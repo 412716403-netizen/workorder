@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, DollarSign, Search, X } from 'lucide-react';
+import { ChevronDown, Search, X } from 'lucide-react';
 import type {
   FinanceAccountType,
   FinanceCategory,
@@ -49,6 +49,8 @@ interface FinanceRecordFormModalProps {
   workers: Worker[];
   globalNodes: GlobalNodeTemplate[];
   financeAccountTypes: FinanceAccountType[];
+  /** 资金账户插件开启时：收款单/付款单需选择收支账户 */
+  fundsAccountEnabled?: boolean;
 }
 
 function OrderSearchSelect({ orders, products, value, onChange, label }: { orders: ProductionOrder[]; products: Product[]; value: string; onChange: (orderNumber: string) => void; label: string }) {
@@ -131,6 +133,7 @@ function FinanceRecordFormModal({
   workers,
   globalNodes,
   financeAccountTypes,
+  fundsAccountEnabled = false,
 }: FinanceRecordFormModalProps) {
   if (!open) return null;
 
@@ -180,15 +183,6 @@ function FinanceRecordFormModal({
                         />
                       </div>
                     )}
-                    {selectedCategory.selectPaymentAccount && (
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">收支账户</label>
-                        <select value={financeAccountTypes.find(a => a.name === form.paymentAccount)?.id ?? ''} onChange={e => { const a = financeAccountTypes.find(x => x.id === e.target.value); setForm({ ...form, paymentAccount: a ? a.name : '' }); }} className={`${formStandardControlClass} cursor-pointer`}>
-                          <option value="">请选择收支账户类型...</option>
-                          {financeAccountTypes.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                        </select>
-                      </div>
-                    )}
                     {selectedCategory.linkWorker && (
                       <WorkerSelectWithTabs workers={workers} processNodes={globalNodes} value={form.workerId} onChange={id => setForm({ ...form, workerId: id })} label="关联工人" />
                     )}
@@ -224,6 +218,15 @@ function FinanceRecordFormModal({
                     />
                   </div>
                 )}
+                {fundsAccountEnabled && (
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">收支账户 <span className="text-rose-500">*</span></label>
+                    <select value={financeAccountTypes.find(a => a.name === form.paymentAccount)?.id ?? ''} onChange={e => { const a = financeAccountTypes.find(x => x.id === e.target.value); setForm({ ...form, paymentAccount: a ? a.name : '' }); }} className={`${formStandardControlClass} cursor-pointer`}>
+                      <option value="">请选择收支账户...</option>
+                      {financeAccountTypes.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                    </select>
+                  </div>
+                )}
               </>
             ) : (
               <>
@@ -240,19 +243,24 @@ function FinanceRecordFormModal({
                 </div>
               </>
             )}
-            <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">结算金额 (CNY)</label>
+            <div className="lg:col-span-2 mt-1 border-t border-slate-100" />
+            <div className="space-y-1 lg:col-span-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">结算金额 (CNY) <span className="text-rose-500">*</span></label>
               <div className="relative">
-                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-base font-black text-slate-400">¥</span>
                 <input
                   type="number"
-                  value={form.amount}
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  value={form.amount === 0 ? '' : form.amount}
                   onChange={e => setForm({ ...form, amount: parseFloat(e.target.value) || 0 })}
-                  className={formStandardControlIconClass}
+                  className="w-full h-12 box-border bg-slate-50 border border-slate-100 rounded-xl pl-9 pr-3 text-lg font-black text-slate-900 placeholder:text-slate-300 placeholder:font-medium focus:ring-2 focus:ring-indigo-500 focus:border-indigo-200 outline-none transition-all"
                 />
               </div>
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1 lg:col-span-2">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">备注说明</label>
               <textarea
                 rows={2}

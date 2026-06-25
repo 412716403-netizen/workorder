@@ -7,7 +7,7 @@ import type { FeaturePluginId } from './workbench.js';
 
 export type FeaturePluginCategoryId = 'reporting' | 'tools' | 'management';
 
-export type FeaturePluginIconKey = 'Inbox' | 'FlaskConical' | 'BookOpen' | 'ScanLine';
+export type FeaturePluginIconKey = 'Inbox' | 'FlaskConical' | 'BookOpen' | 'ScanLine' | 'Wallet';
 
 export interface FeaturePluginGuideSection {
   title: string;
@@ -161,6 +161,47 @@ export const FEATURE_PLUGIN_MARKET_CATALOG: FeaturePluginMarketItem[] = [
       {
         title: '编辑文档',
         body: '右侧编辑器输入「/」唤起块级菜单，可插入标题、列表、待办、表格、代码块、分割线、高亮块与图片。',
+      },
+    ],
+  },
+  {
+    id: 'funds_account',
+    label: '资金账户',
+    tagline: '账户余额、流水台账与账户间转账，收付款按账户精确归集',
+    category: 'management',
+    tags: ['资金账户', '余额台账'],
+    icon: 'Wallet',
+    launchedAt: '2026-06-25',
+    defaultEnabled: false,
+    toggleable: true,
+    introduction: {
+      summary:
+        '资金账户插件面向需要按账户（现金/银行/微信等）精确管理资金的场景：在「财务」内提供资金账户页，实时聚合各账户期初、流入、流出与当前余额，支持账户流水下钻与账户间转账；开启后收款单/付款单登记时需选择收支账户，使每笔款项精确归集到账户。',
+      highlights: [
+        '资金账户页：按账户实时聚合余额，支持今日/本周/本月/全部期间筛选',
+        '账户流水下钻与查看单据详情，账户间转账（内部调拨）一键完成',
+        '收款单/付款单登记时强制选择收支账户，款项精确归账',
+        '账户类型（含期初余额/期初日期）在资金账户页内维护',
+      ],
+      scenarios: [
+        '需要分账户掌握现金、银行、在线钱包余额的企业',
+        '资金在多个账户间频繁划拨、需留痕的财务管理',
+        '暂不需要账户级资金管理的小厂可关闭插件，收付款不再要求选账户',
+      ],
+    },
+    usageGuide: [
+      {
+        title: '开通与权限',
+        body: '租户管理员在插件中心开启「资金账户」。开启后「财务」出现「资金账户」页；账户余额查看与转账分别受 finance:account:view、finance:transfer:create 权限控制，账户类型维护沿用 settings:finance_account_types:* 权限。',
+        bullets: ['管理员：插件中心开启', '关闭插件后：资金账户页隐藏，收付款不再要求选择收支账户'],
+      },
+      {
+        title: '维护账户与期初',
+        body: '在「财务 - 资金账户 - 账户类型」中新增账户，录入期初余额与期初日期；当前余额 = 期初 + 累计收 − 累计付，实时聚合不落库。',
+      },
+      {
+        title: '登记与转账',
+        body: '收款单/付款单登记时选择收支账户，款项归集到对应账户；账户间划拨用「账户转账」生成一进一出两条流水，天然计入各自余额。',
       },
     ],
   },

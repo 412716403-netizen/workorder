@@ -1,7 +1,7 @@
 import type { TenantPrismaClient } from '../lib/prisma.js';
 import { prisma as basePrisma } from '../lib/prisma.js';
 import { genId } from '../utils/genId.js';
-import { sanitizeUpdate, sanitizeCreate } from '../utils/request.js';
+import { sanitizeUpdate, sanitizeCreate, normalizeDates } from '../utils/request.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { assertCategoryBatchColorMutex, applyCategoryPurchasePartnerRule, assertCategoryPurchasePartnerRule } from '../utils/categoryMutex.js';
 import {
@@ -544,6 +544,7 @@ export async function createFinanceAccountType(
   body: Record<string, unknown>,
 ) {
   const data = sanitizeCreate(body);
+  normalizeDates(data);
   data.name = await assertSettingsNameUnique(db.financeAccountType, data.name, '收支账户类型');
   if (!data.id) data.id = genId('fatype');
   return db.financeAccountType.create({ data });
@@ -555,6 +556,7 @@ export async function updateFinanceAccountType(
   body: Record<string, unknown>,
 ) {
   const data = sanitizeUpdate(body);
+  normalizeDates(data);
   await resolveSettingsNameOnUpdate(db.financeAccountType, data, '收支账户类型', id);
   return db.financeAccountType.update({ where: { id }, data });
 }

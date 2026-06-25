@@ -71,7 +71,7 @@ export function sanitizeItems(items: Record<string, unknown>[], extraExclude?: s
 
 const DATE_KEYS = new Set([
   'startDate', 'dueDate', 'timestamp', 'createdAt',
-  'plannedDate', 'actualDate', 'accountExpiresAt',
+  'plannedDate', 'actualDate', 'accountExpiresAt', 'openingDate',
 ]);
 
 /**

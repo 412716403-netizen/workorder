@@ -1,5 +1,5 @@
 import React from 'react';
-import { Inbox, FlaskConical, BookOpen, ScanLine } from 'lucide-react';
+import { Inbox, FlaskConical, BookOpen, ScanLine, Wallet } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { FeaturePluginIconKey } from '../../../types';
 
@@ -8,6 +8,7 @@ export const PLUGIN_ICON_MAP: Record<FeaturePluginIconKey, LucideIcon> = {
   FlaskConical,
   BookOpen,
   ScanLine,
+  Wallet,
 };
 
 /** 图标背景 + 浅色环，用于卡片 */
@@ -19,6 +20,7 @@ export const PLUGIN_ICON_THEME: Record<
   FlaskConical: { bg: 'bg-amber-500', ring: 'ring-amber-100', soft: 'bg-amber-50' },
   BookOpen: { bg: 'bg-sky-500', ring: 'ring-sky-100', soft: 'bg-sky-50' },
   ScanLine: { bg: 'bg-indigo-500', ring: 'ring-indigo-100', soft: 'bg-indigo-50' },
+  Wallet: { bg: 'bg-emerald-500', ring: 'ring-emerald-100', soft: 'bg-emerald-50' },
 };
 
 interface PluginIconProps {

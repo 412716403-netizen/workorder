@@ -9,7 +9,6 @@ import {
   ToggleRight,
   ClipboardList,
   Building2,
-  CreditCard,
   UserPlus,
   Package,
   ListPlus,
@@ -194,7 +193,6 @@ const FinanceCategoriesTab: React.FC<FinanceCategoriesTabProps> = ({
                       {[
                         { label: '是否关联工单', key: 'linkOrder', desc: '登记时可选关联工单。', icon: ClipboardList },
                         { label: '是否关联合作单位', key: 'linkPartner', desc: '登记时选择或填写合作单位/客户/供应商。', icon: Building2 },
-                        { label: '是否选择收支账户', key: 'selectPaymentAccount', desc: '登记时选择收支账户。', icon: CreditCard },
                         { label: '是否关联工人', key: 'linkWorker', desc: '登记时可选关联工人（如工资、补贴）。', icon: UserPlus },
                         { label: '是否关联产品', key: 'linkProduct', desc: '登记时可选关联产品。', icon: Package },
                       ].map(toggle => (
@@ -217,6 +215,7 @@ const FinanceCategoriesTab: React.FC<FinanceCategoriesTabProps> = ({
                   <div className="space-y-4 pt-4 border-t border-slate-100">
                     <ReportCustomFieldsConfigTable
                       showRequiredColumn
+                      showShowInFormColumn={false}
                       fields={cat.customFields}
                       onChange={next => updateFinanceCategoryConfig(cat.id, { customFields: next })}
                       title={

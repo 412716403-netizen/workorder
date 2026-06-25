@@ -11,9 +11,27 @@ export interface FinanceFilter {
   operator?: string;
   workerId?: string;
   productId?: string;
+  accountTypeId?: string;
   startDate?: string;
   endDate?: string;
   search?: string;
+}
+
+export interface AccountBalanceRow {
+  accountTypeId: string;
+  name: string;
+  accountKind: string | null;
+  initialBalance: number;
+  openingBalance: number;
+  inflow: number;
+  outflow: number;
+  balance: number;
+}
+
+export interface AccountBalancesResult {
+  accounts: AccountBalanceRow[];
+  totals: { initialBalance: number; openingBalance: number; inflow: number; outflow: number; balance: number };
+  unassigned: { inflow: number; outflow: number };
 }
 
 export interface FinanceSummary {
@@ -36,6 +54,23 @@ export const finance = {
   /** Phase 3.A：后端聚合接口，对账类视图改用此接口，不再前端遍历全量 */
   summary: (params: FinanceFilter & { topPartners?: number } = {}) =>
     request<FinanceSummary>(`/finance/summary${buildQs(params as Record<string, string | number | undefined>)}`),
+  /** 资金账户余额：按 accountTypeId 实时聚合（期初 + 收 - 付）。
+   * startDate/endDate 仅约束流入/流出展示口径，当前余额始终全量。 */
+  accountBalances: (params: { startDate?: string; endDate?: string } = {}) =>
+    request<AccountBalancesResult>(`/finance/account-balances${buildQs(params)}`),
+  /** 账户间转账（内部调拨）：后端事务内落 PAYMENT + RECEIPT 两条流水 */
+  transfer: (body: {
+    fromAccountId: string;
+    toAccountId: string;
+    amount: number;
+    timestamp?: string;
+    note?: string;
+    operator?: string;
+  }) =>
+    request<{ transferGroupId: string; docNo: string; outRecord: FinanceRecord; inRecord: FinanceRecord }>(
+      '/finance/transfers',
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
   /**
    * Phase 3.D follow-up：销售单打印「上次结余」窄查接口。
    * - partnerName 为必填（财务记录按 name 精确匹配；后端 PSI 也按 (partnerId or partnerName) OR 匹配）。

@@ -232,11 +232,18 @@ model FinanceCategory {
 }
 
 model FinanceAccountType {
-  id        String   @id @db.VarChar(50)
-  tenantId  String   @map("tenant_id") @db.Uuid
-  name      String   @db.VarChar(100)
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+  id             String    @id @db.VarChar(50)
+  tenantId       String    @map("tenant_id") @db.Uuid
+  name           String    @db.VarChar(100)
+  initialBalance Decimal   @default(0) @map("initial_balance") @db.Decimal(14, 2)
+  openingDate    DateTime? @map("opening_date") @db.Timestamptz()
+  accountKind    String?   @map("account_kind") @db.VarChar(50)
+  sortOrder      Int       @default(0) @map("sort_order")
+  active         Boolean   @default(true)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  financeRecords FinanceRecord[]
 
   @@index([tenantId])
   @@map("finance_account_types")
@@ -839,12 +846,14 @@ model FinanceRecord {
   workerId       String?  @map("worker_id") @db.VarChar(50)
   productId      String?  @map("product_id") @db.VarChar(50)
   paymentAccount String?  @map("payment_account") @db.VarChar(100)
+  accountTypeId  String?  @map("account_type_id") @db.VarChar(50)
   customData     Json     @default("{}") @map("custom_data")
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
 
-  category FinanceCategory? @relation(fields: [categoryId], references: [id])
+  category    FinanceCategory?    @relation(fields: [categoryId], references: [id])
+  accountType FinanceAccountType? @relation(fields: [accountTypeId], references: [id])
 
   @@index([tenantId])
   @@index([type])
@@ -852,6 +861,7 @@ model FinanceRecord {
   @@index([timestamp])
   @@index([categoryId])
   @@index([workerId])
+  @@index([accountTypeId])
   @@index([tenantId, type, createdAt])
   @@index([tenantId, updatedAt])
   @@map("finance_records")

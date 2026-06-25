@@ -3,7 +3,8 @@ import { useLocation } from 'react-router-dom';
 import { 
   ArrowDownCircle, 
   ArrowUpCircle, 
-  Scale
+  Scale,
+  Wallet
 } from 'lucide-react';
 import {
   ProductionOrder,
@@ -23,6 +24,7 @@ import {
 } from '../types';
 import { PartnerCategory, ProductCategory, GlobalNodeTemplate } from '../types';
 import FinanceOpsView from './FinanceOpsView';
+import AccountBalancesTab from './finance/AccountBalancesTab';
 import {
   subModuleMainContentTopClass,
   subModuleTabBarBackdropClass,
@@ -32,6 +34,7 @@ import {
   subModuleTabPillClass,
 } from '../styles/uiDensity';
 import { useModulePermission } from '../hooks/useModulePermission';
+import { useFeaturePlugins } from '../hooks/useFeaturePlugins';
 import { useSetMainScrollSegment } from '../contexts/MainScrollSegmentContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useMasterData, useConfigData, useOrdersData, useFinanceData, useAppActions } from '../contexts/AppDataContext';
@@ -82,7 +85,8 @@ const FinanceView: React.FC = () => {
   const printTemplates = c.printTemplates;
   const onUpdatePrintTemplates = a.onUpdatePrintTemplates;
   const onRefreshPrintTemplates = a.refreshPrintTemplates;
-  const [activeTab, setActiveTab] = useState<FinanceOpType>('RECEIPT');
+  type FinanceTabId = FinanceOpType | 'ACCOUNT';
+  const [activeTab, setActiveTab] = useState<FinanceTabId>('RECEIPT');
   const location = useLocation();
   const setScrollSegment = useSetMainScrollSegment();
 
@@ -141,18 +145,43 @@ const FinanceView: React.FC = () => {
   }, []);
 
   const { hasPerm: hasFinancePerm } = useModulePermission({ tenantRole, userPermissions, moduleName: 'finance' });
+  const { isPluginEnabled } = useFeaturePlugins();
+  const fundsAccountEnabled = isPluginEnabled('funds_account');
+  useEffect(() => {
+    if (!fundsAccountEnabled && activeTab === 'ACCOUNT') setActiveTab('RECEIPT');
+  }, [fundsAccountEnabled, activeTab]);
+
+  // 收支账户类型管理已从「系统设置」移到「资金账户」页，权限沿用 settings:finance_account_types:*
+  const isOwner = tenantRole === 'owner';
+  const hasSettingsPerm = (perm: string): boolean => {
+    if (isOwner) return true;
+    if (!userPermissions) return true;
+    if (userPermissions.includes(perm)) return true;
+    const [module] = perm.split(':');
+    return !!module && userPermissions.includes(module);
+  };
+  const accountTypePermBase = 'settings:finance_account_types';
+  const canViewAccountType = hasSettingsPerm(`${accountTypePermBase}:view`);
+  const canCreateAccountType = hasSettingsPerm(`${accountTypePermBase}:create`);
+  const canEditAccountType = hasSettingsPerm(`${accountTypePermBase}:edit`);
+  const canDeleteAccountType = hasSettingsPerm(`${accountTypePermBase}:delete`);
 
   const allTabs = [
     { id: 'RECEIPT', label: '收款单', icon: ArrowDownCircle, color: 'text-indigo-600', bg: 'bg-indigo-50', sub: '客户款项回收记录' },
     { id: 'PAYMENT', label: '付款单', icon: ArrowUpCircle, color: 'text-indigo-600', bg: 'bg-indigo-50', sub: '供应商及费用支出记录' },
+    { id: 'ACCOUNT', label: '资金账户', icon: Wallet, color: 'text-indigo-600', bg: 'bg-indigo-50', sub: '账户余额、流水与转账' },
     { id: 'RECONCILIATION', label: '财务对账', icon: Scale, color: 'text-indigo-600', bg: 'bg-indigo-50', sub: '往来款项核对与差异分析' },
   ];
   const permMap: Record<string, string> = {
     RECEIPT: 'finance:receipt:view',
     PAYMENT: 'finance:payment:view',
+    ACCOUNT: 'finance:account:view',
     RECONCILIATION: 'finance:reconciliation:allow',
   };
-  const tabs = allTabs.filter(tab => hasFinancePerm(permMap[tab.id]));
+  const tabs = allTabs.filter(tab => {
+    if (tab.id === 'ACCOUNT' && !fundsAccountEnabled) return false;
+    return hasFinancePerm(permMap[tab.id]);
+  });
 
   return (
     <div className="space-y-0">
@@ -173,7 +202,7 @@ const FinanceView: React.FC = () => {
                 <button
                   key={tab.id}
                   type="button"
-                  onClick={() => setActiveTab(tab.id as FinanceOpType)}
+                  onClick={() => setActiveTab(tab.id as FinanceTabId)}
                   className={subModuleTabButtonClass(activeTab === tab.id)}
                 >
                   <tab.icon
@@ -190,6 +219,23 @@ const FinanceView: React.FC = () => {
         <div style={{ height: placeholderHeight }} aria-hidden="true" />
       )}
       <div className={`min-h-[600px] ${subModuleMainContentTopClass}`}>
+        {activeTab === 'ACCOUNT' ? (
+        fundsAccountEnabled ? (
+        <AccountBalancesTab
+          financeAccountTypes={financeAccountTypes}
+          userPermissions={userPermissions}
+          onRefreshFinanceAccountTypes={a.refreshFinanceAccountTypes}
+          canViewAccountType={canViewAccountType}
+          canCreateAccountType={canCreateAccountType}
+          canEditAccountType={canEditAccountType}
+          canDeleteAccountType={canDeleteAccountType}
+          orders={orders}
+          financeCategories={financeCategories}
+          workers={workers}
+          products={products}
+        />
+        ) : null
+        ) : (
         <FinanceOpsView 
           type={activeTab}
           orders={orders}
@@ -218,7 +264,9 @@ const FinanceView: React.FC = () => {
           printTemplates={printTemplates}
           onUpdatePrintTemplates={onUpdatePrintTemplates}
           onRefreshPrintTemplates={onRefreshPrintTemplates}
+          fundsAccountEnabled={fundsAccountEnabled}
         />
+        )}
       </div>
     </div>
   );

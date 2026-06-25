@@ -13,6 +13,15 @@ const createRecordSchema = z.object({
 
 const updateRecordSchema = z.object({}).passthrough();
 
+const createTransferSchema = z.object({
+  fromAccountId: z.string().min(1, '转出账户不能为空'),
+  toAccountId: z.string().min(1, '转入账户不能为空'),
+  amount: z.number({ required_error: '转账金额不能为空' }).positive('转账金额必须大于 0'),
+  timestamp: z.string().optional(),
+  note: z.string().optional(),
+  operator: z.string().optional(),
+}).passthrough();
+
 /**
  * 通用 `/finance/records*` 端点：承载收款单/付款单（及对账核销）落库。
  * 历史挂 `finance:records:*`，但权限树无 `records` 子模块，细粒度财务角色（如只勾收款单）
@@ -21,6 +30,15 @@ const updateRecordSchema = z.object({}).passthrough();
  */
 router.get('/records', requireFinanceRead(), ctrl.listRecords);
 router.get('/summary', requireSubPermission('finance:reconciliation:allow'), ctrl.summary);
+/** 资金账户余额：按 accountTypeId 实时聚合（期初 + 收 - 付） */
+router.get('/account-balances', requireSubPermission('finance:account:view'), ctrl.accountBalances);
+/** 账户间转账（内部调拨）：事务内落 PAYMENT + RECEIPT 两条流水 */
+router.post(
+  '/transfers',
+  requireSubPermission('finance:transfer:create'),
+  validate(createTransferSchema),
+  ctrl.createTransfer,
+);
 /**
  * Phase 3.D follow-up：销售单打印应收 ledger 窄查；
  * 仅需 PSI 销售单查看权限即可（与打印链路保持一致）。

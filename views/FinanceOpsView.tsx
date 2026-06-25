@@ -91,6 +91,8 @@ interface FinanceOpsViewProps {
   printTemplates: PrintTemplate[];
   onUpdatePrintTemplates: (list: PrintTemplate[]) => void | Promise<void>;
   onRefreshPrintTemplates?: () => void | Promise<void>;
+  /** 资金账户插件开启时：收款单/付款单登记需选择收支账户 */
+  fundsAccountEnabled?: boolean;
 }
 
 const emptyForm: FinanceRecordFormValues = {
@@ -133,6 +135,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
   printTemplates,
   onUpdatePrintTemplates,
   onRefreshPrintTemplates,
+  fundsAccountEnabled = false,
 }) => {
   const { currentUser } = useAuth();
   const docOperator = currentOperatorDisplayName(currentUser);
@@ -496,7 +499,11 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
   };
 
   const needPartner = !selectedCategory || selectedCategory.linkPartner === true;
-  const canSaveReceiptPayment = form.amount > 0 && (!needPartner || form.partner.trim() !== '') && (!categoriesForType.length || form.categoryId);
+  const needPaymentAccount = fundsAccountEnabled && isReceiptOrPayment;
+  const canSaveReceiptPayment = form.amount > 0
+    && (!needPartner || form.partner.trim() !== '')
+    && (!categoriesForType.length || form.categoryId)
+    && (!needPaymentAccount || form.paymentAccount.trim() !== '');
   const canSaveOther = form.amount > 0 && form.partner.trim() !== '';
   const canSave = isReceiptOrPayment ? canSaveReceiptPayment : canSaveOther;
 
@@ -1153,6 +1160,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
         workers={workers}
         globalNodes={globalNodes}
         financeAccountTypes={financeAccountTypes}
+        fundsAccountEnabled={fundsAccountEnabled}
       />
 
       {showReceiptFormConfig && (

@@ -18,6 +18,25 @@ const reorderNodesSchema = z.object({
   orderedIds: z.array(z.string().min(1)).min(1),
 });
 
+// 收支账户类型：除 name 外还携带期初余额等主数据字段
+const financeAccountTypeFields = {
+  initialBalance: z.number().finite('期初余额必须为数字').optional(),
+  openingDate: z.string().optional().nullable(),
+  accountKind: z.string().max(50).optional().nullable(),
+  sortOrder: z.number().int().optional(),
+  active: z.boolean().optional(),
+};
+
+const financeAccountTypeCreateSchema = z.object({
+  name: z.string().min(1, '名称不能为空'),
+  ...financeAccountTypeFields,
+}).passthrough();
+
+const financeAccountTypeUpdateSchema = z.object({
+  name: z.string().min(1, '名称不能为空').optional(),
+  ...financeAccountTypeFields,
+}).passthrough();
+
 const updateConfigSchema = z.object({
   value: z.unknown().refine(v => v !== undefined, { message: '配置值不能为空' }),
 });
@@ -59,8 +78,8 @@ router.delete('/finance-categories/:id', requireSubPermission('settings:finance_
 
 // 收支账户类型
 router.get('/finance-account-types',      requireSubPermission('settings:finance_account_types:view'),   ctrl.listFinanceAccountTypes);
-router.post('/finance-account-types',     requireSubPermission('settings:finance_account_types:create'), validate(nameRequiredSchema), ctrl.createFinanceAccountType);
-router.put('/finance-account-types/:id',  requireSubPermission('settings:finance_account_types:edit'),   validate(updateNameSchema), ctrl.updateFinanceAccountType);
+router.post('/finance-account-types',     requireSubPermission('settings:finance_account_types:create'), validate(financeAccountTypeCreateSchema), ctrl.createFinanceAccountType);
+router.put('/finance-account-types/:id',  requireSubPermission('settings:finance_account_types:edit'),   validate(financeAccountTypeUpdateSchema), ctrl.updateFinanceAccountType);
 router.delete('/finance-account-types/:id', requireSubPermission('settings:finance_account_types:delete'), ctrl.deleteFinanceAccountType);
 
 // 系统配置

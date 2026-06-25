@@ -1,8 +1,10 @@
 import type { TenantPrismaClient } from '../lib/prisma.js';
-import { generateDocNo } from '../utils/docNumber.js';
+import { prisma as basePrisma } from '../lib/prisma.js';
+import { generateDocNo, generateDocNoWithLock } from '../utils/docNumber.js';
 import { genId } from '../utils/genId.js';
-import { FINANCE_DOC_NO_PREFIX, type FinanceOpType } from '../types/index.js';
+import { FINANCE_DOC_NO_PREFIX, FINANCE_TRANSFER_DOC_NO_PREFIX, FINANCE_UNASSIGNED_ACCOUNT_KEY, type FinanceOpType } from '../types/index.js';
 import { sanitizeUpdate, sanitizeCreate, normalizeDates } from '../utils/request.js';
+import { AppError } from '../middleware/errorHandler.js';
 
 export interface FinanceListFilter {
   type?: string;
@@ -12,6 +14,7 @@ export interface FinanceListFilter {
   operator?: string;
   workerId?: string;
   productId?: string;
+  accountTypeId?: string;
   startDate?: string;
   endDate?: string;
   search?: string;
@@ -25,6 +28,15 @@ function buildFinanceWhere(opts: FinanceListFilter): Record<string, unknown> {
   if (opts.categoryId) where.categoryId = opts.categoryId;
   if (opts.workerId) where.workerId = opts.workerId;
   if (opts.productId) where.productId = opts.productId;
+  if (opts.accountTypeId) {
+    if (opts.accountTypeId === FINANCE_UNASSIGNED_ACCOUNT_KEY) {
+      // 「未归账」：accountTypeId 为空且仅看收/付款（与余额聚合的 unassigned 口径一致）
+      where.accountTypeId = null;
+      if (!opts.type) where.type = { in: ['RECEIPT', 'PAYMENT'] };
+    } else {
+      where.accountTypeId = opts.accountTypeId;
+    }
+  }
   if (opts.partner) where.partner = { contains: opts.partner, mode: 'insensitive' };
   // 注意：`FinanceRecord` 当前 schema 无 `partnerId` 列，仅有 `partner`（合作单位 name）。
   // 历史曾写 `where.partner = opts.partnerId` 形如 "拿 id 当 name 精确匹配"，永远查不到，
@@ -87,6 +99,23 @@ export async function getRecord(db: TenantPrismaClient, id: string) {
   });
 }
 
+/**
+ * 由 `paymentAccount`（账户名）解析对应的 `accountTypeId` 外键。
+ * 账户名一一对应账户类型；解析不到（空名/已删除账户）则置空，落入「未归账」。
+ * paymentAccount 仍按字符串原样保存，账户改名时由历史回填/外键各司其职。
+ */
+async function resolveAccountTypeId(
+  db: TenantPrismaClient,
+  paymentAccount: unknown,
+): Promise<string | null> {
+  if (typeof paymentAccount !== 'string' || paymentAccount.trim() === '') return null;
+  const acc = await db.financeAccountType.findFirst({
+    where: { name: paymentAccount },
+    select: { id: true },
+  });
+  return acc?.id ?? null;
+}
+
 export async function createRecord(
   db: TenantPrismaClient,
   body: Record<string, unknown>,
@@ -106,6 +135,11 @@ export async function createRecord(
     );
   }
 
+  // 收/付款记录按账户名解析账户外键，保证写入即归账（否则全部落到「未归账」）。
+  if (data.accountTypeId == null) {
+    data.accountTypeId = await resolveAccountTypeId(db, data.paymentAccount);
+  }
+
   return db.financeRecord.create({ data });
 }
 
@@ -116,6 +150,10 @@ export async function updateRecord(
 ) {
   const data = sanitizeUpdate(body);
   normalizeDates(data);
+  // paymentAccount 变更时同步刷新账户外键（含改成空 → 归为未归账）。
+  if ('paymentAccount' in data && data.accountTypeId == null) {
+    data.accountTypeId = await resolveAccountTypeId(db, data.paymentAccount);
+  }
   return db.financeRecord.update({ where: { id }, data });
 }
 
@@ -190,6 +228,268 @@ export async function summarize(
       amount: r._sum.amount ?? 0,
     })),
   };
+}
+
+// ── 资金账户余额 ──
+
+export interface AccountBalanceRow {
+  accountTypeId: string;
+  name: string;
+  accountKind: string | null;
+  initialBalance: number;
+  /** 期初余额：全部时 = initialBalance；选期间时 = initialBalance + 期间开始日之前的净流水 */
+  openingBalance: number;
+  /** Σ RECEIPT（流入，展示口径） */
+  inflow: number;
+  /** Σ PAYMENT（流出，展示口径） */
+  outflow: number;
+  /** 当前余额：initialBalance + 全量Σ(RECEIPT) - 全量Σ(PAYMENT) */
+  balance: number;
+}
+
+export interface AccountBalancesResult {
+  accounts: AccountBalanceRow[];
+  totals: { initialBalance: number; openingBalance: number; inflow: number; outflow: number; balance: number };
+  /** 未归账：accountTypeId 为空的历史流水合计，供前端给出提示 */
+  unassigned: { inflow: number; outflow: number };
+}
+
+/** 把分组聚合行拆成「按账户的流入/流出」两张表 + 未归账合计 */
+function splitGroupedFlows(
+  grouped: Array<{ accountTypeId: string | null; type: string; amount: number }>,
+) {
+  const inflowMap = new Map<string, number>();
+  const outflowMap = new Map<string, number>();
+  const unassigned = { inflow: 0, outflow: 0 };
+  for (const row of grouped) {
+    const amount = Number(row.amount ?? 0);
+    const isReceipt = row.type === 'RECEIPT';
+    if (row.accountTypeId == null) {
+      if (isReceipt) unassigned.inflow += amount;
+      else unassigned.outflow += amount;
+      continue;
+    }
+    const target = isReceipt ? inflowMap : outflowMap;
+    target.set(row.accountTypeId, (target.get(row.accountTypeId) ?? 0) + amount);
+  }
+  return { inflowMap, outflowMap, unassigned };
+}
+
+/**
+ * 纯函数：把账户主数据 + 分组聚合行汇总成各账户余额。
+ * - `grouped`：展示口径（可被「今日/本周/本月」期间筛选）的流入/流出 + 未归账；
+ * - `balanceGrouped`：余额口径（始终全量、不受期间影响），默认与 `grouped` 相同（即「全部」）；
+ * - `openingGrouped`：期间开始日**之前**的净流水；用于期初余额，默认空（即「全部」时期初 = initialBalance）。
+ * 口径：inflow/outflow 取展示口径；balance = initialBalance + 全量净流水；
+ * openingBalance = initialBalance + 期初前净流水（全部时退化为 initialBalance）。
+ * 抽成纯函数便于单测，不依赖 Prisma / req。
+ */
+export function accumulateAccountBalances(
+  accountTypes: Array<{ id: string; name: string; accountKind: string | null; initialBalance: unknown }>,
+  grouped: Array<{ accountTypeId: string | null; type: string; amount: number }>,
+  balanceGrouped: Array<{ accountTypeId: string | null; type: string; amount: number }> = grouped,
+  openingGrouped: Array<{ accountTypeId: string | null; type: string; amount: number }> = [],
+): AccountBalancesResult {
+  const { inflowMap, outflowMap, unassigned } = splitGroupedFlows(grouped);
+  const { inflowMap: balInflowMap, outflowMap: balOutflowMap } = splitGroupedFlows(balanceGrouped);
+  const { inflowMap: openInflowMap, outflowMap: openOutflowMap } = splitGroupedFlows(openingGrouped);
+
+  const accounts: AccountBalanceRow[] = accountTypes.map(acc => {
+    const initialBalance = Number(acc.initialBalance ?? 0);
+    const inflow = inflowMap.get(acc.id) ?? 0;
+    const outflow = outflowMap.get(acc.id) ?? 0;
+    const balInflow = balInflowMap.get(acc.id) ?? 0;
+    const balOutflow = balOutflowMap.get(acc.id) ?? 0;
+    const openInflow = openInflowMap.get(acc.id) ?? 0;
+    const openOutflow = openOutflowMap.get(acc.id) ?? 0;
+    return {
+      accountTypeId: acc.id,
+      name: acc.name,
+      accountKind: acc.accountKind ?? null,
+      initialBalance,
+      openingBalance: initialBalance + openInflow - openOutflow,
+      inflow,
+      outflow,
+      balance: initialBalance + balInflow - balOutflow,
+    };
+  });
+
+  const totals = accounts.reduce(
+    (acc, r) => ({
+      initialBalance: acc.initialBalance + r.initialBalance,
+      openingBalance: acc.openingBalance + r.openingBalance,
+      inflow: acc.inflow + r.inflow,
+      outflow: acc.outflow + r.outflow,
+      balance: acc.balance + r.balance,
+    }),
+    { initialBalance: 0, openingBalance: 0, inflow: 0, outflow: 0, balance: 0 },
+  );
+
+  return { accounts, totals, unassigned };
+}
+
+export interface CreateTransferInput {
+  fromAccountId: string;
+  toAccountId: string;
+  amount: number;
+  timestamp?: string;
+  note?: string;
+  operator?: string;
+}
+
+/**
+ * 账户间转账（内部调拨）：在一个事务内落两条流水——
+ * - PAYMENT（转出账户）+ RECEIPT（转入账户），共享同一 ZZD 转账单号与 transferGroupId；
+ * - 两条流水保持 RECEIPT/PAYMENT 类型，天然复用账户余额聚合；
+ * - customData.transfer=true 用于报表区分内部调拨与真实收付。
+ */
+export async function createTransfer(
+  db: TenantPrismaClient,
+  tenantId: string,
+  input: CreateTransferInput,
+) {
+  const amount = Number(input.amount);
+  if (!input.fromAccountId || !input.toAccountId) throw new AppError(400, '转出/转入账户不能为空');
+  if (input.fromAccountId === input.toAccountId) throw new AppError(400, '转出与转入账户不能相同');
+  if (!Number.isFinite(amount) || amount <= 0) throw new AppError(400, '转账金额必须大于 0');
+
+  // 事务内的 tx 不经 getTenantPrisma 扩展（见 lib/prisma.ts 说明），
+  // 因此读侧须显式带 tenantId 过滤、写侧须显式写入 tenantId。
+  return basePrisma.$transaction(async tx => {
+    const [fromAcc, toAcc] = await Promise.all([
+      tx.financeAccountType.findFirst({ where: { id: input.fromAccountId, tenantId } }),
+      tx.financeAccountType.findFirst({ where: { id: input.toAccountId, tenantId } }),
+    ]);
+    if (!fromAcc) throw new AppError(404, '转出账户不存在');
+    if (!toAcc) throw new AppError(404, '转入账户不存在');
+
+    const docNo = await generateDocNoWithLock(
+      tx,
+      FINANCE_TRANSFER_DOC_NO_PREFIX,
+      'finance_records',
+      'doc_no',
+      tenantId,
+    );
+    const transferGroupId = genId('xfer');
+    const timestamp = input.timestamp ? new Date(input.timestamp) : new Date();
+    const note = input.note?.trim() || `账户转账：${fromAcc.name} → ${toAcc.name}`;
+    const operator = input.operator?.trim() || null;
+
+    const outRecord = await tx.financeRecord.create({
+      data: {
+        id: genId('fin'),
+        tenantId,
+        type: 'PAYMENT',
+        docNo,
+        amount,
+        timestamp,
+        note,
+        operator,
+        relatedId: transferGroupId,
+        status: 'COMPLETED',
+        accountTypeId: fromAcc.id,
+        paymentAccount: fromAcc.name,
+        customData: {
+          transfer: true,
+          transferGroupId,
+          direction: 'out',
+          counterpartAccountId: toAcc.id,
+          counterpartAccountName: toAcc.name,
+        },
+      },
+    });
+
+    const inRecord = await tx.financeRecord.create({
+      data: {
+        id: genId('fin'),
+        tenantId,
+        type: 'RECEIPT',
+        docNo,
+        amount,
+        timestamp,
+        note,
+        operator,
+        relatedId: transferGroupId,
+        status: 'COMPLETED',
+        accountTypeId: toAcc.id,
+        paymentAccount: toAcc.name,
+        customData: {
+          transfer: true,
+          transferGroupId,
+          direction: 'in',
+          counterpartAccountId: fromAcc.id,
+          counterpartAccountName: fromAcc.name,
+        },
+      },
+    });
+
+    return { transferGroupId, docNo, outRecord, inRecord };
+  });
+}
+
+/** 由 startDate/endDate 生成 timestamp 范围过滤（gte/lte）；无有效边界返回 null */
+function timestampRange(startDate?: string, endDate?: string): { gte?: Date; lte?: Date } | null {
+  const ts: { gte?: Date; lte?: Date } = {};
+  if (startDate) {
+    const d = new Date(startDate);
+    if (!Number.isNaN(d.getTime())) ts.gte = d;
+  }
+  if (endDate) {
+    const d = new Date(endDate);
+    if (!Number.isNaN(d.getTime())) ts.lte = d;
+  }
+  return ts.gte || ts.lte ? ts : null;
+}
+
+/**
+ * 资金账户余额：按 accountTypeId 实时聚合（期初 + 收 - 付），不落库存量值。
+ * 仅统计 RECEIPT / PAYMENT 且未作废（status != CANCELLED）的流水。
+ * `startDate/endDate` 仅约束「流入/流出」展示口径（今日/本周/本月）；
+ * 「当前余额」始终按全量聚合，不随期间变化。
+ */
+export async function getAccountBalances(
+  db: TenantPrismaClient,
+  opts: { startDate?: string; endDate?: string } = {},
+): Promise<AccountBalancesResult> {
+  const baseWhere = { type: { in: ['RECEIPT', 'PAYMENT'] }, status: { not: 'CANCELLED' } };
+  const range = timestampRange(opts.startDate, opts.endDate);
+  // 期初余额口径：统计「期间开始日（range.gte）之前」的净流水；无开始日（全部）则不查。
+  const openingBefore = range?.gte ?? null;
+
+  const mapGrouped = (rows: Array<{ accountTypeId: string | null; type: string; _sum: { amount: unknown } }>) =>
+    rows.map(g => ({ accountTypeId: g.accountTypeId, type: g.type, amount: Number(g._sum.amount ?? 0) }));
+
+  const [accountTypes, allTimeGrouped, periodGroupedRaw, openingGroupedRaw] = await Promise.all([
+    db.financeAccountType.findMany({
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
+      select: { id: true, name: true, accountKind: true, initialBalance: true },
+    }),
+    db.financeRecord.groupBy({
+      by: ['accountTypeId', 'type'],
+      where: baseWhere,
+      _sum: { amount: true },
+    }),
+    range
+      ? db.financeRecord.groupBy({
+          by: ['accountTypeId', 'type'],
+          where: { ...baseWhere, timestamp: range },
+          _sum: { amount: true },
+        })
+      : Promise.resolve(null),
+    openingBefore
+      ? db.financeRecord.groupBy({
+          by: ['accountTypeId', 'type'],
+          where: { ...baseWhere, timestamp: { lt: openingBefore } },
+          _sum: { amount: true },
+        })
+      : Promise.resolve(null),
+  ]);
+
+  const allTime = mapGrouped(allTimeGrouped);
+  const period = periodGroupedRaw ? mapGrouped(periodGroupedRaw) : allTime;
+  const opening = openingGroupedRaw ? mapGrouped(openingGroupedRaw) : [];
+
+  return accumulateAccountBalances(accountTypes, period, allTime, opening);
 }
 
 /**

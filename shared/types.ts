@@ -152,6 +152,15 @@ export const FINANCE_DOC_NO_PREFIX: Record<FinanceOpType, string> = {
   SETTLEMENT: 'GZD',
 };
 
+/** 账户间转账（内部调拨）单号前缀；转账落两条 RECEIPT/PAYMENT 流水，共享同一转账单号 */
+export const FINANCE_TRANSFER_DOC_NO_PREFIX = 'ZZD' as const;
+
+/**
+ * 资金账户余额/台账的「未归账」哨兵：作为 accountTypeId 过滤值时，
+ * 表示 `accountTypeId IS NULL` 的收付款流水（未选择收支账户的单据）。
+ */
+export const FINANCE_UNASSIGNED_ACCOUNT_KEY = '__unassigned__' as const;
+
 /** 生产计划单号前缀（如 PLN40） */
 export const PLAN_DOC_NO_PREFIX = 'PLN' as const;
 /** 生产工单号前缀（如 WO40；主计划下达时由计划单号 PLN→WO 转换） */

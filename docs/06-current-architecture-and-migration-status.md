@@ -216,6 +216,10 @@
   - 新后端接口：`psi.listRecords` 加 `startDate/endDate/search/types`；新增 `GET /api/orders/report-history`。
   - `PendingStockPanel` 内嵌的「生产入库流水」与 `OrderListView.orderCenterProdQuery` 脱钩，绕过其 40 页/8000 条客户端硬上限；主面板「待入库清单」跨日累计逻辑仍沿用 props.prodRecords。
   - `AppDataContext.invalidateAll{Prod,Psi}Records` 改 predicate 风格批量匹配 queryKey 前缀，修复旧 `psiOps.warehouseStockProd` 与实际 key 不一致的 invalidate bug。
+- **资金账户余额与转账（已完成）**：
+  - `FinanceAccountType` 加 `initialBalance/openingDate/accountKind/sortOrder/active`；`FinanceRecord` 加 `accountTypeId` 外键（migration `20260625120000_finance_account_balance` 按 `(tenant_id, name)` 回填，保留 `payment_account` 作展示/回退）。
+  - 余额实时聚合（不落库存量）：`GET /api/finance/account-balances`（`finance:account:view`）→ `getAccountBalances` → 纯函数 `accumulateAccountBalances`（含单测 `backend/tests/financeAccountBalances.test.ts`）。
+  - 账户间转账：`POST /api/finance/transfers`（`finance:transfer:create`）事务内落 PAYMENT+RECEIPT 同 `transferGroupId`/`ZZD` 单号；前端「财务 - 资金账户」Tab（`AccountBalancesTab` + `AccountTransferModal`），账户流水下钻按 `accountTypeId` 窄拉 `finance.listPage`。
 
 ## 8. 本文件的边界
 

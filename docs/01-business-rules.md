@@ -383,6 +383,20 @@
 
 按 `type` 过滤后，对 `amount` 求和。当前没有复杂的状态口径分叉说明时，默认按有效记录直接累计。
 
+### 4.2.1 资金账户余额
+
+- **口径**：账户「当前余额」为派生值，不落库存量：`当前余额 = initialBalance + Σ(RECEIPT) - Σ(PAYMENT)`，仅统计 `accountTypeId` 命中该账户且 `status != CANCELLED` 的流水。期初余额（`FinanceAccountType.initialBalance`）与期初日期在「财务 - 资金账户 - 账户类型」录入（原「系统设置 - 收支账户类型」入口已迁移至此，权限仍沿用 `settings:finance_account_types:*`）。
+- **实现**：`GET /api/finance/account-balances`（权限 `finance:account:view`）→ `finance.service.getAccountBalances` → 纯函数 `accumulateAccountBalances`（已覆盖单测）。前端在「财务 - 资金账户」Tab 展示账户余额卡片、账户流水下钻（按 `accountTypeId` 过滤 `listPage`）。
+- **插件开关**：「资金账户」由功能插件 `funds_account` 控制（插件中心开启，默认关闭）。开启后「财务」才显示「资金账户」页，且收款单/付款单登记时**强制选择收支账户**（前端 `FinanceRecordFormModal` 按 `fundsAccountEnabled` 渲染并校验，替代原收付款分类上的「是否选择收支账户」逐项开关——该逐项开关已下线）。关闭插件则隐藏资金账户页、收付款不再要求选账户。
+- **期间筛选（今日/本周/本月/全部）**：接口可带 `startDate/endDate`（周以周一为起点）。**流入/流出**取期间口径；**当前余额**始终全量；**期初余额**（前端「期初合计/期初余额」卡）选「全部」时 = 账户初始资金 `initialBalance`，选期间时 = `initialBalance + 期间开始日之前的净流水`（即该日期前的账户余额）。三套口径由 `accumulateAccountBalances` 接收 `grouped`(期间) / `balanceGrouped`(全量) / `openingGrouped`(开始日前) 三组分组算出。同一期间也会同步过滤账户流水下钻列表。
+- **未归账**：历史流水 `accountTypeId` 为空（`paymentAccount` 对不上账户名）时归入「未归账」提示，不计入任一账户余额。
+
+### 4.2.2 账户间转账（内部调拨）
+
+- **规则**：一笔转账在事务内落两条流水——PAYMENT（转出账户）+ RECEIPT（转入账户），金额相等、共享同一 `ZZD` 转账单号与 `relatedId = transferGroupId`，`customData.transfer = true`。两条流水仍是 RECEIPT/PAYMENT 类型，天然计入各自账户余额，整体对净现金流无影响。
+- **约束**：转出 ≠ 转入账户、金额 > 0；账户须属当前租户。
+- **实现**：`POST /api/finance/transfers`（权限 `finance:transfer:create`）→ `finance.service.createTransfer`。
+
 ### 4.3 合作单位对账 Excel 导出
 
 - **入口**：财务 → 对账 → 合作单位，在已选择合作单位并点击「查询」后，工具栏「导出 Excel」可用（数据加载中禁用）。**开始/结束日期可不填**；未填开始日期时「上期结余」为 0，明细为与该合作单位相关的全部对账单据。
@@ -428,7 +442,7 @@
 - 示例：`横机(不按顺序) → 套口(按顺序) → 缩绒(按顺序)` 时，套口按总量可报；缩绒 gate 在套口完成量。`横机(按顺序) → 套口(不按顺序) → 缩绒(按顺序)` 时，缩绒 gate 在横机完成量（跳过套口）。
 | 仓库管理 | `warehouses` | 支持 code 自动生成或手工填写；仓库名称租户内唯一；**删除限制**：被进销存单据（`PsiRecord` 的 `warehouseId/fromWarehouseId/toWarehouseId/allocationWarehouseId`，无外键）或生产操作记录（`ProductionOpRecord.warehouseId`）引用时禁止删除，`deleteWarehouse` 返回 409 列明细；前端经 `GET /settings/warehouses/usage` 预检，被引用项删除按钮置灰并提示 |
 | 收付款类型 | `financeCategories` | 控制财务表单显示与关联项；类型名称租户内唯一（不区分收款/付款 kind）；**删除限制**：被财务记录（`FinanceRecord.categoryId`）引用时禁止删除，`deleteFinanceCategory` 返回 409；前端经 `GET /settings/finance-categories/usage` 预检，被引用项删除按钮置灰并提示 |
-| 收支账户类型 | `financeAccountTypes` | 控制收付款账户选项；类型名称租户内唯一 |
+| 收支账户类型 | `financeAccountTypes` | 控制收付款账户选项；类型名称租户内唯一；可配期初余额/期初日期/账户分类，用于「资金账户」余额聚合（详见 §4.2.1） |
 
 ### 5.2 基本信息
 

@@ -13,6 +13,7 @@ function parseFinanceFilter(req: { query: Record<string, unknown> }) {
     operator: optStr(req.query.operator),
     workerId: optStr(req.query.workerId),
     productId: optStr(req.query.productId),
+    accountTypeId: optStr(req.query.accountTypeId),
     startDate: optStr(req.query.startDate),
     endDate: optStr(req.query.endDate),
     search: optStr(req.query.search),
@@ -38,6 +39,28 @@ export const summary = asyncHandler(async (req, res) => {
     ...parseFinanceFilter(req),
     topPartners,
   }));
+});
+
+export const accountBalances = asyncHandler(async (req, res) => {
+  const db = getTenantPrisma(req.tenantId!);
+  res.json(await financeService.getAccountBalances(db, {
+    startDate: optStr(req.query.startDate),
+    endDate: optStr(req.query.endDate),
+  }));
+});
+
+export const createTransfer = asyncHandler(async (req, res) => {
+  const tenantId = req.tenantId!;
+  const db = getTenantPrisma(tenantId);
+  const result = await financeService.createTransfer(db, tenantId, {
+    fromAccountId: str(req.body.fromAccountId),
+    toAccountId: str(req.body.toAccountId),
+    amount: Number(req.body.amount),
+    timestamp: optStr(req.body.timestamp),
+    note: optStr(req.body.note),
+    operator: optStr(req.body.operator),
+  });
+  res.status(201).json(result);
 });
 
 export const getRecord = asyncHandler(async (req, res) => {

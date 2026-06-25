@@ -7,12 +7,10 @@ import {
   Warehouse as WarehouseIcon,
   Wallet,
   Link2,
-  CreditCard,
 } from 'lucide-react';
-import { ProductCategory, GlobalNodeTemplate, Warehouse, PartnerCategory, FinanceCategory, FinanceAccountType, ProductionLinkMode, ProcessSequenceMode } from '../types';
+import { ProductCategory, GlobalNodeTemplate, Warehouse, PartnerCategory, FinanceCategory, ProductionLinkMode, ProcessSequenceMode } from '../types';
 import {
   moduleHeaderRowClass,
-  outlineToolbarButtonClass,
   pageTitleClass,
   subModuleMainContentTopClass,
   subModuleTabButtonClass,
@@ -27,7 +25,6 @@ import NodesTab from './settings/NodesTab';
 import WarehousesTab from './settings/WarehousesTab';
 import FinanceCategoriesTab from './settings/FinanceCategoriesTab';
 import ProductionConfigTab from './settings/ProductionConfigTab';
-import AccountTypesModal from './settings/AccountTypesModal';
 
 type SettingsTab = 'categories' | 'partner_categories' | 'nodes' | 'warehouses' | 'finance_categories' | 'production';
 
@@ -73,8 +70,6 @@ const SettingsView: React.FC = () => {
   const warehouses = m.warehouses;
   const financeCategories = f.financeCategories;
   const onRefreshFinanceCategories = a.refreshFinanceCategories;
-  const financeAccountTypes = f.financeAccountTypes;
-  const onRefreshFinanceAccountTypes = a.refreshFinanceAccountTypes;
   const allowExceedMaxReportQty = c.allowExceedMaxReportQty;
   const onUpdateAllowExceedMaxReportQty = a.onUpdateAllowExceedMaxReportQty;
   const allowExceedMaxOutsourceReceiveQty = c.allowExceedMaxOutsourceReceiveQty;
@@ -118,7 +113,6 @@ const SettingsView: React.FC = () => {
 
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<SettingsTab>('categories');
-  const [showAccountTypesModal, setShowAccountTypesModal] = useState(false);
 
   const tabs = [
     { id: 'categories', label: '产品分类管理', icon: Tag, color: 'text-indigo-600', bg: 'bg-indigo-50', title: '产品分类管理', sub: '定义产品分类、颜色尺码及扩展属性' },
@@ -179,17 +173,6 @@ const SettingsView: React.FC = () => {
               {(activeTabMeta as typeof tabs[0]).sub}
             </p>
           </div>
-          {activeTab === 'finance_categories' && canView('finance_account_types') && (
-            <div className="flex items-center gap-2 shrink-0 mt-4 sm:mt-0">
-            <button
-              type="button"
-              onClick={() => setShowAccountTypesModal(true)}
-              className={outlineToolbarButtonClass}
-            >
-              <CreditCard className="w-4 h-4 shrink-0" /> 收支账户类型
-            </button>
-            </div>
-          )}
         </div>
       )}
 
@@ -257,16 +240,6 @@ const SettingsView: React.FC = () => {
         )}
       </div>
 
-      {showAccountTypesModal && (
-        <AccountTypesModal
-          financeAccountTypes={financeAccountTypes}
-          onRefreshFinanceAccountTypes={onRefreshFinanceAccountTypes}
-          onClose={() => setShowAccountTypesModal(false)}
-          canCreate={canCreate('finance_account_types')}
-          canEdit={canEdit('finance_account_types')}
-          canDelete={canDelete('finance_account_types')}
-        />
-      )}
     </div>
   );
 };

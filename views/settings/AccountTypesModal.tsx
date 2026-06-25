@@ -20,6 +20,14 @@ interface AccountTypesModalProps {
   canDelete: boolean;
 }
 
+/** 把 ISO/Date 字符串裁成 <input type="date"> 需要的 yyyy-MM-dd */
+function toDateInputValue(value?: string): string {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toISOString().slice(0, 10);
+}
+
 const AccountTypesModal: React.FC<AccountTypesModalProps> = ({
   financeAccountTypes,
   onRefreshFinanceAccountTypes,
@@ -29,8 +37,14 @@ const AccountTypesModal: React.FC<AccountTypesModalProps> = ({
   canDelete,
 }) => {
   const [newAccountTypeName, setNewAccountTypeName] = useState('');
+  const [newInitialBalance, setNewInitialBalance] = useState('');
+  const [newOpeningDate, setNewOpeningDate] = useState('');
+  const [newAccountKind, setNewAccountKind] = useState('');
   const [editingAccountTypeId, setEditingAccountTypeId] = useState<string | null>(null);
-  const [editingAccountTypeName, setEditingAccountTypeName] = useState('');
+  const [editingName, setEditingName] = useState('');
+  const [editingInitialBalance, setEditingInitialBalance] = useState('');
+  const [editingOpeningDate, setEditingOpeningDate] = useState('');
+  const [editingAccountKind, setEditingAccountKind] = useState('');
   const addLock = useAsyncSubmitLock();
 
   const addFinanceAccountType = async () => {
@@ -39,8 +53,16 @@ const AccountTypesModal: React.FC<AccountTypesModalProps> = ({
     if (hasSettingsNameConflict(financeAccountTypes, trimmed)) { toast.warning(`账户类型"${trimmed}"已存在`); return; }
     await addLock.run(async () => {
       try {
-        await api.settings.financeAccountTypes.create({ name: trimmed });
+        await api.settings.financeAccountTypes.create({
+          name: trimmed,
+          initialBalance: newInitialBalance.trim() === '' ? 0 : Number(newInitialBalance),
+          openingDate: newOpeningDate || null,
+          accountKind: newAccountKind.trim() || null,
+        });
         setNewAccountTypeName('');
+        setNewInitialBalance('');
+        setNewOpeningDate('');
+        setNewAccountKind('');
         await onRefreshFinanceAccountTypes();
       } catch (err: any) { toast.error(err.message || '操作失败'); }
     });
@@ -54,9 +76,29 @@ const AccountTypesModal: React.FC<AccountTypesModalProps> = ({
     } catch (err: any) { toast.error(err.message || '操作失败'); }
   };
 
-  const updateFinanceAccountTypeConfig = async (id: string, updates: Partial<FinanceAccountType>) => {
+  const beginEdit = (acc: FinanceAccountType) => {
+    setEditingAccountTypeId(acc.id);
+    setEditingName(acc.name);
+    setEditingInitialBalance(acc.initialBalance != null ? String(acc.initialBalance) : '');
+    setEditingOpeningDate(toDateInputValue(acc.openingDate));
+    setEditingAccountKind(acc.accountKind ?? '');
+  };
+
+  const saveEdit = async (acc: FinanceAccountType) => {
+    const next = editingName.trim();
+    if (!next) { toast.error('账户类型名称不能为空'); return; }
+    if (hasSettingsNameConflict(financeAccountTypes, next, acc.id)) {
+      toast.error(`账户类型"${next}"已存在`);
+      return;
+    }
     try {
-      await api.settings.financeAccountTypes.update(id, updates);
+      await api.settings.financeAccountTypes.update(acc.id, {
+        name: next,
+        initialBalance: editingInitialBalance.trim() === '' ? 0 : Number(editingInitialBalance),
+        openingDate: editingOpeningDate || null,
+        accountKind: editingAccountKind.trim() || null,
+      });
+      setEditingAccountTypeId(null);
       await onRefreshFinanceAccountTypes();
     } catch (err: any) { toast.error(err.message || '操作失败'); }
   };
@@ -73,20 +115,47 @@ const AccountTypesModal: React.FC<AccountTypesModalProps> = ({
         </div>
         <div className="p-6 overflow-y-auto flex-1">
           {canCreate && (
-          <div className="space-y-4 mb-6">
+          <div className="space-y-3 mb-6">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 block">新增账户类型</label>
-            <div className="flex gap-3">
-              <input
-                type="text"
-                placeholder="如：现金、银行存款、微信、支付宝"
-                value={newAccountTypeName}
-                onChange={e => setNewAccountTypeName(e.target.value)}
-                className={`${formStandardControlClass} flex-1`}
-              />
-              <button type="button" onClick={() => void addFinanceAccountType()} disabled={!newAccountTypeName.trim() || addLock.busy} className="px-5 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shrink-0">
-                {addLock.busy ? '提交中…' : '确认添加'}
-              </button>
+            <input
+              type="text"
+              placeholder="名称，如：现金、银行存款、微信、支付宝"
+              value={newAccountTypeName}
+              onChange={e => setNewAccountTypeName(e.target.value)}
+              className={`${formStandardControlClass} w-full`}
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <span className="text-[10px] text-slate-400 ml-1">期初余额</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={newInitialBalance}
+                  onChange={e => setNewInitialBalance(e.target.value)}
+                  className={`${formStandardControlClass} w-full`}
+                />
+              </div>
+              <div className="space-y-1">
+                <span className="text-[10px] text-slate-400 ml-1">期初日期</span>
+                <input
+                  type="date"
+                  value={newOpeningDate}
+                  onChange={e => setNewOpeningDate(e.target.value)}
+                  className={`${formStandardControlClass} w-full`}
+                />
+              </div>
             </div>
+            <input
+              type="text"
+              placeholder="账户分类（可选），如 现金 / 银行 / 在线钱包"
+              value={newAccountKind}
+              onChange={e => setNewAccountKind(e.target.value)}
+              className={`${formStandardControlClass} w-full`}
+            />
+            <button type="button" onClick={() => void addFinanceAccountType()} disabled={!newAccountTypeName.trim() || addLock.busy} className="w-full px-5 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all">
+              {addLock.busy ? '提交中…' : '确认添加'}
+            </button>
           </div>
           )}
           <div className="space-y-2">
@@ -95,48 +164,75 @@ const AccountTypesModal: React.FC<AccountTypesModalProps> = ({
               <p className="py-8 text-center text-slate-400 text-sm">暂无收支账户类型，请在上方新增</p>
             ) : (
               financeAccountTypes.map(acc => (
-                <div key={acc.id} className="flex items-center gap-3 p-4 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-white hover:border-slate-200 transition-all">
+                <div key={acc.id} className="p-4 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-white hover:border-slate-200 transition-all">
                   {editingAccountTypeId === acc.id ? (
-                    <>
+                    <div className="space-y-3">
                       <input
                         type="text"
-                        value={editingAccountTypeName}
-                        onChange={e => setEditingAccountTypeName(e.target.value)}
-                        className="flex-1 bg-white border border-slate-200 rounded-xl py-2.5 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                        value={editingName}
+                        onChange={e => setEditingName(e.target.value)}
+                        className={`${formStandardControlClass} w-full`}
                       />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const next = editingAccountTypeName.trim();
-                          if (!next) { toast.error('账户类型名称不能为空'); return; }
-                          if (hasSettingsNameConflict(financeAccountTypes, next, acc.id)) {
-                            toast.error(`账户类型"${next}"已存在`);
-                            return;
-                          }
-                          void updateFinanceAccountTypeConfig(acc.id, { name: next }).then(() => setEditingAccountTypeId(null));
-                        }}
-                        className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700"
-                      >
-                        保存
-                      </button>
-                      <button type="button" onClick={() => setEditingAccountTypeId(null)} className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-200">
-                        取消
-                      </button>
-                    </>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <span className="text-[10px] text-slate-400 ml-1">期初余额</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={editingInitialBalance}
+                            onChange={e => setEditingInitialBalance(e.target.value)}
+                            className={`${formStandardControlClass} w-full`}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <span className="text-[10px] text-slate-400 ml-1">期初日期</span>
+                          <input
+                            type="date"
+                            value={editingOpeningDate}
+                            onChange={e => setEditingOpeningDate(e.target.value)}
+                            className={`${formStandardControlClass} w-full`}
+                          />
+                        </div>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="账户分类（可选）"
+                        value={editingAccountKind}
+                        onChange={e => setEditingAccountKind(e.target.value)}
+                        className={`${formStandardControlClass} w-full`}
+                      />
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => void saveEdit(acc)} className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700">
+                          保存
+                        </button>
+                        <button type="button" onClick={() => setEditingAccountTypeId(null)} className="flex-1 px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-200">
+                          取消
+                        </button>
+                      </div>
+                    </div>
                   ) : (
-                    <>
-                      <span className="flex-1 text-sm font-bold text-slate-800">{acc.name}</span>
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-slate-800 truncate">{acc.name}</span>
+                          {acc.accountKind && <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 shrink-0">{acc.accountKind}</span>}
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          期初 {Number(acc.initialBalance ?? 0).toFixed(2)}
+                          {acc.openingDate ? ` · ${toDateInputValue(acc.openingDate)}` : ''}
+                        </p>
+                      </div>
                       {canEdit && (
-                      <button type="button" onClick={() => { setEditingAccountTypeId(acc.id); setEditingAccountTypeName(acc.name); }} className="p-2 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all" title="编辑">
+                      <button type="button" onClick={() => beginEdit(acc)} className="p-2 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all shrink-0" title="编辑">
                         <FileText className="w-4 h-4" />
                       </button>
                       )}
                       {canDelete && (
-                      <button type="button" onClick={() => { removeFinanceAccountType(acc.id); }} className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all" title="删除">
+                      <button type="button" onClick={() => { removeFinanceAccountType(acc.id); }} className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all shrink-0" title="删除">
                         <Trash2 className="w-4 h-4" />
                       </button>
                       )}
-                    </>
+                    </div>
                   )}
                 </div>
               ))

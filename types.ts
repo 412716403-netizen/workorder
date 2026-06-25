@@ -12,6 +12,8 @@ export {
   isPlanDispatchStatus,
   isOrderDispatchStatus,
   FINANCE_DOC_NO_PREFIX,
+  FINANCE_TRANSFER_DOC_NO_PREFIX,
+  FINANCE_UNASSIGNED_ACCOUNT_KEY,
   PLAN_DOC_NO_PREFIX,
   WORK_ORDER_DOC_NO_PREFIX,
   SCAN_ITEM_CODE_IDS_KEY,
@@ -471,6 +473,16 @@ export interface FinanceCategory {
 export interface FinanceAccountType {
   id: string;
   name: string;
+  /** 期初余额（系统启用时录入的历史余额，参与当前余额聚合） */
+  initialBalance?: number;
+  /** 期初日期（ISO 字符串，可用于限定聚合起点；当前聚合实现暂只用作展示） */
+  openingDate?: string;
+  /** 账户类型分类（如 现金 / 银行 / 在线钱包），便于分类汇总 */
+  accountKind?: string;
+  /** 排序权重，越小越靠前 */
+  sortOrder?: number;
+  /** 是否启用 */
+  active?: boolean;
 }
 
 export interface BOMItem {
@@ -1670,8 +1682,10 @@ export interface FinanceRecord {
   workerId?: string;
   /** 关联产品 id（当分类开启“是否关联产品”时） */
   productId?: string;
-  /** 收支账户（当分类开启「是否选择收支账户」时） */
+  /** 收支账户（当分类开启「是否选择收支账户」时）；展示用账户名，余额聚合以 accountTypeId 为准 */
   paymentAccount?: string;
+  /** 关联收支账户类型 id（余额聚合 / 转账 / 台账下钻的精确分组键） */
+  accountTypeId?: string;
   /** 分类自定义字段值，key 为 customField.id */
   customData?: Record<string, any>;
 }
