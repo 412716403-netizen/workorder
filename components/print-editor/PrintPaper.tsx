@@ -21,6 +21,7 @@ import {
   isLikelyPrintImageUrl,
 } from '../../utils/printResolve';
 import { getPaperMarginsMm, getPrintLayoutMetrics, getPrintOutputPageCount } from './layoutMetrics';
+import { QR_QUIET_ZONE_MODULES } from '../../utils/qrcodegen';
 import {
   computeBodyVerticalPushByElementId,
   elementHeightGrowMm,
@@ -308,7 +309,12 @@ function BodyElementView({
           }}
           onPointerDown={e => editorMode?.onElementPointerDown?.(el, e)}
         >
-          <QRCodeSVG value={v.length > 2000 ? v.slice(0, 2000) : v} style={{ width: '100%', height: '100%' }} />
+          <QRCodeSVG
+            value={v.length > 2000 ? v.slice(0, 2000) : v}
+            level="M"
+            marginSize={QR_QUIET_ZONE_MODULES}
+            style={{ width: '100%', height: '100%' }}
+          />
         </div>
       );
     }

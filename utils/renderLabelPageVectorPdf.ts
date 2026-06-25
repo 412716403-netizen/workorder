@@ -12,6 +12,7 @@ import { getPrintLayoutMetrics, getPaperMarginsMm } from '../components/print-ed
 import { formatNumberForPrint, resolvePrintPlaceholders } from './printResolve';
 import { LABEL_PDF_FONT_NAME } from './labelPdfChineseFont';
 import { resolveLabelQrPayload, resolveQrCells } from './labelPrintQr';
+import { QR_QUIET_ZONE_MODULES } from './qrcodegen';
 
 const PT_TO_MM = 0.3527777778;
 /** 与 PrintPaper 文本 `lineHeight: 1.2` 一致 */
@@ -123,7 +124,9 @@ function drawTextInBox(
 
 /**
  * 直接矢量绘制二维码：每行合并连续暗模块为一个矩形，零 PNG 编码/解码。
- * 矩阵来自与浏览器打印相同的 qrcodegen 编码器，图案与扫码结果一致。
+ * 矩阵来自与浏览器打印相同的 qrcodegen 编码器（level M），图案与扫码结果一致。
+ * 四周保留 `QR_QUIET_ZONE_MODULES` 个模块的静区（与 PrintPaper 的 QRCodeSVG marginSize 一致），
+ * 静区计入框内：实际模块尺寸按 `(n + 2*静区)` 均分框宽，码主体整体内缩静区模块数。
  */
 function drawQrInBox(
   doc: jsPDF,
@@ -132,8 +135,12 @@ function drawQrInBox(
 ): void {
   const n = cells?.length ?? 0;
   if (!cells || n === 0) return;
-  const moduleW = box.w / n;
-  const moduleH = box.h / n;
+  const quiet = QR_QUIET_ZONE_MODULES;
+  const totalModules = n + quiet * 2;
+  const moduleW = box.w / totalModules;
+  const moduleH = box.h / totalModules;
+  const ox = box.x + quiet * moduleW;
+  const oy = box.y + quiet * moduleH;
 
   doc.setFillColor(255, 255, 255);
   doc.rect(box.x, box.y, box.w, box.h, 'F');
@@ -151,7 +158,7 @@ function drawQrInBox(
       while (x < n && row[x]) {
         x++;
       }
-      doc.rect(box.x + runStart * moduleW, box.y + y * moduleH, (x - runStart) * moduleW, moduleH, 'F');
+      doc.rect(ox + runStart * moduleW, oy + y * moduleH, (x - runStart) * moduleW, moduleH, 'F');
     }
   }
 }
