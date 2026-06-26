@@ -396,6 +396,10 @@
 - **规则**：一笔转账在事务内落两条流水——PAYMENT（转出账户）+ RECEIPT（转入账户），金额相等、共享同一 `ZZD` 转账单号与 `relatedId = transferGroupId`，`customData.transfer = true`。两条流水仍是 RECEIPT/PAYMENT 类型，天然计入各自账户余额，整体对净现金流无影响。
 - **约束**：转出 ≠ 转入账户、金额 > 0；账户须属当前租户。
 - **实现**：`POST /api/finance/transfers`（权限 `finance:transfer:create`）→ `finance.service.createTransfer`。
+- **编辑/删除（成对）**：转账两腿必须一起改/删，否则余额失衡。
+  - 编辑：`PUT /api/finance/transfers/:groupId`（`finance:transfer:edit`）→ `updateTransfer`，事务内按 `transferGroupId` 取出 PAYMENT/RECEIPT 两腿成对更新账户、金额、备注；`docNo` 与 `transferGroupId` 不变。
+  - 删除：`DELETE /api/finance/transfers/:groupId`（`finance:transfer:delete`）→ `deleteTransfer`，按 `transferGroupId` 成对删除。
+  - 防误删：普通 `deleteRecord` 检测到记录为转账腿（`customData.transfer === true`）时，按 `relatedId` 级联删整组，避免从收/付款列表删半条转账。
 
 ### 4.3 合作单位对账 Excel 导出
 

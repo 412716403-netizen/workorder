@@ -63,6 +63,26 @@ export const createTransfer = asyncHandler(async (req, res) => {
   res.status(201).json(result);
 });
 
+export const updateTransfer = asyncHandler(async (req, res) => {
+  const tenantId = req.tenantId!;
+  const db = getTenantPrisma(tenantId);
+  const result = await financeService.updateTransfer(db, tenantId, str(req.params.groupId), {
+    fromAccountId: str(req.body.fromAccountId),
+    toAccountId: str(req.body.toAccountId),
+    amount: Number(req.body.amount),
+    timestamp: optStr(req.body.timestamp),
+    note: optStr(req.body.note),
+    operator: optStr(req.body.operator),
+  });
+  res.json(result);
+});
+
+export const deleteTransfer = asyncHandler(async (req, res) => {
+  const tenantId = req.tenantId!;
+  const db = getTenantPrisma(tenantId);
+  res.json(await financeService.deleteTransfer(db, tenantId, str(req.params.groupId)));
+});
+
 export const getRecord = asyncHandler(async (req, res) => {
   const db = getTenantPrisma(req.tenantId!);
   const record = await financeService.getRecord(db, str(req.params.id));

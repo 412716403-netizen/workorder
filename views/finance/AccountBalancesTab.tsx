@@ -1,7 +1,9 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Wallet, ArrowLeftRight, X, Clock, FileText, Search, CreditCard } from 'lucide-react';
+import { toast } from 'sonner';
 import * as api from '../../services/api';
+import { useConfirm } from '../../contexts/ConfirmContext';
 import {
   FinanceAccountType,
   FinanceCategory,
@@ -16,7 +18,7 @@ import type { PsiListPrintControllerHandle } from '../../components/psi/PsiListP
 import { hasSubPermission } from '../../utils/hasSubPermission';
 import { fmtDT } from '../../utils/formatTime';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
-import AccountTransferModal from './AccountTransferModal';
+import AccountTransferModal, { type TransferEditTarget } from './AccountTransferModal';
 import AccountTypesModal from '../settings/AccountTypesModal';
 import FinanceDetailModal from './FinanceDetailModal';
 
@@ -51,6 +53,8 @@ interface RecTransferInfo {
   transfer: boolean;
   counterpart?: string;
   direction?: string;
+  transferGroupId?: string;
+  counterpartAccountId?: string;
 }
 
 const readTransfer = (rec: FinanceRecord): RecTransferInfo => {
@@ -59,6 +63,8 @@ const readTransfer = (rec: FinanceRecord): RecTransferInfo => {
     transfer: cd?.transfer === true,
     counterpart: cd?.counterpartAccountName as string | undefined,
     direction: cd?.direction as string | undefined,
+    transferGroupId: (cd?.transferGroupId as string | undefined) ?? rec.relatedId,
+    counterpartAccountId: cd?.counterpartAccountId as string | undefined,
   };
 };
 
@@ -107,12 +113,14 @@ const AccountBalancesTab: React.FC<AccountBalancesTabProps> = ({
   products,
 }) => {
   const qc = useQueryClient();
+  const confirm = useConfirm();
   const financeCatMap = useMemo(() => new Map(financeCategories.map(c => [c.id, c])), [financeCategories]);
   const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
   const workerMap = useMemo(() => new Map(workers.map(w => [w.id, w])), [workers]);
   const printRef = useRef<PsiListPrintControllerHandle | null>(null);
   const [period, setPeriod] = useState<PeriodKey>('all');
   const [showTransfer, setShowTransfer] = useState(false);
+  const [editTransfer, setEditTransfer] = useState<TransferEditTarget | null>(null);
   const [showAccountTypes, setShowAccountTypes] = useState(false);
   const [drillAccountId, setDrillAccountId] = useState<string | null>(null);
   const [detailRec, setDetailRec] = useState<FinanceRecord | null>(null);
@@ -125,6 +133,8 @@ const AccountBalancesTab: React.FC<AccountBalancesTabProps> = ({
   };
 
   const canTransfer = hasSubPermission(userPermissions, 'finance:transfer:create');
+  const canEditTransfer = hasSubPermission(userPermissions, 'finance:transfer:edit');
+  const canDeleteTransfer = hasSubPermission(userPermissions, 'finance:transfer:delete');
 
   const balancesQuery = useQuery({
     queryKey: ['finance', 'account-balances', period],
@@ -150,6 +160,42 @@ const AccountBalancesTab: React.FC<AccountBalancesTabProps> = ({
     qc.invalidateQueries({ queryKey: ['finance', 'account-ledger'] });
     qc.invalidateQueries({ queryKey: ['finance', 'list'] });
   };
+
+  /** 从转账流水还原转出/转入账户：out 腿 self=转出、对方=转入；in 腿相反。 */
+  const handleEditTransfer = (rec: FinanceRecord, t: RecTransferInfo) => {
+    const selfAcc = rec.accountTypeId;
+    if (!t.transferGroupId || !selfAcc || !t.counterpartAccountId) {
+      toast.error('转账账户信息缺失，无法编辑');
+      return;
+    }
+    const isOut = t.direction === 'out';
+    setEditTransfer({
+      transferGroupId: t.transferGroupId,
+      fromAccountId: isOut ? selfAcc : t.counterpartAccountId,
+      toAccountId: isOut ? t.counterpartAccountId : selfAcc,
+      amount: Number(rec.amount) || 0,
+      // 自动生成的「账户转账：X → Y」默认备注视为空，避免编辑时回填冗余文案
+      note: rec.note && !rec.note.startsWith('账户转账：') ? rec.note : '',
+    });
+  };
+
+  /** 删除转账组（确认对话框由详情弹窗负责，这里只执行成对删除）。 */
+  const handleDeleteTransfer = async (transferGroupId: string | undefined) => {
+    if (!transferGroupId) {
+      toast.error('转账信息缺失，无法删除');
+      return;
+    }
+    try {
+      await api.finance.deleteTransfer(transferGroupId);
+      toast.success('转账已删除');
+      invalidate();
+    } catch (err: any) {
+      toast.error(err.message || '删除失败');
+    }
+  };
+
+  const detailTransfer = detailRec ? readTransfer(detailRec) : null;
+  const detailIsTransfer = !!detailTransfer?.transfer;
 
   const data = balancesQuery.data;
   const accounts = data?.accounts ?? [];
@@ -281,10 +327,11 @@ const AccountBalancesTab: React.FC<AccountBalancesTabProps> = ({
         </div>
       )}
 
-      {showTransfer && (
+      {(showTransfer || editTransfer) && (
         <AccountTransferModal
           financeAccountTypes={financeAccountTypes}
-          onClose={() => setShowTransfer(false)}
+          editing={editTransfer}
+          onClose={() => { setShowTransfer(false); setEditTransfer(null); }}
           onSuccess={invalidate}
         />
       )}
@@ -399,13 +446,16 @@ const AccountBalancesTab: React.FC<AccountBalancesTabProps> = ({
         <FinanceDetailModal
           detailRecord={detailRec}
           onClose={() => setDetailRec(null)}
-          fillFormFromRecord={() => {}}
+          // 转账详情：编辑按钮复用「打开转账编辑弹窗」，删除按钮复用 deleteTransfer（弹窗自带二次确认）。
+          fillFormFromRecord={rec => handleEditTransfer(rec, readTransfer(rec))}
           setEditingRecordId={() => {}}
           setShowModal={() => {}}
           setDetailRecord={target => setDetailRec((target as FinanceRecord | null) ?? null)}
-          canEdit={false}
-          canDelete={false}
-          confirm={async () => false}
+          onUpdateRecord={detailIsTransfer ? () => {} : undefined}
+          onDeleteRecord={detailIsTransfer ? () => void handleDeleteTransfer(detailTransfer?.transferGroupId) : undefined}
+          canEdit={detailIsTransfer && canEditTransfer}
+          canDelete={detailIsTransfer && canDeleteTransfer}
+          confirm={confirm}
           showListPrintButton={false}
           canView={false}
           financeListPrintRef={printRef}

@@ -71,6 +71,21 @@ export const finance = {
       '/finance/transfers',
       { method: 'POST', body: JSON.stringify(body) },
     ),
+  /** 编辑账户转账：成对更新转出/转入两条流水（transferGroupId 不变） */
+  updateTransfer: (
+    transferGroupId: string,
+    body: { fromAccountId: string; toAccountId: string; amount: number; timestamp?: string; note?: string; operator?: string },
+  ) =>
+    request<{ transferGroupId: string; outRecord: FinanceRecord; inRecord: FinanceRecord }>(
+      `/finance/transfers/${transferGroupId}`,
+      { method: 'PUT', body: JSON.stringify(body) },
+    ),
+  /** 删除账户转账：按 transferGroupId 成对删除两条流水 */
+  deleteTransfer: (transferGroupId: string) =>
+    request<{ message: string; count: number }>(
+      `/finance/transfers/${transferGroupId}`,
+      { method: 'DELETE' },
+    ),
   /**
    * Phase 3.D follow-up：销售单打印「上次结余」窄查接口。
    * - partnerName 为必填（财务记录按 name 精确匹配；后端 PSI 也按 (partnerId or partnerName) OR 匹配）。

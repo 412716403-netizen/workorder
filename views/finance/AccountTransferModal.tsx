@@ -6,22 +6,35 @@ import { FinanceAccountType } from '../../types';
 import { useAsyncSubmitLock } from '../../hooks/useAsyncSubmitLock';
 import { formStandardControlClass } from '../../styles/uiDensity';
 
+/** 编辑模式入参：转账组 id + 预填的转出/转入账户、金额、备注 */
+export interface TransferEditTarget {
+  transferGroupId: string;
+  fromAccountId: string;
+  toAccountId: string;
+  amount: number;
+  note: string;
+}
+
 interface AccountTransferModalProps {
   financeAccountTypes: FinanceAccountType[];
   onClose: () => void;
   onSuccess: () => void;
+  /** 传入则进入编辑模式，调用 updateTransfer 成对更新 */
+  editing?: TransferEditTarget | null;
 }
 
-/** 账户间转账（内部调拨）：选转出/转入账户 + 金额，后端事务内落两条流水 */
+/** 账户间转账（内部调拨）：选转出/转入账户 + 金额，后端事务内落/改两条流水 */
 const AccountTransferModal: React.FC<AccountTransferModalProps> = ({
   financeAccountTypes,
   onClose,
   onSuccess,
+  editing,
 }) => {
-  const [fromAccountId, setFromAccountId] = useState('');
-  const [toAccountId, setToAccountId] = useState('');
-  const [amount, setAmount] = useState('');
-  const [note, setNote] = useState('');
+  const isEdit = !!editing;
+  const [fromAccountId, setFromAccountId] = useState(editing?.fromAccountId ?? '');
+  const [toAccountId, setToAccountId] = useState(editing?.toAccountId ?? '');
+  const [amount, setAmount] = useState(editing ? String(editing.amount) : '');
+  const [note, setNote] = useState(editing?.note ?? '');
   const lock = useAsyncSubmitLock();
 
   const submit = async () => {
@@ -31,25 +44,35 @@ const AccountTransferModal: React.FC<AccountTransferModalProps> = ({
     if (!Number.isFinite(amt) || amt <= 0) { toast.warning('转账金额必须大于 0'); return; }
     await lock.run(async () => {
       try {
-        await api.finance.transfer({
-          fromAccountId,
-          toAccountId,
-          amount: amt,
-          note: note.trim() || undefined,
-        });
-        toast.success('转账成功');
+        if (isEdit && editing) {
+          await api.finance.updateTransfer(editing.transferGroupId, {
+            fromAccountId,
+            toAccountId,
+            amount: amt,
+            note: note.trim() || undefined,
+          });
+          toast.success('转账已更新');
+        } else {
+          await api.finance.transfer({
+            fromAccountId,
+            toAccountId,
+            amount: amt,
+            note: note.trim() || undefined,
+          });
+          toast.success('转账成功');
+        }
         onSuccess();
         onClose();
-      } catch (err: any) { toast.error(err.message || '转账失败'); }
+      } catch (err: any) { toast.error(err.message || (isEdit ? '更新失败' : '转账失败')); }
     });
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-white w-full max-w-md rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 flex flex-col">
         <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
-          <h2 className="text-lg font-bold text-slate-800">账户间转账</h2>
+          <h2 className="text-lg font-bold text-slate-800">{isEdit ? '编辑账户转账' : '账户间转账'}</h2>
           <button type="button" onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-white transition-all">
             <X className="w-5 h-5" />
           </button>
@@ -86,7 +109,7 @@ const AccountTransferModal: React.FC<AccountTransferModalProps> = ({
             取消
           </button>
           <button type="button" onClick={() => void submit()} disabled={lock.busy} className="flex-1 px-5 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all">
-            {lock.busy ? '提交中…' : '确认转账'}
+            {lock.busy ? '提交中…' : isEdit ? '保存修改' : '确认转账'}
           </button>
         </div>
       </div>

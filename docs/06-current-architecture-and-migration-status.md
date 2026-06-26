@@ -220,6 +220,7 @@
   - `FinanceAccountType` 加 `initialBalance/openingDate/accountKind/sortOrder/active`；`FinanceRecord` 加 `accountTypeId` 外键（migration `20260625120000_finance_account_balance` 按 `(tenant_id, name)` 回填，保留 `payment_account` 作展示/回退）。
   - 余额实时聚合（不落库存量）：`GET /api/finance/account-balances`（`finance:account:view`）→ `getAccountBalances` → 纯函数 `accumulateAccountBalances`（含单测 `backend/tests/financeAccountBalances.test.ts`）。
   - 账户间转账：`POST /api/finance/transfers`（`finance:transfer:create`）事务内落 PAYMENT+RECEIPT 同 `transferGroupId`/`ZZD` 单号；前端「财务 - 资金账户」Tab（`AccountBalancesTab` + `AccountTransferModal`），账户流水下钻按 `accountTypeId` 窄拉 `finance.listPage`。
+  - 转账编辑/删除（成对操作）：`PUT /api/finance/transfers/:groupId`（`finance:transfer:edit`）事务内成对改两腿、保持 `docNo`/`transferGroupId` 不变；`DELETE /api/finance/transfers/:groupId`（`finance:transfer:delete`）按 `transferGroupId` 成对删。`deleteRecord` 也对转账腿做级联（删任一腿即删整组），避免从收/付款列表误删半条转账导致余额失衡。流水下钻点「详情」打开 `FinanceDetailModal`，转账记录在弹窗右上角显示「编辑/删除」（按 `finance:transfer:edit|delete` 权限）：编辑复用 `AccountTransferModal` 编辑模式，删除走 `deleteTransfer`（弹窗自带二次确认）。
 
 ## 8. 本文件的边界
 

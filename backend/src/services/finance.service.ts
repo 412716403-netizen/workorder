@@ -158,6 +158,17 @@ export async function updateRecord(
 }
 
 export async function deleteRecord(db: TenantPrismaClient, id: string) {
+  // 转账流水成对存在：删任一腿都应连删另一腿，避免账户余额因半条转账而失衡。
+  const rec = await db.financeRecord.findFirst({
+    where: { id },
+    select: { id: true, relatedId: true, customData: true },
+  });
+  const isTransferLeg =
+    !!rec?.relatedId && (rec.customData as Record<string, unknown> | null)?.transfer === true;
+  if (isTransferLeg) {
+    await db.financeRecord.deleteMany({ where: { relatedId: rec!.relatedId! } });
+    return { message: '已删除' };
+  }
   await db.financeRecord.delete({ where: { id } });
   return { message: '已删除' };
 }
@@ -425,6 +436,101 @@ export async function createTransfer(
 
     return { transferGroupId, docNo, outRecord, inRecord };
   });
+}
+
+export interface UpdateTransferInput {
+  fromAccountId: string;
+  toAccountId: string;
+  amount: number;
+  timestamp?: string;
+  note?: string;
+  operator?: string;
+}
+
+/**
+ * 编辑账户转账：成对更新转出(PAYMENT)/转入(RECEIPT)两条流水，保持 docNo 与 transferGroupId 不变。
+ * 与创建同口径——读侧显式带 tenantId、写侧不依赖扩展客户端的租户作用域。
+ */
+export async function updateTransfer(
+  _db: TenantPrismaClient,
+  tenantId: string,
+  transferGroupId: string,
+  input: UpdateTransferInput,
+) {
+  const amount = Number(input.amount);
+  if (!input.fromAccountId || !input.toAccountId) throw new AppError(400, '转出/转入账户不能为空');
+  if (input.fromAccountId === input.toAccountId) throw new AppError(400, '转出与转入账户不能相同');
+  if (!Number.isFinite(amount) || amount <= 0) throw new AppError(400, '转账金额必须大于 0');
+
+  return basePrisma.$transaction(async tx => {
+    const records = await tx.financeRecord.findMany({
+      where: { tenantId, relatedId: transferGroupId },
+    });
+    if (records.length === 0) throw new AppError(404, '转账记录不存在');
+    const outRec = records.find(r => r.type === 'PAYMENT');
+    const inRec = records.find(r => r.type === 'RECEIPT');
+    if (!outRec || !inRec) throw new AppError(400, '转账记录不完整，无法编辑');
+
+    const [fromAcc, toAcc] = await Promise.all([
+      tx.financeAccountType.findFirst({ where: { id: input.fromAccountId, tenantId } }),
+      tx.financeAccountType.findFirst({ where: { id: input.toAccountId, tenantId } }),
+    ]);
+    if (!fromAcc) throw new AppError(404, '转出账户不存在');
+    if (!toAcc) throw new AppError(404, '转入账户不存在');
+
+    const timestamp = input.timestamp ? new Date(input.timestamp) : outRec.timestamp;
+    const note = input.note?.trim() || `账户转账：${fromAcc.name} → ${toAcc.name}`;
+    const operator = input.operator?.trim() ?? outRec.operator;
+
+    const outRecord = await tx.financeRecord.update({
+      where: { id: outRec.id },
+      data: {
+        amount,
+        timestamp,
+        note,
+        operator,
+        accountTypeId: fromAcc.id,
+        paymentAccount: fromAcc.name,
+        customData: {
+          transfer: true,
+          transferGroupId,
+          direction: 'out',
+          counterpartAccountId: toAcc.id,
+          counterpartAccountName: toAcc.name,
+        },
+      },
+    });
+    const inRecord = await tx.financeRecord.update({
+      where: { id: inRec.id },
+      data: {
+        amount,
+        timestamp,
+        note,
+        operator,
+        accountTypeId: toAcc.id,
+        paymentAccount: toAcc.name,
+        customData: {
+          transfer: true,
+          transferGroupId,
+          direction: 'in',
+          counterpartAccountId: fromAcc.id,
+          counterpartAccountName: fromAcc.name,
+        },
+      },
+    });
+    return { transferGroupId, outRecord, inRecord };
+  });
+}
+
+/** 删除账户转账：按 transferGroupId 成对删除两条流水（transferGroupId 由 genId('xfer') 生成，全局唯一，不会误删普通流水）。 */
+export async function deleteTransfer(
+  db: TenantPrismaClient,
+  _tenantId: string,
+  transferGroupId: string,
+) {
+  const result = await db.financeRecord.deleteMany({ where: { relatedId: transferGroupId } });
+  if (result.count === 0) throw new AppError(404, '转账记录不存在');
+  return { message: '转账已删除', count: result.count };
 }
 
 /** 由 startDate/endDate 生成 timestamp 范围过滤（gte/lte）；无有效边界返回 null */

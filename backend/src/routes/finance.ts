@@ -22,6 +22,8 @@ const createTransferSchema = z.object({
   operator: z.string().optional(),
 }).passthrough();
 
+const updateTransferSchema = createTransferSchema;
+
 /**
  * 通用 `/finance/records*` 端点：承载收款单/付款单（及对账核销）落库。
  * 历史挂 `finance:records:*`，但权限树无 `records` 子模块，细粒度财务角色（如只勾收款单）
@@ -38,6 +40,19 @@ router.post(
   requireSubPermission('finance:transfer:create'),
   validate(createTransferSchema),
   ctrl.createTransfer,
+);
+/** 编辑账户转账：成对更新转出/转入两条流水 */
+router.put(
+  '/transfers/:groupId',
+  requireSubPermission('finance:transfer:edit'),
+  validate(updateTransferSchema),
+  ctrl.updateTransfer,
+);
+/** 删除账户转账：按 transferGroupId 成对删除两条流水 */
+router.delete(
+  '/transfers/:groupId',
+  requireSubPermission('finance:transfer:delete'),
+  ctrl.deleteTransfer,
 );
 /**
  * Phase 3.D follow-up：销售单打印应收 ledger 窄查；

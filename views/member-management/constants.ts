@@ -89,7 +89,7 @@ export const FINANCE_SUB_MODULES: { key: string; label: string; actions: string[
   { key: 'receipt', label: '收款单', actions: ['view', 'create', 'edit', 'delete'], group: '收款单' },
   { key: 'payment', label: '付款单', actions: ['view', 'create', 'edit', 'delete'], group: '付款单' },
   { key: 'account', label: '资金账户', actions: ['view'], group: '资金账户' },
-  { key: 'transfer', label: '账户转账', actions: ['create', 'view'], group: '资金账户' },
+  { key: 'transfer', label: '账户转账', actions: ['view', 'create', 'edit', 'delete'], group: '资金账户' },
   { key: 'reconciliation', label: '财务对帐', actions: ['allow'], group: '财务对帐' },
 ];
 

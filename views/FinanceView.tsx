@@ -147,9 +147,26 @@ const FinanceView: React.FC = () => {
   const { hasPerm: hasFinancePerm } = useModulePermission({ tenantRole, userPermissions, moduleName: 'finance' });
   const { isPluginEnabled } = useFeaturePlugins();
   const fundsAccountEnabled = isPluginEnabled('funds_account');
+  /**
+   * 资金账户为敏感子模块的可见性判定：
+   * - 故意 **不走** `isTenantElevatedRole(admin)` 提权放行：当一个 admin 被分配了
+   *   限制性自定义角色时，`permissions` 拿到的是该角色的细粒度权限（不含裸 `finance`），
+   *   应按角色生效；只有 owner / 真·超管拿到的是模块级权限（含裸 `finance`）。
+   * - 与 `hasModulePerm` 语义一致：模块级授权仅在「无任何 finance 细粒度权限」时才视为放行，
+   *   一旦配置了细粒度，就必须显式勾选 `finance:account:view`。
+   */
+  const financePermList = userPermissions ?? [];
+  const hasFinanceModuleGrant = financePermList.includes('finance');
+  const hasFinanceFineGrained = financePermList.some(p => p.startsWith('finance:'));
+  const canViewAccountTab =
+    !userPermissions ||
+    userPermissions.length === 0 ||
+    financePermList.includes('finance:account:view') ||
+    (hasFinanceModuleGrant && !hasFinanceFineGrained);
+  const accountTabVisible = fundsAccountEnabled && canViewAccountTab;
   useEffect(() => {
-    if (!fundsAccountEnabled && activeTab === 'ACCOUNT') setActiveTab('RECEIPT');
-  }, [fundsAccountEnabled, activeTab]);
+    if (activeTab === 'ACCOUNT' && !accountTabVisible) setActiveTab('RECEIPT');
+  }, [accountTabVisible, activeTab]);
 
   // 收支账户类型管理已从「系统设置」移到「资金账户」页，权限沿用 settings:finance_account_types:*
   const isOwner = tenantRole === 'owner';
@@ -179,7 +196,7 @@ const FinanceView: React.FC = () => {
     RECONCILIATION: 'finance:reconciliation:allow',
   };
   const tabs = allTabs.filter(tab => {
-    if (tab.id === 'ACCOUNT' && !fundsAccountEnabled) return false;
+    if (tab.id === 'ACCOUNT') return accountTabVisible;
     return hasFinancePerm(permMap[tab.id]);
   });
 
@@ -220,7 +237,7 @@ const FinanceView: React.FC = () => {
       )}
       <div className={`min-h-[600px] ${subModuleMainContentTopClass}`}>
         {activeTab === 'ACCOUNT' ? (
-        fundsAccountEnabled ? (
+        accountTabVisible ? (
         <AccountBalancesTab
           financeAccountTypes={financeAccountTypes}
           userPermissions={userPermissions}
