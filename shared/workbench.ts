@@ -15,7 +15,8 @@ export type WorkbenchWidgetType =
   | 'rework_stats'
   | 'sales_stats'
   | 'sales_order_stats'
-  | 'finance_stats';
+  | 'finance_stats'
+  | 'product_economics';
 
 export type WorkbenchWidgetCategory = 'general' | 'efficiency' | 'reports';
 
@@ -40,6 +41,12 @@ export interface WorkbenchPage {
   title: string;
   sortOrder: number;
   layout: WorkbenchPageLayout;
+  /**
+   * 自定义页面创建者的 userId。
+   * - 首页（WORKBENCH_HOME_PAGE_ID）为系统页，无创建者（null/undefined）。
+   * - 自定义页面默认仅创建者可见；可在角色管理中按页面授权给角色查看。
+   */
+  createdByUserId?: string | null;
 }
 
 export interface WorkbenchConfig {
@@ -86,6 +93,7 @@ export const WORKBENCH_WIDGET_TYPES: WorkbenchWidgetType[] = [
   'sales_stats',
   'sales_order_stats',
   'finance_stats',
+  'product_economics',
 ];
 
 export const FEATURE_PLUGIN_CATALOG: FeaturePluginDefinition[] = getToggleableFeaturePlugins().map(p => ({
@@ -195,6 +203,17 @@ export const WORKBENCH_WIDGET_CATALOG: WorkbenchWidgetDefinition[] = [
     minH: 4,
     requiredModule: 'finance',
   },
+  {
+    type: 'product_economics',
+    title: '产品经营情况',
+    description: '按产品汇总物料成本、报工成本、外协/返工/报损及库存与销售',
+    category: 'reports',
+    defaultW: 5,
+    defaultH: 6,
+    minW: 4,
+    minH: 4,
+    requiredModule: 'production',
+  },
 ];
 
 export const WORKBENCH_HOME_PAGE_ID = 'page-overview';
@@ -265,7 +284,20 @@ export const WORKBENCH_BUILTIN_DEFAULT: WorkbenchConfig = {
 
 export const DASHBOARD_SETTING_KEYS = {
   featurePlugins: 'featurePlugins',
+  /** 租户级共享的工作台自定义页面（不含首页；首页仍按用户存于 membership.preferences） */
+  workbenchSharedPages: 'workbenchSharedPages',
 } as const;
+
+/**
+ * 工作台权限模块标识。角色权限里以 `workbench:<pageId>` 形式授予某自定义页面的查看权。
+ * 与既有 `module:resource:action` 三段式不同，工作台页面是动态资源，采用 `workbench:<pageId>` 两段式。
+ */
+export const WORKBENCH_PERM_MODULE = 'workbench';
+
+/** 生成某工作台自定义页面的查看权限 key */
+export function workbenchPagePermKey(pageId: string): string {
+  return `${WORKBENCH_PERM_MODULE}:${pageId}`;
+}
 
 export function defaultFeaturePlugins(): FeaturePluginsConfig {
   const out: FeaturePluginsConfig = {};

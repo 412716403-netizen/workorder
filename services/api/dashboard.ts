@@ -5,8 +5,11 @@ export interface WorkbenchResponse {
   effective: WorkbenchConfig;
 }
 
-export interface WorkbenchResponse {
-  effective: WorkbenchConfig;
+export interface WorkbenchPageSummary {
+  id: string;
+  title: string;
+  createdByUserId: string | null;
+  creatorName: string | null;
 }
 
 export interface DashboardNotification {
@@ -133,6 +136,8 @@ export const dashboard = {
   getWorkbench: () => request<WorkbenchResponse>('/dashboard/workbench'),
   saveWorkbench: (config: WorkbenchConfig) =>
     request<WorkbenchConfig>('/dashboard/workbench', { method: 'PUT', body: JSON.stringify(config) }),
+  getWorkbenchPages: () =>
+    request<{ pages: WorkbenchPageSummary[] }>('/dashboard/workbench/pages'),
   getShortcuts: () => request<ShortcutsResponse>('/dashboard/shortcuts'),
   saveShortcuts: (ids: string[]) =>
     request<{ selected: string[] }>('/dashboard/shortcuts', {

@@ -30,6 +30,9 @@ interface WorkbenchTabBarProps {
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
   onReorder: (orderedIds: string[]) => void;
+  canEditPage: (page: WorkbenchPage) => boolean;
+  /** 是否允许新增自定义页面（仅企业创建者 owner） */
+  canAddPage: boolean;
   toolbar?: React.ReactNode;
 }
 
@@ -55,6 +58,7 @@ function SortableTab({
   page,
   active,
   editing,
+  editable,
   onSelect,
   onRename,
   onDelete,
@@ -62,6 +66,7 @@ function SortableTab({
   page: WorkbenchPage;
   active: boolean;
   editing: boolean;
+  editable: boolean;
   onSelect: () => void;
   onRename: (title: string) => void;
   onDelete: () => void;
@@ -70,7 +75,7 @@ function SortableTab({
   const [name, setName] = useState(page.title);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: page.id,
-    disabled: !editing,
+    disabled: !editing || !editable,
   });
 
   useEffect(() => {
@@ -107,15 +112,17 @@ function SortableTab({
         active ? 'bg-indigo-50 text-indigo-600 shadow-sm' : 'text-slate-400 hover:bg-slate-50/50 hover:text-slate-600'
       }`}
     >
-      <span
-        className="cursor-grab touch-none pl-2 text-slate-300 hover:text-slate-500 active:cursor-grabbing"
-        {...attributes}
-        {...listeners}
-        onClick={e => e.stopPropagation()}
-        aria-hidden
-      >
-        <GripVertical className="h-3.5 w-3.5" />
-      </span>
+      {editable && (
+        <span
+          className="cursor-grab touch-none pl-2 text-slate-300 hover:text-slate-500 active:cursor-grabbing"
+          {...attributes}
+          {...listeners}
+          onClick={e => e.stopPropagation()}
+          aria-hidden
+        >
+          <GripVertical className="h-3.5 w-3.5" />
+        </span>
+      )}
       <button
         type="button"
         onClick={onSelect}
@@ -141,6 +148,7 @@ function SortableTab({
           <span
             className="max-w-[8rem] truncate"
             onDoubleClick={e => {
+              if (!editable) return;
               e.stopPropagation();
               setRenaming(true);
             }}
@@ -149,7 +157,7 @@ function SortableTab({
           </span>
         )}
       </button>
-      {!renaming && (
+      {!renaming && editable && (
         <button
           type="button"
           onClick={e => {
@@ -175,6 +183,8 @@ const WorkbenchTabBar: React.FC<WorkbenchTabBarProps> = ({
   onRename,
   onDelete,
   onReorder,
+  canEditPage,
+  canAddPage,
   toolbar,
 }) => {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
@@ -220,6 +230,7 @@ const WorkbenchTabBar: React.FC<WorkbenchTabBarProps> = ({
                     page={page}
                     active={page.id === activePageId}
                     editing={editing}
+                    editable={canEditPage(page)}
                     onSelect={() => onSelect(page.id)}
                     onRename={title => onRename(page.id, title)}
                     onDelete={() => onDelete(page.id)}
@@ -227,7 +238,7 @@ const WorkbenchTabBar: React.FC<WorkbenchTabBarProps> = ({
                 ))}
               </SortableContext>
             </DndContext>
-            {editing && (
+            {editing && canAddPage && (
               <button
                 type="button"
                 onClick={onAddPage}

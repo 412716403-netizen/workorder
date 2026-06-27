@@ -77,7 +77,7 @@
 | 财务记录 CRUD | 已落地 | 已有 `/api/finance/records` | 补充统计、校验与测试说明 |
 | 资金账户余额 | 已落地 | `FinanceAccountType` 加期初余额；`GET /api/finance/account-balances` 实时聚合（期初+收-付）；`FinanceRecord.accountTypeId` 外键（migration `20260625120000` 已回填）；前端「资金账户」Tab | 后续可加按状态过滤（审核流）/账户报表 |
 | 账户间转账 | 已落地 | `POST /api/finance/transfers` 事务内落 PAYMENT+RECEIPT 同组（`ZZD` 单号） | 后续可加转账撤销/红冲 |
-| Dashboard / 工作台 | 已落地 | `/api/dashboard/*`：workbench 配置、feature-plugins、stats、**order-stats / outsource-stats / rework-stats**、notifications | 前端 `WorkbenchView`；默认首页 `/workbench` |
+| Dashboard / 工作台 | 已落地 | `/api/dashboard/*`：workbench 配置、feature-plugins、stats、**order-stats / outsource-stats / rework-stats**、notifications；**工作台自定义页改为租户共享：仅 owner 可创建/编辑，默认仅创建者可见（不给 owner/admin 自动可见），角色按页授权只读查看**（`workbench:<pageId>`，列表 `GET /dashboard/workbench/pages` 含首页，存于 `system_settings.workbenchSharedPages`，首页仍按用户存 `preferences`）；**页面查看权限＝该页内容整体授权：被授权页内组件全部展示、金额不掩码，统计接口经 `augmentPermissionsWithWorkbench` 临时补齐模块返回完整数据；首页可单独授予 `workbench:<首页id>` 解除金额掩码；**首页可见性也纳入按页面授权**：角色启用按页面授权但未含首页时首页隐藏，未涉及工作台权限的角色首页仍默认可见，前端在无可见页时显示空态** | 前端 `WorkbenchView`（`WorkbenchPageAccessProvider` 下发 `fullAccess`）+ 角色管理「工作台」模块；存量用户旧 `preferences.dashboardWorkbench` 中的自定义页不会自动迁入共享池（仅保留个人首页），需重新创建 |
 | 追溯码插件 | 已落地 | `featurePlugins.traceability`：计划追溯码、扫码累加、扫码称重 UI gate | 插件中心开通；存量租户默认开启 |
 | 资料库 | 已落地 | `/api/knowledge-base/*`：文件夹/文档 CRUD、图片资源上传 | 前端 `KnowledgeBaseView`；插件 `knowledge_base` 可开关 |
 | 收支汇总、库存预警、订单进度 | 部分落地 | 已有后端聚合方向 | 继续按指标逐项校验计算口径 |

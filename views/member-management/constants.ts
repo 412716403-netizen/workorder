@@ -11,6 +11,7 @@ export const ALL_PERMISSIONS = [
   { id: 'price_amount', label: '单价/金额' },
   { id: 'basic', label: '基础信息' },
   { id: 'collaboration', label: '协作管理' },
+  { id: 'workbench', label: '工作台' },
   { id: 'settings', label: '系统设置' },
 ];
 
@@ -151,6 +152,7 @@ export function permSummary(perms: string[]): string {
     perms.some(p => p.startsWith(`collaboration:${sm.key}:`)),
   ).length;
   const priceAmountCount = PRICE_AMOUNT_SUB_MODULES.filter(sm => perms.includes(sm.permKey)).length;
+  const workbenchCount = perms.filter(p => p.startsWith('workbench:')).length;
   const modules = ALL_PERMISSIONS
     .filter(p => perms.includes(p.id))
     .map(p => {
@@ -162,6 +164,7 @@ export function permSummary(perms: string[]): string {
       if (p.id === 'finance' && financeCount > 0) return `${p.label}(${financeCount}项)`;
       if (p.id === 'collaboration' && collaborationCount > 0) return `${p.label}(${collaborationCount}项)`;
       if (p.id === 'price_amount' && priceAmountCount > 0) return `${p.label}(${priceAmountCount}项)`;
+      if (p.id === 'workbench' && workbenchCount > 0) return `${p.label}(${workbenchCount}页)`;
       return p.label;
     });
   if (!perms.includes('settings') && settingsCount > 0) modules.push(`系统设置(${settingsCount}项)`);
@@ -172,5 +175,6 @@ export function permSummary(perms: string[]): string {
   if (!perms.includes('finance') && financeCount > 0) modules.push(`财务结算(${financeCount}项)`);
   if (!perms.includes('collaboration') && collaborationCount > 0) modules.push(`协作管理(${collaborationCount}项)`);
   if (!perms.includes('price_amount') && priceAmountCount > 0) modules.push(`单价/金额(${priceAmountCount}项)`);
+  if (!perms.includes('workbench') && workbenchCount > 0) modules.push(`工作台(${workbenchCount}页)`);
   return modules.length > 0 ? modules.join('、') : '无权限';
 }

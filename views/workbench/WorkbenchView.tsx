@@ -4,6 +4,7 @@ import { useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 import WorkbenchTabBar from './WorkbenchTabBar';
 import WorkbenchGrid from './WorkbenchGrid';
+import { WorkbenchPageAccessProvider } from './WorkbenchPageAccessContext';
 import AddWidgetModal from './AddWidgetModal';
 import AddPageModal from './AddPageModal';
 import ShortcutsWidget from './widgets/ShortcutsWidget';
@@ -50,9 +51,9 @@ const WorkbenchView: React.FC = () => {
         && isHomePinnedWidgetType(item.widgetType);
       const props = {
         editing: wb.editing,
-        layoutLocked: pinnedOnHome,
+        layoutLocked: pinnedOnHome || (!!activePage && !wb.canEditPage(activePage)),
         onRemove:
-          wb.editing && activePage && !pinnedOnHome
+          wb.editing && activePage && !pinnedOnHome && wb.canEditPage(activePage)
             ? () => wb.removeWidget(activePage.id, item.i)
             : undefined,
       };
@@ -79,8 +80,11 @@ const WorkbenchView: React.FC = () => {
           return null;
       }
     },
-    [wb.editing, wb.removeWidget, activePage],
+    [wb.editing, wb.removeWidget, wb.canEditPage, activePage],
   );
+
+  const activePageEditable = activePage ? wb.canEditPage(activePage) : false;
+  const activePageFullAccess = activePage ? wb.hasFullAccess(activePage) : false;
 
   const handleDeletePage = async (pageId: string) => {
     if (isWorkbenchHomePage(pageId)) {
@@ -99,6 +103,16 @@ const WorkbenchView: React.FC = () => {
     return (
       <div className="flex min-h-[400px] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-indigo-400" />
+      </div>
+    );
+  }
+
+  // 角色无任何可查看的工作台页面（首页被权限隐藏且无授权的自定义页面）
+  if (wb.config && wb.config.pages.length === 0) {
+    return (
+      <div className="py-12 text-center">
+        <p className="text-slate-500">暂无可查看的工作台页面</p>
+        <p className="mt-2 text-xs text-slate-400">请联系企业管理员为你的角色分配工作台页面查看权限。</p>
       </div>
     );
   }
@@ -138,24 +152,30 @@ const WorkbenchView: React.FC = () => {
         onRename={wb.renamePage}
         onDelete={handleDeletePage}
         onReorder={wb.reorderPages}
+        canEditPage={wb.canEditPage}
+        canAddPage={wb.canCreatePages}
         toolbar={
           !wb.editing ? (
-            <button
-              type="button"
-              onClick={wb.startEdit}
-              className="flex items-center gap-1 rounded-xl border border-emerald-200 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50"
-            >
-              <Pencil className="h-4 w-4" /> 自定义布局
-            </button>
-          ) : (
-            <>
+            wb.canCreatePages ? (
               <button
                 type="button"
-                onClick={() => setWidgetModalOpen(true)}
+                onClick={wb.startEdit}
                 className="flex items-center gap-1 rounded-xl border border-emerald-200 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50"
               >
-                <Plus className="h-4 w-4" /> 添加组件
+                <Pencil className="h-4 w-4" /> 自定义布局
               </button>
+            ) : null
+          ) : (
+            <>
+              {activePageEditable && (
+                <button
+                  type="button"
+                  onClick={() => setWidgetModalOpen(true)}
+                  className="flex items-center gap-1 rounded-xl border border-emerald-200 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50"
+                >
+                  <Plus className="h-4 w-4" /> 添加组件
+                </button>
+              )}
               <button
                 type="button"
                 onClick={wb.cancelEdit}
@@ -176,16 +196,18 @@ const WorkbenchView: React.FC = () => {
         }
       />
 
-      <WorkbenchGrid
-        key={activePage.id}
-        items={activePage.layout.items}
-        editing={wb.editing}
-        isItemPinned={item =>
-          isWorkbenchHomePage(activePage.id) && isHomePinnedWidgetType(item.widgetType)
-        }
-        renderWidget={renderWidget}
-        onLayoutChange={items => wb.updatePageLayout(activePage.id, items)}
-      />
+      <WorkbenchPageAccessProvider fullAccess={activePageFullAccess}>
+        <WorkbenchGrid
+          key={activePage.id}
+          items={activePage.layout.items}
+          editing={wb.editing}
+          isItemPinned={item =>
+            isWorkbenchHomePage(activePage.id) && isHomePinnedWidgetType(item.widgetType)
+          }
+          renderWidget={renderWidget}
+          onLayoutChange={items => wb.updatePageLayout(activePage.id, items)}
+        />
+      </WorkbenchPageAccessProvider>
 
       <AddWidgetModal
         open={widgetModalOpen}

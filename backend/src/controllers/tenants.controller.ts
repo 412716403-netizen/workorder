@@ -70,7 +70,7 @@ export const applyToJoin = asyncHandler(async (req, res) => {
 });
 
 export const getApplications = asyncHandler(async (req, res) => {
-  res.json(await tenantsService.getApplications(str(req.params.id)));
+  res.json(await tenantsService.getApplications(req.user!.userId, str(req.params.id)));
 });
 
 export const reviewApplication = asyncHandler(async (req, res) => {

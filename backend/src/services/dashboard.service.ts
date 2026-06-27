@@ -7,9 +7,14 @@ import * as settingsService from './settings.service.js';
 import * as productionService from './production.service.js';
 import {
   DASHBOARD_SETTING_KEYS,
+  WORKBENCH_HOME_PAGE_ID,
+  WORKBENCH_BUILTIN_DEFAULT,
+  WORKBENCH_WIDGET_CATALOG,
   defaultFeaturePlugins,
   parseFeaturePlugins,
+  isWorkbenchHomePage,
   type WorkbenchConfig,
+  type WorkbenchPage,
   type FeaturePluginsConfig,
 } from '../../../shared/workbench.js';
 import { applyTraceabilityLabelPrintDefaults } from '../../../shared/traceabilityLabelPrintDefaults.js';
@@ -33,7 +38,9 @@ import {
 import {
   filterWorkbenchByAccess,
   normalizeWorkbenchConfig,
-  resolveEffectiveWorkbenchConfig,
+  filterWorkbenchPagesByVisibility,
+  hasWorkbenchPageFullAccess,
+  mergeSharedWorkbenchPages,
 } from '../../../shared/workbenchValidate.js';
 import {
   DEFAULT_DASHBOARD_ORDER_STATS_NODE_COUNT,
@@ -68,6 +75,55 @@ function readUserWorkbench(preferences: unknown): WorkbenchConfig | null {
   return parseWorkbenchConfig(wb);
 }
 
+/** 系统内置首页（个人首页缺省值） */
+function builtinHomePage(): WorkbenchPage {
+  return normalizeWorkbenchConfig(WORKBENCH_BUILTIN_DEFAULT).pages[0];
+}
+
+/** 读取当前用户的个人首页（存于 membership.preferences.dashboardWorkbench） */
+function readUserHomePage(preferences: unknown): WorkbenchPage {
+  const wb = readUserWorkbench(preferences);
+  const home = wb?.pages.find(p => isWorkbenchHomePage(p.id));
+  return home ?? builtinHomePage();
+}
+
+/** 读取租户级共享的自定义页面（存于 system_settings.workbenchSharedPages） */
+function readSharedWorkbenchPages(config: Record<string, unknown>): WorkbenchPage[] {
+  const raw = config[DASHBOARD_SETTING_KEYS.workbenchSharedPages];
+  if (!Array.isArray(raw)) return [];
+  const normalized = normalizeWorkbenchConfig({
+    version: 1,
+    activePageId: WORKBENCH_HOME_PAGE_ID,
+    pages: raw,
+  });
+  return normalized.pages.filter(p => !isWorkbenchHomePage(p.id));
+}
+
+function assembleWorkbench(homePage: WorkbenchPage, sharedPages: WorkbenchPage[]): WorkbenchConfig {
+  return normalizeWorkbenchConfig({
+    version: 1,
+    activePageId: WORKBENCH_HOME_PAGE_ID,
+    pages: [homePage, ...sharedPages],
+  });
+}
+
+type WidgetAccessOpts = {
+  permissions: string[];
+  featurePlugins: FeaturePluginsConfig;
+  tenantRole?: string;
+  /** 当前查看者 userId，用于页面级完整授权判定 */
+  userId?: string;
+};
+
+/** 对给定页面集合按查看者权限做 widget 级过滤（防篡改 / 隐藏无权组件），返回含首页的归一化页面 */
+function applyWidgetAccess(pages: WorkbenchPage[], opts: WidgetAccessOpts): WorkbenchPage[] {
+  const filtered = filterWorkbenchByAccess(
+    normalizeWorkbenchConfig({ version: 1, activePageId: WORKBENCH_HOME_PAGE_ID, pages }),
+    opts,
+  );
+  return filtered.pages;
+}
+
 function readUserShortcutIds(preferences: unknown): string[] {
   if (!preferences || typeof preferences !== 'object') return normalizeShortcutIds(null);
   const raw = (preferences as { dashboardShortcuts?: unknown }).dashboardShortcuts;
@@ -95,18 +151,31 @@ function filterShortcutIdsByAccess(
     .map(item => item.id);
 }
 
+/**
+ * 工作台有效配置：
+ * - 首页（HOME）= 当前用户的个人首页（membership.preferences）。
+ * - 自定义页面 = 租户级共享池中「当前用户可见」的页面（创建者本人 / owner·admin / 角色被授予 `workbench:<pageId>`）。
+ * 最终再按查看者权限做 widget 级过滤。
+ */
 export async function getWorkbench(userId: string, tenantId: string, permissions: string[]) {
   const [membership, config] = await Promise.all([
     getMembership(userId, tenantId),
     settingsService.getConfig(tenantId),
   ]);
 
-  const userOverride = readUserWorkbench(membership.preferences);
   const featurePlugins = parseFeaturePlugins(config[DASHBOARD_SETTING_KEYS.featurePlugins]);
-  const accessOpts = { permissions, featurePlugins, tenantRole: membership.role };
 
-  const effectiveRaw = resolveEffectiveWorkbenchConfig(userOverride);
-  const effective = filterWorkbenchByAccess(effectiveRaw, accessOpts);
+  const homePage = readUserHomePage(membership.preferences);
+  const sharedPages = readSharedWorkbenchPages(config);
+  const assembled = assembleWorkbench(homePage, sharedPages);
+
+  const visible = filterWorkbenchPagesByVisibility(assembled, { userId, permissions });
+  const effective = filterWorkbenchByAccess(visible, {
+    permissions,
+    featurePlugins,
+    tenantRole: membership.role,
+    userId,
+  });
 
   return { effective };
 }
@@ -120,12 +189,23 @@ export async function saveUserWorkbench(
   const membership = await getMembership(userId, tenantId);
   const config = await settingsService.getConfig(tenantId);
   const featurePlugins = parseFeaturePlugins(config[DASHBOARD_SETTING_KEYS.featurePlugins]);
-  const normalized = normalizeWorkbenchConfig(body);
-  const filtered = filterWorkbenchByAccess(normalized, {
+  // 自定义页面管理权限按业务约定＝企业创建者 owner
+  const canManage = membership.role === 'owner';
+  const accessOpts: WidgetAccessOpts = {
     permissions,
     featurePlugins,
     tenantRole: membership.role,
-  });
+    userId,
+  };
+
+  const submitted = normalizeWorkbenchConfig(body);
+  const submittedHome = submitted.pages.find(p => isWorkbenchHomePage(p.id)) ?? builtinHomePage();
+  const submittedCustom = submitted.pages.filter(p => !isWorkbenchHomePage(p.id));
+
+  // 1) 个人首页落 membership.preferences（按提交者权限过滤 widget）
+  const homePersisted =
+    applyWidgetAccess([submittedHome], accessOpts).find(p => isWorkbenchHomePage(p.id))
+    ?? builtinHomePage();
 
   const prefs =
     membership.preferences && typeof membership.preferences === 'object'
@@ -137,12 +217,116 @@ export async function saveUserWorkbench(
     data: {
       preferences: {
         ...prefs,
-        dashboardWorkbench: filtered,
+        dashboardWorkbench: { version: 1, activePageId: WORKBENCH_HOME_PAGE_ID, pages: [homePersisted] },
       } as object,
     },
   });
 
-  return filtered;
+  // 2) 自定义页面合并进租户共享池（仅创建者本人/提权者的改动会写入；他人页保留）
+  const storedShared = readSharedWorkbenchPages(config);
+  const submittedCustomFiltered = applyWidgetAccess(submittedCustom, accessOpts)
+    .filter(p => !isWorkbenchHomePage(p.id));
+  const mergedShared = mergeSharedWorkbenchPages(storedShared, submittedCustomFiltered, { userId, canManage });
+  await settingsService.updateConfig(tenantId, DASHBOARD_SETTING_KEYS.workbenchSharedPages, mergedShared);
+
+  // 3) 返回与 GET 一致的、当前用户可见且按权限过滤后的视图
+  const assembled = assembleWorkbench(homePersisted, mergedShared);
+  const visible = filterWorkbenchPagesByVisibility(assembled, { userId, permissions });
+  return filterWorkbenchByAccess(visible, accessOpts);
+}
+
+export interface WorkbenchPageSummary {
+  id: string;
+  title: string;
+  createdByUserId: string | null;
+  creatorName: string | null;
+}
+
+/**
+ * 角色管理用：列出可按页面授权的工作台页面（首页 + 租户级共享自定义页面），含创建者展示名。
+ * 授予某页 `workbench:<pageId>` 后，该角色成员可在工作台「完整查看」该页（含金额等全部内容）。
+ */
+export async function listWorkbenchPages(tenantId: string): Promise<WorkbenchPageSummary[]> {
+  const config = await settingsService.getConfig(tenantId);
+  const pages = readSharedWorkbenchPages(config);
+
+  const creatorIds = [...new Set(pages.map(p => p.createdByUserId).filter((v): v is string => !!v))];
+  const creators = creatorIds.length
+    ? await basePrisma.user.findMany({
+        where: { id: { in: creatorIds } },
+        select: { id: true, displayName: true, username: true },
+      })
+    : [];
+  const nameById = new Map(creators.map(u => [u.id, u.displayName || u.username]));
+
+  const homeEntry: WorkbenchPageSummary = {
+    id: WORKBENCH_HOME_PAGE_ID,
+    title: '首页',
+    createdByUserId: null,
+    creatorName: null,
+  };
+
+  return [
+    homeEntry,
+    ...pages.map(p => ({
+      id: p.id,
+      title: p.title,
+      createdByUserId: p.createdByUserId ?? null,
+      creatorName: p.createdByUserId ? nameById.get(p.createdByUserId) ?? null : null,
+    })),
+  ];
+}
+
+/**
+ * 计算当前用户因「工作台页面完整授权」而获得的附加业务模块。
+ *
+ * 语义：当某工作台页面对用户完整可见（创建者 / 被授予 `workbench:<pageId>` / 裸 `workbench` / owner·admin）时，
+ * 该页所放置 widget 所需的模块（如 psi/production/finance）视为对该用户开放，
+ * 以便统计接口为这些 widget 返回完整数据（前端再据页面授权解除金额掩码）。
+ * 仅作用于统计数据读取，不影响其它业务接口的权限判定。
+ */
+export async function resolveWorkbenchAccessModules(
+  userId: string,
+  tenantId: string,
+  permissions: string[],
+  tenantRole?: string,
+): Promise<string[]> {
+  const [membership, config] = await Promise.all([
+    getMembership(userId, tenantId),
+    settingsService.getConfig(tenantId),
+  ]);
+  const homePage = readUserHomePage(membership.preferences);
+  const sharedPages = readSharedWorkbenchPages(config);
+  const assembled = assembleWorkbench(homePage, sharedPages);
+  const visible = filterWorkbenchPagesByVisibility(assembled, { userId, permissions });
+
+  const modules = new Set<string>();
+  for (const page of visible.pages) {
+    if (!hasWorkbenchPageFullAccess(page, { userId, permissions, tenantRole: tenantRole ?? membership.role })) {
+      continue;
+    }
+    for (const item of page.layout.items) {
+      const def = WORKBENCH_WIDGET_CATALOG.find(w => w.type === item.widgetType);
+      if (def?.requiredModule) modules.add(def.requiredModule);
+    }
+  }
+  return [...modules];
+}
+
+/**
+ * 在统计接口读取数据前，按「工作台页面完整授权」为用户补齐附加模块权限。
+ * owner/admin 已持全部模块权限，无需补齐。
+ */
+export async function augmentPermissionsWithWorkbench(
+  userId: string,
+  tenantId: string,
+  permissions: string[],
+  tenantRole?: string,
+): Promise<string[]> {
+  if (tenantRole === 'owner' || tenantRole === 'admin') return permissions;
+  const extra = await resolveWorkbenchAccessModules(userId, tenantId, permissions, tenantRole);
+  if (extra.length === 0) return permissions;
+  return [...new Set([...permissions, ...extra])];
 }
 
 const MAX_DASHBOARD_SHORTCUTS = 12;

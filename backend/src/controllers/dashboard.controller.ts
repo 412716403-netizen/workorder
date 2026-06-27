@@ -15,6 +15,11 @@ export const saveUserWorkbench = asyncHandler(async (req, res) => {
   res.json(await dashboardService.saveUserWorkbench(userId, tenantId, req.body, permissions));
 });
 
+export const getWorkbenchPages = asyncHandler(async (req, res) => {
+  const tenantId = req.tenantId!;
+  res.json({ pages: await dashboardService.listWorkbenchPages(tenantId) });
+});
+
 export const getShortcuts = asyncHandler(async (req, res) => {
   const userId = req.user!.userId;
   const tenantId = req.tenantId!;
@@ -45,7 +50,13 @@ export const updateFeaturePlugins = asyncHandler(async (req, res) => {
 export const getStats = asyncHandler(async (req, res) => {
   const userId = req.user!.userId;
   const tenantId = req.tenantId!;
-  const permissions = await dashboardService.resolveUserPermissions(userId, tenantId);
+  const basePermissions = await dashboardService.resolveUserPermissions(userId, tenantId);
+  const permissions = await dashboardService.augmentPermissionsWithWorkbench(
+    userId,
+    tenantId,
+    basePermissions,
+    req.user!.tenantRole,
+  );
   const db = dashboardService.getTenantPrisma(tenantId);
   const days = req.query.days ? Number(req.query.days) : undefined;
   const periodRaw = typeof req.query.period === 'string' ? req.query.period : undefined;
@@ -83,7 +94,13 @@ export const deleteMessage = asyncHandler(async (req, res) => {
 export const getOrderStatsSettings = asyncHandler(async (req, res) => {
   const userId = req.user!.userId;
   const tenantId = req.tenantId!;
-  const permissions = await dashboardService.resolveUserPermissions(userId, tenantId);
+  const basePermissions = await dashboardService.resolveUserPermissions(userId, tenantId);
+  const permissions = await dashboardService.augmentPermissionsWithWorkbench(
+    userId,
+    tenantId,
+    basePermissions,
+    req.user!.tenantRole,
+  );
   res.json(await dashboardService.getOrderStatsSettings(userId, tenantId, permissions));
 });
 
@@ -97,7 +114,13 @@ export const saveOrderStatsSettings = asyncHandler(async (req, res) => {
 export const getOrderStats = asyncHandler(async (req, res) => {
   const userId = req.user!.userId;
   const tenantId = req.tenantId!;
-  const permissions = await dashboardService.resolveUserPermissions(userId, tenantId);
+  const basePermissions = await dashboardService.resolveUserPermissions(userId, tenantId);
+  const permissions = await dashboardService.augmentPermissionsWithWorkbench(
+    userId,
+    tenantId,
+    basePermissions,
+    req.user!.tenantRole,
+  );
   const db = dashboardService.getTenantPrisma(tenantId);
   const periodRaw = typeof req.query.period === 'string' ? req.query.period : undefined;
   const period = periodRaw === 'yesterday' || periodRaw === 'month' ? periodRaw : 'today';
@@ -111,7 +134,13 @@ export const getOrderStats = asyncHandler(async (req, res) => {
 export const getOutsourceStatsSettings = asyncHandler(async (req, res) => {
   const userId = req.user!.userId;
   const tenantId = req.tenantId!;
-  const permissions = await dashboardService.resolveUserPermissions(userId, tenantId);
+  const basePermissions = await dashboardService.resolveUserPermissions(userId, tenantId);
+  const permissions = await dashboardService.augmentPermissionsWithWorkbench(
+    userId,
+    tenantId,
+    basePermissions,
+    req.user!.tenantRole,
+  );
   res.json(await dashboardService.getOutsourceStatsSettings(userId, tenantId, permissions));
 });
 
@@ -125,7 +154,13 @@ export const saveOutsourceStatsSettings = asyncHandler(async (req, res) => {
 export const getOutsourceStats = asyncHandler(async (req, res) => {
   const userId = req.user!.userId;
   const tenantId = req.tenantId!;
-  const permissions = await dashboardService.resolveUserPermissions(userId, tenantId);
+  const basePermissions = await dashboardService.resolveUserPermissions(userId, tenantId);
+  const permissions = await dashboardService.augmentPermissionsWithWorkbench(
+    userId,
+    tenantId,
+    basePermissions,
+    req.user!.tenantRole,
+  );
   const db = dashboardService.getTenantPrisma(tenantId);
   const periodRaw = typeof req.query.period === 'string' ? req.query.period : undefined;
   const period = periodRaw === 'yesterday' || periodRaw === 'month' ? periodRaw : 'today';
@@ -135,7 +170,13 @@ export const getOutsourceStats = asyncHandler(async (req, res) => {
 export const getReworkStatsSettings = asyncHandler(async (req, res) => {
   const userId = req.user!.userId;
   const tenantId = req.tenantId!;
-  const permissions = await dashboardService.resolveUserPermissions(userId, tenantId);
+  const basePermissions = await dashboardService.resolveUserPermissions(userId, tenantId);
+  const permissions = await dashboardService.augmentPermissionsWithWorkbench(
+    userId,
+    tenantId,
+    basePermissions,
+    req.user!.tenantRole,
+  );
   res.json(await dashboardService.getReworkStatsSettings(userId, tenantId, permissions));
 });
 
@@ -149,7 +190,13 @@ export const saveReworkStatsSettings = asyncHandler(async (req, res) => {
 export const getReworkStats = asyncHandler(async (req, res) => {
   const userId = req.user!.userId;
   const tenantId = req.tenantId!;
-  const permissions = await dashboardService.resolveUserPermissions(userId, tenantId);
+  const basePermissions = await dashboardService.resolveUserPermissions(userId, tenantId);
+  const permissions = await dashboardService.augmentPermissionsWithWorkbench(
+    userId,
+    tenantId,
+    basePermissions,
+    req.user!.tenantRole,
+  );
   const db = dashboardService.getTenantPrisma(tenantId);
   const periodRaw = typeof req.query.period === 'string' ? req.query.period : undefined;
   const period = periodRaw === 'yesterday' || periodRaw === 'month' ? periodRaw : 'today';

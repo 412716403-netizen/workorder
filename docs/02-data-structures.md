@@ -98,11 +98,20 @@
 
 | 存储 | Key / 字段 | 形状 | 说明 |
 |------|------------|------|------|
-| `tenant_memberships.preferences` | `dashboardWorkbench` | `WorkbenchConfig` | 用户个性化工作台（多 Tab + 每页 layout） |
+| `tenant_memberships.preferences` | `dashboardWorkbench` | `WorkbenchConfig`（仅含首页） | **个人首页**布局（每位成员私有，自由自定义） |
+| `system_settings` | `workbenchSharedPages` | `WorkbenchPage[]`（不含首页） | **租户级共享自定义页面**池；每页带 `createdByUserId` 创建者 |
 | `system_settings` | `featurePlugins` | `Record<string, boolean>` | 租户级功能插件开关 |
 | `platform_announcements` | — | 行级表 | 平台 admin 发布的全租户公告（最多 50 条，发布人展示「系统」） |
 
-类型定义见 `shared/workbench.ts`、`shared/dashboardMessages.ts`；到期提醒逻辑见 `shared/tenantExpiryReminder.ts`；API 见 `GET/PUT /api/dashboard/workbench`、`GET/POST/DELETE /api/dashboard/messages`（仅平台 admin）、`GET /api/dashboard/notifications`。
+工作台页面可见性与权限：
+
+- **首页**：每人编辑自己的个人副本；**可见性纳入角色授权**——持有裸 `workbench` 或显式 `workbench:<首页id>` → 可见；已启用按页面授权（持有任意 `workbench:<pageId>`）但未含首页 → 隐藏；完全未涉及工作台权限（无任何 `workbench*` 键）→ 默认可见。无任何可见页时前端显示空态。
+- **创建/编辑权**：自定义页面**仅企业创建者 owner 账号**可创建、改名、删除、调整组件（其余成员包括 admin 一律不能创建/编辑）。
+- **可见性（严格）**：默认**仅创建者可见**；**不**给 owner/admin 自动可见；其余成员需角色被授予 `workbench:<pageId>`（或裸 `workbench` 模块＝全部自定义页面）方可查看（只读）。
+- **完整授权（页面查看权限＝该页内容整体授权）**：页面对用户完整授权（创建者 / `workbench:<pageId>` / 裸 `workbench` / owner·admin）时，该页 widget 不再按模块过滤、金额不再掩码；统计接口经 `augmentPermissionsWithWorkbench` 按页面完整授权临时补齐 psi/production/finance 等模块以返回完整数据。首页在可见前提下，仅在被授予 `workbench:<首页id>`（或裸 `workbench`/owner·admin）时内容才完整展示，否则仍按查看者自身权限掩码。
+- 后端读取时按 `getWorkbench` 组装「个人首页 + 当前用户可见的共享页面」并按 widget 权限过滤；保存时 `saveUserWorkbench` 把首页落 `preferences`、自定义页按 `canManage`（owner）规则合并进共享池（非 owner 的改动一律忽略，库保持不变）。
+
+类型定义见 `shared/workbench.ts`（`WORKBENCH_PERM_MODULE` / `workbenchPagePermKey`）、`shared/workbenchValidate.ts`（`canViewWorkbenchPage` / `canEditWorkbenchPage` / `hasWorkbenchPageFullAccess` / `filterWorkbenchPagesByVisibility` / `mergeSharedWorkbenchPages`）、`shared/dashboardMessages.ts`；API 见 `GET/PUT /api/dashboard/workbench`、`GET /api/dashboard/workbench/pages`（角色管理列页面）、`GET/POST/DELETE /api/dashboard/messages`（仅平台 admin）、`GET /api/dashboard/notifications`。
 
 ### 1.7 资料库
 

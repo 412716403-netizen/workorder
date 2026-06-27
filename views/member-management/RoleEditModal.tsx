@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import * as api from '../../services/api';
-import type { RoleRow } from '../../services/api';
+import type { RoleRow, WorkbenchPageSummary } from '../../services/api';
+import { workbenchPagePermKey } from '../../types';
 import { toast } from 'sonner';
 import {
   ALL_PERMISSIONS,
@@ -53,6 +54,9 @@ function computeInitialPerms(role: RoleRow | null): string[] {
   if (!perms.includes('collaboration') && perms.some(p => p.startsWith('collaboration:'))) {
     perms.push('collaboration');
   }
+  if (!perms.includes('workbench') && perms.some(p => p.startsWith('workbench:'))) {
+    perms.push('workbench');
+  }
   if (!perms.includes('price_amount') && AMOUNT_FINE_GRAINED_PERM_KEYS.some(k => perms.includes(k))) {
     perms.push('price_amount');
   }
@@ -73,6 +77,18 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
   const [financeExpanded, setFinanceExpanded] = useState(false);
   const [collaborationExpanded, setCollaborationExpanded] = useState(false);
   const [priceAmountExpanded, setPriceAmountExpanded] = useState(false);
+  const [workbenchExpanded, setWorkbenchExpanded] = useState(false);
+
+  const [workbenchPages, setWorkbenchPages] = useState<WorkbenchPageSummary[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.dashboard
+      .getWorkbenchPages()
+      .then(res => { if (!cancelled) setWorkbenchPages(res.pages); })
+      .catch(() => { if (!cancelled) setWorkbenchPages([]); });
+    return () => { cancelled = true; };
+  }, []);
 
   const settingsModuleChecked = rolePerms.includes('settings');
   const developmentModuleChecked = rolePerms.includes('development');
@@ -83,6 +99,7 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
   const financeModuleChecked = rolePerms.includes('finance');
   const collaborationModuleChecked = rolePerms.includes('collaboration');
   const priceAmountModuleChecked = rolePerms.includes('price_amount');
+  const workbenchModuleChecked = rolePerms.includes('workbench');
 
   async function handleSaveRole() {
     if (!roleName.trim()) { toast.error('请输入角色名称'); return; }
@@ -107,6 +124,10 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
     }
     if (permsToSave.some(p => p.startsWith('finance:'))) {
       permsToSave = permsToSave.filter(p => p !== 'finance');
+    }
+    // 工作台：勾选具体页面时去掉裸模块键 `workbench`（裸键表示「全部页面」，与逐页授权互斥）
+    if (permsToSave.some(p => p.startsWith('workbench:'))) {
+      permsToSave = permsToSave.filter(p => p !== 'workbench');
     }
     // 协作：保留裸模块键 `collaboration` 作为侧栏入口开关；细粒度 list 另存
     // 单价/金额：保留裸模块键 `price_amount`；各业务 amount 键另存
@@ -521,6 +542,22 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
     });
   }
 
+  function toggleWorkbenchPagePerm(pageId: string) {
+    const permKey = workbenchPagePermKey(pageId);
+    setRolePerms(prev =>
+      prev.includes(permKey) ? prev.filter(p => p !== permKey) : [...prev, permKey],
+    );
+  }
+
+  function toggleWorkbenchAllPages() {
+    const keys = workbenchPages.map(p => workbenchPagePermKey(p.id));
+    const hasAll = keys.length > 0 && keys.every(k => rolePerms.includes(k));
+    setRolePerms(prev => {
+      const without = prev.filter(p => !p.startsWith('workbench:'));
+      return hasAll ? without : [...new Set([...without, ...keys])];
+    });
+  }
+
   function toggleModulePerm(modId: string) {
     setRolePerms(prev => {
       if (prev.includes(modId)) {
@@ -541,6 +578,9 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
         }
         if (modId === 'collaboration') {
           return prev.filter(p => p !== modId && !p.startsWith('collaboration:'));
+        }
+        if (modId === 'workbench') {
+          return prev.filter(p => p !== modId && !p.startsWith('workbench:'));
         }
         if (modId === 'knowledge_base') {
           return prev.filter(p => p !== modId && !p.startsWith('knowledge_base:'));
@@ -1393,6 +1433,85 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
                       ))}
                     </tbody>
                   </table>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* 工作台 - 自定义页面查看权限 */}
+          {workbenchModuleChecked && (
+            <div className="border border-slate-200 rounded-xl overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setWorkbenchExpanded(v => !v)}
+                className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors"
+              >
+                <span className="text-sm font-bold text-slate-700">工作台 - 页面查看权限</span>
+                <div className="flex items-center gap-2">
+                  {!workbenchExpanded && rolePerms.some(p => p.startsWith('workbench:')) && (
+                    <span className="text-xs text-indigo-500 font-medium">
+                      已授权 {rolePerms.filter(p => p.startsWith('workbench:')).length} 页
+                    </span>
+                  )}
+                  {workbenchExpanded
+                    ? <ChevronDown className="w-4 h-4 text-slate-400" />
+                    : <ChevronRight className="w-4 h-4 text-slate-400" />}
+                </div>
+              </button>
+              {workbenchExpanded && (
+                <>
+                  <p className="px-4 py-2 text-xs text-slate-400 bg-slate-50/50 border-t border-slate-100">
+                    勾选某页面后，本角色成员在工作台「完整查看」该页：页面内所有组件内容（含金额等）全部展示，不再按各自模块/金额权限掩码。自定义页面默认仅创建者可见。不勾选任何页面时视为可完整查看全部页面（含首页）；一旦勾选了任意页面，则未勾选的页面（含「首页」）对该角色不可见——如需隐藏首页，勾选其它页面并保持「首页」不勾选即可。
+                  </p>
+                  {workbenchPages.length === 0 ? (
+                    <p className="px-4 py-6 text-center text-xs text-slate-400">
+                      暂无自定义页面（成员在工作台「自定义布局」中创建页面后将在此列出）
+                    </p>
+                  ) : (
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 border-t border-slate-100">
+                          <th className="text-left px-4 py-2 font-medium text-slate-600 w-[70%]">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={workbenchPages.every(p => rolePerms.includes(workbenchPagePermKey(p.id)))}
+                                onChange={toggleWorkbenchAllPages}
+                                className="rounded border-gray-300 text-indigo-600 cursor-pointer w-4 h-4"
+                              />
+                              全选
+                            </label>
+                          </th>
+                          <th className="text-center px-2 py-2 font-medium text-slate-600">查看</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {workbenchPages.map(page => (
+                          <tr key={page.id} className="hover:bg-slate-50/50">
+                            <td className="px-4 py-2.5 text-slate-700 font-medium">
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={rolePerms.includes(workbenchPagePermKey(page.id))}
+                                  onChange={() => toggleWorkbenchPagePerm(page.id)}
+                                  className="rounded border-gray-300 text-indigo-600 cursor-pointer w-4 h-4"
+                                />
+                                {page.title}
+                              </label>
+                            </td>
+                            <td className="text-center px-2 py-2.5">
+                              <input
+                                type="checkbox"
+                                checked={rolePerms.includes(workbenchPagePermKey(page.id))}
+                                onChange={() => toggleWorkbenchPagePerm(page.id)}
+                                className="rounded border-gray-300 text-indigo-600 cursor-pointer w-4 h-4"
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
                 </>
               )}
             </div>

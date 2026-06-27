@@ -173,11 +173,20 @@
 ### 2.8 工作台（多 Tab 首页）
 
 - 路由：`/workbench`；登录后默认首页。
-- **WorkbenchConfig**：`pages[]` 每页含独立 `layout.items`；`activePageId` 记录上次 Tab。
-- **有效配置**：`membership.preferences.dashboardWorkbench` → 内置默认（见 `shared/workbench.ts`）。
+- **WorkbenchConfig**：`pages[]` 每页含独立 `layout.items`；`activePageId` 记录上次 Tab；自定义页 `createdByUserId` 记录创建者。
+- **页面归属**：**首页**＝个人页（`membership.preferences.dashboardWorkbench`，每人私有、自由自定义）；**自定义页**＝租户级共享池（`system_settings.workbenchSharedPages`）。
+- **自定义页创建/编辑（本次新增）**：**仅企业创建者 owner 账号**可创建/改名/删除/增删组件；其余成员（含 admin）不能创建或编辑。
+- **自定义页可见性（严格）**：默认**仅创建者可见**，**不**给 owner/admin 自动可见；其余成员需在「角色管理 → 工作台」被授予该页查看权（权限 key `workbench:<pageId>`，裸 `workbench` ＝全部自定义页面），且为**只读**。
+- **首页可见性（本次更新）**：首页**不再恒可见**，纳入「角色管理 → 工作台」按页面授权：
+ - 角色持有裸 `workbench`（＝全部页面）或显式勾选「首页」（`workbench:<homeId>`）→ 首页可见。
+ - 角色**已启用按页面授权**（持有任意 `workbench:<pageId>` 键）但**未含首页** → 首页对该角色**隐藏**（不再作为默认页强行注入）。
+ - 角色**完全未涉及**工作台页面权限（无任何 `workbench*` 键）→ 首页作为默认落地页**保持可见**（不破坏既有普通角色）。
+ - 若某角色最终无任何可见工作台页面，`/workbench` 显示「暂无可查看的工作台页面」空态。
+- **页面授权＝该页内容整体授权**：当某页面对用户**完整授权**（创建者本人 / 被授予 `workbench:<pageId>` / 裸 `workbench` / owner·admin）时，该页内所有组件内容**全部展示**——不再按查看者各自的模块/金额权限剔除组件或将金额掩码为 `***`；统计接口也据此为该页组件返回完整数据（后端 `augmentPermissionsWithWorkbench` 按页面完整授权临时补齐 psi/production/finance 等模块）。
+- **首页内容授权**：首页可见时，其内容默认仍按查看者**自身**模块/金额权限掩码；在「角色管理 → 工作台」勾选「首页」后，该角色成员的首页内容也**完整展示**（含金额）。仅作用于统计数据展示，不放宽其它业务模块的权限。
 - **首页默认布局**：顶部三卡（快捷入口 / 插件中心 / 消息中心）+ 工单/外协统计（各 6×7 格，占满第二行）+ 财务/销售/返工统计（各 4×6 格）；详见 `WORKBENCH_HOME_DEFAULT_LAYOUT`。
 - **首页固定组件**：快捷入口、插件中心、消息中心**不可移除、拖动或缩放**；保存时后端强制合并固定位置，租户仅可调整其余组件与其他 Tab 页。
-- **Tab 约束**：至少保留 1 个页面；编辑模式可增删改 Tab、拖拽排序。
+- **Tab 约束**：至少保留 1 个页面；编辑模式可增删改 Tab、拖拽排序（自定义页的改名/删除/排序仅对可编辑页生效）。
 - **组件**：快捷入口、插件中心（租户功能开关）、消息中心（只读，展示系统公告与到期提醒）、**工单统计 / 外协统计 / 返工统计**、销售/财务统计；无模块权限或未启用功能插件的组件不可添加且保存时剔除。
 - **工单统计**：按用户所选工序展示卡片；周期可选今日/昨日/本月；**生产任务数**为当前快照（未完工工单/产品数，不随周期变化）；**剩余可报**与工单中心工序卡一致（可报最多 − 已报数）；良品/不良品为周期内报工合计；**进度 = 已报数 / 可报最多**。
 - **外协统计**：布局与工单统计一致；**外协任务数**为有待收回的任务数（快照）；**待收回**为已派 − 已收（快照）；**已收回 / 已派出**为周期内外协流水；**进度 = 已收回 / 已派出**（快照）。
@@ -642,6 +651,13 @@
 **实现锚点**：`utils/canViewAmount.ts`、`views/member-management/constants.ts`、`views/member-management/RoleEditModal.tsx`；进销存 `views/PSIOpsView.tsx` / `views/psi-ops/*`；外协 `views/production-ops/Outsource*.tsx`；协作 `views/collaboration/*`。
 
 **范围外（默认不做）**：财务对账模块中的 PSI/外协金额展示与导出，仍按财务域权限控制；如需叠加金额权限可单独评估。
+
+### 5.7 成员审核权限
+
+- **成员审核（加入申请的通过/拒绝）** 不再仅限 owner/admin：**被授予「基础信息 → 成员管理 → 添加」（`basic:members:create`）** 细粒度权限的角色成员，也可在「成员管理 → 待审核」查看并审核加入申请。
+- 判定：`role ∈ {owner, admin}` **或** 有效权限含 `basic:members:create` → 可审核；否则隐藏「待审核」Tab 且后端 403。
+- 仅放开**成员审核**；角色管理、分配/修改成员角色与权限、移除成员等仍限 owner/admin（移除成员仍仅 owner）。
+- 实现锚点：前端 `views/MemberManagementView.tsx`（`canReviewApplications`）；后端 `tenants.service.ts` 的 `assertCanReviewApplications` 同时门控 `getApplications` 与 `reviewApplication`（此前后端无校验，已补齐）。
 
 ---
 

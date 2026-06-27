@@ -3,6 +3,7 @@ import { Loader2 } from 'lucide-react';
 import WidgetShell from '../WidgetShell';
 import { useAuth } from '../../../contexts/AuthContext';
 import { hasPriceAmountModuleAccess } from '../../../utils/canViewAmount';
+import { useWorkbenchPageFullAccess } from '../WorkbenchPageAccessContext';
 import { useDashboardStats } from '../../../hooks/useDashboardStats';
 import { workbenchPeriodLabel, type WorkbenchOrderStatsPeriod } from '../../../types';
 import {
@@ -27,7 +28,9 @@ const FINANCE_THEME = {
 const FinanceStatsWidget: React.FC<FinanceStatsWidgetProps> = ({ editing, onRemove }) => {
   const [period, setPeriod] = useState<WorkbenchOrderStatsPeriod>('today');
   const { tenantCtx } = useAuth();
-  const showAmount = hasPriceAmountModuleAccess(tenantCtx?.tenantRole, tenantCtx?.permissions);
+  const fullAccess = useWorkbenchPageFullAccess();
+  const showAmount =
+    fullAccess || hasPriceAmountModuleAccess(tenantCtx?.tenantRole, tenantCtx?.permissions);
   const { data, isLoading, isFetching, refetch } = useDashboardStats('finance', period);
   const fin = data?.finance;
 

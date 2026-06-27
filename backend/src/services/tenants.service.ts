@@ -221,7 +221,23 @@ export async function applyToJoin(userId: string, tenantId: string, message?: st
   });
 }
 
-export async function getApplications(tenantId: string) {
+/**
+ * 成员审核权限：企业创建者 owner / 管理员 admin，
+ * 或被授予「成员管理 - 添加」细粒度权限（`basic:members:create`）的角色成员。
+ */
+async function assertCanReviewApplications(callerId: string, tenantId: string) {
+  const m = await prisma.tenantMembership.findUnique({
+    where: { userId_tenantId: { userId: callerId, tenantId } },
+    include: { customRole: { select: { permissions: true } } },
+  });
+  if (!m) throw new AppError(403, '您不是该企业的成员');
+  if (m.role === 'owner' || m.role === 'admin') return;
+  if (resolveMemberPerms(m).includes('basic:members:create')) return;
+  throw new AppError(403, '无权审核成员申请');
+}
+
+export async function getApplications(callerId: string, tenantId: string) {
+  await assertCanReviewApplications(callerId, tenantId);
   return prisma.joinApplication.findMany({
     where: { tenantId },
     include: { user: { select: { id: true, username: true, phone: true, displayName: true } } },
@@ -235,6 +251,7 @@ export async function reviewApplication(
   appId: string,
   body: { action: string; role?: string; permissions?: unknown },
 ) {
+  await assertCanReviewApplications(reviewerId, tenantId);
   const app = await prisma.joinApplication.findUnique({ where: { id: appId } });
   if (!app) throw new AppError(404, '申请不存在');
   if (app.tenantId !== tenantId) throw new AppError(400, '申请与企业不匹配');

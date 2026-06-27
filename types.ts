@@ -110,6 +110,8 @@ export {
   isHomePinnedWidgetType,
   mergeWorkbenchHomePinnedItems,
   isWorkbenchWidgetType,
+  workbenchPagePermKey,
+  WORKBENCH_PERM_MODULE,
   type WorkbenchWidgetType,
   type WorkbenchHomePinnedWidgetType,
   type WorkbenchWidgetCategory,
@@ -188,6 +190,12 @@ export {
   filterWorkbenchByAccess,
   canUseWidget,
   isValidWorkbenchConfig,
+  canViewWorkbenchPage,
+  canEditWorkbenchPage,
+  hasWorkbenchPageFullAccess,
+  filterWorkbenchPagesByVisibility,
+  mergeSharedWorkbenchPages,
+  type WorkbenchPageAccessOpts,
 } from './shared/workbenchValidate';
 
 /** 开发管理 BOM（与 BOM 结构对齐，parent 为款式 id） */

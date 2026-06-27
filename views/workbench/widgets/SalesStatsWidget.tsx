@@ -3,6 +3,7 @@ import { Loader2 } from 'lucide-react';
 import WidgetShell from '../WidgetShell';
 import { useAuth } from '../../../contexts/AuthContext';
 import { canViewAmount, AMOUNT_PERMISSION_KEYS } from '../../../utils/canViewAmount';
+import { useWorkbenchPageFullAccess } from '../WorkbenchPageAccessContext';
 import { useDashboardStats } from '../../../hooks/useDashboardStats';
 import { workbenchPeriodLabel, type WorkbenchOrderStatsPeriod } from '../../../types';
 import {
@@ -27,11 +28,14 @@ const SALES_THEME = {
 const SalesStatsWidget: React.FC<SalesStatsWidgetProps> = ({ editing, onRemove }) => {
   const [period, setPeriod] = useState<WorkbenchOrderStatsPeriod>('today');
   const { tenantCtx } = useAuth();
-  const showAmount = canViewAmount(
-    tenantCtx?.tenantRole,
-    tenantCtx?.permissions,
-    AMOUNT_PERMISSION_KEYS.PSI_SALES_BILL,
-  );
+  const fullAccess = useWorkbenchPageFullAccess();
+  const showAmount =
+    fullAccess
+    || canViewAmount(
+      tenantCtx?.tenantRole,
+      tenantCtx?.permissions,
+      AMOUNT_PERMISSION_KEYS.PSI_SALES_BILL,
+    );
   const { data, isLoading, isFetching, refetch } = useDashboardStats('sales', period);
   const sales = data?.sales;
 

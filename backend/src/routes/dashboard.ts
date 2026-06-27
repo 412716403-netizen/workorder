@@ -12,6 +12,7 @@ const workbenchConfigSchema = z.object({
     id: z.string().min(1),
     title: z.string().min(1),
     sortOrder: z.number(),
+    createdByUserId: z.string().nullable().optional(),
     layout: z.object({
       version: z.literal(1),
       items: z.array(z.object({
@@ -46,6 +47,7 @@ const publishMessageSchema = z.object({
 /** 工作台：任意已选租户用户可访问，不做模块级 requirePermission */
 router.get('/workbench', ctrl.getWorkbench);
 router.put('/workbench', validate(workbenchConfigSchema), ctrl.saveUserWorkbench);
+router.get('/workbench/pages', ctrl.getWorkbenchPages);
 router.get('/shortcuts', ctrl.getShortcuts);
 router.put('/shortcuts', validate(shortcutIdsSchema), ctrl.saveShortcuts);
 

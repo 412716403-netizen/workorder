@@ -15,6 +15,7 @@ import MilestoneAssignModal from './member-management/MilestoneAssignModal';
 import { moduleHeaderRowClass } from '../styles/uiDensity';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { useRolesQuery, useInvalidateRoles } from '../hooks/useRolesQuery';
+import { useAuth } from '../contexts/AuthContext';
 
 interface MemberManagementViewProps {
   tenantId: string;
@@ -32,7 +33,11 @@ export default function MemberManagementView({ tenantId, tenantRole, currentUser
   const [tenantInfo, setTenantInfo] = useState<{ inviteCode: string; name: string } | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const { tenantCtx } = useAuth();
   const canManage = tenantRole === 'owner' || tenantRole === 'admin';
+  // 被授予「成员管理 - 添加」(basic:members:create) 的角色成员也可审核加入申请
+  const canReviewApplications =
+    canManage || (tenantCtx?.permissions ?? []).includes('basic:members:create');
 
   const rolesQuery = useRolesQuery(canManage);
   const rolesList = rolesQuery.data ?? [];
@@ -67,7 +72,7 @@ export default function MemberManagementView({ tenantId, tenantRole, currentUser
     try {
       const results = await Promise.allSettled([
         api.tenants.getMembers(tenantId),
-        canManage ? api.tenants.getApplications(tenantId) : Promise.resolve([]),
+        canReviewApplications ? api.tenants.getApplications(tenantId) : Promise.resolve([]),
         api.tenants.get(tenantId),
       ]);
       const val = (i: number) => results[i].status === 'fulfilled' ? (results[i] as PromiseFulfilledResult<any>).value : undefined;
@@ -76,7 +81,7 @@ export default function MemberManagementView({ tenantId, tenantRole, currentUser
       if (val(2)) setTenantInfo(val(2));
     } catch (err: any) { toast.error(err.message || '加载失败'); }
     finally { setLoading(false); }
-  }, [tenantId, canManage]);
+  }, [tenantId, canReviewApplications]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -162,7 +167,7 @@ export default function MemberManagementView({ tenantId, tenantRole, currentUser
         <div className="flex flex-wrap gap-1.5 min-w-0 justify-start">
           {([
             { key: 'members' as const, label: '成员列表', icon: Users },
-            ...(canManage
+            ...(canReviewApplications
               ? [{ key: 'applications' as const, label: '待审核', icon: Shield, badgeCount: applications.length } as const]
               : []),
             { key: 'invite' as const, label: '邀请码', icon: ShieldCheck },
@@ -201,7 +206,7 @@ export default function MemberManagementView({ tenantId, tenantRole, currentUser
         <InviteCodeTab tenantInfo={tenantInfo} onCopyInviteCode={copyInviteCode} />
       )}
 
-      {tab === 'applications' && (
+      {tab === 'applications' && canReviewApplications && (
         <ApplicationsTab applications={applications} onReview={handleReview} />
       )}
 

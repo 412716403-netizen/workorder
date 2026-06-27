@@ -11,6 +11,8 @@ import {
   isWorkbenchHomePage,
   isHomePinnedWidgetType,
   mergeWorkbenchHomePinnedItems,
+  canEditWorkbenchPage,
+  hasWorkbenchPageFullAccess,
   type WorkbenchConfig,
   type WorkbenchLayoutItem,
   type WorkbenchPage,
@@ -24,8 +26,10 @@ function newId(prefix: string): string {
 
 export function useWorkbenchConfig() {
   const qc = useQueryClient();
-  const { tenantCtx } = useAuth();
+  const { tenantCtx, userId } = useAuth();
   const tenantId = tenantCtx?.tenantId;
+  const tenantRole = tenantCtx?.tenantRole;
+  const permissions = useMemo(() => tenantCtx?.permissions ?? [], [tenantCtx?.permissions]);
   const workbenchKey = useMemo(() => dashboardQueryKey(tenantId, 'workbench'), [tenantId]);
 
   const query = useQuery({
@@ -52,7 +56,8 @@ export function useWorkbenchConfig() {
   useEffect(() => {
     if (!editing) {
       if (effective) {
-        setDraft(normalizeWorkbenchConfig({ ...effective, activePageId: WORKBENCH_HOME_PAGE_ID }));
+        // ensureHome=false：服务端按角色权限可能已隐藏首页，前端不得重新注入
+        setDraft(normalizeWorkbenchConfig({ ...effective, activePageId: WORKBENCH_HOME_PAGE_ID }, false));
       } else if (query.isError && !query.isLoading) {
         setDraft(normalizeWorkbenchConfig(WORKBENCH_BUILTIN_DEFAULT));
       }
@@ -66,11 +71,11 @@ export function useWorkbenchConfig() {
 
   const config = useMemo(() => {
     if (!layoutConfig) return null;
-    const normalized = normalizeWorkbenchConfig(layoutConfig);
+    // ensureHome=false：尊重服务端的可见性裁剪（首页可能因角色权限被隐藏）
+    const normalized = normalizeWorkbenchConfig(layoutConfig, false);
     const pageIds = new Set(normalized.pages.map(p => p.id));
-    const activePageId = pageIds.has(sessionActivePageId)
-      ? sessionActivePageId
-      : WORKBENCH_HOME_PAGE_ID;
+    const fallbackId = normalized.pages[0]?.id ?? WORKBENCH_HOME_PAGE_ID;
+    const activePageId = pageIds.has(sessionActivePageId) ? sessionActivePageId : fallbackId;
     return { ...normalized, activePageId };
   }, [layoutConfig, sessionActivePageId]);
 
@@ -129,6 +134,7 @@ export function useWorkbenchConfig() {
       title: title.trim() || '新页面',
       sortOrder: 0,
       layout: { version: 1, items: [] },
+      createdByUserId: userId || null,
     };
     setDraft(prev => {
       if (!prev) return prev;
@@ -139,7 +145,7 @@ export function useWorkbenchConfig() {
       };
     });
     setSessionActivePageId(page.id);
-  }, []);
+  }, [userId]);
 
   const renamePage = useCallback((pageId: string, title: string) => {
     if (isWorkbenchHomePage(pageId)) return;
@@ -243,10 +249,25 @@ export function useWorkbenchConfig() {
     });
   }, []);
 
+  // 自定义页面创建/管理权限按业务约定＝企业创建者 owner
+  const canCreatePages = tenantRole === 'owner';
+  const canEditPage = useCallback(
+    (page: WorkbenchPage) => canEditWorkbenchPage(page, { userId, permissions }),
+    [userId, permissions],
+  );
+  /** 页面对当前用户是否「完整授权」（完整展示内容，含金额，跳过模块/金额掩码） */
+  const hasFullAccess = useCallback(
+    (page: WorkbenchPage) => hasWorkbenchPageFullAccess(page, { userId, permissions, tenantRole }),
+    [userId, permissions, tenantRole],
+  );
+
   return {
     isLoading: query.isLoading,
     error: loadError,
     isFallback: query.isError && !effective,
+    canEditPage,
+    hasFullAccess,
+    canCreatePages,
     refetch: query.refetch,
     config,
     activePage,
