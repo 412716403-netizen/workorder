@@ -11,12 +11,14 @@ export interface WorkbenchResponse {
 
 export interface DashboardNotification {
   id: string;
-  type: 'system' | 'announcement' | 'expiry_reminder';
+  type: 'system' | 'announcement' | 'expiry_reminder' | 'todo';
   title: string;
   body: string;
   createdAt: string;
   href?: string;
   publisherName?: string;
+  /** 待办类消息完成状态（标题不再追加「已完成」，改由复选框/按钮展示） */
+  done?: boolean;
 }
 
 export interface PublishedMessageRow {

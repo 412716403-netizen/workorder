@@ -1,5 +1,32 @@
 import type { DevSampleDto, DevStyleVariantDto, DictionaryItem } from '../types';
 
+type ColorSizeDict = { colors: DictionaryItem[]; sizes: DictionaryItem[] };
+
+/**
+ * 由颜色/尺码 id 生成展示标签，如「红色 / M」；
+ * 缺失字典项时回退到 id，两者皆空时返回空串。
+ */
+export function colorSizeLabel(
+  colorId: string | undefined,
+  sizeId: string | undefined,
+  dictionaries: ColorSizeDict,
+): string {
+  const cid = (colorId ?? '').trim();
+  const sid = (sizeId ?? '').trim();
+  const parts: string[] = [];
+  if (cid) parts.push(dictionaries.colors.find((c) => c.id === cid)?.name ?? cid);
+  if (sid) parts.push(dictionaries.sizes.find((s) => s.id === sid)?.name ?? sid);
+  return parts.join(' / ');
+}
+
+/** 款式变体的展示标签：优先颜色/尺码名，回退 skuSuffix。 */
+export function devStyleVariantLabel(
+  variant: Pick<DevStyleVariantDto, 'colorId' | 'sizeId' | 'skuSuffix'>,
+  dictionaries: ColorSizeDict,
+): string {
+  return colorSizeLabel(variant.colorId, variant.sizeId, dictionaries) || (variant.skuSuffix ?? '');
+}
+
 /** 按色码矩阵生成/保留款式变体（与产品档案逻辑一致） */
 export function buildDevStyleVariants(
   colorIds: string[],

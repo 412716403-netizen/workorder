@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from './AuthContext';
 import * as api from '../services/api';
+import { STOCK_SNAPSHOT_QK_BASE } from '../hooks/useStockSnapshot';
 import type {
   Product,
   ProductionOrder,
@@ -363,6 +364,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }, [qc]);
   const invalidateAllPsiRecords = useCallback(() => {
     qc.invalidateQueries({ queryKey: ['psiOpsRecords'] });
+    // 库存快照（仓库管理列表、批次/规格库存等的数据源）：PSI 写入后须重拉，否则盘点/调拨后库存数字不刷新
+    qc.invalidateQueries({ queryKey: STOCK_SNAPSHOT_QK_BASE });
     qc.invalidateQueries({ queryKey: ['planRelatedPsi'] });
     // 计划详情面板「计划相关 PSI」与列表「采购订单进度」窄查
     qc.invalidateQueries({ queryKey: ['plan.relatedPsi'] });

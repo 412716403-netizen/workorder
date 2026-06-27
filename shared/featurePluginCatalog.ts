@@ -7,7 +7,7 @@ import type { FeaturePluginId } from './workbench.js';
 
 export type FeaturePluginCategoryId = 'reporting' | 'tools' | 'management';
 
-export type FeaturePluginIconKey = 'Inbox' | 'FlaskConical' | 'BookOpen' | 'ScanLine' | 'Wallet';
+export type FeaturePluginIconKey = 'Inbox' | 'FlaskConical' | 'BookOpen' | 'ScanLine' | 'Wallet' | 'ListTodo';
 
 export interface FeaturePluginGuideSection {
   title: string;
@@ -202,6 +202,47 @@ export const FEATURE_PLUGIN_MARKET_CATALOG: FeaturePluginMarketItem[] = [
       {
         title: '登记与转账',
         body: '收款单/付款单登记时选择收支账户，款项归集到对应账户；账户间划拨用「账户转账」生成一进一出两条流水，天然计入各自余额。',
+      },
+    ],
+  },
+  {
+    id: 'todo_reminder',
+    label: '待办提醒',
+    tagline: '单据一键加待办，到点在工作台消息中心提醒',
+    category: 'tools',
+    tags: ['待办事项', '提醒'],
+    icon: 'ListTodo',
+    launchedAt: '2026-06-26',
+    defaultEnabled: false,
+    toggleable: true,
+    introduction: {
+      summary:
+        '待办提醒插件面向个人事务跟进：在生产工单、生产计划等详情页一键把单据加入待办，也可新建不关联单据的独立待办；每条待办可填内容备注并设置提醒时间，到点后在工作台消息中心提醒。待办按人隔离，仅本人可见。',
+      highlights: [
+        '生产工单/计划详情页一键「加待办」，自动带单号与跳转链接',
+        '支持不关联单据的独立待办，集中管理个人事项',
+        '可设提醒时间，到点进入工作台消息中心提醒',
+        '待办按个人隔离，互不可见，无需管理员单独授权',
+      ],
+      scenarios: [
+        '生产主管对重点工单设跟进提醒，到点处理',
+        '个人临时事项记录与定时提醒',
+        '暂不需要的成员可关闭插件，相关入口与图标全部隐藏',
+      ],
+    },
+    usageGuide: [
+      {
+        title: '开通插件',
+        body: '租户管理员在插件中心开启「待办提醒」。开启后工作台「消息中心」卡片出现「待办事项」按钮，生产工单/计划详情页出现「加待办」图标；关闭后相关入口与提醒全部隐藏。',
+        bullets: ['管理员：插件中心开启', '待办为个人级，每位成员只看自己的待办'],
+      },
+      {
+        title: '添加待办',
+        body: '在详情页点「加待办」把当前单据加入待办；或在「消息中心 - 待办事项」面板点「新建待办」添加独立待办。填写内容备注，按需开启提醒并选择提醒时间。',
+      },
+      {
+        title: '查看与提醒',
+        body: '在消息中心「待办事项」面板查看、完成或删除待办；到点的提醒会出现在消息中心列表，点击可跳转关联单据。',
       },
     ],
   },

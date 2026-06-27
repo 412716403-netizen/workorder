@@ -471,6 +471,8 @@ export interface DevLogDto {
 export interface DevSampleDto {
   id: string;
   name: string;
+  colorId?: string;
+  sizeId?: string;
   createdAt: string;
   stages: DevStageDto[];
   logs: DevLogDto[];
@@ -515,6 +517,8 @@ export interface DevStyleDto {
   colorIds: string[];
   sizeIds: string[];
   milestoneNodeIds: string[];
+  /** 该款式的默认开发流程节点名（创建时配置，新增首个样品时带出） */
+  defaultStageNames?: string[];
   salesPrice?: number;
   purchasePrice?: number;
   unitId?: string;
@@ -591,4 +595,51 @@ export interface KnowledgeAssetUploadResponse {
   url: string;
   mimeType: string;
   sizeBytes: number;
+}
+
+// ============================================================
+// 待办提醒（todo_reminder 插件）
+// ============================================================
+
+/** 待办关联的单据类型；standalone 表示不关联单据的独立待办 */
+export const TODO_SOURCE_TYPES = [
+  'standalone',
+  'production_order',
+  'plan',
+  'product',
+  'outsource',
+  'rework',
+  'purchase_order',
+  'purchase_bill',
+  'sales_order',
+  'sales_bill',
+  'dev_stage',
+  'dev_bom',
+] as const;
+export type TodoSourceType = (typeof TODO_SOURCE_TYPES)[number];
+
+export const TODO_STATUSES = ['open', 'done'] as const;
+export type TodoStatus = (typeof TODO_STATUSES)[number];
+
+/** 待办备注最大字符数（与后端校验一致） */
+export const TODO_NOTE_MAX_CHARS = 2000;
+
+export function isTodoSourceType(value: unknown): value is TodoSourceType {
+  return typeof value === 'string' && (TODO_SOURCE_TYPES as readonly string[]).includes(value);
+}
+
+/** 待办事项 DTO（个人级；前后端共用形状） */
+export interface TodoItemDTO {
+  id: string;
+  sourceType: TodoSourceType;
+  sourceId: string | null;
+  sourceDocNo: string | null;
+  sourceTitle: string | null;
+  href: string | null;
+  note: string;
+  remindEnabled: boolean;
+  remindAt: string | null;
+  status: TodoStatus;
+  createdAt: string;
+  updatedAt: string;
 }

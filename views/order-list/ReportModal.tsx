@@ -245,6 +245,7 @@ const ReportModal: React.FC<ReportModalProps> = ({
           productTotalQty: isAnchor ? reportModal.productTotalQty : undefined,
           productCompletedQty: isAnchor ? reportModal.productCompletedQty : undefined,
           productMaxReportableQty: isAnchor ? reportModal.productMaxReportableQty : undefined,
+          scopedOrderIds: isAnchor ? orderIdsInModal : undefined,
         }),
       );
     }
@@ -263,6 +264,7 @@ const ReportModal: React.FC<ReportModalProps> = ({
     reportModal.productTotalQty,
     reportModal.productCompletedQty,
     reportModal.productMaxReportableQty,
+    orderIdsInModal,
   ]);
 
   const canSubmitAnyProduct = sessionProductIds.some(pid => {

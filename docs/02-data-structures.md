@@ -244,6 +244,10 @@ interface BOM {
 
 `DevStyleVariant.nodeBoms` 与 `ProductVariant.nodeBoms` 同形。发布大货时拷贝为 `Bom`，并重新生成 `bom-*` id 写入产品变体 `nodeBoms`。
 
+`DevStyle.defaultStageNames`（Json 字符串数组）：款式创建时配置的默认开发流程节点名。创建款式不再自动建头样；新增首个样品（头样）时带出这套默认节点。
+
+`DevSample` 增加可选 `colorId` / `sizeId`：开发样品（头样与新增样品轮次）绑定**单一**「颜色×尺码」组合，取自款式 `DevStyleVariant`。款式配置了颜色尺码（存在 variants）时为必填，且组合须命中某条 variant；款式无颜色尺码时为空。
+
 ### 5.2 开发节点模板字段（DevStageTemplateField）
 
 与工序节点库 `GlobalNodeTemplate.reportTemplate`（`ReportFieldDefinition`）同形，持久化于关系表 `dev_stage_template_fields`：
@@ -394,6 +398,28 @@ interface ProductMilestoneProgress {
 - 历史 JSON 中若仍存在 `number`，加载与归一化时视为 **`text`**；若存在 **`boolean`**，定义会规范为 **`select`**，缺省选项为 `['是','否']`（已有 `options` 则保留）。
 - 工序 **`reportDisplayTemplate`**（报工页只读展示）保留 **文本 / 附件 / 资料库** 语义：归一化时非 `text`/`file`/`knowledge` 的项会降级为 **`text`**，与报工弹窗只读区展示逻辑一致。
 - 前端在 `appDataLoadCore` / 设置保存链路对 `customFields`、`reportTemplate`、`reportDisplayTemplate` 做归一化；设置 API 写入时对上述 JSON 数组做 Zod 校验，拒绝再写入 `number`/`boolean` 类型字面量。
+
+---
+
+## 待办事项 `todo_items`（`todo_reminder` 插件）
+
+个人待办，按 `tenantId + userId` 作用域。模型 `TodoItem`（`backend/prisma/schema.prisma`），共享 DTO `TodoItemDTO` 与枚举 `TodoSourceType` / `TodoStatus` 在 `shared/types.ts`。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | uuid | 主键 |
+| `tenantId` / `userId` | uuid | 租户 + 归属人（FK `tenants` / `users`，级联删除） |
+| `sourceType` | varchar(40) | `standalone` / `production_order` / `plan` / `product` / `outsource` / `rework` / `purchase_order` / `purchase_bill` / `sales_order` / `sales_bill` / `dev_stage` / `dev_bom` |
+| `sourceId` | varchar(50)? | 关联单据 id；`standalone` 为空 |
+| `sourceDocNo` / `sourceTitle` | varchar? | 单号 / 标题快照（列表展示，免跨表） |
+| `href` | text? | 跳转路径快照（消息中心/列表跳单据） |
+| `note` | text | 内容备注（≤2000，`TODO_NOTE_MAX_CHARS`） |
+| `remindEnabled` | bool | 是否定时提醒 |
+| `remindAt` | timestamptz? | 提醒时间（开启时必填、需为将来） |
+| `remindedAt` | timestamptz? | 已提醒标记，重设提醒时清空 |
+| `status` | varchar(20) | `open` / `done` |
+
+索引：`(tenant_id,user_id,status)`、`(tenant_id,user_id,remind_enabled,remind_at)`。迁移：`20260626120000_add_todo_items`。
 
 ---
 

@@ -36,6 +36,7 @@ export function mapDevStyleRow(row: {
   colorIds: unknown;
   sizeIds: unknown;
   milestoneNodeIds: unknown;
+  defaultStageNames: unknown;
   salesPrice: unknown;
   purchasePrice: unknown;
   unitId: string | null;
@@ -54,6 +55,8 @@ export function mapDevStyleRow(row: {
   samples?: Array<{
     id: string;
     name: string;
+    colorId: string | null;
+    sizeId: string | null;
     createdAt: Date;
     stages?: Array<{
       id: string;
@@ -78,6 +81,7 @@ export function mapDevStyleRow(row: {
     colorIds: asStringArray(row.colorIds),
     sizeIds: asStringArray(row.sizeIds),
     milestoneNodeIds: asStringArray(row.milestoneNodeIds),
+    defaultStageNames: asStringArray(row.defaultStageNames),
     salesPrice: dec(row.salesPrice),
     purchasePrice: dec(row.purchasePrice),
     unitId: row.unitId ?? undefined,
@@ -96,6 +100,8 @@ export function mapDevStyleRow(row: {
     samples: (row.samples ?? []).map((s) => ({
       id: s.id,
       name: s.name,
+      colorId: s.colorId ?? undefined,
+      sizeId: s.sizeId ?? undefined,
       createdAt: s.createdAt.toISOString(),
       stages: (s.stages ?? [])
         .sort((a, b) => a.order - b.order)

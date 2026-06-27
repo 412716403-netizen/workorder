@@ -46,6 +46,7 @@
 | 租户/登录态恢复 | 浏览器 `localStorage` + httpOnly Cookie + 内存 token |
 | 页面聚合状态 | `AppDataContext` |
 | 打印模板 / 表单配置 | 已进入聚合状态与后端配置并存阶段，需持续收口 |
+| 待办提醒（`todo_reminder` 插件） | 后端 `TodoItem` 表 + `/api/todos`（个人区，按 `userId` 隔离，不挂 `requireSubPermission`）；提醒经 `dashboard.getNotifications` 注入工作台消息中心，无业务字段落本地 |
 
 ## 3. 当前最重要的结构事实
 

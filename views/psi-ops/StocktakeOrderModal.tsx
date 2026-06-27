@@ -274,8 +274,8 @@ const StocktakeOrderModal: React.FC<StocktakeOrderModalProps> = ({
                   stocktakeItems.length === 0 ||
                   !stocktakeItems.some(i => {
                     if (!i.productId) return false;
-                    const q = i.variantQuantities ? Object.values(i.variantQuantities).reduce((s, v) => s + v, 0) : (i.quantity ?? 0);
-                    return q >= 0;
+                    if (i.variantQuantities && Object.keys(i.variantQuantities).length > 0) return true;
+                    return i.quantity != null;
                   })
                 }
                 className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:pointer-events-none shadow-md"

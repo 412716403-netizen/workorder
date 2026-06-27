@@ -7,7 +7,6 @@ import { toast } from 'sonner';
 import ReportCustomFieldsEditor from '../../components/ReportCustomFieldsEditor';
 import { effectiveCustomDocFieldType } from '../../utils/reportCustomDocField';
 import {
-  formStandardCategoryPillClass,
   formStandardControlClass,
   outlineAccentToolbarButtonClass,
   outlineToolbarButtonClass,
@@ -17,6 +16,7 @@ import {
 } from '../../styles/uiDensity';
 import DevCreateSectionCard from './DevCreateSectionCard';
 import DevStageTemplateModal, { type DevTemplatePerms } from './DevStageTemplateModal';
+import AddTodoButton from '../../components/AddTodoButton';
 
 const STATUS_OPTIONS: DevStageStatus[] = [
   DevStageStatus.PENDING,
@@ -25,17 +25,27 @@ const STATUS_OPTIONS: DevStageStatus[] = [
   DevStageStatus.EXCEPTION,
 ];
 
+// 与未选中态保持完全一致的形状（尺寸/圆角/边框/字号），仅切换颜色
+const STATUS_BTN_BASE = 'px-3 py-1.5 rounded-lg text-xs font-medium transition-all border';
+
 const STATUS_ACTIVE_CLASS: Record<DevStageStatus, string> = {
-  [DevStageStatus.PENDING]: 'bg-slate-600 border-slate-600 text-white shadow-md shadow-slate-600/20',
-  [DevStageStatus.IN_PROGRESS]: 'bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-600/20',
-  [DevStageStatus.COMPLETED]: 'bg-emerald-600 border-emerald-600 text-white shadow-md shadow-emerald-600/20',
-  [DevStageStatus.EXCEPTION]: 'bg-red-500 border-red-500 text-white shadow-md shadow-red-500/20',
+  [DevStageStatus.PENDING]: 'bg-slate-600 border-slate-600 text-white',
+  [DevStageStatus.IN_PROGRESS]: 'bg-blue-600 border-blue-600 text-white',
+  [DevStageStatus.COMPLETED]: 'bg-emerald-600 border-emerald-600 text-white',
+  [DevStageStatus.EXCEPTION]: 'bg-red-500 border-red-500 text-white',
 };
+
+const STATUS_INACTIVE_CLASS =
+  'bg-white/80 text-slate-600 border-slate-200 hover:bg-white hover:text-slate-800 hover:border-slate-300';
 
 interface DevStageRegisterModalProps {
   stage: DevStageDto;
   open: boolean;
   onClose: () => void;
+  /** 所属款式 id（用于待办「前往单据」深链） */
+  styleId?: string;
+  /** 所属款式名称（用于待办快照上下文） */
+  styleName?: string;
   onSave: (payload: {
     status?: string;
     fields?: Array<{ label: string; value: string; type?: string }>;
@@ -77,6 +87,8 @@ const DevStageRegisterModal: React.FC<DevStageRegisterModalProps> = ({
   open,
   onClose,
   onSave,
+  styleId,
+  styleName,
   templateFields = [],
   templates = [],
   canManageTemplates = false,
@@ -189,6 +201,16 @@ const DevStageRegisterModal: React.FC<DevStageRegisterModalProps> = ({
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
+            <AddTodoButton
+              modalZIndexClass="z-[400]"
+              seed={{
+                sourceType: 'dev_stage',
+                sourceId: stage.id,
+                sourceDocNo: '开发管理',
+                sourceTitle: `${styleName ? `${styleName} · ` : ''}节点登记 · ${stage.name}`,
+                href: `/development?styleId=${encodeURIComponent(styleId ?? '')}&devStageId=${encodeURIComponent(stage.id)}`,
+              }}
+            />
             {templateSettingsBtn}
             <button
               type="button"
@@ -216,10 +238,8 @@ const DevStageRegisterModal: React.FC<DevStageRegisterModalProps> = ({
                   key={s}
                   type="button"
                   onClick={() => setStatus(s)}
-                  className={`transition-all ${
-                    status === s
-                      ? STATUS_ACTIVE_CLASS[s]
-                      : formStandardCategoryPillClass(false)
+                  className={`${STATUS_BTN_BASE} ${
+                    status === s ? STATUS_ACTIVE_CLASS[s] : STATUS_INACTIVE_CLASS
                   }`}
                 >
                   {DEV_STAGE_STATUS_LABEL[s]}

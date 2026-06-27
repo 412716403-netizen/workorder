@@ -10,7 +10,8 @@ describe('TENANT_DEFAULT_SETTINGS.outsourceFormSettings', () => {
       onlyShowNotCompletedOrder?: boolean;
     };
     expect(outsource.showOutsourceDispatchDeliveryDate).toBe(false);
-    expect(outsource.showPartnerFlowDetailOnList).toBe(false);
+    // 加工厂往来明细已固定为始终开启。
+    expect(outsource.showPartnerFlowDetailOnList).toBe(true);
     expect(outsource.hideZeroPendingPartnerOnList).toBe(false);
     expect(outsource.onlyShowNotCompletedOrder).toBe(false);
   });

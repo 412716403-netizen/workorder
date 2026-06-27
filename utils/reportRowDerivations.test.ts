@@ -63,6 +63,49 @@ describe('reportRowDerivations', () => {
     expect(d.effectiveRemainingForModal).toBeGreaterThan(0);
   });
 
+  it('scopedOrderIds limits aggregation to the clicked order (order-link mode)', () => {
+    // 同款产品 p1 的另一张工单，关联工单模式下点 o1 报工不应把 o1b 的数量也算进来。
+    const order1b: ProductionOrder = {
+      ...order1,
+      id: 'o1b',
+      orderNumber: 'WO-1B',
+      items: [{ variantId: 'v1', quantity: 1600 }],
+      milestones: [
+        { id: 'm1b', templateId: tid, name: '裁剪', status: '进行中', completedQuantity: 400, reportTemplate: [], reports: [] },
+      ],
+    } as ProductionOrder;
+
+    const scoped = computeReportRowDerivations({
+      productId: 'p1',
+      milestoneTemplateId: tid,
+      productionLinkMode: 'order',
+      processSequenceMode: 'free',
+      outOfSequenceTemplateIds: new Set(),
+      orders: [order1, order1b],
+      productMilestoneProgresses: [],
+      prodRecords: [],
+      getDefectiveRework: () => ({ defective: 0, rework: 0, reworkByVariant: {} }),
+      reworkMergeBucketOrderId: id => id,
+      scopedOrderIds: ['o1'],
+    });
+    expect(scoped.ordersInModal.map(o => o.id)).toEqual(['o1']);
+    expect(scoped.hintTotalQty).toBe(100);
+
+    const unscoped = computeReportRowDerivations({
+      productId: 'p1',
+      milestoneTemplateId: tid,
+      productionLinkMode: 'order',
+      processSequenceMode: 'free',
+      outOfSequenceTemplateIds: new Set(),
+      orders: [order1, order1b],
+      productMilestoneProgresses: [],
+      prodRecords: [],
+      getDefectiveRework: () => ({ defective: 0, rework: 0, reworkByVariant: {} }),
+      reworkMergeBucketOrderId: id => id,
+    });
+    expect(unscoped.hintTotalQty).toBe(1700);
+  });
+
   it('resolveTargetOrderForReport picks order with variant', () => {
     const hit = resolveTargetOrderForReport([order1], 'p1', tid, 'v1');
     expect(hit?.order.id).toBe('o1');

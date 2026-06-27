@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { FlaskConical } from 'lucide-react';
 import { useAppData } from '../../contexts/AppDataContext';
 import { useDevStyles } from '../../hooks/useDevStyles';
@@ -80,6 +81,34 @@ const DevManagementView: React.FC = () => {
   const [sortMode, setSortMode] = useState<DevSortMode>('time');
   const [listFilters, setListFilters] = useState<DevStyleListFilters>(DEV_STYLE_LIST_FILTERS_DEFAULT);
   const [productModal, setProductModal] = useState<{ open: boolean; style: DevStyleDto; isEdit: boolean } | null>(null);
+  const [pendingDeepLink, setPendingDeepLink] = useState<{ styleId: string; stageId?: string; sampleId?: string } | null>(null);
+
+  const location = useLocation();
+  const navigate = useNavigate();
+  // 待办「前往单据」深链：定位款式 → 切到对应页签并清空筛选 → 记录待打开的节点/样品弹窗
+  useEffect(() => {
+    const st = location.state as { styleId?: string; devStageId?: string; devSampleId?: string } | null;
+    if (!st?.styleId) return;
+    if (loading) return;
+    const clearState = () => {
+      const rest = { ...(st as Record<string, unknown>) };
+      delete rest.styleId;
+      delete rest.devStageId;
+      delete rest.devSampleId;
+      navigate(location.pathname, { replace: true, state: Object.keys(rest).length > 0 ? rest : undefined });
+    };
+    const target = styles.find((s) => s.id === st.styleId);
+    if (!target) {
+      clearState();
+      return;
+    }
+    setActiveTab(target.status === DevStyleStatus.DEVELOPING ? 'developing' : 'archived');
+    setSearchQuery('');
+    setListFilters(DEV_STYLE_LIST_FILTERS_DEFAULT);
+    setSelectedId(target.id);
+    setPendingDeepLink({ styleId: target.id, stageId: st.devStageId, sampleId: st.devSampleId });
+    clearState();
+  }, [location.state, location.pathname, loading, styles, navigate]);
 
   const visibleStyles = useMemo(
     () => filterDevStyles(styles, { activeTab, searchQuery, filters: listFilters, partners }),
@@ -255,7 +284,7 @@ const DevManagementView: React.FC = () => {
   return (
     <>
       {productModalEl}
-      <div className="-mx-12 -mt-4 -mb-8 flex min-h-[calc(100vh-5rem)] h-[calc(100vh-5rem)] overflow-hidden border-t border-slate-200 bg-white">
+      <div className="-mx-12 -mt-4 -mb-8 flex min-h-screen h-screen overflow-hidden border-t border-slate-200 bg-white">
         <DevStyleSidebar
           styles={styles}
           categories={categories}
@@ -283,6 +312,10 @@ const DevManagementView: React.FC = () => {
             partners={partners}
             dictionaries={dictionaries}
             templates={templates}
+            categories={categories}
+            globalNodes={globalNodes}
+            devBoms={devBoms}
+            onSaveBom={saveDevBom}
             readOnly={readOnly}
             canEdit={canEdit}
             canDeleteStyle={canDeleteStyle}
@@ -314,6 +347,9 @@ const DevManagementView: React.FC = () => {
             onUpdateStage={async (stageId, data) => {
               await updateStage(stageId, data);
             }}
+            deepLinkStageId={pendingDeepLink?.styleId === selected.id ? pendingDeepLink?.stageId ?? null : null}
+            deepLinkSampleId={pendingDeepLink?.styleId === selected.id ? pendingDeepLink?.sampleId ?? null : null}
+            onConsumeDeepLink={() => setPendingDeepLink(null)}
           />
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center bg-slate-50/30 text-slate-400 gap-3">

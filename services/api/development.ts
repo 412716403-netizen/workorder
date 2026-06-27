@@ -15,7 +15,10 @@ export const devStyles = {
     request<{ message: string }>(`/dev/styles/${id}`, { method: 'DELETE' }),
   publish: (id: string) =>
     request<{ style: DevStyleDto; productId: string }>(`/dev/styles/${id}/publish`, { method: 'POST' }),
-  addSample: (id: string, data: { name?: string; stageNames?: string[] }) =>
+  addSample: (
+    id: string,
+    data: { name?: string; stageNames?: string[]; colorId?: string; sizeId?: string },
+  ) =>
     request<DevStyleDto>(`/dev/styles/${id}/samples`, { method: 'POST', body: JSON.stringify(data) }),
   deleteSample: (sampleId: string) =>
     request<DevStyleDto>(`/dev/styles/samples/${sampleId}`, { method: 'DELETE' }),

@@ -98,6 +98,9 @@ interface PlanOrderListViewProps {
   onAddPSIRecordBatch?: (records: any[]) => Promise<void>;
   onCreateSubPlan?: (params: { productId: string; quantity: number; planId: string; bomNodeId: string }) => void;
   onCreateSubPlans?: (params: { planId: string; items: Array<{ productId: string; quantity: number; bomNodeId: string; parentProductId?: string; parentNodeId?: string }> }) => void;
+  /** 深链打开「生产计划详情」 */
+  initialDetailPlanId?: string | null;
+  onClearDetailPlanIdFromState?: () => void;
 }
 
 /** 计划树根 id → 根及所有子孙计划 id（与后端批次码子树一致） */
@@ -230,10 +233,15 @@ function renderPlanListCustomFieldValue(
   );
 }
 
-const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMode = 'order', plans, products, categories, dictionaries, workers, equipment, globalNodes, boms, partners, partnerCategories = [], planFormSettings, onUpdatePlanFormSettings, printTemplates, onUpdatePrintTemplates, onRefreshPrintTemplates, orders = [], onCreatePlan, onConvertToOrder, onDeletePlan, onUpdateProduct, onUpdatePlan, onUpdateOrder, onAddPSIRecord, onAddPSIRecordBatch, onCreateSubPlan, onCreateSubPlans }) => {
+const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMode = 'order', plans, products, categories, dictionaries, workers, equipment, globalNodes, boms, partners, partnerCategories = [], planFormSettings, onUpdatePlanFormSettings, printTemplates, onUpdatePrintTemplates, onRefreshPrintTemplates, orders = [], onCreatePlan, onConvertToOrder, onDeletePlan, onUpdateProduct, onUpdatePlan, onUpdateOrder, onAddPSIRecord, onAddPSIRecordBatch, onCreateSubPlan, onCreateSubPlans, initialDetailPlanId, onClearDetailPlanIdFromState }) => {
   const { tenantCtx } = useAuth();
   const [showModal, setShowModal] = useState(false);
-  const [viewDetailPlanId, setViewDetailPlanId] = useState<string | null>(null);
+  const [viewDetailPlanId, setViewDetailPlanId] = useState<string | null>(initialDetailPlanId ?? null);
+  // 深链同步：已停留在计划单 tab 时，从消息中心/待办再次深链到某计划单，
+  // initialDetailPlanId 只在挂载时进 useState 初值，需在其变化时主动打开详情。
+  useEffect(() => {
+    if (initialDetailPlanId) setViewDetailPlanId(initialDetailPlanId);
+  }, [initialDetailPlanId]);
   const [viewProductId, setViewProductId] = useState<string | null>(null);
   const [showPlanFormConfigModal, setShowPlanFormConfigModal] = useState(false);
   /** 打开计划单表单配置时默认页签（工具栏为字段；列表「增加打印模版」为打印） */
@@ -968,7 +976,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
       {viewDetailPlanId && (
         <PlanDetailPanel
           planId={viewDetailPlanId}
-          onClose={() => setViewDetailPlanId(null)}
+          onClose={() => { setViewDetailPlanId(null); onClearDetailPlanIdFromState?.(); }}
           plans={plans}
           products={products}
           categories={categories}

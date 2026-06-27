@@ -48,7 +48,7 @@ export interface WorkbenchConfig {
   pages: WorkbenchPage[];
 }
 
-export type FeaturePluginId = 'collaboration' | 'development' | 'knowledge_base' | 'traceability' | 'funds_account';
+export type FeaturePluginId = 'collaboration' | 'development' | 'knowledge_base' | 'traceability' | 'funds_account' | 'todo_reminder';
 
 export interface FeaturePluginDefinition {
   id: FeaturePluginId;

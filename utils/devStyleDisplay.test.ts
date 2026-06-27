@@ -7,19 +7,25 @@ import {
   getDevSampleSidebarProgress,
 } from './devStyleDisplay';
 
-const sample = (stages: DevStageStatus[]): DevSampleDto => ({
+type StageSpec = DevStageStatus | { status: DevStageStatus; withData?: boolean };
+
+const sample = (stages: StageSpec[]): DevSampleDto => ({
   id: 's1',
   name: '头样',
   createdAt: '',
-  stages: stages.map((status, order) => ({
-    id: `st-${order}`,
-    name: `节点${order}`,
-    status,
-    order,
-    updatedAt: '',
-    fields: [],
-    attachments: [],
-  })),
+  stages: stages.map((spec, order) => {
+    const status = typeof spec === 'object' ? spec.status : spec;
+    const withData = typeof spec === 'object' ? spec.withData : false;
+    return {
+      id: `st-${order}`,
+      name: `节点${order}`,
+      status,
+      order,
+      updatedAt: '',
+      fields: withData ? [{ id: `f-${order}`, label: '说明', value: '已填', type: 'text' }] : [],
+      attachments: [],
+    };
+  }),
   logs: [],
 });
 
@@ -58,21 +64,42 @@ describe('canDeleteDevSample', () => {
     expect(canDeleteDevSample(sample([DevStageStatus.PENDING, DevStageStatus.PENDING]))).toBe(true);
   });
 
-  it('blocks delete when any stage started', () => {
-    expect(canDeleteDevSample(sample([DevStageStatus.IN_PROGRESS, DevStageStatus.PENDING]))).toBe(false);
+  it('allows delete when first stage is in_progress but has no entered data', () => {
+    expect(
+      canDeleteDevSample(sample([DevStageStatus.IN_PROGRESS, DevStageStatus.PENDING])),
+    ).toBe(true);
+  });
+
+  it('blocks delete when first stage in_progress has entered data', () => {
+    expect(
+      canDeleteDevSample(
+        sample([{ status: DevStageStatus.IN_PROGRESS, withData: true }, DevStageStatus.PENDING]),
+      ),
+    ).toBe(false);
+  });
+
+  it('blocks delete when a started stage is not the first one', () => {
+    expect(
+      canDeleteDevSample(sample([DevStageStatus.PENDING, DevStageStatus.IN_PROGRESS])),
+    ).toBe(false);
+  });
+
+  it('blocks delete when first stage completed', () => {
     expect(canDeleteDevSample(sample([DevStageStatus.COMPLETED]))).toBe(false);
   });
 });
 
 describe('getDevSampleDeleteBlockReason', () => {
-  it('returns reason for started nodes', () => {
-    expect(getDevSampleDeleteBlockReason(sample([DevStageStatus.IN_PROGRESS]))).toMatch(/已开始的节点/);
+  it('returns reason for nodes with entered data', () => {
+    expect(
+      getDevSampleDeleteBlockReason(sample([{ status: DevStageStatus.IN_PROGRESS, withData: true }])),
+    ).toMatch(/已录入资料/);
   });
 
-  it('returns reason when only one sample left', () => {
+  it('allows deleting the only/head sample (款式可回到 0 样品)', () => {
     expect(
       getDevSampleDeleteBlockReason(sample([DevStageStatus.PENDING]), { sampleCount: 1 }),
-    ).toMatch(/至少保留一个样品轮次/);
+    ).toBeNull();
   });
 
   it('returns null when deletable', () => {

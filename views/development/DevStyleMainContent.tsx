@@ -5,6 +5,7 @@ import {
   History,
   Plus,
   Layers,
+  Boxes,
   Image as ImageIcon,
   Trash2,
   Tag,
@@ -17,7 +18,7 @@ import {
   FileText,
   FileArchive as FileArchiveIcon,
 } from 'lucide-react';
-import type { AppDictionaries, DevAttachmentDto, DevSampleDto, DevStageDto, DevStageTemplateDto, DevStyleDto, Partner, Product } from '../../types';
+import type { AppDictionaries, DevAttachmentDto, DevBomDto, DevSampleDto, DevStageDto, DevStageTemplateDto, DevStyleDto, GlobalNodeTemplate, Partner, Product, ProductCategory } from '../../types';
 import { DevStyleStatus, DEV_STAGE_STATUS_LABEL, DevStageStatus } from '../../types';
 import { toast } from 'sonner';
 import {
@@ -29,12 +30,16 @@ import {
   resolveDevStyleCustomerName,
 } from '../../utils/devStyleDisplay';
 import { resolveDevStyleWithPublishedProduct } from '../../utils/productInfoDevStyleBridge';
+import { colorSizeLabel } from '../../utils/devStyleVariants';
 import { devTemplateFieldsToReportFields } from '../../utils/devStageTemplateFields';
 import DevStageRegisterModal from './DevStageRegisterModal';
 import { type DevTemplatePerms } from './DevStageTemplateModal';
 import DevStageRegisteredContent from './DevStageRegisteredContent';
 import DevAddSampleModal from './DevAddSampleModal';
 import DevStyleLogModal from './DevStyleLogModal';
+import DevBomConfigSection from './DevBomConfigSection';
+import AddTodoButton from '../../components/AddTodoButton';
+import { devSingleSkuVariantId } from '../../utils/devBomHelpers';
 import {
   formStandardLabelClass,
   outlineToolbarButtonClass,
@@ -79,6 +84,10 @@ interface DevStyleMainContentProps {
   partners: Partner[];
   dictionaries: AppDictionaries;
   templates: DevStageTemplateDto[];
+  categories: ProductCategory[];
+  globalNodes: GlobalNodeTemplate[];
+  devBoms?: DevBomDto[];
+  onSaveBom?: (bom: DevBomDto, exists: boolean) => Promise<DevBomDto | void>;
   readOnly?: boolean;
   canEdit?: boolean;
   canDeleteStyle?: boolean;
@@ -92,12 +101,18 @@ interface DevStyleMainContentProps {
   onPublish: () => void;
   onDelete: () => void;
   onToggleArchive: () => void;
-  onAddSample: (data: { name: string; stageNames: string[] }) => Promise<void>;
+  onAddSample: (data: { name: string; stageNames: string[]; colorId?: string; sizeId?: string }) => Promise<void>;
   onDeleteSample: (sampleId: string) => Promise<void>;
   onUpdateStage: (
     stageId: string,
     data: Parameters<typeof import('../../services/api/development').devStyles.updateStage>[1],
   ) => Promise<void>;
+  /** 待办「前往单据」深链：打开指定节点登记弹窗 */
+  deepLinkStageId?: string | null;
+  /** 待办「前往单据」深链：打开指定样品 BOM 录入弹窗 */
+  deepLinkSampleId?: string | null;
+  /** 深链消费完成回调（清除父层 pending，避免重复打开） */
+  onConsumeDeepLink?: () => void;
 }
 
 const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
@@ -106,6 +121,10 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
   partners,
   dictionaries,
   templates,
+  categories,
+  globalNodes,
+  devBoms,
+  onSaveBom,
   readOnly,
   canEdit,
   canDeleteStyle,
@@ -122,11 +141,15 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
   onAddSample,
   onDeleteSample,
   onUpdateStage,
+  deepLinkStageId,
+  deepLinkSampleId,
+  onConsumeDeepLink,
 }) => {
   const [activeSampleId, setActiveSampleId] = useState(style.samples[0]?.id ?? '');
   const [registerStage, setRegisterStage] = useState<DevStageDto | null>(null);
   const [logOpen, setLogOpen] = useState(false);
   const [addSampleOpen, setAddSampleOpen] = useState(false);
+  const [bomModalOpen, setBomModalOpen] = useState(false);
   const [showFullImage, setShowFullImage] = useState(false);
 
   useEffect(() => {
@@ -135,7 +158,35 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
     }
   }, [style.samples, activeSampleId]);
 
+  // 待办「前往单据」深链：选中款式后打开对应节点登记 / BOM 录入弹窗
+  useEffect(() => {
+    if (!deepLinkStageId && !deepLinkSampleId) return;
+    if (deepLinkStageId) {
+      for (const sample of style.samples) {
+        const stg = sample.stages.find((s) => s.id === deepLinkStageId);
+        if (stg) {
+          setActiveSampleId(sample.id);
+          setRegisterStage(stg);
+          break;
+        }
+      }
+    } else if (deepLinkSampleId && style.samples.some((s) => s.id === deepLinkSampleId)) {
+      setActiveSampleId(deepLinkSampleId);
+      setBomModalOpen(true);
+    }
+    onConsumeDeepLink?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLinkStageId, deepLinkSampleId, style.id]);
+
   const activeSample: DevSampleDto | undefined = style.samples.find((s) => s.id === activeSampleId);
+  // 样品对应款式变体：单 SKU 用占位变体 id；否则按颜色尺码命中具体变体
+  const activeSampleVariantId = useMemo<string | undefined>(() => {
+    if (!activeSample) return undefined;
+    if (style.variants.length === 0) return devSingleSkuVariantId(style.id);
+    return style.variants.find(
+      (v) => v.colorId === activeSample.colorId && v.sizeId === activeSample.sizeId,
+    )?.id;
+  }, [activeSample, style.variants, style.id]);
   const displayStyle = useMemo(
     () => resolveDevStyleWithPublishedProduct(style, products),
     [style, products],
@@ -258,32 +309,38 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
             )}
           </div>
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-              <div className={`mb-2 flex items-center gap-2 ${formStandardLabelClass}`}>
-                <Tag className="w-3 h-3" /> 颜色
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {colorNames.length ? colorNames.map((c) => (
-                  <span key={c} className="rounded-md border bg-white px-2 py-0.5 text-xs font-medium text-slate-600">{c}</span>
-                )) : <span className="text-xs text-slate-300 italic">未设置</span>}
-              </div>
+          {(colorNames.length > 0 || sizeNames.length > 0) && (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {colorNames.length > 0 && (
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                  <div className={`mb-2 flex items-center gap-2 ${formStandardLabelClass}`}>
+                    <Tag className="w-3 h-3" /> 颜色
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {colorNames.map((c) => (
+                      <span key={c} className="rounded-md border bg-white px-2 py-0.5 text-xs font-medium text-slate-600">{c}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {sizeNames.length > 0 && (
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                  <div className={`mb-2 flex items-center gap-2 ${formStandardLabelClass}`}>
+                    <Ruler className="w-3 h-3" /> 尺码
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {sizeNames.map((s) => (
+                      <span key={s} className="rounded-md border bg-white px-2 py-0.5 text-xs font-medium text-slate-600">{s}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-              <div className={`mb-2 flex items-center gap-2 ${formStandardLabelClass}`}>
-                <Ruler className="w-3 h-3" /> 尺码
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {sizeNames.length ? sizeNames.map((s) => (
-                  <span key={s} className="rounded-md border bg-white px-2 py-0.5 text-xs font-medium text-slate-600">{s}</span>
-                )) : <span className="text-xs text-slate-300 italic">未设置</span>}
-              </div>
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
-      <div className="p-8 lg:p-10 bg-slate-50/30 flex-1">
+      <div className="p-8 lg:p-10 bg-white flex-1">
         <div className="flex items-center justify-between mb-6">
           <h3 className={sectionTitleClass}>样品开发记录</h3>
           {activeSample && (
@@ -297,8 +354,11 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
           )}
         </div>
 
-        <div className="mb-8 flex gap-3 overflow-x-auto px-0.5 pb-2 pt-3">
-          {style.samples.map((sample) => (
+        <div className="mb-8 flex items-start gap-3">
+          <div className="flex min-w-0 flex-1 gap-3 overflow-x-auto px-0.5 pb-2 pt-3">
+          {style.samples.map((sample) => {
+            const sampleColorSize = colorSizeLabel(sample.colorId, sample.sizeId, dictionaries);
+            return (
             <div key={sample.id} className="group/sample relative shrink-0 pr-1 pt-1">
               <button
                 type="button"
@@ -311,8 +371,19 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
               >
                 <Layers className="h-4 w-4 shrink-0" />
                 {sample.name}
+                {sampleColorSize && (
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                      activeSampleId === sample.id
+                        ? 'bg-white/20 text-white'
+                        : 'bg-slate-100 text-slate-500'
+                    }`}
+                  >
+                    {sampleColorSize}
+                  </span>
+                )}
               </button>
-              {canEdit && !readOnly && style.samples.length > 1 && (
+              {canEdit && !readOnly && (
                 <button
                   type="button"
                   aria-label={`删除${sample.name}`}
@@ -323,7 +394,8 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
                 </button>
               )}
             </div>
-          ))}
+            );
+          })}
           {canEdit && !readOnly && (
             <button
               type="button"
@@ -333,10 +405,20 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
               <Plus className="w-5 h-5" />
             </button>
           )}
+          </div>
+          {activeSample && canEdit && !readOnly && (
+            <button
+              type="button"
+              onClick={() => setBomModalOpen(true)}
+              className={`mt-3 flex shrink-0 items-center gap-2 ${outlineToolbarButtonClass} border-amber-200 bg-amber-50 text-amber-600 hover:bg-amber-100`}
+            >
+              <Boxes className="h-4 w-4" /> BOM
+            </button>
+          )}
         </div>
 
         {activeSample && (
-          <div className="space-y-6 max-w-4xl relative">
+          <div className="space-y-6 relative">
             <div className="absolute left-6 top-6 bottom-6 w-0.5 bg-slate-100" aria-hidden />
             {activeSample.stages.map((stage, idx) => (
               <div key={stage.id} className="relative pl-16">
@@ -401,12 +483,73 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
             ))}
           </div>
         )}
+
       </div>
+
+      {bomModalOpen && activeSample && (
+        <div className="fixed inset-0 z-[280] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/40" onClick={() => setBomModalOpen(false)} role="presentation" />
+          <div className="relative flex max-h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
+            <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-6 py-4">
+              <h3 className={sectionTitleClass}>
+                BOM 录入 · {activeSample.name}
+                {colorSizeLabel(activeSample.colorId, activeSample.sizeId, dictionaries) && (
+                  <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+                    {colorSizeLabel(activeSample.colorId, activeSample.sizeId, dictionaries)}
+                  </span>
+                )}
+              </h3>
+              <div className="flex shrink-0 items-center gap-2">
+                <AddTodoButton
+                  modalZIndexClass="z-[400]"
+                  seed={{
+                    sourceType: 'dev_bom',
+                    sourceId: activeSample.id,
+                    sourceDocNo: '开发管理',
+                    sourceTitle: `${style.name} · BOM 录入 · ${activeSample.name}`,
+                    href: `/development?styleId=${encodeURIComponent(style.id)}&devSampleId=${encodeURIComponent(activeSample.id)}`,
+                  }}
+                />
+                <button type="button" onClick={() => setBomModalOpen(false)}>
+                  <X className="h-5 w-5 text-slate-400" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-6 py-5">
+              {activeSampleVariantId ? (
+                <DevBomConfigSection
+                  working={style}
+                  setWorking={() => {}}
+                  globalNodes={globalNodes}
+                  categories={categories}
+                  products={products}
+                  dictionaries={dictionaries}
+                  devBoms={devBoms}
+                  mode="persist"
+                  onSaveBom={onSaveBom}
+                  readOnly={readOnly}
+                  variantFilterId={activeSampleVariantId}
+                  showMilestonePicker={false}
+                  scopedHeading=""
+                  scopedDescription=""
+                />
+              ) : (
+                <p className="rounded-2xl border border-amber-100 bg-amber-50/60 px-4 py-3 text-xs font-medium text-amber-600">
+                  该样品未绑定颜色尺码，无法录入 BOM；请在新增样品时选择颜色尺码。
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <DevAddSampleModal
         open={addSampleOpen}
         existingSamples={style.samples}
         templates={templates}
+        defaultStageNames={style.defaultStageNames}
+        variants={style.variants}
+        dictionaries={dictionaries}
         onClose={() => setAddSampleOpen(false)}
         onConfirm={(data) => void onAddSample(data)}
       />
@@ -415,6 +558,8 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
         <DevStageRegisterModal
           stage={registerStage}
           open
+          styleId={style.id}
+          styleName={style.name}
           templateFields={templateFieldsForStage}
           templates={templates}
           canManageTemplates={canManageTemplates}

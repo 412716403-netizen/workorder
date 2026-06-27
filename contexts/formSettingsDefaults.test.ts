@@ -334,7 +334,7 @@ describe('normalizeOutsourceFormSettings', () => {
   it('injects default outsourceCenterPrint without auto template whitelist', () => {
     const n = normalizeOutsourceFormSettings({});
     expect(n.showOutsourceDispatchDeliveryDate).toBe(false);
-    expect(n.showPartnerFlowDetailOnList).toBe(false);
+    expect(n.showPartnerFlowDetailOnList).toBe(true);
     expect(n.hideZeroPendingPartnerOnList).toBe(false);
     expect(n.onlyShowNotCompletedOrder).toBe(false);
     expect(n.outsourceCenterPrint?.dispatchFlowDetail?.allowedTemplateIds).toBeUndefined();
@@ -387,7 +387,8 @@ describe('normalizeOutsourceFormSettings', () => {
       outsourceReceiveCustomFields: [],
     });
     expect(n.showOutsourceDispatchDeliveryDate).toBe(false);
-    expect(n.showPartnerFlowDetailOnList).toBe(false);
+    // 加工厂往来明细已固定为始终开启，规整后恒为 true。
+    expect(n.showPartnerFlowDetailOnList).toBe(true);
     expect(n.hideZeroPendingPartnerOnList).toBe(false);
     expect(n.onlyShowNotCompletedOrder).toBe(false);
   });

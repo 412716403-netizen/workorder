@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Plus,
   Clock,
@@ -51,6 +52,7 @@ import WarehousePanel from './psi-ops/WarehousePanel';
 import OrderBillFormPage from './psi-ops/OrderBillFormPage';
 import PsiDocDetailSummary from './psi-ops/PsiDocDetailSummary';
 import PsiOrderBillDocModal from './psi-ops/PsiOrderBillDocModal';
+import AddTodoButton from '../components/AddTodoButton';
 import PsiOrderBillFlowListModal from './psi-ops/PsiOrderBillFlowListModal';
 import { PSI_ORDER_BILL_FLOW_LABELS } from './psi-ops/psiOrderBillFlowHelpers';
 import PendingShipmentListModal, { PendingShipmentGroup } from './psi-ops/PendingShipmentListModal';
@@ -390,6 +392,20 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
     });
   }, [recordsList, type, products, warehouses]);
 
+  // 待办关联单据标题：单号 + 合作单位（供应商/客户），从单据记录里取 partner 快照
+  const psiDocTitleWithPartner = useCallback(
+    (
+      docNumber: string | null,
+      list: ReadonlyArray<{ docNumber?: string; partner?: string }>,
+    ): string => {
+      if (!docNumber) return '';
+      const rec = list.find((r) => r.docNumber === docNumber);
+      const partner = rec?.partner?.trim();
+      return partner ? `${docNumber} · ${partner}` : docNumber;
+    },
+    [],
+  );
+
   const groupedRecords = useMemo(
     () => groupRecordsByDocNumber(recordsList, type),
     [recordsList, type],
@@ -583,6 +599,21 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
     },
     [type],
   );
+
+  // 待办「前往单据」深链：location.state.psiDoc + tab===type 时打开对应单据详情
+  const psiDeepLinkLocation = useLocation();
+  const psiDeepLinkNavigate = useNavigate();
+  useEffect(() => {
+    const st = psiDeepLinkLocation.state as { tab?: string; psiDoc?: string } | null;
+    if (!st?.psiDoc || st.tab !== type) return;
+    handlePsiOrderBillFlowDetail(st.psiDoc);
+    const rest = { ...(st as Record<string, unknown>) };
+    delete rest.psiDoc;
+    psiDeepLinkNavigate(psiDeepLinkLocation.pathname, {
+      replace: true,
+      state: Object.keys(rest).length > 0 ? rest : undefined,
+    });
+  }, [psiDeepLinkLocation.state, psiDeepLinkLocation.pathname, type, handlePsiOrderBillFlowDetail, psiDeepLinkNavigate]);
 
   const psiTabViewPerm =
     type === 'PURCHASE_ORDER'
@@ -779,6 +810,19 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
           onEnterEdit={() => setPurchaseOrderModalPhase('edit')}
           onCancelEdit={() => setPurchaseOrderModalPhase('detail')}
           hasPsiPerm={hasPsiPerm}
+          leadingDetailActions={
+            editingPODocNumber ? (
+              <AddTodoButton
+                seed={{
+                  sourceType: 'purchase_order',
+                  sourceId: editingPODocNumber,
+                  sourceDocNo: '采购订单',
+                  sourceTitle: psiDocTitleWithPartner(editingPODocNumber, recordsList),
+                  href: `/psi?tab=PURCHASE_ORDER&psiDoc=${encodeURIComponent(editingPODocNumber ?? '')}`,
+                }}
+              />
+            ) : undefined
+          }
           detailContent={
             <PsiDocDetailSummary
               docType="PURCHASE_ORDER"
@@ -857,6 +901,19 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
           onEnterEdit={() => setPurchaseBillModalPhase('edit')}
           onCancelEdit={() => setPurchaseBillModalPhase('detail')}
           hasPsiPerm={hasPsiPerm}
+          leadingDetailActions={
+            editingPBDocNumber ? (
+              <AddTodoButton
+                seed={{
+                  sourceType: 'purchase_bill',
+                  sourceId: editingPBDocNumber,
+                  sourceDocNo: '采购入库',
+                  sourceTitle: psiDocTitleWithPartner(editingPBDocNumber, recordsList),
+                  href: `/psi?tab=PURCHASE_BILL&psiDoc=${encodeURIComponent(editingPBDocNumber ?? '')}`,
+                }}
+              />
+            ) : undefined
+          }
           detailContent={
             <PsiDocDetailSummary
               docType="PURCHASE_BILL"
@@ -935,6 +992,19 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
           onEnterEdit={() => setSalesOrderModalPhase('edit')}
           onCancelEdit={() => setSalesOrderModalPhase('detail')}
           hasPsiPerm={hasPsiPerm}
+          leadingDetailActions={
+            editingSODocNumber ? (
+              <AddTodoButton
+                seed={{
+                  sourceType: 'sales_order',
+                  sourceId: editingSODocNumber,
+                  sourceDocNo: '销售订单',
+                  sourceTitle: psiDocTitleWithPartner(editingSODocNumber, recordsList),
+                  href: `/psi?tab=SALES_ORDER&psiDoc=${encodeURIComponent(editingSODocNumber ?? '')}`,
+                }}
+              />
+            ) : undefined
+          }
           detailContent={
             <PsiDocDetailSummary
               docType="SALES_ORDER"
@@ -1006,6 +1076,19 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
           permSubmodule="sales_bill"
           deleteConfirmMessage="确定要删除该销售单吗？"
           recordType="SALES_BILL"
+          leadingDetailActions={
+            salesBillEditingDocForModal ? (
+              <AddTodoButton
+                seed={{
+                  sourceType: 'sales_bill',
+                  sourceId: salesBillEditingDocForModal,
+                  sourceDocNo: '销售单',
+                  sourceTitle: psiDocTitleWithPartner(salesBillEditingDocForModal, salesBillDetailRecordsList),
+                  href: `/psi?tab=SALES_BILL&psiDoc=${encodeURIComponent(salesBillEditingDocForModal ?? '')}`,
+                }}
+              />
+            ) : undefined
+          }
           onDeleteRecords={onDeleteRecords}
           onClose={() => {
             if (salesBillRevealOpen) {

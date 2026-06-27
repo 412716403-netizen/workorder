@@ -33,6 +33,11 @@ export interface ReportRowDerivationsInput {
   productTotalQty?: number;
   productCompletedQty?: number;
   productMaxReportableQty?: number;
+  /**
+   * 本次报工弹窗真正纳入的工单 id（关联工单模式下为被点击的单个工单，产品组报工时为该组工单）。
+   * 传入时只统计这些工单，避免按 productId 把同款其它工单也聚合进来（导致表头数量虚高）。
+   */
+  scopedOrderIds?: string[];
 }
 
 export interface ReportRowDerivations {
@@ -98,9 +103,14 @@ export function computeReportRowDerivations(input: ReportRowDerivationsInput): R
     productTotalQty,
     productCompletedQty,
     productMaxReportableQty,
+    scopedOrderIds,
   } = input;
 
-  const ordersInModal = resolveOrdersForProductAtTemplate(orders, productId, milestoneTemplateId);
+  const ordersForProduct = resolveOrdersForProductAtTemplate(orders, productId, milestoneTemplateId);
+  const ordersInModal =
+    scopedOrderIds && scopedOrderIds.length > 0
+      ? ordersForProduct.filter(o => scopedOrderIds.includes(o.id))
+      : ordersForProduct;
   const orderIdsInModal = ordersInModal.map(o => o.id);
   const tid = milestoneTemplateId;
   const useProductPmp = productionLinkMode === 'product' && productMilestoneProgresses.length > 0;

@@ -82,7 +82,9 @@ const DevCreateStyleModal: React.FC<DevCreateStyleModalProps> = ({
   onSave,
 }) => {
   const [working, setWorking] = useState<DevStyleDto>(() => JSON.parse(JSON.stringify(initial)));
-  const [stageNames, setStageNames] = useState<string[]>([]);
+  const [stageNames, setStageNames] = useState<string[]>(
+    () => (Array.isArray(initial.defaultStageNames) ? [...initial.defaultStageNames] : []),
+  );
   const [pendingBoms, setPendingBoms] = useState<DevBomDto[]>([]);
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -93,7 +95,7 @@ const DevCreateStyleModal: React.FC<DevCreateStyleModalProps> = ({
     if (!open) return;
     const merged = resolveDevStyleWithPublishedProduct(initial, products);
     setWorking(JSON.parse(JSON.stringify(merged)));
-    setStageNames([]);
+    setStageNames(Array.isArray(initial.defaultStageNames) ? [...initial.defaultStageNames] : []);
     setPendingBoms([]);
     setSaving(false);
   }, [open, initial, products]);
@@ -120,7 +122,7 @@ const DevCreateStyleModal: React.FC<DevCreateStyleModalProps> = ({
       toast.error(catalogConflict);
       return false;
     }
-    if (isNew && stageNames.length === 0) {
+    if (stageNames.length === 0) {
       toast.error('请至少配置一个开发流程节点');
       return false;
     }
@@ -150,6 +152,8 @@ const DevCreateStyleModal: React.FC<DevCreateStyleModalProps> = ({
           code: next.code.trim(),
           name: next.name.trim(),
           status: isNew ? DevStyleStatus.DEVELOPING : initial.status,
+          // 编辑态也持久化默认开发流程；新建态由 templateStageNames 写入
+          defaultStageNames: stageNames,
         },
         { templateStageNames: isNew ? stageNames : undefined, isNew, pendingBoms },
       );
@@ -190,7 +194,7 @@ const DevCreateStyleModal: React.FC<DevCreateStyleModalProps> = ({
                 <p className={`truncate ${pageSubtitleClass} mt-0 max-w-none`}>
                   {isNew
                     ? '填写款式档案、开发流程与生产 BOM，创建后进入样品开发'
-                    : '修改款式基础信息与生产配置'}
+                    : '修改款式基础信息、开发流程与生产配置；开发节点变更后，新建样品按新节点'}
                 </p>
               </div>
             </div>
@@ -218,11 +222,11 @@ const DevCreateStyleModal: React.FC<DevCreateStyleModalProps> = ({
               onRefreshDictionaries={onRefreshDictionaries}
               onRefreshPartners={onRefreshPartners}
               embeddedInModal
-              showStageFlow={isNew}
+              showStageFlow
               stageNames={stageNames}
               setStageNames={setStageNames}
               onOpenTemplateSettings={
-                isNew && canManageTemplates ? () => setTemplateModalOpen(true) : undefined
+                canManageTemplates ? () => setTemplateModalOpen(true) : undefined
               }
             />
 

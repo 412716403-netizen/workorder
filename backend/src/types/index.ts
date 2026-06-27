@@ -51,6 +51,13 @@ export {
   type ProductVariantUsageEntry,
   type ProductVariantUsageResponse,
   SCAN_ITEM_CODE_IDS_KEY,
+  TODO_SOURCE_TYPES,
+  TODO_STATUSES,
+  TODO_NOTE_MAX_CHARS,
+  isTodoSourceType,
+  type TodoSourceType,
+  type TodoStatus,
+  type TodoItemDTO,
 } from '../../../shared/types.js';
 
 export {

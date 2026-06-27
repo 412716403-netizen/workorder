@@ -133,14 +133,15 @@ const ProductionManagementView: React.FC = () => {
     ],
   }), []);
 
-  /** 关闭工单详情时清除 location.state 中的 detailOrderId，避免切到其他 tab 再回工单中心时弹窗再次打开 */
-  const clearDetailOrderIdFromState = () => {
+  /** 关闭单据详情时清除 location.state 中对应的深链 id（detailOrderId/detailProductId/detailPlanId），避免切到其他 tab 再回来时弹窗再次打开 */
+  const clearDetailKeyFromState = (key: 'detailOrderId' | 'detailProductId' | 'detailPlanId') => {
     const state = location.state && typeof location.state === 'object' && !Array.isArray(location.state) ? location.state as Record<string, unknown> : {};
-    if ('detailOrderId' in state) {
-      const { detailOrderId: _, ...rest } = state;
+    if (key in state) {
+      const { [key]: _removed, ...rest } = state;
       navigate(location.pathname, { replace: true, state: Object.keys(rest).length > 0 ? rest : undefined });
     }
   };
+  const clearDetailOrderIdFromState = () => clearDetailKeyFromState('detailOrderId');
 
   useEffect(() => {
     const tab = (location.state as { tab?: MainTab })?.tab;
@@ -255,6 +256,8 @@ const ProductionManagementView: React.FC = () => {
           <Suspense fallback={<TabPanelFallback />}>
           <PlanOrderListView 
             productionLinkMode={productionLinkMode}
+            initialDetailPlanId={(location.state as { detailPlanId?: string })?.detailPlanId}
+            onClearDetailPlanIdFromState={() => clearDetailKeyFromState('detailPlanId')}
             plans={plans} 
             products={products} 
             categories={categories}
@@ -290,6 +293,8 @@ const ProductionManagementView: React.FC = () => {
 <OrderListView
             initialDetailOrderId={(location.state as { detailOrderId?: string })?.detailOrderId}
             onClearDetailOrderIdFromState={clearDetailOrderIdFromState}
+            initialDetailProductId={(location.state as { detailProductId?: string })?.detailProductId}
+            onClearDetailProductIdFromState={() => clearDetailKeyFromState('detailProductId')}
             productionLinkMode={productionLinkMode}
             processSequenceMode={processSequenceMode}
             allowExceedMaxReportQty={allowExceedMaxReportQty}

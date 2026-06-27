@@ -453,14 +453,39 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
       toast.warning('请选择盘点仓库');
       return;
     }
-    const hasValidLine = stocktakeItems.some(i => {
+    // 是否会被保存：变体行需录入了规格数量；非变体行需在数量框里实际填写（含 0），空输入不算
+    const lineWillBeSaved = (i: StocktakeLineDraft) => {
       if (!i.productId) return false;
-      const q = i.variantQuantities ? Object.values(i.variantQuantities).reduce((s, v) => s + v, 0) : (i.quantity ?? 0);
-      return q >= 0;
-    });
+      if (i.variantQuantities && Object.keys(i.variantQuantities).length > 0) return true;
+      return i.quantity != null;
+    };
+    const hasValidLine = stocktakeItems.some(lineWillBeSaved);
     if (stocktakeItems.length === 0 || !hasValidLine) {
       toast.warning('请至少添加一条盘点明细');
       return;
+    }
+    // 重复校验：批次产品「同产品同批次」、非批次产品「同产品」不可在一次盘点中重复录入
+    const seenBatchKeys = new Set<string>();
+    const seenPlainProductIds = new Set<string>();
+    for (const item of stocktakeItems) {
+      if (!item.productId) continue;
+      const p = productMapPSI.get(item.productId);
+      const usesBatch = categoryUsesBatchManagement(categoryMapPSI.get(p?.categoryId ?? ''));
+      const bn = (item.batchNo ?? '').trim();
+      if (usesBatch && bn) {
+        const key = `${item.productId}::${bn}`;
+        if (seenBatchKeys.has(key)) {
+          toast.error(`产品「${p?.name ?? item.productId}」批次「${bn}」在本次盘点中重复，请合并为一行`);
+          return;
+        }
+        seenBatchKeys.add(key);
+      } else if (!usesBatch) {
+        if (seenPlainProductIds.has(item.productId)) {
+          toast.error(`产品「${p?.name ?? item.productId}」在本次盘点中重复，同一产品不能录入两次`);
+          return;
+        }
+        seenPlainProductIds.add(item.productId);
+      }
     }
     for (const item of stocktakeItems) {
       if (!item.productId) continue;
@@ -520,7 +545,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
             createdAt,
           });
         });
-      } else if ((item.quantity ?? 0) >= 0) {
+      } else if (item.quantity != null) {
         const bn = (item.batchNo ?? '').trim();
         const p = productMapPSI.get(item.productId);
         const batchCat = categoryUsesBatchManagement(categoryMapPSI.get(p?.categoryId ?? ''));
@@ -545,6 +570,10 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
         });
       }
     });
+    if (newRecords.length === 0) {
+      toast.warning('请填写实盘数量后再保存（未填写数量的明细行不会盘点）');
+      return;
+    }
     const originalDocNumber = editingStocktakeDocNumber ?? undefined;
     newRecords.forEach(r => {
       if (r.batchNo) {
@@ -759,8 +788,9 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
     return allStocks.filter(ps => ps.name.toLowerCase().includes(term) || ps.sku.toLowerCase().includes(term) || ps.categoryName.toLowerCase().includes(term));
   }, [products, warehouses, recordsList, categories, debouncedSearchTerm, getVariantDisplayQty, dictionaries, getStock, categoryMapPSI]);
 
-  const nonZeroStocks = useMemo(() => filteredProductStocks.filter(p => p.total !== 0), [filteredProductStocks]);
-  const pStocks = useProgressiveList(nonZeroStocks);
+  // 仅展示当前有库存的产品；库存为 0（含盘点为 0）的产品不在仓库列表显示
+  const visibleStocks = useMemo(() => filteredProductStocks.filter(p => p.total !== 0), [filteredProductStocks]);
+  const pStocks = useProgressiveList(visibleStocks);
 
   // ── 仓库流水 ── 聚合逻辑下沉到 ./warehouseFlowHelpers
   const warehouseFlowRows = useMemo(() => {
@@ -1112,7 +1142,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
                    )
                  ) : (
                    <div className="overflow-x-auto">
-                     {nonZeroStocks.length === 0 ? (
+                     {visibleStocks.length === 0 ? (
                        <div className="py-16 text-center text-slate-400">
                          <Package className="w-12 h-12 mx-auto mb-3 opacity-50" />
                          <p className="text-sm font-bold">暂无库存数据</p>

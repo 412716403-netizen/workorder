@@ -802,12 +802,14 @@ export async function getStats(
 
 export type DashboardNotification = {
   id: string;
-  type: 'system' | 'announcement' | 'expiry_reminder';
+  type: 'system' | 'announcement' | 'expiry_reminder' | 'todo';
   title: string;
   body: string;
   createdAt: string;
   href?: string;
   publisherName?: string;
+  /** 待办类消息的完成状态（前端用复选框/按钮展示，标题不再追加「已完成」） */
+  done?: boolean;
 };
 
 const MAX_PLATFORM_ANNOUNCEMENTS_STORE = MAX_PLATFORM_ANNOUNCEMENTS;
@@ -879,22 +881,81 @@ function toAnnouncementNotification(msg: DashboardPublishedMessage): DashboardNo
   };
 }
 
-/** 工作台消息 feed：全平台公告 + 到期提醒 */
+const TODO_REMINDER_PUBLISHER = '待办提醒';
+
+/** todo_reminder 插件：当前用户到点未完成的待办，注入消息流 */
+async function buildTodoReminderNotifications(
+  tenantId: string,
+  userId: string,
+): Promise<DashboardNotification[]> {
+  const plugins = await getFeaturePlugins(tenantId);
+  if (plugins.todo_reminder !== true) return [];
+
+  const db = getTenantPrisma(tenantId);
+  const now = new Date();
+  // 到点的待办（含已完成）都保留在消息中心：完成后不消失，完成状态用 done 字段返回
+  type TodoReminderRow = {
+    id: string;
+    note: string;
+    sourceDocNo: string | null;
+    sourceTitle: string | null;
+    href: string | null;
+    remindAt: Date | null;
+    status: string;
+  };
+  let rows: TodoReminderRow[];
+  try {
+    rows = (await db.todoItem.findMany({
+      where: {
+        userId,
+        remindEnabled: true,
+        remindAt: { lte: now },
+      },
+      select: { id: true, note: true, sourceDocNo: true, sourceTitle: true, href: true, remindAt: true, status: true },
+      orderBy: { remindAt: 'desc' },
+      take: 20,
+    })) as TodoReminderRow[];
+  } catch {
+    // 待办表尚未迁移（todo migration 未执行）或查询异常时，降级为空，
+    // 避免一个插件特性拖垮整个工作台消息中心接口。
+    return [];
+  }
+
+  return rows.map(row => {
+    const docLabel = [row.sourceDocNo, row.sourceTitle].filter(Boolean).join(' ');
+    // 标题只放固定提示 + 关联单据；完成状态由 done 字段驱动，不再追加「已完成」
+    const title = docLabel ? `待办提醒 · ${docLabel}` : '待办提醒';
+    return {
+      id: `todo-${row.id}`,
+      type: 'todo' as const,
+      title,
+      body: row.note,
+      createdAt: (row.remindAt ?? now).toISOString(),
+      href: row.href ?? undefined,
+      publisherName: TODO_REMINDER_PUBLISHER,
+      done: row.status === 'done',
+    };
+  });
+}
+
+/** 工作台消息 feed：全平台公告 + 到期提醒 + 待办提醒 */
 export async function getNotifications(
   tenantId: string,
-  _userId: string,
+  userId: string,
   _tenantRole: string | undefined,
   _permissions: string[],
   opts: { limit?: number } = {},
 ) {
   const limit = Math.min(Math.max(1, opts.limit ?? 20), 50);
-  const [platformMsgs, expiryReminder] = await Promise.all([
+  const [platformMsgs, expiryReminder, todoReminders] = await Promise.all([
     loadPlatformAnnouncements(),
     buildExpiryReminderNotification(tenantId),
+    buildTodoReminderNotifications(tenantId, userId),
   ]);
 
   const items: DashboardNotification[] = platformMsgs.map(toAnnouncementNotification);
   if (expiryReminder) items.push(expiryReminder);
+  items.push(...todoReminders);
 
   items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 

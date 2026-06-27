@@ -7,7 +7,7 @@ import { devStyleInclude, mapDevStyleRow } from './dev-styles.mapper.js';
 import { publishDevStyleToProduct } from './dev-publish.service.js';
 
 const STYLE_JSON_FIELDS = [
-  'categoryCustomData', 'colorIds', 'sizeIds', 'milestoneNodeIds',
+  'categoryCustomData', 'colorIds', 'sizeIds', 'milestoneNodeIds', 'defaultStageNames',
 ] as const;
 
 function coerceStyleJson(data: Record<string, unknown>): void {
@@ -20,6 +20,12 @@ function coerceStyleJson(data: Record<string, unknown>): void {
   }
 }
 
+/** 把任意来源（含 Prisma Json 字段）归一化为去空白、非空的工序名数组。 */
+function normalizeStageNames(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((x) => String(x).trim()).filter(Boolean);
+}
+
 async function assertCategory(db: TenantPrismaClient, categoryId: unknown): Promise<string | undefined> {
   if (categoryId === undefined || categoryId === null || categoryId === '') return undefined;
   const id = String(categoryId).trim();
@@ -27,6 +33,33 @@ async function assertCategory(db: TenantPrismaClient, categoryId: unknown): Prom
   const cat = await db.productCategory.findFirst({ where: { id } });
   if (!cat) throw new AppError(400, '产品分类不存在');
   return id;
+}
+
+/**
+ * 校验并归一化样品绑定的颜色尺码：
+ * - 款式有 variants（启用颜色尺码）时必填，且 colorId/sizeId 组合须命中某条 variant；
+ * - 款式无 variants 时强制置空（不区分颜色尺码）。
+ */
+export function resolveSampleColorSize(
+  variants: Array<{ colorId: unknown; sizeId: unknown }>,
+  colorId: unknown,
+  sizeId: unknown,
+): { colorId: string | null; sizeId: string | null } {
+  if (!variants.length) {
+    return { colorId: null, sizeId: null };
+  }
+  const cid = colorId == null ? '' : String(colorId).trim();
+  const sid = sizeId == null ? '' : String(sizeId).trim();
+  if (!cid && !sid) {
+    throw new AppError(400, '该款式已配置颜色尺码，请选择样品对应的颜色尺码');
+  }
+  const matched = variants.some(
+    (v) => String(v.colorId ?? '') === cid && String(v.sizeId ?? '') === sid,
+  );
+  if (!matched) {
+    throw new AppError(400, '所选颜色尺码不属于该款式');
+  }
+  return { colorId: cid || null, sizeId: sid || null };
 }
 
 async function appendDevLog(
@@ -136,34 +169,21 @@ export async function createDevStyle(
       }))
     : [];
 
-  const stageNames = Array.isArray(templateStageNames)
-    ? (templateStageNames as unknown[]).map((x) => String(x).trim()).filter(Boolean)
-    : ['头样'];
+  // 该款式的默认开发流程节点（创建时配置）。不再自动创建头样，
+  // 头样与后续样品统一在「样品开发」区点「+」经 addDevSample 创建，并带出这套默认节点。
+  // 优先用显式传入的 templateStageNames；未传时保留 body 自带的 defaultStageNames（兼容非 UI 调用方），都没有则为空。
+  if (templateStageNames !== undefined) {
+    data.defaultStageNames = normalizeStageNames(templateStageNames);
+  } else {
+    data.defaultStageNames = normalizeStageNames(data.defaultStageNames);
+  }
 
-  await db.$transaction(async (tx) => {
-    await tx.devStyle.create({
-      data: {
-        ...data,
-        tenantId,
-        variants: cleanVariants.length ? { create: cleanVariants } : undefined,
-      },
-    });
-    const sampleId = genId('dsmp');
-    await tx.devSample.create({
-      data: {
-        id: sampleId,
-        styleId: data.id as string,
-        name: stageNames.length > 0 ? '头样' : '样品 1',
-        stages: {
-          create: (stageNames.length ? stageNames : ['设计']).map((n, i) => ({
-            id: genId('dstg'),
-            name: n,
-            order: i,
-            status: i === 0 ? DevStageStatus.IN_PROGRESS : DevStageStatus.PENDING,
-          })),
-        },
-      },
-    });
+  await db.devStyle.create({
+    data: {
+      ...data,
+      tenantId,
+      variants: cleanVariants.length ? { create: cleanVariants } : undefined,
+    },
   });
 
   return getDevStyle(db, data.id as string);
@@ -258,20 +278,31 @@ export async function deleteDevStyle(db: TenantPrismaClient, styleId: string) {
 export async function addDevSample(
   db: TenantPrismaClient,
   styleId: string,
-  body: { name?: string; stageNames?: string[] },
+  body: { name?: string; stageNames?: string[]; colorId?: string; sizeId?: string },
 ) {
-  const style = await db.devStyle.findUnique({ where: { id: styleId } });
+  const style = await db.devStyle.findUnique({
+    where: { id: styleId },
+    include: { variants: { select: { colorId: true, sizeId: true } } },
+  });
   if (!style) throw new AppError(404, '款式不存在');
+  const sampleColorSize = resolveSampleColorSize(style.variants, body.colorId, body.sizeId);
   let names = body.stageNames?.length
     ? body.stageNames.map((n) => n.trim()).filter(Boolean)
     : [];
+  if (names.length === 0) {
+    // 与前端 DevAddSampleModal 一致：优先款式的默认开发流程，其次头样节点，最后兜底。
+    names = normalizeStageNames(style.defaultStageNames);
+  }
   if (names.length === 0) {
     const firstSample = await db.devSample.findFirst({
       where: { styleId },
       orderBy: { createdAt: 'asc' },
       include: { stages: { orderBy: { order: 'asc' } } },
     });
-    names = firstSample?.stages.map((s) => s.name) ?? ['设计', '打样', '评审'];
+    names = firstSample?.stages.map((s) => s.name).filter(Boolean) ?? [];
+  }
+  if (names.length === 0) {
+    names = ['设计', '打样', '评审'];
   }
   const sampleId = genId('dsmp');
   await db.devSample.create({
@@ -279,6 +310,8 @@ export async function addDevSample(
       id: sampleId,
       styleId,
       name: body.name?.trim() || `样品 ${Date.now() % 1000}`,
+      colorId: sampleColorSize.colorId,
+      sizeId: sampleColorSize.sizeId,
       stages: {
         create: names.map((n, i) => ({
           id: genId('dstg'),
@@ -295,14 +328,24 @@ export async function addDevSample(
 export async function deleteDevSample(db: TenantPrismaClient, sampleId: string) {
   const sample = await db.devSample.findUnique({
     where: { id: sampleId },
-    include: { stages: true, style: true },
+    include: {
+      stages: { include: { fields: true, attachments: true }, orderBy: { order: 'asc' } },
+      style: true,
+    },
   });
   if (!sample) throw new AppError(404, '样品轮次不存在');
   if (sample.style.status === DevStyleStatus.PUBLISHED) {
     throw new AppError(409, '已发布大货的款式不可修改样品');
   }
-  const hasProgress = sample.stages.some((st) => st.status !== DevStageStatus.PENDING);
-  if (hasProgress) throw new AppError(409, '样品存在已开始的节点，无法删除');
+  // 可删：全部待开始；或仅第一个节点「进行中且未录入资料」、其余待开始
+  const stageHasData = (st: { fields: { value: string }[]; attachments: unknown[] }) =>
+    st.attachments.length > 0 || st.fields.some((f) => (f.value ?? '').trim() !== '');
+  const blocked = sample.stages.some((st, idx) => {
+    if (st.status === DevStageStatus.PENDING) return false;
+    if (idx === 0 && st.status === DevStageStatus.IN_PROGRESS && !stageHasData(st)) return false;
+    return true;
+  });
+  if (blocked) throw new AppError(409, '样品存在已录入资料或已推进的节点，无法删除');
   await db.devSample.delete({ where: { id: sampleId } });
   return getDevStyle(db, sample.styleId);
 }

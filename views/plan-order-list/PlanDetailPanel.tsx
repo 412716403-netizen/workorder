@@ -28,6 +28,7 @@ import { toast } from 'sonner';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
+import AddTodoButton from '../../components/AddTodoButton';
 import {
   PlanOrder,
   Product,
@@ -1215,7 +1216,18 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                   </p>
                 </div>
              </div>
-             <button onClick={onClose} className="p-3 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50 transition-all"><X className="w-7 h-7" /></button>
+             <div className="flex items-center gap-2">
+               <AddTodoButton
+                 seed={{
+                   sourceType: 'plan',
+                   sourceId: viewPlan.id,
+                   sourceDocNo: '生产计划',
+                   sourceTitle: `${viewPlan.planNumber} · ${viewProduct.name}`,
+                   href: `/production?tab=plans&planId=${viewPlan.id}`,
+                 }}
+               />
+               <button onClick={onClose} className="p-3 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50 transition-all"><X className="w-7 h-7" /></button>
+             </div>
           </div>
 
           {/* 类目锚点小标签 */}

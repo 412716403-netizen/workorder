@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchProductionByFilter, getTodayRangeIso, nextOutsourceDocNumberResolved } from './sharedFlowListHelpers';
 import { getActiveOrderIdsCsv, getActiveSourceProductIdsCsv } from '../../utils/stockMaterialHelpers';
@@ -277,6 +278,28 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
   const [flowOpenSeed, setFlowOpenSeed] = useState<OutsourceFlowOpenSeed>(null);
   const [flowOpenNonce, setFlowOpenNonce] = useState(0);
   const [partnerQtyDetailSeed, setPartnerQtyDetailSeed] = useState<PartnerFlowDetailSeed | null>(null);
+
+  // 待办「前往单据」深链：location.state.outsourceFlow（PartnerFlowDetailSeed JSON）命中时打开往来明细
+  const outsourceDeepLinkLocation = useLocation();
+  const outsourceDeepLinkNavigate = useNavigate();
+  useEffect(() => {
+    const st = outsourceDeepLinkLocation.state as { outsourceFlow?: string } | null;
+    if (!st?.outsourceFlow) return;
+    try {
+      const seed = JSON.parse(st.outsourceFlow) as PartnerFlowDetailSeed;
+      if (seed && seed.productId && seed.nodeId && seed.partner) {
+        setPartnerQtyDetailSeed(seed);
+      }
+    } catch {
+      /* outsourceFlow 非法 JSON 时忽略 */
+    }
+    const rest = { ...(st as Record<string, unknown>) };
+    delete rest.outsourceFlow;
+    outsourceDeepLinkNavigate(outsourceDeepLinkLocation.pathname, {
+      replace: true,
+      state: Object.keys(rest).length > 0 ? rest : undefined,
+    });
+  }, [outsourceDeepLinkLocation.state, outsourceDeepLinkLocation.pathname, outsourceDeepLinkNavigate]);
   const [matDispatchOrderId, setMatDispatchOrderId] = useState<string | null>(null);
   const [matDispatchProductId, setMatDispatchProductId] = useState<string | null>(null);
   const [matDispatchPartnerOptions, setMatDispatchPartnerOptions] = useState<string[]>([]);

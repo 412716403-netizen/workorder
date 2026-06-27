@@ -14,6 +14,13 @@ const createStyleSchema = z.object({
 
 const updateStyleSchema = z.object({}).passthrough();
 
+const addSampleSchema = z.object({
+  name: z.string().optional(),
+  stageNames: z.array(z.string()).optional(),
+  colorId: z.string().optional(),
+  sizeId: z.string().optional(),
+}).passthrough();
+
 const updateStageSchema = z.object({
   status: z.string().optional(),
   fields: z.array(z.object({}).passthrough()).optional(),
@@ -61,7 +68,7 @@ router.post('/styles', requireSubPermission('development:styles:create'), valida
 router.put('/styles/:id', requireSubPermission('development:styles:edit'), validate(updateStyleSchema), stylesCtrl.updateStyle);
 router.delete('/styles/:id', requireSubPermission('development:styles:delete'), stylesCtrl.deleteStyle);
 router.post('/styles/:id/publish', requireSubPermission('development:styles:edit'), stylesCtrl.publishStyle);
-router.post('/styles/:id/samples', requireSubPermission('development:styles:edit'), stylesCtrl.addSample);
+router.post('/styles/:id/samples', requireSubPermission('development:styles:edit'), validate(addSampleSchema), stylesCtrl.addSample);
 router.delete('/styles/samples/:sampleId', requireSubPermission('development:styles:edit'), stylesCtrl.deleteSample);
 router.put('/styles/stages/:stageId', requireSubPermission('development:styles:edit'), validate(updateStageSchema), stylesCtrl.updateStage);
 router.put(

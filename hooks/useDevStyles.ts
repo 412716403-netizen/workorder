@@ -78,7 +78,10 @@ export function useDevStyles() {
     return saved;
   }, [refresh]);
 
-  const addSample = useCallback(async (styleId: string, data: { name?: string; stageNames?: string[] }) => {
+  const addSample = useCallback(async (
+    styleId: string,
+    data: { name?: string; stageNames?: string[]; colorId?: string; sizeId?: string },
+  ) => {
     const saved = await api.devStyles.addSample(styleId, data);
     await refresh();
     return saved;

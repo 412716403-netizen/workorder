@@ -17,6 +17,7 @@ import type {
 } from '../../types';
 import { DEFAULT_OUTSOURCE_FORM_SETTINGS } from '../../types';
 import DocPhaseModal from '../../components/DocPhaseModal';
+import AddTodoButton from '../../components/AddTodoButton';
 import { DocSummaryCard, DocInlineMetaRow, DocCustomFieldInlineReadList } from '../../components/doc-modal';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import { buildVariantQtyMatrixLayout } from '../../utils/variantQtyMatrix';
@@ -342,6 +343,17 @@ const ProductProductionDetailModal: React.FC<ProductProductionDetailModalProps> 
         detailTitle="产品生产详情"
         editTitle=""
         newTitle=""
+        leadingDetailActions={
+          <AddTodoButton
+            seed={{
+              sourceType: 'product',
+              sourceId: product.id,
+              sourceDocNo: '工单中心',
+              sourceTitle: product.name,
+              href: `/production?tab=orders&productId=${product.id}`,
+            }}
+          />
+        }
         hasPerm={() => false}
         viewPerm="__none__"
         editPerm="__none__"

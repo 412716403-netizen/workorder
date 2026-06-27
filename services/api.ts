@@ -60,5 +60,8 @@ export { collaboration, itemCodesApi, planVirtualBatchesApi } from './api/collab
 export { dashboard } from './api/dashboard';
 export type { WorkbenchResponse, DashboardNotification, DashboardStats } from './api/dashboard';
 
+export { todos } from './api/todos';
+export type { TodoCreatePayload, TodoUpdatePayload } from './api/todos';
+
 export { knowledgeBase } from './api/knowledgeBase';
 export type { KnowledgeTreeResponse } from './api/knowledgeBase';

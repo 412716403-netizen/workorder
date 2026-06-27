@@ -18,7 +18,6 @@ import { buildVariantQtyMatrixLayout } from '../../../utils/variantQtyMatrix';
 import QtyMatrixTable, { type QtyMatrixTableRow } from '../../../components/variant-matrix/QtyMatrixTable';
 import { variantMaxGoodProductMode } from '../../../utils/productReportAggregates';
 import { reworkMergeBucketOrderId } from '../../../utils/reworkMergeBucketOrderId';
-import { isProcessSequential } from '../../../shared/processSequence';
 import {
   VARIANT_QTY_MATRIX_CONTAINER_ATTR,
   handleVariantQtyMatrixKeyDown,
@@ -118,8 +117,6 @@ const ReportVariantMatrixInput: React.FC<Props> = ({
       ? reportModal.order.productName
       : (product.name ?? productOrder.productName);
 
-  const currentOrder = ordersInModal[0];
-  const currentMs = currentOrder?.milestones.find(m => m.templateId === tid);
   const reworkByVariant: Record<string, number> = {};
   for (const bid of new Set(ordersInModal.map(o => reworkMergeBucketOrderId(o.id, orders)))) {
     const rw = getDefectiveRework(bid as string, tid).reworkByVariant;
@@ -127,7 +124,6 @@ const ReportVariantMatrixInput: React.FC<Props> = ({
       reworkByVariant[k] = (reworkByVariant[k] ?? 0) + (q as number);
     });
   }
-  const itemsSource = currentOrder?.items ?? reportModal.productItems ?? reportModal.order.items ?? [];
   const milestoneNodeIds = product.milestoneNodeIds || [];
   const variantRemainingBaseMap = new Map<string, number>();
   for (const variant of product.variants ?? []) {
@@ -148,12 +144,20 @@ const ReportVariantMatrixInput: React.FC<Props> = ({
       variantRemainingBaseMap.set(variant.id, Math.max(0, rawMax));
       continue;
     }
-    const item = Array.isArray(itemsSource) ? itemsSource.find((i: { variantId?: string }) => (i.variantId || '') === variant.id) : undefined;
-    const completedInMilestone = (currentMs?.reports || []).filter((r: { variantId?: string }) => (r.variantId || '') === variant.id).reduce((s: number, r: { quantity?: number }) => s + (r.quantity ?? 0), 0);
-    const defectiveForThisVariant = (currentMs?.reports || []).filter((r: { variantId?: string; defectiveQuantity?: number }) => (r.variantId || '') === variant.id).reduce((s: number, r: { defectiveQuantity?: number }) => s + (r.defectiveQuantity ?? 0), 0);
-    const base = isProcessSequential(processSequenceMode, tid, outOfSequenceTemplateIds)
-      ? Math.max(0, getSeqRemainingForVariant(productId, variant.id) - defectiveForThisVariant)
-      : (item ? Math.max(0, (item.quantity ?? 0) - completedInMilestone - defectiveForThisVariant) : 0);
+    // 跨本产品所有工单聚合该规格本工序的不良，口径与表头产品级 hint 一致；
+    // 产品组（多工单）报工时不能只取首单，否则各规格“最多”之和会与表头“剩 N 件”对不上。
+    const defectiveForThisVariant = ordersInModal.reduce((sum, o) => {
+      const ms = o.milestones.find(m => m.templateId === tid);
+      return (
+        sum +
+        (ms?.reports || [])
+          .filter((r: { variantId?: string }) => (r.variantId || '') === variant.id)
+          .reduce((s: number, r: { defectiveQuantity?: number }) => s + (r.defectiveQuantity ?? 0), 0)
+      );
+    }, 0);
+    // getSeqRemainingForVariant 已对 anchor 的聚合 productItems / 多工单做处理（顺序与脱链工序均覆盖），
+    // 返回该规格在本工序的可报余量（已减前序/已报），此处再减不良。
+    const base = Math.max(0, getSeqRemainingForVariant(productId, variant.id) - defectiveForThisVariant);
     const reworkForVariant = reworkByVariant[variant.id] ?? 0;
     const outsourcedForVariant = outsourcedByVariantId[variant.id] ?? 0;
     variantRemainingBaseMap.set(variant.id, Math.max(0, base + reworkForVariant - outsourcedForVariant));

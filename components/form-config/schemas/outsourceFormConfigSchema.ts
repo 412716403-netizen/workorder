@@ -83,15 +83,6 @@ export const outsourceFormConfigSchema: FormConfigSchema<OutsourceFormSettings> 
         },
         {
           kind: 'toggle',
-          id: 'showPartnerFlowDetailOnList',
-          label: '加工厂往来显示明细',
-          description:
-            '开启后，列表中加工厂往来将展示逐笔流水；关闭则偏汇总展示（具体以列表实现为准）。',
-          path: 'showPartnerFlowDetailOnList',
-          defaultChecked: false,
-        },
-        {
-          kind: 'toggle',
           id: 'hideZeroPendingPartnerOnList',
           label: '加工厂剩余为 0 时不显示',
           description:

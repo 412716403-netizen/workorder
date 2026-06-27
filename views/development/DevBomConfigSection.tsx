@@ -44,6 +44,13 @@ interface DevBomConfigSectionProps {
   readOnly?: boolean;
   /** 嵌入「创建开发款式」弹窗：分区卡片布局 */
   embeddedInCreateModal?: boolean;
+  /** 仅显示该变体（颜色尺码）的 BOM；单 SKU 传 devSingleSkuVariantId(styleId)。样品面板按样品对应变体限定 */
+  variantFilterId?: string;
+  /** 是否显示「大货生产工序配置」选择器，默认 true；样品面板不改款式工序，传 false */
+  showMilestonePicker?: boolean;
+  /** 非嵌入模式下矩阵区标题/描述覆盖（样品面板用） */
+  scopedHeading?: string;
+  scopedDescription?: string;
 }
 
 const DevBomConfigSection: React.FC<DevBomConfigSectionProps> = ({
@@ -60,11 +67,22 @@ const DevBomConfigSection: React.FC<DevBomConfigSectionProps> = ({
   onSaveBom,
   readOnly,
   embeddedInCreateModal,
+  variantFilterId,
+  showMilestonePicker = true,
+  scopedHeading,
+  scopedDescription,
 }) => {
   const bomState = useBomEditorPortalState();
   const copyBOMTriggerRef = useRef<HTMLButtonElement>(null);
   const productShape = useMemo(() => devStyleToProductForBom(working), [working]);
   const singleSkuVariantId = devSingleSkuVariantId(working.id);
+
+  // 样品面板按样品对应变体限定矩阵：只保留该变体行（单 SKU 走空 variants 分支）。
+  // 仅过滤矩阵展示；复制来源 / BomEditorPortal 仍用完整 productShape。
+  const matrixShape = useMemo(() => {
+    if (!variantFilterId || variantFilterId === singleSkuVariantId) return productShape;
+    return { ...productShape, variants: productShape.variants.filter((v) => v.id === variantFilterId) };
+  }, [productShape, variantFilterId, singleSkuVariantId]);
 
   const {
     activeVariantIdForBOM,
@@ -289,7 +307,7 @@ const DevBomConfigSection: React.FC<DevBomConfigSectionProps> = ({
   /** 嵌入「创建/编辑款式」弹窗（z-[350]）时，BOM 编辑器须叠在其上 */
   const bomNestedOverlayZ = embeddedInCreateModal || mode === 'pending' ? 'z-[400]' : 'z-[300]';
 
-  const milestonePicker = (
+  const milestonePicker = showMilestonePicker ? (
     <DevFlowNodePicker
       title="大货生产工序配置"
       options={milestoneOptions}
@@ -301,23 +319,29 @@ const DevBomConfigSection: React.FC<DevBomConfigSectionProps> = ({
       optionsEmptyMessage='暂无工序节点，请先在「系统设置 → 工序节点库」中添加'
       selectedEmptyMessage="请点击上方节点选择大货生产工序"
     />
-  );
+  ) : null;
 
   const bomMatrixSection = !readOnly && (
     <>
       {!embeddedInCreateModal && (
         <section className="rounded-2xl border-2 border-indigo-100 bg-indigo-50/20 p-4 space-y-3">
-          <h3 className={sectionTitleClass}>生产BOM配置</h3>
-          <p className={`${pageSubtitleClass} mt-0 max-w-none`}>
-            开发进度节点在「样品开发」页登记；此处为发布大货后的报工工序，并用于 BOM 按工序配置。
-          </p>
+          {(scopedHeading ?? '生产BOM配置') && (
+            <h3 className={sectionTitleClass}>{scopedHeading ?? '生产BOM配置'}</h3>
+          )}
+          {(scopedDescription
+            ?? '开发进度节点在「样品开发」页登记；此处为发布大货后的报工工序，并用于 BOM 按工序配置。') && (
+            <p className={`${pageSubtitleClass} mt-0 max-w-none`}>
+              {scopedDescription
+                ?? '开发进度节点在「样品开发」页登记；此处为发布大货后的报工工序，并用于 BOM 按工序配置。'}
+            </p>
+          )}
           {mode === 'pending' && pendingBoms.length > 0 && (
             <p className="text-xs font-medium text-amber-600">
               已配置 {pendingBoms.filter((b) => b.items?.some((i) => i.productId)).length} 条 BOM，创建款式后将一并保存
             </p>
           )}
           <BomVariantMatrix
-            product={productShape}
+            product={matrixShape}
             boms={bomsAsProduct}
             enabledBOMNodes={enabledBOMNodes}
             dictionaries={dictionaries}
@@ -342,7 +366,7 @@ const DevBomConfigSection: React.FC<DevBomConfigSectionProps> = ({
             </p>
           )}
           <BomVariantMatrix
-            product={productShape}
+            product={matrixShape}
             boms={bomsAsProduct}
             enabledBOMNodes={enabledBOMNodes}
             dictionaries={dictionaries}

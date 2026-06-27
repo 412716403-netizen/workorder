@@ -657,7 +657,12 @@ export function useReportModalState(args: UseReportModalStateArgs) {
   );
 
   const getSeqRemainingForVariant = useCallback((productId: string, variantId: string): number => {
-    const allOrders = resolveOrdersForProductAtTemplate(orders, productId, milestoneTemplateId, reportModal.order.id);
+    // 锚定产品用本弹窗实际纳入的工单（关联工单模式下即被点击的单个工单），避免按 productId
+    // 把同款其它工单的前序/本序完成量也聚合进来，导致"可报"虚高（与表头口径保持一致）。
+    const allOrders =
+      productId === anchorProductId
+        ? ordersInModal
+        : resolveOrdersForProductAtTemplate(orders, productId, milestoneTemplateId, reportModal.order.id);
     const items =
       productId === anchorProductId
         ? (reportModal.productItems ?? reportModal.order.items)
@@ -743,6 +748,7 @@ export function useReportModalState(args: UseReportModalStateArgs) {
     reportModal.milestone,
     reportModal.productItems,
     orders,
+    ordersInModal,
     anchorProductId,
     milestoneTemplateId,
     productionLinkMode,

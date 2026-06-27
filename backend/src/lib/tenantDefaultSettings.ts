@@ -93,7 +93,7 @@ export const TENANT_DEFAULT_SETTINGS: Record<string, unknown> = {
     outsourceDispatchCustomFields: [],
     outsourceReceiveCustomFields: [],
     showOutsourceDispatchDeliveryDate: false,
-    showPartnerFlowDetailOnList: false,
+    showPartnerFlowDetailOnList: true,
     hideZeroPendingPartnerOnList: false,
     onlyShowNotCompletedOrder: false,
     outsourceCenterPrint: {

@@ -482,6 +482,9 @@ export async function getStockSnapshot(
       getWh(pId, wh).stocktakeAdj += diff;
       getBatch(pId, wh, bn).stocktakeAdj += diff;
       if (vId && rec.systemQuantity != null) {
+        // 关键：先物化变体桶。若该变体此前无任何出入库（库存 0）仅有盘点，
+        // varMap 不会有桶，后续 displayQty 计算会因 `!bucket` 跳过，导致盘点后库存读不到（仍显示 0）。
+        getVar(pId, wh, vId);
         pushVarEvent(pId, wh, vId, {
           time,
           kind: 'stocktake',

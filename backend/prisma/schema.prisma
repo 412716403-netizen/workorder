@@ -28,6 +28,7 @@ model User {
   refreshTokens    RefreshToken[]
   memberships      TenantMembership[]
   joinApplications JoinApplication[]
+  todoItems        TodoItem[]
 
   @@map("users")
 }
@@ -68,6 +69,7 @@ model Tenant {
 
   memberships      TenantMembership[]
   joinApplications JoinApplication[]
+  todoItems        TodoItem[]
 
   @@map("tenants")
 }
@@ -284,6 +286,39 @@ model PlatformAnnouncement {
 
   @@index([createdAt(sort: Desc)])
   @@map("platform_announcements")
+}
+
+/** 个人待办事项（todo_reminder 插件）；个人级，按 userId 作用域隔离 */
+model TodoItem {
+  id            String    @id @default(uuid()) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  /** 关联单据类型：standalone / production_order / plan（与 shared TodoSourceType 一致） */
+  sourceType    String    @default("standalone") @map("source_type") @db.VarChar(40)
+  /** 关联单据 id；standalone 时为空 */
+  sourceId      String?   @map("source_id") @db.VarChar(50)
+  /** 单号快照，用于列表展示，避免跨表查 */
+  sourceDocNo   String?   @map("source_doc_no") @db.VarChar(100)
+  /** 标题快照（产品名/计划名等） */
+  sourceTitle   String?   @map("source_title") @db.VarChar(200)
+  /** 跳转路径快照（点提醒/列表跳单据用） */
+  href          String?   @db.Text
+  note          String    @db.Text
+  remindEnabled Boolean   @default(false) @map("remind_enabled")
+  remindAt      DateTime? @map("remind_at") @db.Timestamptz()
+  /** 已生成提醒/已弹通知的时间，去重用 */
+  remindedAt    DateTime? @map("reminded_at") @db.Timestamptz()
+  /** open / done（与 shared TodoStatus 一致） */
+  status        String    @default("open") @db.VarChar(20)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, userId, status])
+  @@index([tenantId, userId, remindEnabled, remindAt])
+  @@map("todo_items")
 }
 
 // ============================================================
@@ -1008,6 +1043,7 @@ model DevStyle {
   colorIds           Json     @default("[]") @map("color_ids")
   sizeIds            Json     @default("[]") @map("size_ids")
   milestoneNodeIds   Json     @default("[]") @map("milestone_node_ids")
+  defaultStageNames  Json     @default("[]") @map("default_stage_names")
   salesPrice         Decimal? @map("sales_price") @db.Decimal(12, 2)
   purchasePrice      Decimal? @map("purchase_price") @db.Decimal(12, 2)
   unitId             String?  @map("unit_id") @db.VarChar(50)
@@ -1084,6 +1120,8 @@ model DevSample {
   id        String   @id @db.VarChar(50)
   styleId   String   @map("style_id") @db.VarChar(50)
   name      String   @db.VarChar(100)
+  colorId   String?  @map("color_id") @db.VarChar(50)
+  sizeId    String?  @map("size_id") @db.VarChar(50)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   style  DevStyle   @relation(fields: [styleId], references: [id], onDelete: Cascade)

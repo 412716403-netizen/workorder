@@ -128,6 +128,9 @@ interface OrderListViewExtendedProps extends OrderListViewProps {
   initialDetailOrderId?: string | null;
   /** 关闭工单详情弹窗时由父组件清除 location.state 中的 detailOrderId，避免切 tab 再回来时弹窗再次打开 */
   onClearDetailOrderIdFromState?: () => void;
+  /** 产品模式下深链打开「产品生产详情」 */
+  initialDetailProductId?: string | null;
+  onClearDetailProductIdFromState?: () => void;
   onUpdateReport?: (params: ReportUpdateParams) => void;
   onDeleteReport?: (params: { orderId: string; milestoneId: string; reportId: string }) => void;
   onUpdateProduct?: (product: Product) => Promise<Product | null>;
@@ -151,6 +154,8 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   allowExceedMaxStockInQty = false,
   initialDetailOrderId,
   onClearDetailOrderIdFromState,
+  initialDetailProductId,
+  onClearDetailProductIdFromState,
   orders,
   plans = [],
   products,
@@ -218,7 +223,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
 
   const [detailOrderId, setDetailOrderId] = useState<string | null>(initialDetailOrderId ?? null);
   /** 产品模式下产品组「详情」 */
-  const [detailProductId, setDetailProductId] = useState<string | null>(null);
+  const [detailProductId, setDetailProductId] = useState<string | null>(initialDetailProductId ?? null);
   /** 是否从「工单流水」打开详情；两种模式下均启用 detailFromFlowLayout 单工单流水布局 */
   const [orderDetailFromFlow, setOrderDetailFromFlow] = useState(false);
   const openOrderDetail = useCallback((orderId: string, fromOrderFlow = false) => {
@@ -235,7 +240,21 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   }, [onClearDetailOrderIdFromState]);
   const closeProductDetail = useCallback(() => {
     setDetailProductId(null);
-  }, []);
+    onClearDetailProductIdFromState?.();
+  }, [onClearDetailProductIdFromState]);
+  // 深链同步：已停留在工单 tab 时，从消息中心/待办再次深链到工单或产品，
+  // initialDetail*Id 只在挂载时进 useState 初值，需在其变化时主动打开对应详情。
+  useEffect(() => {
+    if (initialDetailOrderId) {
+      setDetailOrderId(initialDetailOrderId);
+      setOrderDetailFromFlow(false);
+    }
+  }, [initialDetailOrderId]);
+  useEffect(() => {
+    if (initialDetailProductId) {
+      setDetailProductId(initialDetailProductId);
+    }
+  }, [initialDetailProductId]);
   const [showOrderFlowModal, setShowOrderFlowModal] = useState(false);
   /** 从产品卡片打开工单流水时传入，用于预填搜索筛选 */
   const [orderFlowProductId, setOrderFlowProductId] = useState<string | null>(null);

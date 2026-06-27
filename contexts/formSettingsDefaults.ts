@@ -347,7 +347,8 @@ export function normalizeOutsourceFormSettings(raw: OutsourceFormSettings | null
     ...s,
     outsourceDispatchCustomFields: dispatch,
     outsourceReceiveCustomFields: receive,
-    showPartnerFlowDetailOnList: s.showPartnerFlowDetailOnList === true,
+    // 加工厂往来明细已固定为始终显示（移除了表单配置开关），统一规整为 true。
+    showPartnerFlowDetailOnList: true,
     showOutsourceDispatchDeliveryDate: s.showOutsourceDispatchDeliveryDate === true,
     hideZeroPendingPartnerOnList: s.hideZeroPendingPartnerOnList === true,
     onlyShowNotCompletedOrder: s.onlyShowNotCompletedOrder === true,

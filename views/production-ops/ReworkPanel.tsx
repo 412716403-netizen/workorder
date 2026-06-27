@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchProductionByFilter, nextOutsourceDocNumberResolved } from './sharedFlowListHelpers';
 import {
@@ -140,6 +141,21 @@ const ReworkPanel: React.FC<PanelProps> = ({
   const [reworkFlowDetailRecord, setReworkFlowDetailRecord] = useState<ProductionOpRecord | null>(null);
   /** 返工管理：点击「详情」时展示的工单 id（主工单），弹窗内展示该工单的返工与不良处理情况 */
   const [reworkDetailOrderId, setReworkDetailOrderId] = useState<string | null>(null);
+
+  // 待办「前往单据」深链：location.state.reworkOrderId 命中时打开返工详情
+  const reworkDeepLinkLocation = useLocation();
+  const reworkDeepLinkNavigate = useNavigate();
+  useEffect(() => {
+    const st = reworkDeepLinkLocation.state as { reworkOrderId?: string } | null;
+    if (!st?.reworkOrderId) return;
+    setReworkDetailOrderId(st.reworkOrderId);
+    const rest = { ...(st as Record<string, unknown>) };
+    delete rest.reworkOrderId;
+    reworkDeepLinkNavigate(reworkDeepLinkLocation.pathname, {
+      replace: true,
+      state: Object.keys(rest).length > 0 ? rest : undefined,
+    });
+  }, [reworkDeepLinkLocation.state, reworkDeepLinkLocation.pathname, reworkDeepLinkNavigate]);
   /** 处理不良品流水弹窗：生成返工(REWORK)+报损(SCRAP)，UI 参考返工报工流水 */
   const [defectFlowModalOpen, setDefectFlowModalOpen] = useState(false);
   const [defectFlowDetailRecord, setDefectFlowDetailRecord] = useState<ProductionOpRecord | null>(null);

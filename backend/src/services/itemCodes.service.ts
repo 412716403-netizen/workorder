@@ -122,11 +122,27 @@ export async function listItemCodes(
     batchMap = new Map(batches.map((b) => [b.id, b]));
   }
 
+  // 分页时件号需跨页连续：以本页每个批次最小 serialNo 之前的件数作为基数，
+  // 否则每页都从 1 重新编号（第 2 页会与第 1 页重号、并丢失后半段件号）。
+  const baseOffsetByBatch = new Map<string, number>();
+  for (const batchId of batchIds) {
+    const minSerialInPage = Math.min(
+      ...items.filter((i) => i.batchId === batchId).map((i) => i.serialNo),
+    );
+    baseOffsetByBatch.set(
+      batchId,
+      await db.itemCode.count({
+        where: { batchId, serialNo: { lt: minSerialInPage } },
+      }),
+    );
+  }
+
   const itemsOut = attachBatchPieceNos(
     items.map((row) => ({
       ...row,
       batch: row.batchId ? batchMap.get(row.batchId) ?? null : null,
     })),
+    baseOffsetByBatch,
   );
 
   return { items: itemsOut, total, page, pageSize };

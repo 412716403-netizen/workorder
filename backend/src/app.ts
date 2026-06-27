@@ -28,6 +28,7 @@ import itemCodesRoutes from './routes/item-codes.js';
 import planVirtualBatchesRoutes from './routes/plan-virtual-batches.js';
 import devRoutes from './routes/dev.js';
 import dashboardRoutes from './routes/dashboard.js';
+import todosRoutes from './routes/todos.js';
 import knowledgeBaseRoutes from './routes/knowledge-base.js';
 
 const app = express();
@@ -100,6 +101,7 @@ app.use('/api/master',     authMiddleware, requireTenant, apiLimiter, cacheContr
 app.use('/api/products',   authMiddleware, requireTenant, apiLimiter, cacheControl(60), productsRoutes);
 app.use('/api/dev',        authMiddleware, requireTenant, apiLimiter, devRoutes);
 app.use('/api/dashboard',  authMiddleware, requireTenant, apiLimiter, dashboardRoutes);
+app.use('/api/todos',      authMiddleware, requireTenant, apiLimiter, todosRoutes);
 app.use('/api/knowledge-base', authMiddleware, requireTenant, apiLimiter, knowledgeBaseRoutes);
 app.use('/api/plans',      authMiddleware, requireTenant, apiLimiter, plansRoutes);
 app.use('/api/orders',     authMiddleware, requireTenant, requirePermission('production'), apiLimiter, ordersRoutes);

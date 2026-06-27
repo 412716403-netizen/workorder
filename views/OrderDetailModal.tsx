@@ -46,6 +46,7 @@ import OutsourcePartnerFlowDetailModal, { type PartnerFlowDetailSeed } from './p
 import OutsourceFlowDocumentDetailModal from './production-ops/OutsourceFlowDocumentDetailModal';
 import { hasOpsPerm } from './production-ops/types';
 import OrderMaterialInfoSection from './order-list/OrderMaterialInfoSection';
+import AddTodoButton from '../components/AddTodoButton';
 
 function reportFieldToPlanForm(cf: ReportFieldDefinition): PlanFormFieldConfig {
   return {
@@ -484,6 +485,17 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
         detailTitle="产品生产详情"
         editTitle=""
         newTitle=""
+        leadingDetailActions={
+          <AddTodoButton
+            seed={{
+              sourceType: 'product',
+              sourceId: product?.id ?? order.productId ?? null,
+              sourceDocNo: '工单中心',
+              sourceTitle: product?.name ?? order.productName,
+              href: `/production?tab=orders&productId=${product?.id ?? order.productId ?? ''}`,
+            }}
+          />
+        }
         hasPerm={() => false}
         viewPerm="__none__"
         editPerm="__none__"
@@ -702,15 +714,26 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       newTitle=""
       showPrint={false}
       leadingDetailActions={
-        (productionLinkMode !== 'product' || detailFromFlowLayout) ? (
-          <OrderCenterDetailPrintBlock
-            printSlot={orderFormSettings?.orderCenterPrint?.orderDetail}
-            printTemplates={printTemplates}
-            buildContext={buildOrderPrintContext}
-            pickerSubtitle={`工单 ${order.orderNumber}`}
-            onAddPrintTemplate={onOpenOrderFormPrintTab}
+        <>
+          <AddTodoButton
+            seed={{
+              sourceType: 'production_order',
+              sourceId: order.id,
+              sourceDocNo: '工单中心',
+              sourceTitle: `${order.orderNumber}${product?.name ? ` · ${product.name}` : ''}`,
+              href: `/production?tab=orders&orderId=${order.id}`,
+            }}
           />
-        ) : null
+          {(productionLinkMode !== 'product' || detailFromFlowLayout) ? (
+            <OrderCenterDetailPrintBlock
+              printSlot={orderFormSettings?.orderCenterPrint?.orderDetail}
+              printTemplates={printTemplates}
+              buildContext={buildOrderPrintContext}
+              pickerSubtitle={`工单 ${order.orderNumber}`}
+              onAddPrintTemplate={onOpenOrderFormPrintTab}
+            />
+          ) : null}
+        </>
       }
       hasPerm={(perm) => {
         if (perm === 'orders:edit' || perm === 'orders:view') return !!onUpdateOrder;

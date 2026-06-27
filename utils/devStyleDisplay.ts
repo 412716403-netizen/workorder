@@ -66,20 +66,33 @@ export function canDeleteDevStyle(style: DevStyleDto): boolean {
   );
 }
 
-/** 样品轮次：该轮次下全部节点均为待开始方可删除（与后端 deleteDevSample 一致） */
+/** 节点是否已录入资料：有附件或任一字段填了非空值 */
+export function devStageHasEnteredData(stage: DevSampleDto['stages'][number]): boolean {
+  if (stage.attachments.length > 0) return true;
+  return stage.fields.some((f) => (f.value ?? '').trim() !== '');
+}
+
+/**
+ * 样品轮次可删除（与后端 deleteDevSample 一致）：
+ * 全部节点为待开始；或仅第一个节点为「进行中且未录入资料」、其余待开始。
+ */
 export function canDeleteDevSample(sample: DevSampleDto): boolean {
-  return sample.stages.every((st) => st.status === DevStageStatus.PENDING);
+  return sample.stages.every((st, idx) => {
+    if (st.status === DevStageStatus.PENDING) return true;
+    if (idx === 0 && st.status === DevStageStatus.IN_PROGRESS && !devStageHasEnteredData(st)) {
+      return true;
+    }
+    return false;
+  });
 }
 
 export function getDevSampleDeleteBlockReason(
   sample: DevSampleDto,
-  opts?: { sampleCount?: number },
+  // opts 保留以兼容调用方；不再限制最少样品数（头样亦可删，款式可回到 0 样品）
+  _opts?: { sampleCount?: number },
 ): string | null {
-  if (opts?.sampleCount !== undefined && opts.sampleCount <= 1) {
-    return '至少保留一个样品轮次，无法删除';
-  }
   if (!canDeleteDevSample(sample)) {
-    return '该样品轮次存在已开始的节点，无法删除';
+    return '该样品轮次存在已录入资料或已推进的节点，无法删除';
   }
   return null;
 }

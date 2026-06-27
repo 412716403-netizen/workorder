@@ -109,6 +109,7 @@
 | 打印模板、预览、标签 | 部分落地 | 前端能力完整，但文档入口尚未充分整理 | 后续可补独立打印链路文档 |
 | 单品码 `ItemCode` | 已落地 | 已有 schema、route、controller、前端 API 封装 | 补扫码响应类型与迁移链核验 |
 | 虚拟批次 `PlanVirtualBatch` | 已落地 | 已有 schema、route、controller、前端 API 封装 | 核对 migration 完整性与打印链路说明 |
+| 待办提醒 `todo_reminder` 插件 | 已落地 | `TodoItem` 表（migration `20260626120000_add_todo_items`）、`/api/todos` 路由（个人区，不挂 `requireSubPermission`）、`services/api/todos.ts` + `hooks/useTodos.ts`；提醒经 `dashboard.getNotifications` 注入工作台消息中心；**无 localStorage 业务字段**；消息「前往单据」按 `href` 内 `tab/orderId/productId/planId` 经 `location.state` 深链打开对应详情弹窗 | — |
 
 ---
 

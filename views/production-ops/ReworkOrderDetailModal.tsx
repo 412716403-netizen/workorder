@@ -1,6 +1,7 @@
 import React from 'react';
 import { X } from 'lucide-react';
 import { ProductionOpRecord, ProductionOrder, Product, GlobalNodeTemplate, AppDictionaries } from '../../types';
+import AddTodoButton from '../../components/AddTodoButton';
 
 export interface ReworkOrderDetailModalProps {
   reworkDetailOrderId: string;
@@ -64,10 +65,21 @@ const ReworkOrderDetailModal: React.FC<ReworkOrderDetailModalProps> = ({
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} aria-hidden />
       <div className="relative bg-white w-full max-w-4xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="px-6 py-5 border-b border-slate-100 shrink-0">
-          <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
-            <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">{mainOrder.orderNumber}</span>
-            返工详情
-          </h3>
+          <div className="flex items-start justify-between gap-3">
+            <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+              <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">{mainOrder.orderNumber}</span>
+              返工详情
+            </h3>
+            <AddTodoButton
+              seed={{
+                sourceType: 'rework',
+                sourceId: mainOrder.id,
+                sourceDocNo: '返工管理',
+                sourceTitle: `${mainOrder.orderNumber}${(mainOrder.productName ?? product?.name) ? ` · ${mainOrder.productName ?? product?.name}` : ''}`,
+                href: `/production?tab=REWORK&reworkOrderId=${mainOrder.id}`,
+              }}
+            />
+          </div>
           <p className="text-xs text-slate-500 mt-1">本页仅展示该工单的返工与不良处理情况</p>
           <div className="flex flex-wrap gap-4 mt-3 text-sm">
             <span className="font-bold text-slate-800">{mainOrder.productName ?? product?.name ?? '—'}</span>

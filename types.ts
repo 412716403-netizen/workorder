@@ -85,6 +85,13 @@ export {
   type KnowledgeDocumentReferencesResponse,
   type KnowledgeAssetUploadResponse,
   KNOWLEDGE_DOCUMENT_CONTENT_MAX_CHARS,
+  TODO_SOURCE_TYPES,
+  TODO_STATUSES,
+  TODO_NOTE_MAX_CHARS,
+  isTodoSourceType,
+  type TodoSourceType,
+  type TodoStatus,
+  type TodoItemDTO,
 } from './shared/types';
 
 export {
@@ -910,7 +917,8 @@ export interface OutsourceFormSettings {
   outsourceReceiveCustomFields?: PlanFormFieldConfig[];
   outsourceCenterPrint?: OutsourceCenterPrintSettings;
   /**
-   * 为 true 时，外协列表加工厂旁的文档图标打开「加工厂往来数量明细」弹窗；为 false 或未设置时打开外协流水并带筛选。
+   * 加工厂往来明细：现已固定为始终开启（移除了表单配置开关），规整后恒为 true。
+   * 外协列表加工厂旁的文档图标始终打开「加工厂往来数量明细」弹窗。
    */
   showPartnerFlowDetailOnList?: boolean;
   /** 为 true 时，外协发出新增/详情/编辑显示交货日期，加工厂往来明细表增加交货日期列；入口在表单配置「列表显示」（`collabData.outsourceDispatchDeliveryDate`）。 */
@@ -927,7 +935,7 @@ export interface OutsourceFormSettings {
 export const DEFAULT_OUTSOURCE_FORM_SETTINGS: OutsourceFormSettings = {
   outsourceDispatchCustomFields: [],
   outsourceReceiveCustomFields: [],
-  showPartnerFlowDetailOnList: false,
+  showPartnerFlowDetailOnList: true,
   showOutsourceDispatchDeliveryDate: false,
   hideZeroPendingPartnerOnList: false,
   onlyShowNotCompletedOrder: false,
