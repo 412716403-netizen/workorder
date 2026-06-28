@@ -95,9 +95,10 @@ const ProductEconomicsWidget: React.FC<ProductEconomicsWidgetProps> = ({
 
   const costSub = documentLinked
     ? '采购入库+关联付款+报工+外协+返工+报损'
-    : '物料+报工+外协+返工+报损';
+    : '物料+关联付款+报工+外协+返工+报损';
 
-  const salesSub = documentLinked ? '销售出库+关联收款' : '销售出库';
+  const salesSub = '销售出库+关联收款';
+  const revenueLabel = `${periodLabel}收入`;
 
   return (
     <>
@@ -130,11 +131,8 @@ const ProductEconomicsWidget: React.FC<ProductEconomicsWidgetProps> = ({
                 tone="amber"
               />
               <WorkbenchKpiMetric
-                label={documentLinked ? `${periodLabel}收入` : `${periodLabel}销售额`}
-                value={formatWorkbenchAmount(
-                  documentLinked ? data.summary.totalRevenue : data.summary.totalSalesAmount,
-                  showAmount,
-                )}
+                label={revenueLabel}
+                value={formatWorkbenchAmount(data.summary.totalRevenue, showAmount)}
                 sub={salesSub}
                 tone="sky"
               />

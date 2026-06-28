@@ -827,6 +827,8 @@ function hasActivity(
     || agg.outsourceFee > 0
     || agg.reworkFee > 0
     || materialSurplusLoss > 0
+    || linkedPaymentCost > 0
+    || linkedReceiptAmount > 0
     || agg.scrapQty > 0
     || agg.salesQty > 0
     || agg.salesAmount > 0
@@ -894,7 +896,10 @@ function buildRow(
 
   const materialCost = includeProduction ? agg.materialCost : 0;
   const surplusLoss = includeProduction ? materialSurplusLoss : 0;
-  const totalCost = materialCost + reportCost + outsourceFee + reworkFee + surplusLoss + scrapAmount;
+  const paymentCost = includeFinance ? linkedPaymentCost : 0;
+  const receiptAmount = includeFinance ? linkedReceiptAmount : 0;
+  const totalCost = materialCost + reportCost + outsourceFee + reworkFee + surplusLoss + scrapAmount + paymentCost;
+  const totalRevenue = salesAmount + receiptAmount;
   return {
     productId,
     name,
@@ -907,16 +912,16 @@ function buildRow(
     reworkFee,
     materialSurplusLoss: surplusLoss,
     linkedPurchaseCost: 0,
-    linkedPaymentCost: 0,
-    linkedReceiptAmount: 0,
+    linkedPaymentCost: paymentCost,
+    linkedReceiptAmount: receiptAmount,
     scrapQty,
     scrapAmount,
     stockQty,
     salesQty,
     salesAmount,
-    totalRevenue: salesAmount,
+    totalRevenue,
     totalCost,
-    grossProfit: salesAmount - totalCost,
+    grossProfit: totalRevenue - totalCost,
   };
 }
 
@@ -968,7 +973,7 @@ export async function computeProductEconomicsList(
   const linkedPurchaseByProduct = documentLinked && includeProduction
     ? await loadLinkedPurchaseCostByProduct(db, productIds, periodRange)
     : new Map<string, number>();
-  const linkedFinance = documentLinked && includeFinance
+  const linkedFinance = includeFinance
     ? await loadLinkedFinanceByProduct(db, productIds, periodRange)
     : { paymentCostMap: new Map<string, number>(), receiptAmountMap: new Map<string, number>() };
 
@@ -1098,7 +1103,7 @@ export async function computeProductEconomicsDetail(
   const linkedPurchaseCost = documentLinked && includeProduction
     ? (await loadLinkedPurchaseCostByProduct(db, [productId])).get(productId) ?? 0
     : 0;
-  const linkedFinance = documentLinked && includeFinance
+  const linkedFinance = includeFinance
     ? await loadLinkedFinanceByProduct(db, [productId])
     : { paymentCostMap: new Map<string, number>(), receiptAmountMap: new Map<string, number>() };
   const linkedPaymentCost = linkedFinance.paymentCostMap.get(productId) ?? 0;

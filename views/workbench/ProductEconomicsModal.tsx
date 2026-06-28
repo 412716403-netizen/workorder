@@ -316,13 +316,13 @@ const ProductEconomicsModal: React.FC<ProductEconomicsModalProps> = ({
                               label="销售出库金额"
                               value={<AmountCell value={display.salesAmount} show={showAmount} />}
                             />
-                            {documentLinked && canFinance && display.linkedReceiptAmount > 0 && (
+                            {canFinance && display.linkedReceiptAmount > 0 && (
                               <MetricRow
                                 label="关联收款"
                                 value={<AmountCell value={display.linkedReceiptAmount} show={showAmount} />}
                               />
                             )}
-                            {documentLinked && (
+                            {(documentLinked || (canFinance && display.linkedReceiptAmount > 0)) && (
                               <MetricRow
                                 label="收入合计"
                                 value={<AmountCell value={display.totalRevenue} show={showAmount} />}
@@ -359,6 +359,12 @@ const ProductEconomicsModal: React.FC<ProductEconomicsModalProps> = ({
                               label="物料结余（损耗）"
                               value={<AmountCell value={display.materialSurplusLoss} show={showAmount} />}
                             />
+                            {canFinance && (
+                              <MetricRow
+                                label="关联付款"
+                                value={<AmountCell value={display.linkedPaymentCost} show={showAmount} />}
+                              />
+                            )}
                           </>
                         )}
                         <MetricRow
