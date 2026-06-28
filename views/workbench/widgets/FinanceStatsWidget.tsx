@@ -1,6 +1,7 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import WidgetShell from '../WidgetShell';
+import FinanceStatsModal from '../FinanceStatsModal';
 import { useAuth } from '../../../contexts/AuthContext';
 import { hasPriceAmountModuleAccess } from '../../../utils/canViewAmount';
 import { useWorkbenchPageFullAccess } from '../WorkbenchPageAccessContext';
@@ -26,6 +27,7 @@ const FINANCE_THEME = {
 } as const;
 
 const FinanceStatsWidget: React.FC<FinanceStatsWidgetProps> = ({ editing, onRemove }) => {
+  const [modalOpen, setModalOpen] = useState(false);
   const periodState = useWorkbenchPeriodFilter('today');
   const {
     periodTab,
@@ -57,6 +59,17 @@ const FinanceStatsWidget: React.FC<FinanceStatsWidgetProps> = ({ editing, onRemo
       theme={FINANCE_THEME}
       isFetching={isFetching}
       onRefresh={() => void refetch()}
+      middleExtra={
+        !editing && fin ? (
+          <button
+            type="button"
+            onClick={() => setModalOpen(true)}
+            className="workbench-no-drag shrink-0 rounded-lg px-2 py-1 text-[11px] font-bold text-indigo-600 hover:bg-indigo-50"
+          >
+            更多
+          </button>
+        ) : null
+      }
     />
   );
 
@@ -73,13 +86,14 @@ const FinanceStatsWidget: React.FC<FinanceStatsWidgetProps> = ({ editing, onRemo
   }, [fin]);
 
   return (
-    <WidgetShell
-      title="财务统计"
-      editing={editing}
-      onRemove={onRemove}
-      headerExtra={headerExtra}
-      {...headerShellProps}
-    >
+    <>
+      <WidgetShell
+        title="财务统计"
+        editing={editing}
+        onRemove={onRemove}
+        headerExtra={headerExtra}
+        {...headerShellProps}
+      >
       {isLoading ? (
         <div className="flex flex-1 items-center justify-center py-10">
           <Loader2 className="h-6 w-6 animate-spin text-slate-300" />
@@ -113,7 +127,15 @@ const FinanceStatsWidget: React.FC<FinanceStatsWidgetProps> = ({ editing, onRemo
           )}
         </div>
       )}
-    </WidgetShell>
+      </WidgetShell>
+
+      <FinanceStatsModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        showAmount={showAmount}
+        initialFilter={filter}
+      />
+    </>
   );
 };
 

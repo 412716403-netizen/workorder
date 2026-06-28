@@ -1,9 +1,9 @@
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { dashboard } from '../services/api/dashboard';
+import { useAuth } from '../contexts/AuthContext';
 import type { WorkbenchPeriodFilter } from '../types';
 import { isValidWorkbenchCustomRange, workbenchPeriodFilterQueryKey } from '../types';
 import { dashboardQueryKey } from './dashboardQueryKeys';
-import { useAuth } from '../contexts/AuthContext';
 
 function statsQueryParams(filter: WorkbenchPeriodFilter) {
   if (filter.mode === 'custom') {
@@ -12,10 +12,7 @@ function statsQueryParams(filter: WorkbenchPeriodFilter) {
   return { period: filter.period };
 }
 
-export function useDashboardStats(
-  segment: 'sales' | 'salesOrder' | 'finance',
-  filter: WorkbenchPeriodFilter,
-) {
+export function useFinancePartnerWorkbenchStats(filter: WorkbenchPeriodFilter) {
   const { tenantCtx } = useAuth();
   const tenantId = tenantCtx?.tenantId;
   const queryEnabled =
@@ -24,8 +21,12 @@ export function useDashboardStats(
       || isValidWorkbenchCustomRange(filter.startDate, filter.endDate));
 
   return useQuery({
-    queryKey: dashboardQueryKey(tenantId, 'stats', segment, workbenchPeriodFilterQueryKey(filter)),
-    queryFn: () => dashboard.getStats(statsQueryParams(filter)),
+    queryKey: dashboardQueryKey(
+      tenantId,
+      'financePartnerStats',
+      workbenchPeriodFilterQueryKey(filter),
+    ),
+    queryFn: () => dashboard.getFinancePartnerStats(statsQueryParams(filter)),
     staleTime: 60_000,
     enabled: queryEnabled,
     placeholderData: keepPreviousData,

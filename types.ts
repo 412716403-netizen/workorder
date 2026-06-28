@@ -195,6 +195,7 @@ export {
   isValidWorkbenchCustomRange,
   workbenchPeriodFilterLabel,
   workbenchPeriodFilterQueryKey,
+  workbenchPeriodFilterToIsoRange,
   resolveWorkbenchStatsQuery,
   type ProductEconomicsListQuery,
   type ProductEconomicsCustomRange,
@@ -202,6 +203,9 @@ export {
   type WorkbenchCustomRange,
   type WorkbenchPeriodTab,
   type WorkbenchPeriodFilter,
+  type PartnerReconPartnerStatsResult,
+  type PartnerReconPartnerStatsSummary,
+  type PartnerReconPartnerStatsSlice,
 } from './shared/workbenchOrderStats';
 
 export {

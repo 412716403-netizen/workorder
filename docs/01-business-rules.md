@@ -148,6 +148,7 @@
 | 周期 | 今日 / 昨日 / 本月 / **自定义**（`startDate`+`endDate`，含起止日全天；按 `FinanceRecord.timestamp` 过滤） |
 | 净现金流 | 周期内收款 − 支出 |
 | 收款 / 支出 | 周期内 `RECEIPT` / `PAYMENT` 金额与笔数 |
+| **更多弹窗** | 卡片标题栏「更多」→ `FinanceStatsModal`：弹窗内独立周期 Tab（今日/昨日/本月/自定义，打开时同步卡片周期）；汇总 KPI、收/付款分类饼图、**合作单位往来**（应收款/应付款/剩余应收/剩余应付 + 按合作单位饼图，口径同财务对账，`GET /dashboard/finance-partner-stats`）、同期工资结算/对账 |
 
 ### 2.5 财务统计（累计，历史口径）
 

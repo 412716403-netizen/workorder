@@ -218,6 +218,24 @@ export interface ProductEconomicsDetailResponse {
   byNode: ProductEconomicsNodeRow[];
 }
 
+export interface FinancePartnerStatsSlice {
+  partner: string;
+  amount: number;
+}
+
+export interface FinancePartnerStatsResponse {
+  summary: {
+    periodReceivable: number;
+    periodPayable: number;
+    remainingReceivable: number;
+    remainingPayable: number;
+  };
+  periodReceivableByPartner: FinancePartnerStatsSlice[];
+  periodPayableByPartner: FinancePartnerStatsSlice[];
+  remainingReceivableByPartner: FinancePartnerStatsSlice[];
+  remainingPayableByPartner: FinancePartnerStatsSlice[];
+}
+
 export interface ShortcutsResponse {
   selected: string[];
   defaults: string[];
@@ -313,6 +331,14 @@ export const dashboard = {
     const qs = search.toString();
     return request<ProductEconomicsDetailResponse | null>(
       `/dashboard/product-economics/${encodeURIComponent(productId)}${qs ? `?${qs}` : ''}`,
+    );
+  },
+  getFinancePartnerStats: (params: WorkbenchStatsQueryParams = {}) => {
+    const search = new URLSearchParams();
+    appendWorkbenchStatsQuery(search, params);
+    const qs = search.toString();
+    return request<FinancePartnerStatsResponse | null>(
+      `/dashboard/finance-partner-stats${qs ? `?${qs}` : ''}`,
     );
   },
   getNotifications: (params: { limit?: number } = {}) => {

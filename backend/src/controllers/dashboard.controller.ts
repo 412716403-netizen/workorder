@@ -1,5 +1,6 @@
 import * as dashboardService from '../services/dashboard.service.js';
 import * as productEconomicsService from '../services/productEconomicsStats.service.js';
+import * as financePartnerWorkbenchStatsService from '../services/financePartnerWorkbenchStats.service.js';
 import { isProductMaterialCostMode } from '../../../shared/types.js';
 import { isWorkbenchOrderStatsPeriod } from '../../../shared/workbenchOrderStats.js';
 import type { WorkbenchStatsListQuery } from '../../../shared/workbenchOrderStats.js';
@@ -254,4 +255,27 @@ export const getProductEconomicsDetail = asyncHandler(async (req, res) => {
       parseProductEconomicsDetailQuery(req).materialCostMode,
     ),
   );
+});
+
+export const getFinancePartnerStats = asyncHandler(async (req, res) => {
+  const userId = req.user!.userId;
+  const tenantId = req.tenantId!;
+  const basePermissions = await dashboardService.resolveUserPermissions(userId, tenantId);
+  const permissions = await dashboardService.augmentPermissionsWithWorkbench(
+    userId,
+    tenantId,
+    basePermissions,
+    req.user!.tenantRole,
+  );
+  const canFinance =
+    permissions.includes('finance') || permissions.some(p => p.startsWith('finance:'));
+  if (!canFinance) {
+    res.json(null);
+    return;
+  }
+  const db = dashboardService.getTenantPrisma(tenantId);
+  res.json(await financePartnerWorkbenchStatsService.getFinancePartnerWorkbenchStats(
+    db,
+    parseWorkbenchStatsQuery(req),
+  ));
 });

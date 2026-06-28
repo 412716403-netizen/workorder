@@ -66,6 +66,7 @@ router.put('/rework-stats/settings', validate(orderStatsNodeIdsSchema), ctrl.sav
 router.get('/rework-stats', ctrl.getReworkStats);
 router.get('/product-economics', ctrl.getProductEconomics);
 router.get('/product-economics/:productId', ctrl.getProductEconomicsDetail);
+router.get('/finance-partner-stats', ctrl.getFinancePartnerStats);
 router.get('/notifications', ctrl.getNotifications);
 router.get('/messages', ctrl.listPublishedMessages);
 router.post('/messages', validate(publishMessageSchema), ctrl.publishMessage);

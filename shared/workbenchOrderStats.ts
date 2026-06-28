@@ -201,6 +201,12 @@ export type WorkbenchPeriodFilter =
   | { mode: 'preset'; period: WorkbenchOrderStatsPeriod }
   | { mode: 'custom'; startDate: string; endDate: string };
 
+export type {
+  PartnerReconPartnerStatsResult,
+  PartnerReconPartnerStatsSummary,
+  PartnerReconPartnerStatsSlice,
+} from './partnerReconPartnerStats';
+
 export function isValidWorkbenchCustomRange(startDate: string, endDate: string): boolean {
   return isWorkbenchStatsYmd(startDate) && isWorkbenchStatsYmd(endDate) && startDate <= endDate;
 }
@@ -215,6 +221,22 @@ export function workbenchPeriodFilterLabel(filter: WorkbenchPeriodFilter): strin
 export function workbenchPeriodFilterQueryKey(filter: WorkbenchPeriodFilter): string {
   if (filter.mode === 'custom') return `custom:${filter.startDate}:${filter.endDate}`;
   return filter.period;
+}
+
+/** 工作台周期 → ISO 时间区间（与 dashboard / finance.summary 口径一致） */
+export function workbenchPeriodFilterToIsoRange(filter: WorkbenchPeriodFilter): {
+  startDate: string;
+  endDate: string;
+} {
+  if (filter.mode === 'custom') {
+    const custom = resolveWorkbenchCustomStatsPeriodRange(filter.startDate, filter.endDate);
+    if (!custom) {
+      throw new Error('Invalid workbench custom range');
+    }
+    return { startDate: custom.start.toISOString(), endDate: custom.end.toISOString() };
+  }
+  const { start, end } = resolveWorkbenchStatsPeriodRange(filter.period);
+  return { startDate: start.toISOString(), endDate: end.toISOString() };
 }
 
 /** 解析工作台统计周期：自定义日期优先，否则 preset（默认 today） */
