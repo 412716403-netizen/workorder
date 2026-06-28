@@ -58,6 +58,13 @@ export {
   type TodoSourceType,
   type TodoStatus,
   type TodoItemDTO,
+  PRODUCT_MATERIAL_COST_MODES,
+  PRODUCT_MATERIAL_COST_MODE_LABEL,
+  DEFAULT_PRODUCT_ECONOMICS_SETTINGS,
+  isProductMaterialCostMode,
+  parseProductEconomicsSettings,
+  type ProductMaterialCostMode,
+  type ProductEconomicsSettings,
 } from '../../../shared/types.js';
 
 export {

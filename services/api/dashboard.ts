@@ -52,7 +52,8 @@ export interface OrderStatsSettingsResponse {
 }
 
 export interface OrderStatsResponse {
-  period: 'today' | 'yesterday' | 'month';
+  period: 'today' | 'yesterday' | 'month' | null;
+  customRange: { startDate: string; endDate: string } | null;
   includeNotStarted: boolean;
   rows: DashboardOrderStatsRow[];
 }
@@ -85,12 +86,14 @@ export interface NodeStatsSettingsResponse {
 }
 
 export interface OutsourceStatsResponse {
-  period: 'today' | 'yesterday' | 'month';
+  period: 'today' | 'yesterday' | 'month' | null;
+  customRange: { startDate: string; endDate: string } | null;
   rows: DashboardOutsourceStatsRow[];
 }
 
 export interface ReworkStatsResponse {
-  period: 'today' | 'yesterday' | 'month';
+  period: 'today' | 'yesterday' | 'month' | null;
+  customRange: { startDate: string; endDate: string } | null;
   rows: DashboardReworkStatsRow[];
 }
 
@@ -103,21 +106,24 @@ export interface DashboardStats {
     trend: { date: string; quantity: number; count: number }[];
   };
   sales?: {
-    period: 'today' | 'yesterday' | 'month';
+    period: 'today' | 'yesterday' | 'month' | null;
+    customRange?: { startDate: string; endDate: string } | null;
     salesBillCount: number;
     salesAmount: number;
     salesQuantity: number;
     salesReturnQuantity: number;
   };
   salesOrder?: {
-    period: 'today' | 'yesterday' | 'month';
+    period: 'today' | 'yesterday' | 'month' | null;
+    customRange?: { startDate: string; endDate: string } | null;
     salesOrderCount: number;
     salesOrderAmount: number;
     salesOrderQuantity: number;
     salesOrderReduceQuantity: number;
   };
   finance?: {
-    period: 'today' | 'yesterday' | 'month';
+    period: 'today' | 'yesterday' | 'month' | null;
+    customRange?: { startDate: string; endDate: string } | null;
     receiptAmount: number;
     paymentAmount: number;
     cashFlow: number;
@@ -126,10 +132,114 @@ export interface DashboardStats {
   };
 }
 
+export interface ProductEconomicsRow {
+  productId: string;
+  name: string;
+  sku: string;
+  imageUrl: string | null;
+  /** 是否配置了标准生产路线（milestoneNodeIds 非空） */
+  hasProcessNodes: boolean;
+  materialCost: number;
+  reportCost: number;
+  outsourceFee: number;
+  reworkFee: number;
+  materialSurplusLoss: number;
+  linkedPurchaseCost: number;
+  linkedPaymentCost: number;
+  linkedReceiptAmount: number;
+  scrapQty: number;
+  scrapAmount: number;
+  stockQty: number;
+  salesQty: number;
+  salesAmount: number;
+  totalRevenue: number;
+  totalCost: number;
+  grossProfit: number;
+}
+
+export interface ProductEconomicsListResponse {
+  canProduction: boolean;
+  canPsi: boolean;
+  canFinance: boolean;
+  materialCostMode: 'consumable' | 'document_linked';
+  period: 'today' | 'yesterday' | 'month' | null;
+  customRange: { startDate: string; endDate: string } | null;
+  summary: {
+    productCount: number;
+    totalCost: number;
+    totalSalesAmount: number;
+    totalRevenue: number;
+    grossProfit: number;
+  };
+  rows: ProductEconomicsRow[];
+}
+
+export interface ProductEconomicsNodeRow {
+  nodeId: string;
+  nodeName: string;
+  hasNodeBom: boolean;
+  materialCost: number;
+  materialQty: number;
+  reportCost: number;
+  outsourceFee: number;
+  reworkFee: number;
+  reportQty: number;
+  outsourceQty: number;
+  reworkQty: number;
+}
+
+export interface ProductEconomicsDetailResponse {
+  canProduction: boolean;
+  canPsi: boolean;
+  canFinance: boolean;
+  materialCostMode: 'consumable' | 'document_linked';
+  productId: string;
+  name: string;
+  sku: string;
+  imageUrl: string | null;
+  materialCost: number;
+  reportCost: number;
+  outsourceFee: number;
+  reworkFee: number;
+  materialSurplusLoss: number;
+  linkedPurchaseCost: number;
+  linkedPaymentCost: number;
+  linkedReceiptAmount: number;
+  scrapQty: number;
+  scrapAmount: number;
+  stockQty: number;
+  salesQty: number;
+  salesAmount: number;
+  totalRevenue: number;
+  totalCost: number;
+  grossProfit: number;
+  totalOrderQty: number;
+  stockInQty: number;
+  byNode: ProductEconomicsNodeRow[];
+}
+
 export interface ShortcutsResponse {
   selected: string[];
   defaults: string[];
   hasCustom: boolean;
+}
+
+type WorkbenchStatsQueryParams = {
+  period?: 'today' | 'yesterday' | 'month';
+  startDate?: string;
+  endDate?: string;
+  includeNotStarted?: boolean;
+  days?: number;
+  materialCostMode?: 'consumable' | 'document_linked';
+};
+
+function appendWorkbenchStatsQuery(search: URLSearchParams, params: WorkbenchStatsQueryParams) {
+  if (params.period) search.set('period', params.period);
+  if (params.startDate) search.set('startDate', params.startDate);
+  if (params.endDate) search.set('endDate', params.endDate);
+  if (params.includeNotStarted) search.set('includeNotStarted', '1');
+  if (params.days != null) search.set('days', String(params.days));
+  if (params.materialCostMode) search.set('materialCostMode', params.materialCostMode);
 }
 
 export const dashboard = {
@@ -147,10 +257,9 @@ export const dashboard = {
   getFeaturePlugins: () => request<FeaturePluginsConfig>('/dashboard/feature-plugins'),
   updateFeaturePlugins: (body: FeaturePluginsConfig) =>
     request<FeaturePluginsConfig>('/dashboard/feature-plugins', { method: 'PUT', body: JSON.stringify(body) }),
-  getStats: (params: { days?: number; period?: 'today' | 'yesterday' | 'month' } = {}) => {
+  getStats: (params: WorkbenchStatsQueryParams = {}) => {
     const search = new URLSearchParams();
-    if (params.days != null) search.set('days', String(params.days));
-    if (params.period) search.set('period', params.period);
+    appendWorkbenchStatsQuery(search, params);
     const qs = search.toString();
     return request<DashboardStats>(`/dashboard/stats${qs ? `?${qs}` : ''}`);
   },
@@ -160,13 +269,9 @@ export const dashboard = {
       method: 'PUT',
       body: JSON.stringify({ ids }),
     }),
-  getOrderStats: (params: {
-    period?: 'today' | 'yesterday' | 'month';
-    includeNotStarted?: boolean;
-  } = {}) => {
+  getOrderStats: (params: WorkbenchStatsQueryParams = {}) => {
     const search = new URLSearchParams();
-    if (params.period) search.set('period', params.period);
-    if (params.includeNotStarted) search.set('includeNotStarted', '1');
+    appendWorkbenchStatsQuery(search, params);
     const qs = search.toString();
     return request<OrderStatsResponse | null>(`/dashboard/order-stats${qs ? `?${qs}` : ''}`);
   },
@@ -176,9 +281,9 @@ export const dashboard = {
       method: 'PUT',
       body: JSON.stringify({ ids }),
     }),
-  getOutsourceStats: (params: { period?: 'today' | 'yesterday' | 'month' } = {}) => {
+  getOutsourceStats: (params: WorkbenchStatsQueryParams = {}) => {
     const search = new URLSearchParams();
-    if (params.period) search.set('period', params.period);
+    appendWorkbenchStatsQuery(search, params);
     const qs = search.toString();
     return request<OutsourceStatsResponse | null>(`/dashboard/outsource-stats${qs ? `?${qs}` : ''}`);
   },
@@ -188,11 +293,27 @@ export const dashboard = {
       method: 'PUT',
       body: JSON.stringify({ ids }),
     }),
-  getReworkStats: (params: { period?: 'today' | 'yesterday' | 'month' } = {}) => {
+  getReworkStats: (params: WorkbenchStatsQueryParams = {}) => {
     const search = new URLSearchParams();
-    if (params.period) search.set('period', params.period);
+    appendWorkbenchStatsQuery(search, params);
     const qs = search.toString();
     return request<ReworkStatsResponse | null>(`/dashboard/rework-stats${qs ? `?${qs}` : ''}`);
+  },
+  getProductEconomics: (params: WorkbenchStatsQueryParams = {}) => {
+    const search = new URLSearchParams();
+    appendWorkbenchStatsQuery(search, params);
+    const qs = search.toString();
+    return request<ProductEconomicsListResponse | null>(
+      `/dashboard/product-economics${qs ? `?${qs}` : ''}`,
+    );
+  },
+  getProductEconomicsDetail: (productId: string, materialCostMode?: 'consumable' | 'document_linked') => {
+    const search = new URLSearchParams();
+    if (materialCostMode) search.set('materialCostMode', materialCostMode);
+    const qs = search.toString();
+    return request<ProductEconomicsDetailResponse | null>(
+      `/dashboard/product-economics/${encodeURIComponent(productId)}${qs ? `?${qs}` : ''}`,
+    );
   },
   getNotifications: (params: { limit?: number } = {}) => {
     const qs = params.limit != null ? `?limit=${params.limit}` : '';

@@ -1,11 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { Loader2 } from 'lucide-react';
 import WidgetShell from '../WidgetShell';
 import { useAuth } from '../../../contexts/AuthContext';
 import { hasPriceAmountModuleAccess } from '../../../utils/canViewAmount';
 import { useWorkbenchPageFullAccess } from '../WorkbenchPageAccessContext';
 import { useDashboardStats } from '../../../hooks/useDashboardStats';
-import { workbenchPeriodLabel, type WorkbenchOrderStatsPeriod } from '../../../types';
+import { useWorkbenchPeriodFilter } from '../../../hooks/useWorkbenchPeriodFilter';
 import {
   formatWorkbenchAmount,
   formatWorkbenchCount,
@@ -26,18 +26,34 @@ const FINANCE_THEME = {
 } as const;
 
 const FinanceStatsWidget: React.FC<FinanceStatsWidgetProps> = ({ editing, onRemove }) => {
-  const [period, setPeriod] = useState<WorkbenchOrderStatsPeriod>('today');
+  const periodState = useWorkbenchPeriodFilter('today');
+  const {
+    periodTab,
+    setPeriodTab,
+    customStart,
+    setCustomStart,
+    customEnd,
+    setCustomEnd,
+    filter,
+    periodLabel,
+    customRangeInvalid,
+    headerShellProps,
+  } = periodState;
   const { tenantCtx } = useAuth();
   const fullAccess = useWorkbenchPageFullAccess();
   const showAmount =
     fullAccess || hasPriceAmountModuleAccess(tenantCtx?.tenantRole, tenantCtx?.permissions);
-  const { data, isLoading, isFetching, refetch } = useDashboardStats('finance', period);
+  const { data, isLoading, isFetching, refetch } = useDashboardStats('finance', filter);
   const fin = data?.finance;
 
   const headerExtra = (
     <WorkbenchStatsHeaderExtra
-      period={period}
-      onPeriodChange={setPeriod}
+      periodTab={periodTab}
+      onPeriodTabChange={setPeriodTab}
+      customStart={customStart}
+      customEnd={customEnd}
+      onCustomStartChange={setCustomStart}
+      onCustomEndChange={setCustomEnd}
       theme={FINANCE_THEME}
       isFetching={isFetching}
       onRefresh={() => void refetch()}
@@ -57,7 +73,13 @@ const FinanceStatsWidget: React.FC<FinanceStatsWidgetProps> = ({ editing, onRemo
   }, [fin]);
 
   return (
-    <WidgetShell title="财务统计" editing={editing} onRemove={onRemove} headerExtra={headerExtra}>
+    <WidgetShell
+      title="财务统计"
+      editing={editing}
+      onRemove={onRemove}
+      headerExtra={headerExtra}
+      {...headerShellProps}
+    >
       {isLoading ? (
         <div className="flex flex-1 items-center justify-center py-10">
           <Loader2 className="h-6 w-6 animate-spin text-slate-300" />
@@ -67,25 +89,28 @@ const FinanceStatsWidget: React.FC<FinanceStatsWidgetProps> = ({ editing, onRemo
       ) : (
         <div className="flex h-full min-h-0 flex-col gap-3">
           <WorkbenchKpiHero
-            label={`${workbenchPeriodLabel(period)}净现金流`}
+            label={`${periodLabel}净现金流`}
             value={formatWorkbenchAmount(fin.cashFlow, showAmount)}
             hint={heroHint}
             tone={cashFlowTone}
           />
           <div className="grid grid-cols-2 gap-3">
             <WorkbenchKpiMetric
-              label={`${workbenchPeriodLabel(period)}收款`}
+              label={`${periodLabel}收款`}
               value={formatWorkbenchAmount(fin.receiptAmount, showAmount)}
               sub={`${formatWorkbenchCount(fin.receiptCount)} 笔`}
               tone="emerald"
             />
             <WorkbenchKpiMetric
-              label={`${workbenchPeriodLabel(period)}支出`}
+              label={`${periodLabel}支出`}
               value={formatWorkbenchAmount(fin.paymentAmount, showAmount)}
               sub={`${formatWorkbenchCount(fin.paymentCount)} 笔`}
               tone="rose"
             />
           </div>
+          {customRangeInvalid && (
+            <p className="text-center text-[10px] text-rose-500">结束日期不能早于开始</p>
+          )}
         </div>
       )}
     </WidgetShell>

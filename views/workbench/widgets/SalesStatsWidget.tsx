@@ -1,11 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { Loader2 } from 'lucide-react';
 import WidgetShell from '../WidgetShell';
 import { useAuth } from '../../../contexts/AuthContext';
 import { canViewAmount, AMOUNT_PERMISSION_KEYS } from '../../../utils/canViewAmount';
 import { useWorkbenchPageFullAccess } from '../WorkbenchPageAccessContext';
 import { useDashboardStats } from '../../../hooks/useDashboardStats';
-import { workbenchPeriodLabel, type WorkbenchOrderStatsPeriod } from '../../../types';
+import { useWorkbenchPeriodFilter } from '../../../hooks/useWorkbenchPeriodFilter';
 import {
   formatWorkbenchAmount,
   formatWorkbenchCount,
@@ -26,7 +26,19 @@ const SALES_THEME = {
 } as const;
 
 const SalesStatsWidget: React.FC<SalesStatsWidgetProps> = ({ editing, onRemove }) => {
-  const [period, setPeriod] = useState<WorkbenchOrderStatsPeriod>('today');
+  const periodState = useWorkbenchPeriodFilter('today');
+  const {
+    periodTab,
+    setPeriodTab,
+    customStart,
+    setCustomStart,
+    customEnd,
+    setCustomEnd,
+    filter,
+    periodLabel,
+    customRangeInvalid,
+    headerShellProps,
+  } = periodState;
   const { tenantCtx } = useAuth();
   const fullAccess = useWorkbenchPageFullAccess();
   const showAmount =
@@ -36,13 +48,17 @@ const SalesStatsWidget: React.FC<SalesStatsWidgetProps> = ({ editing, onRemove }
       tenantCtx?.permissions,
       AMOUNT_PERMISSION_KEYS.PSI_SALES_BILL,
     );
-  const { data, isLoading, isFetching, refetch } = useDashboardStats('sales', period);
+  const { data, isLoading, isFetching, refetch } = useDashboardStats('sales', filter);
   const sales = data?.sales;
 
   const headerExtra = (
     <WorkbenchStatsHeaderExtra
-      period={period}
-      onPeriodChange={setPeriod}
+      periodTab={periodTab}
+      onPeriodTabChange={setPeriodTab}
+      customStart={customStart}
+      customEnd={customEnd}
+      onCustomStartChange={setCustomStart}
+      onCustomEndChange={setCustomEnd}
       theme={SALES_THEME}
       isFetching={isFetching}
       onRefresh={() => void refetch()}
@@ -55,7 +71,13 @@ const SalesStatsWidget: React.FC<SalesStatsWidgetProps> = ({ editing, onRemove }
   }, [sales]);
 
   return (
-    <WidgetShell title="销售统计" editing={editing} onRemove={onRemove} headerExtra={headerExtra}>
+    <WidgetShell
+      title="销售统计"
+      editing={editing}
+      onRemove={onRemove}
+      headerExtra={headerExtra}
+      {...headerShellProps}
+    >
       {isLoading ? (
         <div className="flex flex-1 items-center justify-center py-10">
           <Loader2 className="h-6 w-6 animate-spin text-slate-300" />
@@ -65,17 +87,13 @@ const SalesStatsWidget: React.FC<SalesStatsWidgetProps> = ({ editing, onRemove }
       ) : (
         <div className="flex h-full min-h-0 flex-col gap-3">
           <WorkbenchKpiHero
-            label={`${workbenchPeriodLabel(period)}销售额`}
+            label={`${periodLabel}销售额`}
             value={formatWorkbenchAmount(sales.salesAmount, showAmount)}
             hint={heroHint}
             tone="sky"
           />
           <div className="grid grid-cols-3 gap-3">
-            <WorkbenchKpiMetric
-              label="销售单数"
-              value={formatWorkbenchCount(sales.salesBillCount)}
-              sub="出库单"
-            />
+            <WorkbenchKpiMetric label="销售单数" value={formatWorkbenchCount(sales.salesBillCount)} sub="出库单" />
             <WorkbenchKpiMetric
               label="销售件数"
               value={formatWorkbenchCount(sales.salesQuantity)}
@@ -83,12 +101,15 @@ const SalesStatsWidget: React.FC<SalesStatsWidgetProps> = ({ editing, onRemove }
               tone="emerald"
             />
             <WorkbenchKpiMetric
-              label={`${workbenchPeriodLabel(period)}退货`}
+              label={`${periodLabel}退货`}
               value={formatWorkbenchCount(sales.salesReturnQuantity)}
               sub="销售退货件数"
               tone={sales.salesReturnQuantity > 0 ? 'amber' : 'default'}
             />
           </div>
+          {customRangeInvalid && (
+            <p className="text-center text-[10px] text-rose-500">结束日期不能早于开始</p>
+          )}
         </div>
       )}
     </WidgetShell>

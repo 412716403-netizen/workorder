@@ -16,6 +16,9 @@ export type WorkbenchWidgetType =
   | 'sales_stats'
   | 'sales_order_stats'
   | 'finance_stats'
+  | 'product_economics_consumable'
+  | 'product_economics_document'
+  /** @deprecated 存量布局自动迁移为 product_economics_consumable */
   | 'product_economics';
 
 export type WorkbenchWidgetCategory = 'general' | 'efficiency' | 'reports';
@@ -93,6 +96,8 @@ export const WORKBENCH_WIDGET_TYPES: WorkbenchWidgetType[] = [
   'sales_stats',
   'sales_order_stats',
   'finance_stats',
+  'product_economics_consumable',
+  'product_economics_document',
   'product_economics',
 ];
 
@@ -204,9 +209,20 @@ export const WORKBENCH_WIDGET_CATALOG: WorkbenchWidgetDefinition[] = [
     requiredModule: 'finance',
   },
   {
-    type: 'product_economics',
-    title: '产品经营情况',
-    description: '按产品汇总物料成本、报工成本、外协/返工/报损及库存与销售',
+    type: 'product_economics_consumable',
+    title: '产品经营·报工耗材',
+    description: '按报工耗材与领退料结余损耗汇总物料成本，叠加报工/外协/返工/报损',
+    category: 'reports',
+    defaultW: 5,
+    defaultH: 6,
+    minW: 4,
+    minH: 4,
+    requiredModule: 'production',
+  },
+  {
+    type: 'product_economics_document',
+    title: '产品经营·单据关联',
+    description: '按关联采购入库与关联收付款汇总成本，叠加报工/外协/返工/报损',
     category: 'reports',
     defaultW: 5,
     defaultH: 6,

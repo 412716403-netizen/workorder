@@ -7,7 +7,6 @@ import {
   LayoutGrid,
   ToggleLeft,
   ToggleRight,
-  ClipboardList,
   Building2,
   UserPlus,
   Package,
@@ -49,7 +48,7 @@ const FinanceCategoriesTab: React.FC<FinanceCategoriesTabProps> = ({
     await addLock.run(async () => {
       try {
         const created = await api.settings.financeCategories.create({
-          kind: 'RECEIPT', name: trimmed, linkOrder: false,
+          kind: 'RECEIPT', name: trimmed,
           linkPartner: false, selectPaymentAccount: false, linkWorker: false,
           linkProduct: false, customFields: []
         }) as FinanceCategory;
@@ -191,7 +190,6 @@ const FinanceCategoriesTab: React.FC<FinanceCategoriesTabProps> = ({
                     <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><LayoutGrid className="w-4 h-4" /> 2. 关联与选项开关</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {[
-                        { label: '是否关联工单', key: 'linkOrder', desc: '登记时可选关联工单。', icon: ClipboardList },
                         { label: '是否关联合作单位', key: 'linkPartner', desc: '登记时选择或填写合作单位/客户/供应商。', icon: Building2 },
                         { label: '是否关联工人', key: 'linkWorker', desc: '登记时可选关联工人（如工资、补贴）。', icon: UserPlus },
                         { label: '是否关联产品', key: 'linkProduct', desc: '登记时可选关联产品。', icon: Package },

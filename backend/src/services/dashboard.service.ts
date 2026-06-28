@@ -49,7 +49,10 @@ import {
   MAX_DASHBOARD_ORDER_STATS_NODES,
   normalizeOrderStatsNodeIds,
   resolveWorkbenchStatsPeriodRange,
+  resolveWorkbenchStatsQuery,
+  type WorkbenchCustomRange,
   type WorkbenchOrderStatsPeriod,
+  type WorkbenchStatsListQuery,
 } from '../../../shared/workbenchOrderStats.js';
 import { OrderStatus } from '../../../shared/types.js';
 import { computeTemplateReportStats } from './orderReportableStats.service.js';
@@ -412,8 +415,19 @@ function canAccessProductionStats(permissions: string[]): boolean {
   return permissions.includes('production') || permissions.some(p => p.startsWith('production:'));
 }
 
-function resolveOrderStatsPeriodRange(period: WorkbenchOrderStatsPeriod): { start: Date; end: Date } {
-  return resolveWorkbenchStatsPeriodRange(period);
+function resolveOrderStatsPeriodRange(query: WorkbenchStatsListQuery): {
+  start: Date;
+  end: Date;
+  period: WorkbenchOrderStatsPeriod | null;
+  customRange: WorkbenchCustomRange | null;
+} {
+  const resolved = resolveWorkbenchStatsQuery(query);
+  return {
+    start: resolved.periodRange.start,
+    end: resolved.periodRange.end,
+    period: resolved.period,
+    customRange: resolved.customRange,
+  };
 }
 
 async function loadNodeStatsSettingsContext(
@@ -564,17 +578,17 @@ export async function getOrderStats(
   userId: string,
   tenantId: string,
   permissions: string[],
-  opts: { period?: WorkbenchOrderStatsPeriod; includeNotStarted?: boolean } = {},
+  opts: WorkbenchStatsListQuery & { includeNotStarted?: boolean } = {},
 ) {
   if (!canAccessProductionStats(permissions)) {
     return null;
   }
-  const period: WorkbenchOrderStatsPeriod = opts.period ?? 'today';
+  const { start, end, period, customRange } = resolveOrderStatsPeriodRange(opts);
   const includeNotStarted = opts.includeNotStarted === true;
   const settings = await getOrderStatsSettings(userId, tenantId, permissions);
   const templateIds = settings.selected;
   if (templateIds.length === 0) {
-    return { period, includeNotStarted, rows: [] as Array<{
+    return { period, customRange, includeNotStarted, rows: [] as Array<{
       templateId: string;
       name: string;
       taskCount: number;
@@ -587,7 +601,6 @@ export async function getOrderStats(
     }> };
   }
 
-  const { start, end } = resolveOrderStatsPeriodRange(period);
   const rowMap = new Map<string, OrderStatsAgg>();
   for (const tid of templateIds) rowMap.set(tid, emptyOrderStatsAgg());
 
@@ -664,7 +677,7 @@ export async function getOrderStats(
     };
   });
 
-  return { period, includeNotStarted, rows };
+  return { period, customRange, includeNotStarted, rows };
 }
 
 async function getNodeStatsSettings(
@@ -710,17 +723,17 @@ export async function getOutsourceStats(
   userId: string,
   tenantId: string,
   permissions: string[],
-  opts: { period?: WorkbenchOrderStatsPeriod } = {},
+  opts: WorkbenchStatsListQuery = {},
 ) {
   if (!canAccessProductionStats(permissions)) return null;
-  const period: WorkbenchOrderStatsPeriod = opts.period ?? 'today';
+  const { periodRange, period, customRange } = resolveWorkbenchStatsQuery(opts);
   const settings = await getOutsourceStatsSettings(userId, tenantId, permissions);
   const templateIds = settings.selected;
   if (templateIds.length === 0) {
-    return { period, rows: [] };
+    return { period, customRange, rows: [] };
   }
 
-  const stats = await computeOutsourceTemplateStats(db, templateIds, period);
+  const stats = await computeOutsourceTemplateStats(db, templateIds, periodRange);
   const nodeRows = await db.globalNodeTemplate.findMany({
     where: { id: { in: templateIds } },
     select: { id: true, name: true },
@@ -740,7 +753,7 @@ export async function getOutsourceStats(
     };
   });
 
-  return { period, rows };
+  return { period, customRange, rows };
 }
 
 export async function getReworkStatsSettings(
@@ -765,17 +778,17 @@ export async function getReworkStats(
   userId: string,
   tenantId: string,
   permissions: string[],
-  opts: { period?: WorkbenchOrderStatsPeriod } = {},
+  opts: WorkbenchStatsListQuery = {},
 ) {
   if (!canAccessProductionStats(permissions)) return null;
-  const period: WorkbenchOrderStatsPeriod = opts.period ?? 'today';
+  const { periodRange, period, customRange } = resolveWorkbenchStatsQuery(opts);
   const settings = await getReworkStatsSettings(userId, tenantId, permissions);
   const templateIds = settings.selected;
   if (templateIds.length === 0) {
-    return { period, rows: [] };
+    return { period, customRange, rows: [] };
   }
 
-  const stats = await computeReworkTemplateStats(db, tenantId, templateIds, period);
+  const stats = await computeReworkTemplateStats(db, tenantId, templateIds, periodRange);
   const nodeRows = await db.globalNodeTemplate.findMany({
     where: { id: { in: templateIds } },
     select: { id: true, name: true },
@@ -795,7 +808,7 @@ export async function getReworkStats(
     };
   });
 
-  return { period, rows };
+  return { period, customRange, rows };
 }
 
 export async function getFeaturePlugins(tenantId: string) {
@@ -843,12 +856,11 @@ export async function assertCanManageFeaturePlugins(
 export async function getStats(
   db: TenantPrismaClient,
   permissions: string[],
-  opts: { days?: number; period?: WorkbenchOrderStatsPeriod } = {},
+  opts: WorkbenchStatsListQuery & { days?: number } = {},
 ) {
   const days = Math.min(Math.max(1, opts.days ?? 30), 90);
-  const period: WorkbenchOrderStatsPeriod = opts.period ?? 'today';
-  const { start, end } = resolveWorkbenchStatsPeriodRange(period);
-  const periodTs = { gte: start, lte: end };
+  const { periodRange, period, customRange } = resolveWorkbenchStatsQuery(opts);
+  const periodTs = { gte: periodRange.start, lte: periodRange.end };
 
   const since = new Date();
   since.setDate(since.getDate() - days);
@@ -939,6 +951,7 @@ export async function getStats(
 
     result.sales = {
       period,
+      customRange,
       salesBillCount: salesPeriod._count._all,
       salesAmount: Number(salesPeriod._sum.amount ?? 0),
       salesQuantity: Number(salesPeriod._sum.quantity ?? 0),
@@ -947,6 +960,7 @@ export async function getStats(
 
     result.salesOrder = {
       period,
+      customRange,
       salesOrderCount: salesOrderDocs.length,
       salesOrderAmount: Number(salesOrderPeriod._sum.amount ?? 0),
       salesOrderQuantity: Number(salesOrderPeriod._sum.quantity ?? 0),
@@ -973,6 +987,7 @@ export async function getStats(
 
     result.finance = {
       period,
+      customRange,
       receiptAmount,
       paymentAmount,
       cashFlow: receiptAmount - paymentAmount,

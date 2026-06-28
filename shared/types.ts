@@ -628,6 +628,37 @@ export function isTodoSourceType(value: unknown): value is TodoSourceType {
   return typeof value === 'string' && (TODO_SOURCE_TYPES as readonly string[]).includes(value);
 }
 
+// ============================================================
+// 产品经营 / 物料成本口径
+// ============================================================
+
+export const PRODUCT_MATERIAL_COST_MODES = ['consumable', 'document_linked'] as const;
+export type ProductMaterialCostMode = (typeof PRODUCT_MATERIAL_COST_MODES)[number];
+
+export const PRODUCT_MATERIAL_COST_MODE_LABEL: Record<ProductMaterialCostMode, string> = {
+  consumable: '按报工耗材与结余损耗',
+  document_linked: '按关联采购入库与关联收付款',
+};
+
+export interface ProductEconomicsSettings {
+  materialCostMode: ProductMaterialCostMode;
+}
+
+export const DEFAULT_PRODUCT_ECONOMICS_SETTINGS: ProductEconomicsSettings = {
+  materialCostMode: 'consumable',
+};
+
+export function isProductMaterialCostMode(v: unknown): v is ProductMaterialCostMode {
+  return v === 'consumable' || v === 'document_linked';
+}
+
+export function parseProductEconomicsSettings(raw: unknown): ProductEconomicsSettings {
+  if (!raw || typeof raw !== 'object') return { ...DEFAULT_PRODUCT_ECONOMICS_SETTINGS };
+  const mode = (raw as ProductEconomicsSettings).materialCostMode;
+  if (isProductMaterialCostMode(mode)) return { materialCostMode: mode };
+  return { ...DEFAULT_PRODUCT_ECONOMICS_SETTINGS };
+}
+
 /** 待办事项 DTO（个人级；前后端共用形状） */
 export interface TodoItemDTO {
   id: string;

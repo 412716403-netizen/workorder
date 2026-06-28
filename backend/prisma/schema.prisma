@@ -218,7 +218,6 @@ model FinanceCategory {
   tenantId             String   @map("tenant_id") @db.Uuid
   kind                 String   @db.VarChar(10)
   name                 String   @db.VarChar(100)
-  linkOrder            Boolean  @default(false) @map("link_order")
   linkPartner          Boolean  @default(false) @map("link_partner")
   selectPaymentAccount Boolean  @default(false) @map("select_payment_account")
   linkWorker           Boolean  @default(false) @map("link_worker")

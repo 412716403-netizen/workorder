@@ -10,6 +10,10 @@ interface WidgetShellProps {
   layoutLocked?: boolean;
   onRemove?: () => void;
   headerExtra?: React.ReactNode;
+  /** 附加在 headerExtra 容器上的类名 */
+  headerExtraClassName?: string;
+  /** 标题 h3 额外类名（默认 flex-1 占满剩余空间前段） */
+  titleClassName?: string;
   children: React.ReactNode;
   className?: string;
 }
@@ -21,6 +25,8 @@ const WidgetShell: React.FC<WidgetShellProps> = ({
   layoutLocked,
   onRemove,
   headerExtra,
+  headerExtraClassName,
+  titleClassName,
   children,
   className = '',
 }) => (
@@ -35,21 +41,29 @@ const WidgetShell: React.FC<WidgetShellProps> = ({
     }
   >
     <div
-      className={`flex shrink-0 items-center gap-2 border-b border-slate-100 px-4 py-2.5 ${
+      className={`flex shrink-0 items-center gap-2 border-b border-slate-100 px-4 py-2.5 min-w-0 ${
         editing ? 'bg-slate-50/80' : ''
       }`}
     >
       <span className="h-4 w-1 shrink-0 rounded-full bg-emerald-500" aria-hidden />
-      <div className="flex min-w-0 flex-1 items-center gap-1.5">
-        <h3 className="truncate text-sm font-bold text-slate-800">{title}</h3>
-        {titleDot && (
-          <span
-            className="h-2 w-2 shrink-0 rounded-full bg-rose-500 ring-2 ring-white"
-            aria-label="有待处理消息"
-          />
-        )}
-      </div>
-      <div className="workbench-no-drag ml-auto flex max-w-[55%] shrink-0 items-center justify-end gap-1.5 sm:max-w-none">
+      <h3
+        className={`min-w-0 truncate text-sm font-bold text-slate-800 ${
+          titleClassName ?? 'flex-1'
+        }`}
+      >
+        {title}
+      </h3>
+      {titleDot && (
+        <span
+          className="-ml-1 h-2 w-2 shrink-0 rounded-full bg-rose-500 ring-2 ring-white"
+          aria-label="有待处理消息"
+        />
+      )}
+      <div
+        className={`workbench-no-drag ml-auto flex items-center justify-end overflow-hidden ${
+          headerExtraClassName ?? 'max-w-[55%] shrink-0 sm:max-w-none'
+        }`}
+      >
         {editing ? (
           <>
             {!layoutLocked && (

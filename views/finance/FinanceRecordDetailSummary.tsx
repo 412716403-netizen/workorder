@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
-import type { FinanceCategory, FinanceRecord, PlanFormFieldConfig, Product, ProductionOrder, ReportFieldDefinition, Worker } from '../../types';
+import type { FinanceCategory, FinanceRecord, PlanFormFieldConfig, Product, ReportFieldDefinition, Worker } from '../../types';
 import { normalizeReportFieldDefinition } from '../../utils/reportCustomDocField';
 import { PlanFormCustomFieldReadonly } from '../../components/PlanFormCustomFieldControls';
 
@@ -43,7 +43,6 @@ export interface FinanceRecordDetailSummaryProps {
   financeRec: FinanceRecord;
   current: { partnerLabel: string; label?: string };
   financeCatMap: Map<string, FinanceCategory>;
-  orders: ProductionOrder[];
   productMap: Map<string, Product>;
   workerMap: Map<string, Worker>;
 }
@@ -52,7 +51,6 @@ function FinanceRecordDetailSummary({
   financeRec,
   current,
   financeCatMap,
-  orders,
   productMap,
   workerMap,
 }: FinanceRecordDetailSummaryProps) {
@@ -61,15 +59,6 @@ function FinanceRecordDetailSummary({
     [financeCatMap, financeRec.type],
   );
   const selectedCategory = financeRec.categoryId ? financeCatMap.get(financeRec.categoryId) ?? null : null;
-
-  const relatedOrderLabel = useMemo(() => {
-    const relatedId = financeRec.relatedId?.trim();
-    if (!relatedId) return '—';
-    if (relatedId === 'General-Wages') return 'General-Wages - 通用生产补贴/奖金';
-    const order = orders.find(o => o.orderNumber === relatedId);
-    if (order) return `${order.orderNumber} - ${order.productName}`;
-    return relatedId;
-  }, [financeRec.relatedId, orders]);
 
   const productLabel = useMemo(() => {
     const pid = financeRec.productId?.trim();
@@ -111,11 +100,6 @@ function FinanceRecordDetailSummary({
 
       {selectedCategory ? (
         <>
-          {selectedCategory.linkOrder && (
-            <DetailField label="关联工单" className="lg:col-span-2">
-              {relatedOrderLabel}
-            </DetailField>
-          )}
           {selectedCategory.linkPartner && (
             <DetailField label={current.partnerLabel}>
               {financeRec.partner?.trim() || '—'}

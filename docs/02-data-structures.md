@@ -113,6 +113,36 @@
 
 类型定义见 `shared/workbench.ts`（`WORKBENCH_PERM_MODULE` / `workbenchPagePermKey`）、`shared/workbenchValidate.ts`（`canViewWorkbenchPage` / `canEditWorkbenchPage` / `hasWorkbenchPageFullAccess` / `filterWorkbenchPagesByVisibility` / `mergeSharedWorkbenchPages`）、`shared/dashboardMessages.ts`；API 见 `GET/PUT /api/dashboard/workbench`、`GET /api/dashboard/workbench/pages`（角色管理列页面）、`GET/POST/DELETE /api/dashboard/messages`（仅平台 admin）、`GET /api/dashboard/notifications`。
 
+**工作台统计周期（共用）**：销售/销售订单/财务/工单/外协/返工/产品经营等卡片均支持 `period=today|yesterday|month`，或 `startDate` + `endDate`（`YYYY-MM-DD`，含起止日全天）自定义区间；前端 Hook `useWorkbenchPeriodFilter` + `shared/workbenchOrderStats.ts` 统一解析；标题栏内联日期选择（不占浮层）。
+
+**产品经营情况组件**（`product_economics_consumable` / `product_economics_document`，`requiredModule: production`；旧 `product_economics` 加载时自动迁移为 consumable）：
+
+- 前端：`ProductEconomicsWidget`（汇总 KPI）+ `ProductEconomicsModal`（产品列表 + 单产品下钻）；Hook `useProductEconomics` / `useProductEconomicsDetail`。
+- 弹窗左侧列表：仅展示**已配置标准生产路线**（`milestoneNodeIds` 非空）且有经营数据的产品；卡片汇总 KPI 仍含全部有活动产品。
+- API：`GET /api/dashboard/product-economics`（列表 + 汇总）、`GET /api/dashboard/product-economics/:productId`（单产品明细含 `byNode` 工序拆分）。
+- **工作台卡片**：支持 `period=today|yesterday|month`，或 `startDate` + `endDate`（`YYYY-MM-DD`，含起止日全天）自定义区间；按报工/外协/返工/报损/销售单据 `timestamp` 过滤。**不传 period / 日期为累计**（弹窗明细用累计口径）。
+- 弹窗明细：`GET /api/dashboard/product-economics/:productId` 始终累计。
+- 口径：**累计**（弹窗明细）；卡片可按周期过滤。按产品聚合，仅纳入有任一生产/销售/库存/单据关联活动的产品。
+- **物料成本口径**（租户配置 `system_settings.productEconomicsSettings.materialCostMode`，默认 `consumable`；设置 → 生产）：
+  - **`consumable`（默认）** — 报工耗材 + 结余损耗：
+    - **物料成本**：与生产物料面板「报工耗材」同一数量口径（`shared/productMaterialConsumableCost.ts`），再 × 物料单价。未开启称重 → 报工数 × BOM 用量；开启称重且有快照 → 各子物料 `actualWeight` 累加。**物料单价** = 全部 `PURCHASE_BILL` 加权均价；无入库回退 `purchasePrice`。
+    - **物料结余（损耗）**：对齐生产物料面板结余口径（仅累计）。`max(0, 净领用 − 报工耗材) × 物料单价`。
+    - **毛利参考** = `salesAmount` −（物料+报工+外协+返工+物料结余+报损）。
+  - **`document_linked`** — 关联采购入库 + 关联收付款（与上项**互斥**，不做系统自动去重）：
+    - **关联采购入库**（`linkedPurchaseCost`）：`PURCHASE_BILL` 行 `customData.relatedProductId = 成品 id` 的 `amount`（或 `quantity × purchasePrice`）累计。
+    - **关联付款**（`linkedPaymentCost`）：`FinanceRecord` `type=PAYMENT`、`status=COMPLETED`、`productId` 非空，且分类 `linkProduct=true`，需 finance 模块权限。
+    - **关联收款**（`linkedReceiptAmount`，收入侧）：同上 `type=RECEIPT`。
+    - **业务规范**：物料已在采购入库关联成品时，给供应商付货款**勿**再关联产品；关联付款适用于运费、外协现金等无法走 PSI 的费用。
+    - **毛利参考** = (`salesAmount` + `linkedReceiptAmount`) −（关联采购入库+关联付款+报工+外协+返工+报损）。
+- 两种口径**共用**（需 production 模块）：
+  - **报工成本**：各工序 `quantity × rate` 汇总，**按工序扣减同工序外协加工费**后相加。
+  - **外协加工费**：`ProductionOpRecord`（`type=OUTSOURCE`）`amount` 汇总。
+  - **返工费**：`ProductionOpRecord`（`type=REWORK_REPORT`）`amount` 汇总。
+  - **报损**：数量 = `SCRAP` 流水 `quantity` 汇总；金额 = 报损量 × 单件 BOM 标准物料成本。
+  - **详情 `totalOrderQty` / `stockInQty` / `byNode`**：同前。
+- 响应字段：`materialCostMode`、`canFinance`；行级 `linkedPurchaseCost` / `linkedPaymentCost` / `linkedReceiptAmount` / `totalRevenue`（consumable 时 linked 为 0、`totalRevenue=salesAmount`）。
+- 库存/销售（需 psi 模块）：库存走 `psi.service.getStock`；销售 = `SALES_BILL` `quantity` / `amount` 汇总。
+
 ### 1.7 资料库
 
 | 表 | 租户 | 说明 |

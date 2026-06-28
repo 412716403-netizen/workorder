@@ -3,8 +3,15 @@ import {
   Link2,
   ToggleLeft,
   ToggleRight,
+  BarChart3,
 } from 'lucide-react';
 import { useTraceabilityPlugin } from '../../hooks/useTraceabilityPlugin';
+import {
+  PRODUCT_MATERIAL_COST_MODE_LABEL,
+  PRODUCT_MATERIAL_COST_MODES,
+  type ProductMaterialCostMode,
+  type ProductEconomicsSettings,
+} from '../../types';
 
 interface ProductionConfigTabProps {
   allowExceedMaxReportQty: boolean;
@@ -15,6 +22,8 @@ interface ProductionConfigTabProps {
   onUpdateAllowExceedMaxStockInQty?: (value: boolean) => void;
   weightTolerancePercent: number;
   onUpdateWeightTolerancePercent?: (value: number) => void;
+  productEconomicsSettings: ProductEconomicsSettings;
+  onUpdateProductEconomicsSettings?: (value: ProductEconomicsSettings) => void;
   canEdit: boolean;
 }
 
@@ -35,6 +44,8 @@ const ProductionConfigTab: React.FC<ProductionConfigTabProps> = ({
   onUpdateAllowExceedMaxStockInQty,
   weightTolerancePercent,
   onUpdateWeightTolerancePercent,
+  productEconomicsSettings,
+  onUpdateProductEconomicsSettings,
   canEdit,
 }) => {
   const { weightEnabled } = useTraceabilityPlugin();
@@ -130,6 +141,49 @@ const ProductionConfigTab: React.FC<ProductionConfigTabProps> = ({
             </div>
           </div>
           ) : null}
+        </div>
+      </div>
+
+      <div className="rounded-[32px] border border-slate-200 bg-white p-8 shadow-sm">
+        <h2 className={SECTION_TITLE}>
+          <BarChart3 className="h-4 w-4 text-indigo-600" />
+          产品经营 · 物料成本口径
+        </h2>
+        <p className="mb-4 text-sm text-slate-500">
+          工作台「产品经营情况」按所选口径计算物料/采购相关成本（与报工、外协、返工、报损叠加）。两种口径互斥，请按企业习惯选择一种。
+        </p>
+        <div className="space-y-3">
+          {PRODUCT_MATERIAL_COST_MODES.map(mode => {
+            const active = productEconomicsSettings.materialCostMode === mode;
+            return (
+              <label
+                key={mode}
+                className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 transition ${
+                  active ? 'border-indigo-200 bg-indigo-50/50' : 'border-slate-100 bg-slate-50/60'
+                } ${!canEdit ? 'cursor-not-allowed opacity-60' : ''}`}
+              >
+                <input
+                  type="radio"
+                  name="productMaterialCostMode"
+                  className="mt-1"
+                  checked={active}
+                  disabled={!canEdit}
+                  onChange={() => {
+                    if (!canEdit || active) return;
+                    void onUpdateProductEconomicsSettings?.({ materialCostMode: mode });
+                  }}
+                />
+                <div>
+                  <p className={OPTION_LABEL}>{PRODUCT_MATERIAL_COST_MODE_LABEL[mode]}</p>
+                  <p className={OPTION_DESC}>
+                    {mode === 'consumable'
+                      ? '按报工耗材数量（BOM 或称重）× 物料采购价，并计入领退料结余损耗。适合精细领料、横机称重等场景。'
+                      : '按采购入库「关联成品」金额与财务「关联产品」的收付款累计。给供应商付货款时请勿再关联产品，以免与入库重复；关联付款适用于运费、外协现金等无法走入库的费用。'}
+                  </p>
+                </div>
+              </label>
+            );
+          })}
         </div>
       </div>
     </div>

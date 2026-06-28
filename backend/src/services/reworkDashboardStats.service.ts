@@ -2,10 +2,6 @@ import type { TenantPrismaClient } from '../lib/prisma.js';
 import * as settingsService from './settings.service.js';
 import { computeReworkStatsByTemplate } from '../../../shared/reworkStatsAggregates.js';
 import { buildOutOfSequenceTemplateIds } from '../../../shared/processSequence.js';
-import {
-  resolveWorkbenchStatsPeriodRange,
-  type WorkbenchOrderStatsPeriod,
-} from '../../../shared/workbenchOrderStats.js';
 import type { ProcessSequenceMode, ProductionLinkMode } from '../types/index.js';
 
 function mapReworkRecord(row: {
@@ -53,7 +49,7 @@ export async function computeReworkTemplateStats(
   db: TenantPrismaClient,
   tenantId: string,
   templateIds: string[],
-  period: WorkbenchOrderStatsPeriod,
+  periodRange: { start: Date; end: Date },
 ) {
   if (templateIds.length === 0) return new Map();
 
@@ -61,7 +57,7 @@ export async function computeReworkTemplateStats(
   // 工序顺序设置已下线：全局恒「按工序顺序生产」，例外由工序级 allowOutOfSequence 控制。
   const processSequenceMode: ProcessSequenceMode = 'sequential';
   const productionLinkMode = (config.productionLinkMode as ProductionLinkMode | undefined) ?? 'order';
-  const { start, end } = resolveWorkbenchStatsPeriodRange(period);
+  const { start, end } = periodRange;
 
   const outOfSequenceNodes = await db.globalNodeTemplate.findMany({
     where: { allowOutOfSequence: true },

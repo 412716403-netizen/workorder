@@ -1,8 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import ProductionNodeStatsWidget from './ProductionNodeStatsWidget';
 import { useDashboardReworkStats } from '../../../hooks/useDashboardReworkStats';
 import { useDashboardReworkStatsSettings } from '../../../hooks/useDashboardReworkStatsSettings';
-import type { WorkbenchOrderStatsPeriod } from '../../../types';
+import { useWorkbenchPeriodFilter } from '../../../hooks/useWorkbenchPeriodFilter';
 
 interface ReworkStatsWidgetProps {
   editing?: boolean;
@@ -10,9 +10,20 @@ interface ReworkStatsWidgetProps {
 }
 
 const ReworkStatsWidget: React.FC<ReworkStatsWidgetProps> = ({ editing, onRemove }) => {
-  const [period, setPeriod] = useState<WorkbenchOrderStatsPeriod>('today');
+  const periodState = useWorkbenchPeriodFilter('today');
+  const {
+    periodTab,
+    setPeriodTab,
+    customStart,
+    setCustomStart,
+    customEnd,
+    setCustomEnd,
+    filter,
+    customRangeInvalid,
+    headerShellProps,
+  } = periodState;
   const settings = useDashboardReworkStatsSettings();
-  const { data, isLoading, isFetching, refetch } = useDashboardReworkStats(period);
+  const { data, isLoading, isFetching, refetch } = useDashboardReworkStats(filter);
 
   const rows = useMemo(
     () => data?.rows.map(row => ({
@@ -31,8 +42,14 @@ const ReworkStatsWidget: React.FC<ReworkStatsWidgetProps> = ({ editing, onRemove
     <ProductionNodeStatsWidget
       editing={editing}
       onRemove={onRemove}
-      period={period}
-      onPeriodChange={setPeriod}
+      periodTab={periodTab}
+      onPeriodTabChange={setPeriodTab}
+      customStart={customStart}
+      customEnd={customEnd}
+      onCustomStartChange={setCustomStart}
+      onCustomEndChange={setCustomEnd}
+      headerShellProps={headerShellProps}
+      customRangeInvalid={customRangeInvalid}
       labels={{
         title: '返工统计',
         taskCount: '返工任务数',

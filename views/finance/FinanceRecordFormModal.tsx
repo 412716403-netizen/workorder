@@ -166,11 +166,6 @@ function FinanceRecordFormModal({
                 )}
                 {selectedCategory && (
                   <>
-                    {selectedCategory.linkOrder && (
-                      <div className="lg:col-span-2">
-                        <OrderSearchSelect orders={orders} products={products} value={form.relatedId} onChange={v => setForm({ ...form, relatedId: v })} label="关联工单" />
-                      </div>
-                    )}
                     {selectedCategory.linkPartner && (
                       <div className="space-y-1">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{current.partnerLabel}</label>

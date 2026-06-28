@@ -1,8 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import ProductionNodeStatsWidget from './ProductionNodeStatsWidget';
 import { useDashboardOutsourceStats } from '../../../hooks/useDashboardOutsourceStats';
 import { useDashboardOutsourceStatsSettings } from '../../../hooks/useDashboardOutsourceStatsSettings';
-import type { WorkbenchOrderStatsPeriod } from '../../../types';
+import { useWorkbenchPeriodFilter } from '../../../hooks/useWorkbenchPeriodFilter';
 
 interface OutsourceStatsWidgetProps {
   editing?: boolean;
@@ -10,9 +10,20 @@ interface OutsourceStatsWidgetProps {
 }
 
 const OutsourceStatsWidget: React.FC<OutsourceStatsWidgetProps> = ({ editing, onRemove }) => {
-  const [period, setPeriod] = useState<WorkbenchOrderStatsPeriod>('today');
+  const periodState = useWorkbenchPeriodFilter('today');
+  const {
+    periodTab,
+    setPeriodTab,
+    customStart,
+    setCustomStart,
+    customEnd,
+    setCustomEnd,
+    filter,
+    customRangeInvalid,
+    headerShellProps,
+  } = periodState;
   const settings = useDashboardOutsourceStatsSettings();
-  const { data, isLoading, isFetching, refetch } = useDashboardOutsourceStats(period);
+  const { data, isLoading, isFetching, refetch } = useDashboardOutsourceStats(filter);
 
   const rows = useMemo(
     () => data?.rows.map(row => ({
@@ -31,8 +42,14 @@ const OutsourceStatsWidget: React.FC<OutsourceStatsWidgetProps> = ({ editing, on
     <ProductionNodeStatsWidget
       editing={editing}
       onRemove={onRemove}
-      period={period}
-      onPeriodChange={setPeriod}
+      periodTab={periodTab}
+      onPeriodTabChange={setPeriodTab}
+      customStart={customStart}
+      customEnd={customEnd}
+      onCustomStartChange={setCustomStart}
+      onCustomEndChange={setCustomEnd}
+      headerShellProps={headerShellProps}
+      customRangeInvalid={customRangeInvalid}
       labels={{
         title: '外协统计',
         taskCount: '外协任务数',

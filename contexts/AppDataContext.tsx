@@ -26,6 +26,7 @@ import type {
   FinanceAccountType,
   AppDictionaries,
   ProductCategory,
+  ProductEconomicsSettings,
   PartnerCategory,
   GlobalNodeTemplate,
   BOM,
@@ -50,6 +51,7 @@ import {
   DEFAULT_MATERIAL_FORM_SETTINGS,
   DEFAULT_OUTSOURCE_FORM_SETTINGS,
   DEFAULT_REWORK_FORM_SETTINGS,
+  DEFAULT_PRODUCT_ECONOMICS_SETTINGS,
 } from '../types';
 import { normalizePartnersFromApi } from '../utils/partnerNormalize';
 import {
@@ -128,12 +130,14 @@ export interface AppDataContextValue {
   allowExceedMaxOutsourceReceiveQty: boolean;
   allowExceedMaxStockInQty: boolean;
   weightTolerancePercent: number;
+  productEconomicsSettings: ProductEconomicsSettings;
   productMilestoneProgresses: ProductMilestoneProgress[];
   // Config handlers
   onUpdateAllowExceedMaxReportQty: (v: boolean) => Promise<void>;
   onUpdateAllowExceedMaxOutsourceReceiveQty: (v: boolean) => Promise<void>;
   onUpdateAllowExceedMaxStockInQty: (v: boolean) => Promise<void>;
   onUpdateWeightTolerancePercent: (v: number) => Promise<void>;
+  onUpdateProductEconomicsSettings: (v: ProductEconomicsSettings) => Promise<void>;
   onUpdatePlanFormSettings: (v: PlanFormSettings) => Promise<void>;
   onUpdateOrderFormSettings: (v: OrderFormSettings) => Promise<void>;
   onUpdatePurchaseOrderFormSettings: (v: PurchaseOrderFormSettings) => Promise<void>;
@@ -222,7 +226,7 @@ export type AppDataState = Pick<AppDataContextValue,
   'financeCategories' | 'financeAccountTypes' |
   'planFormSettings' | 'orderFormSettings' | 'purchaseOrderFormSettings' | 'salesOrderFormSettings' | 'purchaseBillFormSettings' | 'salesBillFormSettings' | 'receiptFormSettings' | 'paymentFormSettings' | 'materialPanelSettings' | 'materialFormSettings' | 'outsourceFormSettings' | 'reworkFormSettings' |
   'printTemplates' |
-  'productionLinkMode' | 'processSequenceMode' | 'allowExceedMaxReportQty' | 'allowExceedMaxOutsourceReceiveQty' | 'allowExceedMaxStockInQty' | 'weightTolerancePercent' | 'productMilestoneProgresses'
+  'productionLinkMode' | 'processSequenceMode' | 'allowExceedMaxReportQty' | 'allowExceedMaxOutsourceReceiveQty' | 'allowExceedMaxStockInQty' | 'weightTolerancePercent' | 'productEconomicsSettings' | 'productMilestoneProgresses'
 >;
 
 export type AppDataActions = Omit<AppDataContextValue, keyof AppDataState>;
@@ -249,6 +253,7 @@ export interface ConfigState {
   allowExceedMaxOutsourceReceiveQty: boolean;
   allowExceedMaxStockInQty: boolean;
   weightTolerancePercent: number;
+  productEconomicsSettings: ProductEconomicsSettings;
   planFormSettings: PlanFormSettings;
   orderFormSettings: OrderFormSettings;
   purchaseOrderFormSettings: PurchaseOrderFormSettings;
@@ -438,6 +443,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [allowExceedMaxOutsourceReceiveQty, setAllowExceedMaxOutsourceReceiveQty] = useState<boolean>(false);
   const [allowExceedMaxStockInQty, setAllowExceedMaxStockInQty] = useState<boolean>(false);
   const [weightTolerancePercent, setWeightTolerancePercent] = useState<number>(5);
+  const [productEconomicsSettings, setProductEconomicsSettings] = useState<ProductEconomicsSettings>(
+    DEFAULT_PRODUCT_ECONOMICS_SETTINGS,
+  );
   const [productMilestoneProgresses, setProductMilestoneProgresses] = useState<ProductMilestoneProgress[]>([]);
 
   const activeTenantId = tenantCtx?.tenantId;
@@ -463,6 +471,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
           setAllowExceedMaxOutsourceReceiveQty,
           setAllowExceedMaxStockInQty,
           setWeightTolerancePercent,
+          setProductEconomicsSettings,
           setPlanFormSettings,
           setOrderFormSettings,
           setPurchaseOrderFormSettings,
@@ -607,6 +616,10 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     const n = Math.max(0, Math.min(100, Number(value) || 0));
     await api.settings.updateConfig('weightTolerancePercent', n);
     setWeightTolerancePercent(n);
+  }, []);
+  const onUpdateProductEconomicsSettings = useCallback(async (value: ProductEconomicsSettings) => {
+    await api.settings.updateConfig('productEconomicsSettings', value);
+    setProductEconomicsSettings(value);
   }, []);
   /**
    * 统一的 *FormSettings 保存 handler：
@@ -1076,11 +1089,11 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }), [categories, partnerCategories, dictionaries, globalNodes, partners, workers, equipment, warehouses, products, boms]);
 
   const configValue: ConfigState = useMemo(() => ({
-    productionLinkMode, processSequenceMode, allowExceedMaxReportQty, allowExceedMaxOutsourceReceiveQty, allowExceedMaxStockInQty, weightTolerancePercent,
+    productionLinkMode, processSequenceMode, allowExceedMaxReportQty, allowExceedMaxOutsourceReceiveQty, allowExceedMaxStockInQty, weightTolerancePercent, productEconomicsSettings,
     planFormSettings, orderFormSettings, purchaseOrderFormSettings, salesOrderFormSettings, purchaseBillFormSettings, salesBillFormSettings,
     receiptFormSettings, paymentFormSettings,
     materialPanelSettings, materialFormSettings, outsourceFormSettings, reworkFormSettings, printTemplates,
-  }), [productionLinkMode, processSequenceMode, allowExceedMaxReportQty, allowExceedMaxOutsourceReceiveQty, allowExceedMaxStockInQty, weightTolerancePercent, planFormSettings, orderFormSettings, purchaseOrderFormSettings, salesOrderFormSettings, purchaseBillFormSettings, salesBillFormSettings, receiptFormSettings, paymentFormSettings, materialPanelSettings, materialFormSettings, outsourceFormSettings, reworkFormSettings, printTemplates]);
+  }), [productionLinkMode, processSequenceMode, allowExceedMaxReportQty, allowExceedMaxOutsourceReceiveQty, allowExceedMaxStockInQty, weightTolerancePercent, productEconomicsSettings, planFormSettings, orderFormSettings, purchaseOrderFormSettings, salesOrderFormSettings, purchaseBillFormSettings, salesBillFormSettings, receiptFormSettings, paymentFormSettings, materialPanelSettings, materialFormSettings, outsourceFormSettings, reworkFormSettings, printTemplates]);
 
   const ordersValue: OrdersState = useMemo(() => ({
     orders, plans, productMilestoneProgresses,
@@ -1093,7 +1106,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }), [financeCategories, financeAccountTypes]);
 
   const actionsValue: AppDataActions = useMemo(() => ({
-    onUpdateAllowExceedMaxReportQty, onUpdateAllowExceedMaxOutsourceReceiveQty, onUpdateAllowExceedMaxStockInQty, onUpdateWeightTolerancePercent,
+    onUpdateAllowExceedMaxReportQty, onUpdateAllowExceedMaxOutsourceReceiveQty, onUpdateAllowExceedMaxStockInQty, onUpdateWeightTolerancePercent, onUpdateProductEconomicsSettings,
     onUpdatePlanFormSettings, onUpdateOrderFormSettings,
     onUpdatePurchaseOrderFormSettings, onUpdateSalesOrderFormSettings,
     onUpdatePurchaseBillFormSettings, onUpdateSalesBillFormSettings,

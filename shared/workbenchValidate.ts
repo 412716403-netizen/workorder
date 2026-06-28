@@ -129,15 +129,19 @@ function normalizePage(raw: unknown, fallbackOrder: number): WorkbenchPage | nul
 function normalizeLayoutItem(raw: unknown, idx: number): WorkbenchLayoutItem | null {
   if (!raw || typeof raw !== 'object') return null;
   const it = raw as Partial<WorkbenchLayoutItem>;
-  if (!isWorkbenchWidgetType(it.widgetType)) return null;
-  const def = WORKBENCH_WIDGET_CATALOG.find(w => w.type === it.widgetType);
+  let widgetType = it.widgetType;
+  if (widgetType === 'product_economics') {
+    widgetType = 'product_economics_consumable';
+  }
+  if (!isWorkbenchWidgetType(widgetType)) return null;
+  const def = WORKBENCH_WIDGET_CATALOG.find(w => w.type === widgetType);
   const minW = def?.minW ?? 2;
   const minH = def?.minH ?? 2;
   const w = clampNum(it.w, minW, 12, def?.defaultW ?? 4);
   const h = clampNum(it.h, minH, 24, def?.defaultH ?? 4);
   return {
     i: typeof it.i === 'string' && it.i.trim() ? it.i.trim() : `w-${idx}`,
-    widgetType: it.widgetType,
+    widgetType,
     x: clampNum(it.x, 0, 11, 0),
     y: clampNum(it.y, 0, 1000, 0),
     w,

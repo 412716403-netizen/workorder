@@ -21,6 +21,7 @@ import type {
   Product,
   ProductCategory,
   ProductionLinkMode,
+  ProductEconomicsSettings,
   ProductionOrder,
   PlanOrder,
   ProductMilestoneProgress,
@@ -75,6 +76,7 @@ import {
 } from './formSettingsDefaults';
 import { mergePrintTemplatesForTenantConfig } from '../shared/systemPrintTemplates';
 import { parseFeaturePlugins } from '../shared/workbench';
+import { DEFAULT_PRODUCT_ECONOMICS_SETTINGS, parseProductEconomicsSettings } from '../shared/types';
 
 export function settledVal<T>(results: PromiseSettledResult<unknown>[], i: number): T | undefined {
   return results[i]?.status === 'fulfilled' ? (results[i] as PromiseFulfilledResult<unknown>).value as T : undefined;
@@ -93,6 +95,7 @@ export interface AppDataLoadCoreSetters {
   setAllowExceedMaxOutsourceReceiveQty: Dispatch<SetStateAction<boolean>>;
   setAllowExceedMaxStockInQty: Dispatch<SetStateAction<boolean>>;
   setWeightTolerancePercent: Dispatch<SetStateAction<number>>;
+  setProductEconomicsSettings: Dispatch<SetStateAction<ProductEconomicsSettings>>;
   setPlanFormSettings: Dispatch<SetStateAction<PlanFormSettings>>;
   setOrderFormSettings: Dispatch<SetStateAction<OrderFormSettings>>;
   setPurchaseOrderFormSettings: Dispatch<SetStateAction<PurchaseOrderFormSettings>>;
@@ -177,6 +180,7 @@ export async function executeAppDataLoadCore(
   s.setAllowExceedMaxReportQty(cfg.allowExceedMaxReportQty === true);
   s.setAllowExceedMaxOutsourceReceiveQty(cfg.allowExceedMaxOutsourceReceiveQty === true);
   s.setAllowExceedMaxStockInQty(cfg.allowExceedMaxStockInQty === true);
+  s.setProductEconomicsSettings(parseProductEconomicsSettings(cfg.productEconomicsSettings));
   {
     const raw = cfg.weightTolerancePercent;
     const n = typeof raw === 'number' ? raw : Number(raw);

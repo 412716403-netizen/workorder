@@ -16,6 +16,8 @@ import ReworkStatsWidget from './widgets/ReworkStatsWidget';
 import SalesStatsWidget from './widgets/SalesStatsWidget';
 import SalesOrderStatsWidget from './widgets/SalesOrderStatsWidget';
 import FinanceStatsWidget from './widgets/FinanceStatsWidget';
+import ProductEconomicsConsumableWidget from './widgets/ProductEconomicsConsumableWidget';
+import ProductEconomicsDocumentWidget from './widgets/ProductEconomicsDocumentWidget';
 import { useWorkbenchConfig } from '../../hooks/useWorkbenchConfig';
 import { isWorkbenchHomePage, isHomePinnedWidgetType } from '../../types';
 import type { WorkbenchLayoutItem, WorkbenchWidgetType } from '../../types';
@@ -76,6 +78,11 @@ const WorkbenchView: React.FC = () => {
           return <SalesOrderStatsWidget {...props} />;
         case 'finance_stats':
           return <FinanceStatsWidget {...props} />;
+        case 'product_economics':
+        case 'product_economics_consumable':
+          return <ProductEconomicsConsumableWidget {...props} />;
+        case 'product_economics_document':
+          return <ProductEconomicsDocumentWidget {...props} />;
         default:
           return null;
       }

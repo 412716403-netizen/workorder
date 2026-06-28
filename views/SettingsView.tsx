@@ -78,6 +78,8 @@ const SettingsView: React.FC = () => {
   const onUpdateAllowExceedMaxStockInQty = a.onUpdateAllowExceedMaxStockInQty;
   const weightTolerancePercent = c.weightTolerancePercent;
   const onUpdateWeightTolerancePercent = a.onUpdateWeightTolerancePercent;
+  const productEconomicsSettings = c.productEconomicsSettings;
+  const onUpdateProductEconomicsSettings = a.onUpdateProductEconomicsSettings;
   const onRefreshCategories = a.refreshCategories;
   const onRefreshPartnerCategories = a.refreshPartnerCategories;
   const onRefreshGlobalNodes = a.refreshGlobalNodes;
@@ -235,6 +237,8 @@ const SettingsView: React.FC = () => {
             onUpdateAllowExceedMaxStockInQty={onUpdateAllowExceedMaxStockInQty}
             weightTolerancePercent={weightTolerancePercent}
             onUpdateWeightTolerancePercent={onUpdateWeightTolerancePercent}
+            productEconomicsSettings={productEconomicsSettings}
+            onUpdateProductEconomicsSettings={onUpdateProductEconomicsSettings}
             canEdit={canEdit('production')}
           />
         )}

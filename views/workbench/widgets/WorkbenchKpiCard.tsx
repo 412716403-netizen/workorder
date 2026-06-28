@@ -2,8 +2,7 @@ import React from 'react';
 import { RefreshCw } from 'lucide-react';
 import {
   WORKBENCH_ORDER_STATS_PERIOD_LABELS,
-  WORKBENCH_ORDER_STATS_PERIODS,
-  type WorkbenchOrderStatsPeriod,
+  type WorkbenchPeriodTab,
 } from '../../../types';
 
 export function formatWorkbenchAmount(value: number, show: boolean): string {
@@ -110,41 +109,87 @@ export interface WorkbenchStatsTheme {
   periodText: string;
 }
 
+const PERIOD_TABS: { key: WorkbenchPeriodTab; label: string }[] = [
+  { key: 'today', label: WORKBENCH_ORDER_STATS_PERIOD_LABELS.today },
+  { key: 'yesterday', label: WORKBENCH_ORDER_STATS_PERIOD_LABELS.yesterday },
+  { key: 'month', label: WORKBENCH_ORDER_STATS_PERIOD_LABELS.month },
+  { key: 'custom', label: '自定义' },
+];
+
 interface WorkbenchStatsHeaderExtraProps {
-  period: WorkbenchOrderStatsPeriod;
-  onPeriodChange: (period: WorkbenchOrderStatsPeriod) => void;
+  periodTab: WorkbenchPeriodTab;
+  onPeriodTabChange: (tab: WorkbenchPeriodTab) => void;
+  customStart: string;
+  customEnd: string;
+  onCustomStartChange: (value: string) => void;
+  onCustomEndChange: (value: string) => void;
   theme: WorkbenchStatsTheme;
   isFetching: boolean;
   onRefresh: () => void;
+  /** 刷新按钮前的附加控件（如设置） */
+  middleExtra?: React.ReactNode;
 }
 
 export const WorkbenchStatsHeaderExtra: React.FC<WorkbenchStatsHeaderExtraProps> = ({
-  period,
-  onPeriodChange,
+  periodTab,
+  onPeriodTabChange,
+  customStart,
+  customEnd,
+  onCustomStartChange,
+  onCustomEndChange,
   theme,
   isFetching,
   onRefresh,
+  middleExtra,
 }) => (
-  <div className="workbench-no-drag flex items-center gap-1.5">
-    <div className={`inline-flex overflow-hidden rounded-lg border bg-white shadow-sm ${theme.periodBorder}`}>
-      {WORKBENCH_ORDER_STATS_PERIODS.map(key => {
-        const active = period === key;
+  <div
+    className="flex min-w-0 items-center justify-end gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    onClick={e => e.stopPropagation()}
+    onMouseDown={e => e.stopPropagation()}
+  >
+    <div
+      className={`inline-flex shrink-0 overflow-hidden rounded-lg border bg-white shadow-sm ${theme.periodBorder}`}
+    >
+      {PERIOD_TABS.map(({ key, label }) => {
+        const active = periodTab === key;
         return (
           <button
             key={key}
             type="button"
-            onClick={() => onPeriodChange(key)}
-            className={`min-w-[3.25rem] px-3 py-1.5 text-xs font-bold transition ${
+            onClick={() => onPeriodTabChange(key)}
+            className={`whitespace-nowrap px-1.5 py-1.5 text-[10px] font-bold transition sm:min-w-[2.75rem] sm:px-2 sm:text-[11px] md:min-w-[3rem] md:px-2.5 md:text-xs ${
               active
                 ? `${theme.periodActive} text-white shadow-sm`
                 : `${theme.periodText} hover:bg-slate-50`
             }`}
           >
-            {WORKBENCH_ORDER_STATS_PERIOD_LABELS[key]}
+            {label}
           </button>
         );
       })}
     </div>
+    {periodTab === 'custom' && (
+      <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
+        <input
+          type="date"
+          value={customStart}
+          max={customEnd || undefined}
+          onChange={e => onCustomStartChange(e.target.value)}
+          aria-label="开始日期"
+          className="w-[5.85rem] rounded border border-slate-200 bg-white px-0.5 py-0.5 text-[10px] text-slate-700 sm:w-[6.5rem] sm:px-1 sm:py-1 sm:text-[11px]"
+        />
+        <span className="shrink-0 text-[10px] text-slate-400">至</span>
+        <input
+          type="date"
+          value={customEnd}
+          min={customStart || undefined}
+          onChange={e => onCustomEndChange(e.target.value)}
+          aria-label="结束日期"
+          className="w-[5.85rem] rounded border border-slate-200 bg-white px-0.5 py-0.5 text-[10px] text-slate-700 sm:w-[6.5rem] sm:px-1 sm:py-1 sm:text-[11px]"
+        />
+      </div>
+    )}
+    {middleExtra}
     <WorkbenchStatsRefresh isFetching={isFetching} onRefresh={onRefresh} />
   </div>
 );

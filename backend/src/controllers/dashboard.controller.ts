@@ -1,5 +1,29 @@
 import * as dashboardService from '../services/dashboard.service.js';
+import * as productEconomicsService from '../services/productEconomicsStats.service.js';
+import { isProductMaterialCostMode } from '../../../shared/types.js';
+import { isWorkbenchOrderStatsPeriod } from '../../../shared/workbenchOrderStats.js';
+import type { WorkbenchStatsListQuery } from '../../../shared/workbenchOrderStats.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
+
+function parseWorkbenchStatsQuery(req: {
+  query: Record<string, unknown>;
+}): WorkbenchStatsListQuery {
+  const periodRaw = typeof req.query.period === 'string' ? req.query.period : undefined;
+  const startDate = typeof req.query.startDate === 'string' ? req.query.startDate : undefined;
+  const endDate = typeof req.query.endDate === 'string' ? req.query.endDate : undefined;
+  const period = isWorkbenchOrderStatsPeriod(periodRaw) ? periodRaw : undefined;
+  const modeRaw = typeof req.query.materialCostMode === 'string' ? req.query.materialCostMode : undefined;
+  const materialCostMode = isProductMaterialCostMode(modeRaw) ? modeRaw : undefined;
+  return { period, startDate, endDate, materialCostMode };
+}
+
+function parseProductEconomicsDetailQuery(req: {
+  query: Record<string, unknown>;
+}): { materialCostMode?: 'consumable' | 'document_linked' } {
+  const modeRaw = typeof req.query.materialCostMode === 'string' ? req.query.materialCostMode : undefined;
+  const materialCostMode = isProductMaterialCostMode(modeRaw) ? modeRaw : undefined;
+  return { materialCostMode };
+}
 
 export const getWorkbench = asyncHandler(async (req, res) => {
   const userId = req.user!.userId;
@@ -59,9 +83,7 @@ export const getStats = asyncHandler(async (req, res) => {
   );
   const db = dashboardService.getTenantPrisma(tenantId);
   const days = req.query.days ? Number(req.query.days) : undefined;
-  const periodRaw = typeof req.query.period === 'string' ? req.query.period : undefined;
-  const period = periodRaw === 'yesterday' || periodRaw === 'month' ? periodRaw : 'today';
-  res.json(await dashboardService.getStats(db, permissions, { days, period }));
+  res.json(await dashboardService.getStats(db, permissions, { ...parseWorkbenchStatsQuery(req), days }));
 });
 
 export const getNotifications = asyncHandler(async (req, res) => {
@@ -122,11 +144,9 @@ export const getOrderStats = asyncHandler(async (req, res) => {
     req.user!.tenantRole,
   );
   const db = dashboardService.getTenantPrisma(tenantId);
-  const periodRaw = typeof req.query.period === 'string' ? req.query.period : undefined;
-  const period = periodRaw === 'yesterday' || periodRaw === 'month' ? periodRaw : 'today';
   const includeNotStarted = req.query.includeNotStarted === 'true' || req.query.includeNotStarted === '1';
   res.json(await dashboardService.getOrderStats(db, userId, tenantId, permissions, {
-    period,
+    ...parseWorkbenchStatsQuery(req),
     includeNotStarted,
   }));
 });
@@ -162,9 +182,7 @@ export const getOutsourceStats = asyncHandler(async (req, res) => {
     req.user!.tenantRole,
   );
   const db = dashboardService.getTenantPrisma(tenantId);
-  const periodRaw = typeof req.query.period === 'string' ? req.query.period : undefined;
-  const period = periodRaw === 'yesterday' || periodRaw === 'month' ? periodRaw : 'today';
-  res.json(await dashboardService.getOutsourceStats(db, userId, tenantId, permissions, { period }));
+  res.json(await dashboardService.getOutsourceStats(db, userId, tenantId, permissions, parseWorkbenchStatsQuery(req)));
 });
 
 export const getReworkStatsSettings = asyncHandler(async (req, res) => {
@@ -198,7 +216,42 @@ export const getReworkStats = asyncHandler(async (req, res) => {
     req.user!.tenantRole,
   );
   const db = dashboardService.getTenantPrisma(tenantId);
-  const periodRaw = typeof req.query.period === 'string' ? req.query.period : undefined;
-  const period = periodRaw === 'yesterday' || periodRaw === 'month' ? periodRaw : 'today';
-  res.json(await dashboardService.getReworkStats(db, userId, tenantId, permissions, { period }));
+  res.json(await dashboardService.getReworkStats(db, userId, tenantId, permissions, parseWorkbenchStatsQuery(req)));
+});
+
+export const getProductEconomics = asyncHandler(async (req, res) => {
+  const userId = req.user!.userId;
+  const tenantId = req.tenantId!;
+  const basePermissions = await dashboardService.resolveUserPermissions(userId, tenantId);
+  const permissions = await dashboardService.augmentPermissionsWithWorkbench(
+    userId,
+    tenantId,
+    basePermissions,
+    req.user!.tenantRole,
+  );
+  const db = dashboardService.getTenantPrisma(tenantId);
+  res.json(await productEconomicsService.computeProductEconomicsList(db, tenantId, permissions, parseWorkbenchStatsQuery(req)));
+});
+
+export const getProductEconomicsDetail = asyncHandler(async (req, res) => {
+  const userId = req.user!.userId;
+  const tenantId = req.tenantId!;
+  const basePermissions = await dashboardService.resolveUserPermissions(userId, tenantId);
+  const permissions = await dashboardService.augmentPermissionsWithWorkbench(
+    userId,
+    tenantId,
+    basePermissions,
+    req.user!.tenantRole,
+  );
+  const db = dashboardService.getTenantPrisma(tenantId);
+  const productId = String(req.params.productId);
+  res.json(
+    await productEconomicsService.computeProductEconomicsDetail(
+      db,
+      tenantId,
+      permissions,
+      productId,
+      parseProductEconomicsDetailQuery(req).materialCostMode,
+    ),
+  );
 });

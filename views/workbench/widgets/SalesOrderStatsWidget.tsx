@@ -1,11 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { Loader2 } from 'lucide-react';
 import WidgetShell from '../WidgetShell';
 import { useAuth } from '../../../contexts/AuthContext';
 import { canViewAmount, AMOUNT_PERMISSION_KEYS } from '../../../utils/canViewAmount';
 import { useWorkbenchPageFullAccess } from '../WorkbenchPageAccessContext';
 import { useDashboardStats } from '../../../hooks/useDashboardStats';
-import { workbenchPeriodLabel, type WorkbenchOrderStatsPeriod } from '../../../types';
+import { useWorkbenchPeriodFilter } from '../../../hooks/useWorkbenchPeriodFilter';
 import {
   formatWorkbenchAmount,
   formatWorkbenchCount,
@@ -26,7 +26,19 @@ const SALES_ORDER_THEME = {
 } as const;
 
 const SalesOrderStatsWidget: React.FC<SalesOrderStatsWidgetProps> = ({ editing, onRemove }) => {
-  const [period, setPeriod] = useState<WorkbenchOrderStatsPeriod>('today');
+  const periodState = useWorkbenchPeriodFilter('today');
+  const {
+    periodTab,
+    setPeriodTab,
+    customStart,
+    setCustomStart,
+    customEnd,
+    setCustomEnd,
+    filter,
+    periodLabel,
+    customRangeInvalid,
+    headerShellProps,
+  } = periodState;
   const { tenantCtx } = useAuth();
   const fullAccess = useWorkbenchPageFullAccess();
   const showAmount =
@@ -36,13 +48,17 @@ const SalesOrderStatsWidget: React.FC<SalesOrderStatsWidgetProps> = ({ editing, 
       tenantCtx?.permissions,
       AMOUNT_PERMISSION_KEYS.PSI_SALES_ORDER,
     );
-  const { data, isLoading, isFetching, refetch } = useDashboardStats('salesOrder', period);
+  const { data, isLoading, isFetching, refetch } = useDashboardStats('salesOrder', filter);
   const salesOrder = data?.salesOrder;
 
   const headerExtra = (
     <WorkbenchStatsHeaderExtra
-      period={period}
-      onPeriodChange={setPeriod}
+      periodTab={periodTab}
+      onPeriodTabChange={setPeriodTab}
+      customStart={customStart}
+      customEnd={customEnd}
+      onCustomStartChange={setCustomStart}
+      onCustomEndChange={setCustomEnd}
       theme={SALES_ORDER_THEME}
       isFetching={isFetching}
       onRefresh={() => void refetch()}
@@ -55,7 +71,13 @@ const SalesOrderStatsWidget: React.FC<SalesOrderStatsWidgetProps> = ({ editing, 
   }, [salesOrder]);
 
   return (
-    <WidgetShell title="销售订单统计" editing={editing} onRemove={onRemove} headerExtra={headerExtra}>
+    <WidgetShell
+      title="销售订单统计"
+      editing={editing}
+      onRemove={onRemove}
+      headerExtra={headerExtra}
+      {...headerShellProps}
+    >
       {isLoading ? (
         <div className="flex flex-1 items-center justify-center py-10">
           <Loader2 className="h-6 w-6 animate-spin text-slate-300" />
@@ -65,7 +87,7 @@ const SalesOrderStatsWidget: React.FC<SalesOrderStatsWidgetProps> = ({ editing, 
       ) : (
         <div className="flex h-full min-h-0 flex-col gap-3">
           <WorkbenchKpiHero
-            label={`${workbenchPeriodLabel(period)}订单额`}
+            label={`${periodLabel}订单额`}
             value={formatWorkbenchAmount(salesOrder.salesOrderAmount, showAmount)}
             hint={heroHint}
             tone="indigo"
@@ -83,12 +105,15 @@ const SalesOrderStatsWidget: React.FC<SalesOrderStatsWidgetProps> = ({ editing, 
               tone="emerald"
             />
             <WorkbenchKpiMetric
-              label={`${workbenchPeriodLabel(period)}减单`}
+              label={`${periodLabel}减单`}
               value={formatWorkbenchCount(salesOrder.salesOrderReduceQuantity)}
               sub="负数量件数"
               tone={salesOrder.salesOrderReduceQuantity > 0 ? 'amber' : 'default'}
             />
           </div>
+          {customRangeInvalid && (
+            <p className="text-center text-[10px] text-rose-500">结束日期不能早于开始</p>
+          )}
         </div>
       )}
     </WidgetShell>

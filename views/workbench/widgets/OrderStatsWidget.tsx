@@ -1,15 +1,18 @@
 import React, { useState } from 'react';
-import { CheckCircle2, Loader2, RefreshCw, Settings } from 'lucide-react';
+import { CheckCircle2, Loader2, Settings } from 'lucide-react';
 import WidgetShell from '../WidgetShell';
 import OrderStatsEditModal from './OrderStatsEditModal';
 import { useDashboardOrderStats } from '../../../hooks/useDashboardOrderStats';
 import { useDashboardOrderStatsSettings } from '../../../hooks/useDashboardOrderStatsSettings';
-import {
-  WORKBENCH_ORDER_STATS_PERIOD_LABELS,
-  WORKBENCH_ORDER_STATS_PERIODS,
-  type DashboardOrderStatsRow,
-  type WorkbenchOrderStatsPeriod,
-} from '../../../types';
+import { useWorkbenchPeriodFilter } from '../../../hooks/useWorkbenchPeriodFilter';
+import type { DashboardOrderStatsRow } from '../../../types';
+import { WorkbenchStatsHeaderExtra } from './WorkbenchKpiCard';
+
+const ORDER_STATS_THEME = {
+  periodBorder: 'border-emerald-200',
+  periodActive: 'bg-emerald-500',
+  periodText: 'text-emerald-700',
+} as const;
 
 const NODE_THEMES = [
   { tag: 'bg-sky-100 text-sky-700', bar: 'bg-sky-500' },
@@ -98,54 +101,55 @@ const ProcessCard: React.FC<{ row: DashboardOrderStatsRow; themeIndex: number }>
 };
 
 const OrderStatsWidget: React.FC<OrderStatsWidgetProps> = ({ editing, onRemove }) => {
-  const [period, setPeriod] = useState<WorkbenchOrderStatsPeriod>('today');
+  const periodState = useWorkbenchPeriodFilter('today');
+  const {
+    periodTab,
+    setPeriodTab,
+    customStart,
+    setCustomStart,
+    customEnd,
+    setCustomEnd,
+    filter,
+    customRangeInvalid,
+    headerShellProps,
+  } = periodState;
   const [editOpen, setEditOpen] = useState(false);
   const settings = useDashboardOrderStatsSettings();
-  const { data, isLoading, isFetching, refetch } = useDashboardOrderStats(period);
+  const { data, isLoading, isFetching, refetch } = useDashboardOrderStats(filter);
 
   const headerExtra = (
-    <div className="workbench-no-drag flex items-center gap-1.5">
-      <div className="inline-flex overflow-hidden rounded-lg border border-emerald-200 bg-white shadow-sm">
-        {WORKBENCH_ORDER_STATS_PERIODS.map(key => {
-          const active = period === key;
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setPeriod(key)}
-              className={`min-w-[3.25rem] px-3 py-1.5 text-xs font-bold transition ${
-                active
-                  ? 'bg-emerald-500 text-white shadow-sm'
-                  : 'text-emerald-700 hover:bg-emerald-50'
-              }`}
-            >
-              {WORKBENCH_ORDER_STATS_PERIOD_LABELS[key]}
-            </button>
-          );
-        })}
-      </div>
-      <button
-        type="button"
-        onClick={() => setEditOpen(true)}
-        className="rounded-lg p-1.5 text-indigo-600 hover:bg-indigo-50"
-        aria-label="设置"
-      >
-        <Settings className="h-3.5 w-3.5" />
-      </button>
-      <button
-        type="button"
-        onClick={() => void refetch()}
-        className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-        aria-label="刷新"
-      >
-        <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? 'animate-spin' : ''}`} />
-      </button>
-    </div>
+    <WorkbenchStatsHeaderExtra
+      periodTab={periodTab}
+      onPeriodTabChange={setPeriodTab}
+      customStart={customStart}
+      customEnd={customEnd}
+      onCustomStartChange={setCustomStart}
+      onCustomEndChange={setCustomEnd}
+      theme={ORDER_STATS_THEME}
+      isFetching={isFetching}
+      onRefresh={() => void refetch()}
+      middleExtra={
+        <button
+          type="button"
+          onClick={() => setEditOpen(true)}
+          className="workbench-no-drag shrink-0 rounded-lg p-1.5 text-indigo-600 hover:bg-indigo-50"
+          aria-label="设置"
+        >
+          <Settings className="h-3.5 w-3.5" />
+        </button>
+      }
+    />
   );
 
   return (
     <>
-      <WidgetShell title="工单统计" editing={editing} onRemove={onRemove} headerExtra={headerExtra}>
+      <WidgetShell
+        title="工单统计"
+        editing={editing}
+        onRemove={onRemove}
+        headerExtra={headerExtra}
+        {...headerShellProps}
+      >
         <div className="flex h-full min-h-0 flex-col">
           {isLoading ? (
             <div className="flex flex-1 items-center justify-center py-10">
@@ -163,6 +167,9 @@ const OrderStatsWidget: React.FC<OrderStatsWidgetProps> = ({ editing, onRemove }
                 ))}
               </div>
             </div>
+          )}
+          {customRangeInvalid && (
+            <p className="pb-2 text-center text-[10px] text-rose-500">结束日期不能早于开始</p>
           )}
         </div>
       </WidgetShell>

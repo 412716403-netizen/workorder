@@ -1,9 +1,5 @@
 import type { TenantPrismaClient } from '../lib/prisma.js';
 import { computeOutsourceStatsByTemplate } from '../../../shared/outsourceStatsAggregates.js';
-import {
-  resolveWorkbenchStatsPeriodRange,
-  type WorkbenchOrderStatsPeriod,
-} from '../../../shared/workbenchOrderStats.js';
 
 function mapOutsourceRecord(row: {
   type: string;
@@ -32,11 +28,11 @@ function mapOutsourceRecord(row: {
 export async function computeOutsourceTemplateStats(
   db: TenantPrismaClient,
   templateIds: string[],
-  period: WorkbenchOrderStatsPeriod,
+  periodRange: { start: Date; end: Date },
 ) {
   if (templateIds.length === 0) return new Map();
 
-  const { start, end } = resolveWorkbenchStatsPeriodRange(period);
+  const { start, end } = periodRange;
   const records = await db.productionOpRecord.findMany({
     where: { type: 'OUTSOURCE' },
     select: {

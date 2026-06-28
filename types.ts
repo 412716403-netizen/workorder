@@ -92,6 +92,13 @@ export {
   type TodoSourceType,
   type TodoStatus,
   type TodoItemDTO,
+  PRODUCT_MATERIAL_COST_MODES,
+  PRODUCT_MATERIAL_COST_MODE_LABEL,
+  DEFAULT_PRODUCT_ECONOMICS_SETTINGS,
+  isProductMaterialCostMode,
+  parseProductEconomicsSettings,
+  type ProductMaterialCostMode,
+  type ProductEconomicsSettings,
 } from './shared/types';
 
 export {
@@ -182,6 +189,19 @@ export {
   type DashboardFinanceStats,
   workbenchPeriodLabel,
   resolveWorkbenchStatsPeriodRange,
+  isWorkbenchStatsYmd,
+  resolveWorkbenchCustomStatsPeriodRange,
+  formatWorkbenchCustomRangeLabel,
+  isValidWorkbenchCustomRange,
+  workbenchPeriodFilterLabel,
+  workbenchPeriodFilterQueryKey,
+  resolveWorkbenchStatsQuery,
+  type ProductEconomicsListQuery,
+  type ProductEconomicsCustomRange,
+  type WorkbenchStatsListQuery,
+  type WorkbenchCustomRange,
+  type WorkbenchPeriodTab,
+  type WorkbenchPeriodFilter,
 } from './shared/workbenchOrderStats';
 
 export {
@@ -471,8 +491,6 @@ export interface FinanceCategory {
   kind: FinanceCategoryKind;
   /** 分类名称 */
   name: string;
-  /** 是否关联工单 */
-  linkOrder?: boolean;
   /** 是否关联合作单位 */
   linkPartner?: boolean;
   /** 是否选择收支账户 */

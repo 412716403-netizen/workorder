@@ -1,22 +1,27 @@
-import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { dashboard } from '../services/api/dashboard';
-import type { WorkbenchOrderStatsPeriod } from '../types';
+import type { WorkbenchPeriodFilter } from '../types';
+import { isValidWorkbenchCustomRange, workbenchPeriodFilterQueryKey } from '../types';
 import { dashboardQueryKey } from './dashboardQueryKeys';
 import { useAuth } from '../contexts/AuthContext';
 
-export function useDashboardReworkStats(period: WorkbenchOrderStatsPeriod) {
+export function useDashboardReworkStats(filter: WorkbenchPeriodFilter) {
   const { tenantCtx } = useAuth();
   const tenantId = tenantCtx?.tenantId;
-  const queryKey = useMemo(
-    () => dashboardQueryKey(tenantId, 'rework-stats', period),
-    [tenantId, period],
-  );
+  const queryEnabled =
+    !!tenantId
+    && (filter.mode !== 'custom'
+      || isValidWorkbenchCustomRange(filter.startDate, filter.endDate));
 
   return useQuery({
-    queryKey,
-    queryFn: () => dashboard.getReworkStats({ period }),
+    queryKey: dashboardQueryKey(tenantId, 'rework-stats', workbenchPeriodFilterQueryKey(filter)),
+    queryFn: () =>
+      dashboard.getReworkStats(
+        filter.mode === 'custom'
+          ? { startDate: filter.startDate, endDate: filter.endDate }
+          : { period: filter.period },
+      ),
     staleTime: 30_000,
-    enabled: !!tenantId,
+    enabled: queryEnabled,
   });
 }

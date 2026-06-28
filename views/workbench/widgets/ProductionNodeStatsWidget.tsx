@@ -1,12 +1,9 @@
 import React, { useState } from 'react';
-import { CheckCircle2, Loader2, RefreshCw, Settings } from 'lucide-react';
+import { CheckCircle2, Loader2, Settings } from 'lucide-react';
 import WidgetShell from '../WidgetShell';
 import OrderStatsEditModal from './OrderStatsEditModal';
-import {
-  WORKBENCH_ORDER_STATS_PERIOD_LABELS,
-  WORKBENCH_ORDER_STATS_PERIODS,
-  type WorkbenchOrderStatsPeriod,
-} from '../../../types';
+import type { WorkbenchPeriodTab } from '../../../types';
+import { WorkbenchStatsHeaderExtra, type WorkbenchStatsTheme } from './WorkbenchKpiCard';
 
 const NODE_THEMES = [
   { tag: 'bg-sky-100 text-sky-700', bar: 'bg-sky-500' },
@@ -32,11 +29,7 @@ export interface ProductionNodeStatsCardRow {
   progress: number;
 }
 
-export interface ProductionNodeStatsTheme {
-  periodBorder: string;
-  periodActive: string;
-  periodText: string;
-}
+export interface ProductionNodeStatsTheme extends WorkbenchStatsTheme {}
 
 export interface ProductionNodeStatsLabels {
   title: string;
@@ -56,8 +49,17 @@ interface ProductionNodeStatsWidgetProps {
   onRemove?: () => void;
   labels: ProductionNodeStatsLabels;
   theme: ProductionNodeStatsTheme;
-  period: WorkbenchOrderStatsPeriod;
-  onPeriodChange: (period: WorkbenchOrderStatsPeriod) => void;
+  periodTab: WorkbenchPeriodTab;
+  onPeriodTabChange: (tab: WorkbenchPeriodTab) => void;
+  customStart: string;
+  customEnd: string;
+  onCustomStartChange: (value: string) => void;
+  onCustomEndChange: (value: string) => void;
+  headerShellProps?: {
+    titleClassName?: string;
+    headerExtraClassName?: string;
+  };
+  customRangeInvalid?: boolean;
   rows: ProductionNodeStatsCardRow[] | null;
   isLoading: boolean;
   isFetching: boolean;
@@ -146,8 +148,14 @@ const ProductionNodeStatsWidget: React.FC<ProductionNodeStatsWidgetProps> = ({
   onRemove,
   labels,
   theme,
-  period,
-  onPeriodChange,
+  periodTab,
+  onPeriodTabChange,
+  customStart,
+  customEnd,
+  onCustomStartChange,
+  onCustomEndChange,
+  headerShellProps,
+  customRangeInvalid,
   rows,
   isLoading,
   isFetching,
@@ -158,48 +166,38 @@ const ProductionNodeStatsWidget: React.FC<ProductionNodeStatsWidgetProps> = ({
   const displayRows = rows ?? [];
 
   const headerExtra = (
-    <div className="workbench-no-drag flex items-center gap-1.5">
-      <div className={`inline-flex overflow-hidden rounded-lg border bg-white shadow-sm ${theme.periodBorder}`}>
-        {WORKBENCH_ORDER_STATS_PERIODS.map(key => {
-          const active = period === key;
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => onPeriodChange(key)}
-              className={`min-w-[3.25rem] px-3 py-1.5 text-xs font-bold transition ${
-                active
-                  ? `${theme.periodActive} text-white shadow-sm`
-                  : `${theme.periodText} hover:bg-slate-50`
-              }`}
-            >
-              {WORKBENCH_ORDER_STATS_PERIOD_LABELS[key]}
-            </button>
-          );
-        })}
-      </div>
-      <button
-        type="button"
-        onClick={() => setEditOpen(true)}
-        className="rounded-lg p-1.5 text-indigo-600 hover:bg-indigo-50"
-        aria-label="设置"
-      >
-        <Settings className="h-3.5 w-3.5" />
-      </button>
-      <button
-        type="button"
-        onClick={() => void refetch()}
-        className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-        aria-label="刷新"
-      >
-        <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? 'animate-spin' : ''}`} />
-      </button>
-    </div>
+    <WorkbenchStatsHeaderExtra
+      periodTab={periodTab}
+      onPeriodTabChange={onPeriodTabChange}
+      customStart={customStart}
+      customEnd={customEnd}
+      onCustomStartChange={onCustomStartChange}
+      onCustomEndChange={onCustomEndChange}
+      theme={theme}
+      isFetching={isFetching}
+      onRefresh={() => void refetch()}
+      middleExtra={
+        <button
+          type="button"
+          onClick={() => setEditOpen(true)}
+          className="workbench-no-drag shrink-0 rounded-lg p-1.5 text-indigo-600 hover:bg-indigo-50"
+          aria-label="设置"
+        >
+          <Settings className="h-3.5 w-3.5" />
+        </button>
+      }
+    />
   );
 
   return (
     <>
-      <WidgetShell title={labels.title} editing={editing} onRemove={onRemove} headerExtra={headerExtra}>
+      <WidgetShell
+        title={labels.title}
+        editing={editing}
+        onRemove={onRemove}
+        headerExtra={headerExtra}
+        {...headerShellProps}
+      >
         <div className="flex h-full min-h-0 flex-col">
           {isLoading ? (
             <div className="flex flex-1 items-center justify-center py-10">
@@ -217,6 +215,9 @@ const ProductionNodeStatsWidget: React.FC<ProductionNodeStatsWidgetProps> = ({
                 ))}
               </div>
             </div>
+          )}
+          {customRangeInvalid && (
+            <p className="pb-2 text-center text-[10px] text-rose-500">结束日期不能早于开始</p>
           )}
         </div>
       </WidgetShell>

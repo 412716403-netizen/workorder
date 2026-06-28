@@ -471,7 +471,6 @@ function FinanceDetailModal({
                 financeRec={financeRec}
                 current={current}
                 financeCatMap={financeCatMap}
-                orders={orders}
                 productMap={productMap}
                 workerMap={workerMap}
               />

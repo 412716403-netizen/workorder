@@ -64,6 +64,8 @@ router.get('/outsource-stats', ctrl.getOutsourceStats);
 router.get('/rework-stats/settings', ctrl.getReworkStatsSettings);
 router.put('/rework-stats/settings', validate(orderStatsNodeIdsSchema), ctrl.saveReworkStatsSettings);
 router.get('/rework-stats', ctrl.getReworkStats);
+router.get('/product-economics', ctrl.getProductEconomics);
+router.get('/product-economics/:productId', ctrl.getProductEconomicsDetail);
 router.get('/notifications', ctrl.getNotifications);
 router.get('/messages', ctrl.listPublishedMessages);
 router.post('/messages', validate(publishMessageSchema), ctrl.publishMessage);
