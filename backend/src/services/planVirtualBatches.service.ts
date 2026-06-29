@@ -19,6 +19,29 @@ import { formatBatchSerialLabel } from '../../../shared/serialLabels.js';
 
 const INSERT_CHUNK = 2000;
 
+/** 大批量拆批 + 单品码写入：Prisma 默认 5s 事务超时不足（与 docs/09 nginx proxy_read_timeout 120s 对齐） */
+const BULK_WRITE_TX = {
+  maxWait: 15_000,
+  timeout: 120_000,
+} as const;
+
+type ItemCodeSerialCursor = { next: number };
+
+async function loadNextItemCodeSerial(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  tx: any,
+  tenantId: string,
+  planOrderId: string,
+): Promise<ItemCodeSerialCursor> {
+  const maxSnRows = (await tx.$queryRawUnsafe(
+    `SELECT MAX(serial_no) AS m FROM item_codes
+     WHERE tenant_id = $1::uuid AND plan_order_id = $2`,
+    tenantId,
+    planOrderId,
+  )) as Array<{ m: number | null }>;
+  return { next: (maxSnRows[0]?.m ?? 0) + 1 };
+}
+
 /** 计划子树内各规格 ACTIVE 批次占用件数汇总（用于额度展示，避免拉全量批次列表） */
 export async function subtreeBatchAllocatedByVariant(
   db: TenantPrismaClient,
@@ -62,23 +85,25 @@ async function createLinkedItemCodesForBatch(
     quantity: number;
     batchId: string;
   },
+  opts?: { serialCursor?: ItemCodeSerialCursor; skipPlanLock?: boolean },
 ): Promise<number> {
   const { tenantId, planOrderId, productId, variantId, quantity, batchId } = params;
   if (quantity <= 0) return 0;
 
-  await tx.$executeRawUnsafe(
-    `SELECT 1 FROM plan_orders WHERE id = $1 AND tenant_id = $2::uuid FOR UPDATE`,
-    planOrderId,
-    tenantId,
-  );
+  if (!opts?.skipPlanLock) {
+    await tx.$executeRawUnsafe(
+      `SELECT 1 FROM plan_orders WHERE id = $1 AND tenant_id = $2::uuid FOR UPDATE`,
+      planOrderId,
+      tenantId,
+    );
+  }
 
-  const maxSnRows = (await tx.$queryRawUnsafe(
-    `SELECT MAX(serial_no) AS m FROM item_codes
-     WHERE tenant_id = $1::uuid AND plan_order_id = $2`,
-    tenantId,
-    planOrderId,
-  )) as Array<{ m: number | null }>;
-  let seq = (maxSnRows[0]?.m ?? 0) + 1;
+  let seq: number;
+  if (opts?.serialCursor) {
+    seq = opts.serialCursor.next;
+  } else {
+    seq = (await loadNextItemCodeSerial(tx, tenantId, planOrderId)).next;
+  }
 
   const rows: Array<{
     id: string;
@@ -108,6 +133,9 @@ async function createLinkedItemCodesForBatch(
   for (let i = 0; i < rows.length; i += INSERT_CHUNK) {
     const chunk = rows.slice(i, i + INSERT_CHUNK);
     if (chunk.length > 0) await tx.itemCode.createMany({ data: chunk });
+  }
+  if (opts?.serialCursor) {
+    opts.serialCursor.next = seq;
   }
   return quantity;
 }
@@ -240,7 +268,7 @@ export async function createBatch(
       }
     }
     return { batch: row, itemCodesCreated: created };
-  });
+  }, withItemCodes ? BULK_WRITE_TX : undefined);
 
   return { ...batch, itemCodesCreated };
 }
@@ -293,6 +321,9 @@ export async function bulkSplit(
     let seq = (maxSeqRows[0]?.m ?? 0) + 1;
     const rowsOut: Awaited<ReturnType<typeof tx.planVirtualBatch.create>>[] = [];
     let codes = 0;
+    const serialCursor = withItemCodes
+      ? await loadNextItemCodeSerial(tx, tenantId, planOrderId)
+      : undefined;
     for (const q of chunks) {
       const row = await tx.planVirtualBatch.create({
         data: {
@@ -309,21 +340,25 @@ export async function bulkSplit(
       });
       rowsOut.push(row);
       if (withItemCodes) {
-        codes += await createLinkedItemCodesForBatch(tx, {
-          tenantId,
-          planOrderId,
-          productId: ctx.plan.productId,
-          variantId,
-          quantity: row.quantity,
-          batchId: row.id,
-        });
+        codes += await createLinkedItemCodesForBatch(
+          tx,
+          {
+            tenantId,
+            planOrderId,
+            productId: ctx.plan.productId,
+            variantId,
+            quantity: row.quantity,
+            batchId: row.id,
+          },
+          { serialCursor, skipPlanLock: true },
+        );
       }
     }
     if (withItemCodes && codes > 0) {
       await voidActivePlanLevelItemCodesForVariants(tx, tenantId, planOrderId, [variantId]);
     }
     return { rows: rowsOut, itemCodesCreated: codes };
-  });
+  }, BULK_WRITE_TX);
 
   return {
     created: rows.length,
@@ -447,6 +482,9 @@ export async function bulkSplitAllVariants(
     let seq = (maxSeqRows[0]?.m ?? 0) + 1;
     const rowsOut: Awaited<ReturnType<typeof tx.planVirtualBatch.create>>[] = [];
     let codes = 0;
+    const serialCursor = withItemCodes
+      ? await loadNextItemCodeSerial(tx, tenantId, planOrderId)
+      : undefined;
     for (const p of pending) {
       const row = await tx.planVirtualBatch.create({
         data: {
@@ -463,14 +501,18 @@ export async function bulkSplitAllVariants(
       });
       rowsOut.push(row);
       if (withItemCodes) {
-        codes += await createLinkedItemCodesForBatch(tx, {
-          tenantId,
-          planOrderId,
-          productId: p.productId,
-          variantId: p.variantId,
-          quantity: row.quantity,
-          batchId: row.id,
-        });
+        codes += await createLinkedItemCodesForBatch(
+          tx,
+          {
+            tenantId,
+            planOrderId,
+            productId: p.productId,
+            variantId: p.variantId,
+            quantity: row.quantity,
+            batchId: row.id,
+          },
+          { serialCursor, skipPlanLock: true },
+        );
       }
     }
     if (withItemCodes && codes > 0) {
@@ -478,7 +520,7 @@ export async function bulkSplitAllVariants(
       await voidActivePlanLevelItemCodesForVariants(tx, tenantId, planOrderId, variantKeys);
     }
     return { rows: rowsOut, itemCodesCreated: codes };
-  });
+  }, BULK_WRITE_TX);
 
   return {
     totalCreated: rows.length,

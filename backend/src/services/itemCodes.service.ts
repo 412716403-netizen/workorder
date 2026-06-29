@@ -379,7 +379,7 @@ export async function generateItemCodes(
     const totalForPlan = await tx.itemCode.count({ where: { planOrderId } });
 
     return { generated: toInsert.length, totalForPlan, byVariant };
-  });
+  }, { maxWait: 15_000, timeout: 120_000 });
 }
 
 // ── 追溯时间轴（按产品 + 规格 + 计划树聚合）────────────────────
