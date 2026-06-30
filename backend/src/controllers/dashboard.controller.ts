@@ -1,5 +1,7 @@
 import * as dashboardService from '../services/dashboard.service.js';
 import * as productEconomicsService from '../services/productEconomicsStats.service.js';
+import * as materialPurchasePriceService from '../services/materialPurchasePrice.service.js';
+import * as processEconomicsPriceService from '../services/processEconomicsPrice.service.js';
 import * as financePartnerWorkbenchStatsService from '../services/financePartnerWorkbenchStats.service.js';
 import { isProductMaterialCostMode } from '../../../shared/types.js';
 import { isWorkbenchOrderStatsPeriod } from '../../../shared/workbenchOrderStats.js';
@@ -253,6 +255,243 @@ export const getProductEconomicsDetail = asyncHandler(async (req, res) => {
       permissions,
       productId,
       parseProductEconomicsDetailQuery(req).materialCostMode,
+    ),
+  );
+});
+
+function canAccessProduction(permissions: string[]): boolean {
+  return permissions.includes('production') || permissions.some(p => p.startsWith('production:'));
+}
+
+export const getMaterialPriceSettings = asyncHandler(async (req, res) => {
+  const userId = req.user!.userId;
+  const tenantId = req.tenantId!;
+  const basePermissions = await dashboardService.resolveUserPermissions(userId, tenantId);
+  const permissions = await dashboardService.augmentPermissionsWithWorkbench(
+    userId,
+    tenantId,
+    basePermissions,
+    req.user!.tenantRole,
+  );
+  if (!canAccessProduction(permissions)) {
+    res.json({
+      materialPriceRule: { mode: 'all_time' },
+      canEditGlobal: false,
+      canEditProduct: false,
+    });
+    return;
+  }
+  res.json(
+    await materialPurchasePriceService.getMaterialPriceSettings(
+      tenantId,
+      permissions,
+      req.user!.tenantRole,
+    ),
+  );
+});
+
+export const putMaterialPriceSettings = asyncHandler(async (req, res) => {
+  const tenantId = req.tenantId!;
+  res.json({
+    materialPriceRule: await materialPurchasePriceService.updateMaterialPriceSettings(
+      tenantId,
+      req.body.materialPriceRule,
+    ),
+  });
+});
+
+export const listMaterialPriceParentProducts = asyncHandler(async (req, res) => {
+  const userId = req.user!.userId;
+  const tenantId = req.tenantId!;
+  const basePermissions = await dashboardService.resolveUserPermissions(userId, tenantId);
+  const permissions = await dashboardService.augmentPermissionsWithWorkbench(
+    userId,
+    tenantId,
+    basePermissions,
+    req.user!.tenantRole,
+  );
+  if (!canAccessProduction(permissions)) {
+    res.json({ rows: [] });
+    return;
+  }
+  const search = typeof req.query.search === 'string' ? req.query.search : undefined;
+  const db = dashboardService.getTenantPrisma(tenantId);
+  const rows = await materialPurchasePriceService.listMaterialPriceParentProducts(db, tenantId, { search });
+  res.json({ rows });
+});
+
+export const listMaterialPriceBomMaterials = asyncHandler(async (req, res) => {
+  const userId = req.user!.userId;
+  const tenantId = req.tenantId!;
+  const basePermissions = await dashboardService.resolveUserPermissions(userId, tenantId);
+  const permissions = await dashboardService.augmentPermissionsWithWorkbench(
+    userId,
+    tenantId,
+    basePermissions,
+    req.user!.tenantRole,
+  );
+  if (!canAccessProduction(permissions)) {
+    res.json({ rows: [], parentDefaultRule: null, tenantGlobalRule: { mode: 'all_time' } });
+    return;
+  }
+  const parentId = String(req.params.parentId);
+  const db = dashboardService.getTenantPrisma(tenantId);
+  const result = await materialPurchasePriceService.listMaterialPriceBomMaterials(db, tenantId, parentId);
+  res.json(result);
+});
+
+export const patchParentMaterialPriceDefaultRule = asyncHandler(async (req, res) => {
+  const tenantId = req.tenantId!;
+  const db = dashboardService.getTenantPrisma(tenantId);
+  const parentId = String(req.params.parentId);
+  res.json(
+    await materialPurchasePriceService.updateParentMaterialPriceDefaultRule(
+      db,
+      parentId,
+      req.body.defaultRule,
+    ),
+  );
+});
+
+export const patchBomMaterialPriceOverride = asyncHandler(async (req, res) => {
+  const tenantId = req.tenantId!;
+  const db = dashboardService.getTenantPrisma(tenantId);
+  const parentId = String(req.params.parentId);
+  const materialId = String(req.params.materialId);
+  res.json(
+    await materialPurchasePriceService.updateBomMaterialPriceOverride(
+      db,
+      tenantId,
+      parentId,
+      materialId,
+      req.body.rule,
+    ),
+  );
+});
+
+async function listProcessPriceParentProductsHandler(
+  req: Parameters<typeof listMaterialPriceParentProducts>[0],
+  res: Parameters<typeof listMaterialPriceParentProducts>[1],
+  listFn: typeof processEconomicsPriceService.listReportPriceParentProducts,
+) {
+  const userId = req.user!.userId;
+  const tenantId = req.tenantId!;
+  const basePermissions = await dashboardService.resolveUserPermissions(userId, tenantId);
+  const permissions = await dashboardService.augmentPermissionsWithWorkbench(
+    userId,
+    tenantId,
+    basePermissions,
+    req.user!.tenantRole,
+  );
+  if (!canAccessProduction(permissions)) {
+    res.json({ rows: [] });
+    return;
+  }
+  const search = typeof req.query.search === 'string' ? req.query.search : undefined;
+  const db = dashboardService.getTenantPrisma(tenantId);
+  const rows = await listFn(db, { search });
+  res.json({ rows });
+}
+
+async function listProcessPriceNodesHandler(
+  req: Parameters<typeof listMaterialPriceBomMaterials>[0],
+  res: Parameters<typeof listMaterialPriceBomMaterials>[1],
+  listFn: (db: ReturnType<typeof dashboardService.getTenantPrisma>, parentId: string) => Promise<unknown>,
+) {
+  const userId = req.user!.userId;
+  const tenantId = req.tenantId!;
+  const basePermissions = await dashboardService.resolveUserPermissions(userId, tenantId);
+  const permissions = await dashboardService.augmentPermissionsWithWorkbench(
+    userId,
+    tenantId,
+    basePermissions,
+    req.user!.tenantRole,
+  );
+  if (!canAccessProduction(permissions)) {
+    res.json({ rows: [], parentDefaultRule: null });
+    return;
+  }
+  const parentId = String(req.params.parentId);
+  const db = dashboardService.getTenantPrisma(tenantId);
+  res.json(await listFn(db, parentId));
+}
+
+export const listReportPriceParentProducts = asyncHandler(async (req, res) => {
+  await listProcessPriceParentProductsHandler(
+    req,
+    res,
+    processEconomicsPriceService.listReportPriceParentProducts,
+  );
+});
+
+export const listOutsourcePriceParentProducts = asyncHandler(async (req, res) => {
+  await listProcessPriceParentProductsHandler(
+    req,
+    res,
+    processEconomicsPriceService.listOutsourcePriceParentProducts,
+  );
+});
+
+export const listReportPriceNodes = asyncHandler(async (req, res) => {
+  await listProcessPriceNodesHandler(req, res, processEconomicsPriceService.listReportPriceNodes);
+});
+
+export const listOutsourcePriceNodes = asyncHandler(async (req, res) => {
+  await listProcessPriceNodesHandler(req, res, processEconomicsPriceService.listOutsourcePriceNodes);
+});
+
+export const patchParentReportPriceDefaultRule = asyncHandler(async (req, res) => {
+  const tenantId = req.tenantId!;
+  const db = dashboardService.getTenantPrisma(tenantId);
+  const parentId = String(req.params.parentId);
+  res.json(
+    await processEconomicsPriceService.updateParentReportPriceDefaultRule(
+      db,
+      parentId,
+      req.body.defaultRule,
+    ),
+  );
+});
+
+export const patchParentOutsourcePriceDefaultRule = asyncHandler(async (req, res) => {
+  const tenantId = req.tenantId!;
+  const db = dashboardService.getTenantPrisma(tenantId);
+  const parentId = String(req.params.parentId);
+  res.json(
+    await processEconomicsPriceService.updateParentOutsourcePriceDefaultRule(
+      db,
+      parentId,
+      req.body.defaultRule,
+    ),
+  );
+});
+
+export const patchReportPriceNodeOverride = asyncHandler(async (req, res) => {
+  const tenantId = req.tenantId!;
+  const db = dashboardService.getTenantPrisma(tenantId);
+  const parentId = String(req.params.parentId);
+  const nodeId = String(req.params.nodeId);
+  res.json(
+    await processEconomicsPriceService.updateReportPriceNodeOverride(
+      db,
+      parentId,
+      nodeId,
+      req.body.rule,
+    ),
+  );
+});
+
+export const patchOutsourcePriceNodeOverride = asyncHandler(async (req, res) => {
+  const tenantId = req.tenantId!;
+  const db = dashboardService.getTenantPrisma(tenantId);
+  const parentId = String(req.params.parentId);
+  const nodeId = String(req.params.nodeId);
+  res.json(
+    await processEconomicsPriceService.updateOutsourcePriceNodeOverride(
+      db,
+      parentId,
+      nodeId,
+      req.body.rule,
     ),
   );
 });

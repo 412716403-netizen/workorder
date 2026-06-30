@@ -382,7 +382,7 @@ export interface ReportCustomFieldsConfigTableProps {
   allowedTypes?: readonly CustomDocFieldType[];
   /** 为 false 时不显示「表单中」列（如工序展示模板） */
   showShowInFormColumn?: boolean;
-  /** 为 false 时不渲染标题行（含增加按钮）；由外层卡片提供标题与操作 */
+  /** 为 false 时不渲染标题行与增加按钮；由外层卡片提供标题与操作 */
   showHeader?: boolean;
 }
 
@@ -437,13 +437,15 @@ export const ReportCustomFieldsConfigTable: React.FC<ReportCustomFieldsConfigTab
 
   return (
     <div>
-      {showHeader && (title || headerExtra) && (
+      {showHeader && (
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            {title && <div className="text-sm font-black uppercase tracking-widest text-slate-600">{title}</div>}
-            {subtitle && <div className="mt-1 text-xs text-slate-500">{subtitle}</div>}
-          </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {(title || subtitle) && (
+            <div className="min-w-0 flex-1">
+              {title && <div className="text-sm font-black uppercase tracking-widest text-slate-600">{title}</div>}
+              {subtitle && <div className="mt-1 text-xs text-slate-500">{subtitle}</div>}
+            </div>
+          )}
+          <div className={`flex shrink-0 flex-wrap items-center gap-2 ${!(title || subtitle) ? 'ml-auto' : ''}`}>
             {headerExtra}
             <button
               type="button"

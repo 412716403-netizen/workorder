@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import * as ctrl from '../controllers/dashboard.controller.js';
+import { requireSubPermission } from '../middleware/tenant.js';
 import { validate } from '../middleware/validate.js';
 
 const router = Router();
@@ -66,6 +67,74 @@ router.put('/rework-stats/settings', validate(orderStatsNodeIdsSchema), ctrl.sav
 router.get('/rework-stats', ctrl.getReworkStats);
 router.get('/product-economics', ctrl.getProductEconomics);
 router.get('/product-economics/:productId', ctrl.getProductEconomicsDetail);
+
+const materialPriceRuleSchema = z.union([
+  z.object({ mode: z.literal('all_time') }),
+  z.object({
+    mode: z.literal('fixed_range'),
+    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  }),
+  z.object({ mode: z.literal('last_purchase') }),
+]);
+
+const materialPriceRuleOverrideSchema = z.union([
+  z.object({ inherit: z.literal(true) }),
+  materialPriceRuleSchema,
+]);
+
+router.get('/material-purchase-prices/settings', ctrl.getMaterialPriceSettings);
+router.put(
+  '/material-purchase-prices/settings',
+  requireSubPermission('settings:config:edit'),
+  validate(z.object({ materialPriceRule: materialPriceRuleSchema })),
+  ctrl.putMaterialPriceSettings,
+);
+router.get('/material-purchase-prices/parent-products', ctrl.listMaterialPriceParentProducts);
+router.get('/material-purchase-prices/parent-products/:parentId/materials', ctrl.listMaterialPriceBomMaterials);
+router.patch(
+  '/material-purchase-prices/parent-products/:parentId',
+  requireSubPermission('basic:products:edit'),
+  validate(z.object({ defaultRule: materialPriceRuleSchema.nullable() })),
+  ctrl.patchParentMaterialPriceDefaultRule,
+);
+router.patch(
+  '/material-purchase-prices/parent-products/:parentId/materials/:materialId',
+  requireSubPermission('basic:products:edit'),
+  validate(z.object({ rule: materialPriceRuleOverrideSchema })),
+  ctrl.patchBomMaterialPriceOverride,
+);
+
+router.get('/report-prices/parent-products', ctrl.listReportPriceParentProducts);
+router.get('/report-prices/parent-products/:parentId/nodes', ctrl.listReportPriceNodes);
+router.patch(
+  '/report-prices/parent-products/:parentId',
+  requireSubPermission('basic:products:edit'),
+  validate(z.object({ defaultRule: materialPriceRuleSchema.nullable() })),
+  ctrl.patchParentReportPriceDefaultRule,
+);
+router.patch(
+  '/report-prices/parent-products/:parentId/nodes/:nodeId',
+  requireSubPermission('basic:products:edit'),
+  validate(z.object({ rule: materialPriceRuleOverrideSchema })),
+  ctrl.patchReportPriceNodeOverride,
+);
+
+router.get('/outsource-prices/parent-products', ctrl.listOutsourcePriceParentProducts);
+router.get('/outsource-prices/parent-products/:parentId/nodes', ctrl.listOutsourcePriceNodes);
+router.patch(
+  '/outsource-prices/parent-products/:parentId',
+  requireSubPermission('basic:products:edit'),
+  validate(z.object({ defaultRule: materialPriceRuleSchema.nullable() })),
+  ctrl.patchParentOutsourcePriceDefaultRule,
+);
+router.patch(
+  '/outsource-prices/parent-products/:parentId/nodes/:nodeId',
+  requireSubPermission('basic:products:edit'),
+  validate(z.object({ rule: materialPriceRuleOverrideSchema })),
+  ctrl.patchOutsourcePriceNodeOverride,
+);
+
 router.get('/finance-partner-stats', ctrl.getFinancePartnerStats);
 router.get('/notifications', ctrl.getNotifications);
 router.get('/messages', ctrl.listPublishedMessages);

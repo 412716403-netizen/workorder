@@ -70,8 +70,8 @@ const NodeReportTemplateFieldsSection: React.FC<NodeReportTemplateFieldsSectionP
                 showShowInFormColumn={false}
                 fields={draft[selectedNode.id] ?? []}
                 onChange={next => onDraftChange(selectedNode.id, next)}
-                showHeader={false}
                 addButtonLabel="增加填报项"
+                emptyHint="暂无自定义内容，点击右上角「增加填报项」添加"
                 idPrefix={`order-form-rt-${selectedNode.id}-`}
               />
             ) : (

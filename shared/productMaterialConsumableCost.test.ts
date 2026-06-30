@@ -5,15 +5,17 @@ import {
   isWeightPurchaseUnit,
   materialCostFromBreakdownRows,
 } from './productMaterialConsumableCost';
+import { materialPriceContextKey } from './materialPurchasePrice';
 
 describe('productMaterialConsumableCost', () => {
+  const parentId = 'prod-1';
   const unitNames = new Map([
     ['mat-kg', '千克'],
     ['mat-pcs', '件'],
   ]);
   const prices = new Map([
-    ['mat-kg', 80],
-    ['mat-pcs', 3],
+    [materialPriceContextKey(parentId, 'mat-kg'), 80],
+    [materialPriceContextKey(parentId, 'mat-pcs'), 3],
   ]);
 
   it('isWeightPurchaseUnit recognizes kg aliases', () => {
@@ -51,6 +53,7 @@ describe('productMaterialConsumableCost', () => {
       bomItems: [{ productId: 'mat-pcs', quantity: 1 }],
       priceMap: prices,
       unitNameByMaterialId: unitNames,
+      parentProductId: parentId,
     });
     expect(cost).toBe(6);
   });
@@ -66,6 +69,7 @@ describe('productMaterialConsumableCost', () => {
       bomItems: [{ productId: 'mat-pcs', quantity: 99 }],
       priceMap: prices,
       unitNameByMaterialId: unitNames,
+      parentProductId: parentId,
     });
     expect(materialCostFromBreakdownRows(
       [
@@ -74,6 +78,7 @@ describe('productMaterialConsumableCost', () => {
       ],
       prices,
       unitNames,
+      parentId,
     )).toBe(80 + 6);
     expect(cost).toBe(86);
   });

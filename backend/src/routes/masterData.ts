@@ -20,6 +20,12 @@ router.post('/partners',       requireSubPermission('basic:partners:create'), ct
 router.put('/partners/:id',    requireSubPermission('basic:partners:edit'),   ctrl.updatePartner);
 router.delete('/partners/:id', requireSubPermission('basic:partners:delete'), ctrl.deletePartner);
 
+// 工人（与 Web api.workers / masterData.controller 对齐）
+router.get('/workers',        requireSubPermission('basic:members:view'),   ctrl.listWorkers);
+router.post('/workers',       requireSubPermission('basic:members:create'), ctrl.createWorker);
+router.put('/workers/:id',    requireSubPermission('basic:members:edit'),   ctrl.updateWorker);
+router.delete('/workers/:id', requireSubPermission('basic:members:delete'), ctrl.deleteWorker);
+
 // 设备
 router.get('/equipment',        requireSubPermission('basic:equipment:view'),   ctrl.listEquipment);
 router.post('/equipment',       requireSubPermission('basic:equipment:create'), ctrl.createEquipment);

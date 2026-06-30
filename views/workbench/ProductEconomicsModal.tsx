@@ -4,6 +4,10 @@ import { ChevronRight, ImageIcon, Loader2, RefreshCw, Search, X } from 'lucide-r
 import type { ProductEconomicsRow } from '../../services/api/dashboard';
 import { useProductEconomics, useProductEconomicsDetail } from '../../hooks/useProductEconomics';
 import type { ProductMaterialCostMode } from '../../types';
+import MaterialPurchasePriceModal from './MaterialPurchasePriceModal';
+import ReportProcessPriceModal from './ReportProcessPriceModal';
+import OutsourceProcessPriceModal from './OutsourceProcessPriceModal';
+import TheoreticalCostBreakdownPopover from './TheoreticalCostBreakdownPopover';
 import {
   formatWorkbenchAmount,
   formatWorkbenchCount,
@@ -89,6 +93,10 @@ const ProductEconomicsModal: React.FC<ProductEconomicsModalProps> = ({
 }) => {
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [materialPriceOpen, setMaterialPriceOpen] = useState(false);
+  const [reportPriceOpen, setReportPriceOpen] = useState(false);
+  const [outsourcePriceOpen, setOutsourcePriceOpen] = useState(false);
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
   const { data, isLoading, isFetching, refetch } = useProductEconomics(undefined, materialCostMode);
   const detailQuery = useProductEconomicsDetail(selectedId, materialCostMode);
 
@@ -113,6 +121,10 @@ const ProductEconomicsModal: React.FC<ProductEconomicsModalProps> = ({
     if (!open) {
       setSearch('');
       setSelectedId(null);
+      setMaterialPriceOpen(false);
+      setReportPriceOpen(false);
+      setOutsourcePriceOpen(false);
+      setBreakdownOpen(false);
     }
   }, [open]);
 
@@ -122,10 +134,14 @@ const ProductEconomicsModal: React.FC<ProductEconomicsModalProps> = ({
   const canPsi = data?.canPsi ?? false;
   const canFinance = data?.canFinance ?? false;
   const documentLinked = materialCostMode === 'document_linked';
+  const showMaterialPrice = !documentLinked;
   const detail = detailQuery.data;
   const display = detail ?? selectedRow;
+  const theoreticalUnitCost = display?.theoreticalUnitCost ?? 0;
 
-  return createPortal(
+  return (
+    <>
+      {createPortal(
     <div
       className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-900/45 p-4"
       role="presentation"
@@ -148,6 +164,31 @@ const ProductEconomicsModal: React.FC<ProductEconomicsModalProps> = ({
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            {showMaterialPrice ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setMaterialPriceOpen(true)}
+                  className="inline-flex items-center rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-[11px] font-bold text-violet-700 shadow-sm transition hover:border-violet-300 hover:bg-violet-100"
+                >
+                  物料价格
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReportPriceOpen(true)}
+                  className="inline-flex items-center rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-[11px] font-bold text-violet-700 shadow-sm transition hover:border-violet-300 hover:bg-violet-100"
+                >
+                  报工价格
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOutsourcePriceOpen(true)}
+                  className="inline-flex items-center rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-[11px] font-bold text-violet-700 shadow-sm transition hover:border-violet-300 hover:bg-violet-100"
+                >
+                  外协价格
+                </button>
+              </>
+            ) : null}
             <button
               type="button"
               onClick={() => void refetch()}
@@ -219,6 +260,11 @@ const ProductEconomicsModal: React.FC<ProductEconomicsModalProps> = ({
                                 {formatWorkbenchAmount(row.grossProfit, showAmount)}
                               </div>
                               <div className="text-[9px] text-slate-400">毛利</div>
+                              {!documentLinked ? (
+                                <div className="mt-0.5 text-[9px] tabular-nums text-slate-400">
+                                  理论 {formatWorkbenchAmount(row.theoreticalUnitCost, showAmount)}/件
+                                </div>
+                              ) : null}
                             </div>
                             <ChevronRight
                               className={`h-3.5 w-3.5 shrink-0 ${active ? 'text-violet-400' : 'text-slate-300'}`}
@@ -256,20 +302,37 @@ const ProductEconomicsModal: React.FC<ProductEconomicsModalProps> = ({
                         </p>
                       ) : null}
                     </div>
-                    <div
-                      className={`shrink-0 rounded-xl border px-4 py-2.5 text-right ${
-                        display.grossProfit >= 0
-                          ? 'border-emerald-200 bg-emerald-50/60'
-                          : 'border-rose-200 bg-rose-50/60'
-                      }`}
-                    >
-                      <div className="text-[10px] font-medium text-slate-500">毛利参考</div>
+                    <div className="flex shrink-0 flex-wrap items-start justify-end gap-2">
+                      {!documentLinked ? (
+                        <button
+                          type="button"
+                          className="shrink-0 cursor-pointer rounded-xl border border-violet-200 bg-violet-50/60 px-4 py-2.5 text-right transition hover:border-violet-300 hover:bg-violet-50 disabled:cursor-wait disabled:opacity-60"
+                          title="查看成本组成"
+                          onClick={() => setBreakdownOpen(true)}
+                          disabled={!detail || detailQuery.isFetching}
+                        >
+                          <div className="text-[10px] font-medium text-slate-500">产品成本价（理论）</div>
+                          <div className="text-lg font-black tabular-nums text-violet-700">
+                            {formatWorkbenchAmount(theoreticalUnitCost, showAmount)}
+                            <span className="ml-0.5 text-xs font-bold text-violet-500">/件</span>
+                          </div>
+                        </button>
+                      ) : null}
                       <div
-                        className={`text-lg font-black tabular-nums ${
-                          display.grossProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                        className={`shrink-0 rounded-xl border px-4 py-2.5 text-right ${
+                          display.grossProfit >= 0
+                            ? 'border-emerald-200 bg-emerald-50/60'
+                            : 'border-rose-200 bg-rose-50/60'
                         }`}
                       >
-                        {formatWorkbenchAmount(display.grossProfit, showAmount)}
+                        <div className="text-[10px] font-medium text-slate-500">毛利参考</div>
+                        <div
+                          className={`text-lg font-black tabular-nums ${
+                            display.grossProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                          }`}
+                        >
+                          {formatWorkbenchAmount(display.grossProfit, showAmount)}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -471,6 +534,33 @@ const ProductEconomicsModal: React.FC<ProductEconomicsModalProps> = ({
       </div>
     </div>,
     document.body,
+      )}
+      <MaterialPurchasePriceModal
+        open={materialPriceOpen}
+        onClose={() => setMaterialPriceOpen(false)}
+        showAmount={showAmount}
+        onSaved={() => void refetch()}
+      />
+      <ReportProcessPriceModal
+        open={reportPriceOpen}
+        onClose={() => setReportPriceOpen(false)}
+        showAmount={showAmount}
+        onSaved={() => void refetch()}
+      />
+      <OutsourceProcessPriceModal
+        open={outsourcePriceOpen}
+        onClose={() => setOutsourcePriceOpen(false)}
+        showAmount={showAmount}
+        onSaved={() => void refetch()}
+      />
+      <TheoreticalCostBreakdownPopover
+        open={breakdownOpen}
+        onClose={() => setBreakdownOpen(false)}
+        productName={display?.name ?? ''}
+        breakdown={detail?.theoreticalCostBreakdown}
+        showAmount={showAmount}
+      />
+    </>
   );
 };
 

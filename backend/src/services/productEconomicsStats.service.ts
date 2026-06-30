@@ -3,6 +3,7 @@ import { AppError } from '../middleware/errorHandler.js';
 import {
   parseProductEconomicsSettings,
   type ProductMaterialCostMode,
+  type TheoreticalCostBreakdown,
 } from '../../../shared/types.js';
 import {
   computeReportMaterialCost,
@@ -18,6 +19,18 @@ import {
   type WorkbenchOrderStatsPeriod,
 } from '../../../shared/workbenchOrderStats.js';
 import { computeMaterialSurplusLossByProduct } from './productMaterialSurplusLoss.service.js';
+import { buildMaterialPriceMapForEconomics } from './materialPurchasePrice.service.js';
+import {
+  buildOutsourcePriceMapForEconomics,
+  buildReportPriceMapForEconomics,
+  type ProcessPriceContext,
+} from './processEconomicsPrice.service.js';
+import { lookupContextMaterialPrice } from '../../../shared/materialPurchasePrice.js';
+import {
+  buildTheoreticalCostBreakdown,
+  parseMilestoneNodeIds,
+  type TheoreticalCostBom,
+} from '../../../shared/theoreticalProductCost.js';
 import {
   loadLinkedFinanceByProduct,
   loadLinkedPurchaseCostByProduct,
@@ -63,6 +76,16 @@ type MaterialBreakdownIn = MaterialBreakdownRowIn;
 
 type BomWithItems = Awaited<ReturnType<typeof loadBoms>>[number];
 
+function buildPriceContextsFromBoms(boms: BomWithItems[]): { parentProductId: string; materialId: string }[] {
+  const out: { parentProductId: string; materialId: string }[] = [];
+  for (const b of boms) {
+    for (const item of b.items) {
+      out.push({ parentProductId: b.parentProductId, materialId: item.productId });
+    }
+  }
+  return out;
+}
+
 export interface ProductEconomicsRow {
   productId: string;
   name: string;
@@ -90,6 +113,8 @@ export interface ProductEconomicsRow {
   totalRevenue: number;
   totalCost: number;
   grossProfit: number;
+  /** consumable：单件理论成本（BOM 物料 + 标准路线工序单价）；document_linked 为 0 */
+  theoreticalUnitCost: number;
 }
 
 export interface ProductEconomicsNodeRow {
@@ -151,6 +176,9 @@ export interface ProductEconomicsDetailResponse {
   totalRevenue: number;
   totalCost: number;
   grossProfit: number;
+  theoreticalUnitCost: number;
+  /** consumable 明细：成本组成（饼图）；document_linked 为空 */
+  theoreticalCostBreakdown: TheoreticalCostBreakdown;
   totalOrderQty: number;
   stockInQty: number;
   byNode: ProductEconomicsNodeRow[];
@@ -211,54 +239,62 @@ async function loadBoms(db: TenantPrismaClient, productIds: string[]) {
   });
 }
 
-/** 物料单价 = 该物料全部采购入库(PURCHASE_BILL)的数量加权平均单价；无入库记录时回退档案 purchasePrice */
-async function buildMaterialPriceMap(
+async function loadMaterialLabelById(
   db: TenantPrismaClient,
   materialIds: string[],
-): Promise<Map<string, number>> {
+): Promise<Map<string, string>> {
   const unique = [...new Set(materialIds.filter(Boolean))];
   if (unique.length === 0) return new Map();
+  const products = await db.product.findMany({
+    where: { id: { in: unique } },
+    select: { id: true, name: true },
+  });
+  return new Map(products.map(p => [p.id, p.name]));
+}
 
-  const [products, purchaseBills] = await Promise.all([
-    db.product.findMany({
-      where: { id: { in: unique } },
-      select: { id: true, purchasePrice: true },
-    }),
-    db.psiRecord.findMany({
-      where: {
-        productId: { in: unique },
-        type: 'PURCHASE_BILL',
-        purchasePrice: { not: null },
-        quantity: { not: null },
-      },
-      select: { productId: true, quantity: true, purchasePrice: true },
-    }),
-  ]);
+function toTheoreticalBoms(boms: BomWithItems[]): TheoreticalCostBom[] {
+  return boms.map(b => ({
+    parentProductId: b.parentProductId,
+    variantId: b.variantId,
+    nodeId: b.nodeId,
+    items: b.items.map(i => ({ productId: i.productId, quantity: i.quantity })),
+  }));
+}
 
-  const weighted = new Map<string, { totalQty: number; totalAmount: number }>();
-  for (const r of purchaseBills) {
-    if (!r.productId) continue;
-    const qty = num(r.quantity);
-    const price = num(r.purchasePrice);
-    if (qty === 0 || !(price > 0)) continue;
-    const prev = weighted.get(r.productId) ?? { totalQty: 0, totalAmount: 0 };
-    prev.totalQty += qty;
-    prev.totalAmount += qty * price;
-    weighted.set(r.productId, prev);
-  }
+function computeTheoreticalCostForProduct(params: {
+  boms: BomWithItems[];
+  productId: string;
+  priceMap: Map<string, number>;
+  nodeRates: Record<string, number>;
+  reportPriceMap: Map<string, number>;
+  outsourcePriceMap: Map<string, number>;
+  milestoneNodeIds: unknown;
+  materialLabelById: Map<string, string>;
+  nodeNameById: Map<string, string>;
+}): TheoreticalCostBreakdown {
+  return buildTheoreticalCostBreakdown({
+    boms: toTheoreticalBoms(params.boms),
+    productId: params.productId,
+    priceMap: params.priceMap,
+    nodeRates: params.nodeRates,
+    reportPriceMap: params.reportPriceMap,
+    outsourcePriceMap: params.outsourcePriceMap,
+    milestoneNodeIds: parseMilestoneNodeIds(params.milestoneNodeIds),
+    materialLabelById: params.materialLabelById,
+    nodeNameById: params.nodeNameById,
+  });
+}
 
-  const map = new Map<string, number>();
-  for (const id of unique) {
-    const agg = weighted.get(id);
-    if (agg && agg.totalQty > 0) {
-      map.set(id, agg.totalAmount / agg.totalQty);
-      continue;
+function buildProcessPriceContexts(
+  products: { id: string; milestoneNodeIds: unknown }[],
+): ProcessPriceContext[] {
+  const contexts: ProcessPriceContext[] = [];
+  for (const p of products) {
+    for (const nodeId of parseMilestoneNodeIds(p.milestoneNodeIds)) {
+      contexts.push({ productId: p.id, nodeId });
     }
-    const fallback = num(products.find(p => p.id === id)?.purchasePrice);
-    if (fallback > 0) map.set(id, fallback);
   }
-
-  return map;
+  return contexts;
 }
 
 async function loadMaterialUnitNameByProductId(
@@ -316,7 +352,7 @@ function computeUnitMaterialCost(
     ?? productBoms[0];
   if (!chosen) return 0;
   return chosen.items.reduce(
-    (sum, item) => sum + num(item.quantity) * (priceMap.get(item.productId) ?? 0),
+    (sum, item) => sum + num(item.quantity) * lookupContextMaterialPrice(priceMap, productId, item.productId),
     0,
   );
 }
@@ -344,6 +380,7 @@ function resolveReportMaterialCost(
     bomItems,
     priceMap,
     unitNameByMaterialId,
+    parentProductId: productId,
   });
 }
 
@@ -853,6 +890,7 @@ function buildRow(
   includeProduction: boolean,
   includePsi: boolean,
   includeFinance: boolean,
+  theoreticalUnitCost: number,
 ): ProductEconomicsRow {
   const scrapAmount = includeProduction ? agg.scrapQty * unitMaterialCost : 0;
   const reportCost = includeProduction ? agg.reportCost : 0;
@@ -891,6 +929,7 @@ function buildRow(
       totalRevenue,
       totalCost,
       grossProfit: totalRevenue - totalCost,
+      theoreticalUnitCost: 0,
     };
   }
 
@@ -922,6 +961,7 @@ function buildRow(
     totalRevenue,
     totalCost,
     grossProfit: totalRevenue - totalCost,
+    theoreticalUnitCost,
   };
 }
 
@@ -945,7 +985,14 @@ export async function computeProductEconomicsList(
     db.globalNodeTemplate.findMany({ select: { id: true, name: true } }),
     db.product.findMany({
       where: { enabled: true },
-      select: { id: true, name: true, sku: true, imageUrl: true, milestoneNodeIds: true },
+      select: {
+        id: true,
+        name: true,
+        sku: true,
+        imageUrl: true,
+        milestoneNodeIds: true,
+        nodeRates: true,
+      },
       orderBy: { name: 'asc' },
     }),
   ]);
@@ -953,8 +1000,9 @@ export async function computeProductEconomicsList(
   const productIds = allProducts.map(p => p.id);
 
   const boms = includeProduction ? await loadBoms(db, productIds) : [];
-  const materialIds = boms.flatMap(b => b.items.map(i => i.productId));
-  const priceMap = includeProduction ? await buildMaterialPriceMap(db, materialIds) : new Map();
+  const priceMap = includeProduction
+    ? await buildMaterialPriceMapForEconomics(db, tenantId, buildPriceContextsFromBoms(boms))
+    : new Map();
   const unitMaterialCostByProduct = new Map<string, number>();
   if (includeProduction) {
     for (const pid of productIds) {
@@ -966,7 +1014,7 @@ export async function computeProductEconomicsList(
     ? await loadProductionAggregates(db, boms, priceMap, nodeNameById, periodRange)
     : new Map<string, ProductAgg>();
   const surplusLossByProduct = includeProduction && !periodScoped && !documentLinked
-    ? await computeMaterialSurplusLossByProduct(db, productIds, priceMap)
+    ? await computeMaterialSurplusLossByProduct(db, tenantId, productIds)
     : new Map<string, number>();
   const psiAggs = includePsi ? await loadPsiAggregates(db, periodRange) : new Map();
 
@@ -976,6 +1024,38 @@ export async function computeProductEconomicsList(
   const linkedFinance = includeFinance
     ? await loadLinkedFinanceByProduct(db, productIds, periodRange)
     : { paymentCostMap: new Map<string, number>(), receiptAmountMap: new Map<string, number>() };
+
+  const theoreticalUnitCostByProduct = new Map<string, number>();
+  if (includeProduction && !documentLinked) {
+    const materialIds = boms.flatMap(b => b.items.map(i => i.productId));
+    const materialLabelById = await loadMaterialLabelById(db, materialIds);
+    const theoreticalBoms = toTheoreticalBoms(boms);
+    let reportPriceMap = new Map<string, number>();
+    let outsourcePriceMap = new Map<string, number>();
+    try {
+      const processContexts = buildProcessPriceContexts(allProducts);
+      [reportPriceMap, outsourcePriceMap] = await Promise.all([
+        buildReportPriceMapForEconomics(db, processContexts),
+        buildOutsourcePriceMapForEconomics(db, processContexts),
+      ]);
+    } catch {
+      /* 报工/外协价格表未迁移或流水查询失败时，理论成本仍回退 nodeRates */
+    }
+    for (const p of allProducts) {
+      const breakdown = buildTheoreticalCostBreakdown({
+        boms: theoreticalBoms,
+        productId: p.id,
+        priceMap,
+        nodeRates: parseNodeRates(p.nodeRates),
+        reportPriceMap,
+        outsourcePriceMap,
+        milestoneNodeIds: parseMilestoneNodeIds(p.milestoneNodeIds),
+        materialLabelById,
+        nodeNameById,
+      });
+      theoreticalUnitCostByProduct.set(p.id, breakdown.total);
+    }
+  }
 
   const merged = new Map<string, ProductAgg>();
   for (const pid of productIds) {
@@ -1036,6 +1116,7 @@ export async function computeProductEconomicsList(
         includeProduction,
         includePsi,
         includeFinance,
+        theoreticalUnitCostByProduct.get(p.id) ?? 0,
       ),
     );
   }
@@ -1079,7 +1160,15 @@ export async function computeProductEconomicsDetail(
 
   const product = await db.product.findUnique({
     where: { id: productId },
-    select: { id: true, name: true, sku: true, imageUrl: true, enabled: true, milestoneNodeIds: true },
+    select: {
+      id: true,
+      name: true,
+      sku: true,
+      imageUrl: true,
+      enabled: true,
+      milestoneNodeIds: true,
+      nodeRates: true,
+    },
   });
   if (!product) throw new AppError(404, '产品不存在');
 
@@ -1087,8 +1176,9 @@ export async function computeProductEconomicsDetail(
   const nodeNameById = new Map(globalNodes.map(n => [n.id, n.name]));
 
   const boms = includeProduction ? await loadBoms(db, [productId]) : [];
-  const materialIds = boms.flatMap(b => b.items.map(i => i.productId));
-  const priceMap = includeProduction ? await buildMaterialPriceMap(db, materialIds) : new Map();
+  const priceMap = includeProduction
+    ? await buildMaterialPriceMapForEconomics(db, tenantId, buildPriceContextsFromBoms(boms))
+    : new Map();
   const unitMaterialCost = includeProduction
     ? computeUnitMaterialCost(boms, productId, priceMap)
     : 0;
@@ -1097,7 +1187,7 @@ export async function computeProductEconomicsDetail(
     ? (await loadProductionAggregates(db, boms, priceMap, nodeNameById)).get(productId) ?? emptyAgg()
     : emptyAgg();
   const materialSurplusLoss = includeProduction && !documentLinked
-    ? (await computeMaterialSurplusLossByProduct(db, [productId], priceMap)).get(productId) ?? 0
+    ? (await computeMaterialSurplusLossByProduct(db, tenantId, [productId])).get(productId) ?? 0
     : 0;
 
   const linkedPurchaseCost = documentLinked && includeProduction
@@ -1108,6 +1198,34 @@ export async function computeProductEconomicsDetail(
     : { paymentCostMap: new Map<string, number>(), receiptAmountMap: new Map<string, number>() };
   const linkedPaymentCost = linkedFinance.paymentCostMap.get(productId) ?? 0;
   const linkedReceiptAmount = linkedFinance.receiptAmountMap.get(productId) ?? 0;
+
+  let theoreticalCostBreakdown: TheoreticalCostBreakdown = { total: 0, items: [] };
+  if (includeProduction && !documentLinked) {
+    const materialIds = boms.flatMap(b => b.items.map(i => i.productId));
+    const materialLabelById = await loadMaterialLabelById(db, materialIds);
+    let reportPriceMap = new Map<string, number>();
+    let outsourcePriceMap = new Map<string, number>();
+    try {
+      const processContexts = buildProcessPriceContexts([product]);
+      [reportPriceMap, outsourcePriceMap] = await Promise.all([
+        buildReportPriceMapForEconomics(db, processContexts),
+        buildOutsourcePriceMapForEconomics(db, processContexts),
+      ]);
+    } catch {
+      /* 同上：未迁移时回退 nodeRates */
+    }
+    theoreticalCostBreakdown = computeTheoreticalCostForProduct({
+      boms,
+      productId,
+      priceMap,
+      nodeRates: parseNodeRates(product.nodeRates),
+      reportPriceMap,
+      outsourcePriceMap,
+      milestoneNodeIds: product.milestoneNodeIds,
+      materialLabelById,
+      nodeNameById,
+    });
+  }
 
   if (includePsi) {
     const psi = (await loadPsiAggregates(db)).get(productId);
@@ -1134,6 +1252,7 @@ export async function computeProductEconomicsDetail(
     includeProduction,
     includePsi,
     includeFinance,
+    documentLinked ? 0 : theoreticalCostBreakdown.total,
   );
 
   const quantityDetail = includeProduction
@@ -1200,6 +1319,8 @@ export async function computeProductEconomicsDetail(
     totalRevenue: row.totalRevenue,
     totalCost: row.totalCost,
     grossProfit: row.grossProfit,
+    theoreticalUnitCost: row.theoreticalUnitCost,
+    theoreticalCostBreakdown,
     totalOrderQty: quantityDetail.totalOrderQty,
     stockInQty: quantityDetail.stockInQty,
     byNode,

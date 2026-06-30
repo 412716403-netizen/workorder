@@ -642,21 +642,288 @@ export const PRODUCT_MATERIAL_COST_MODE_LABEL: Record<ProductMaterialCostMode, s
 
 export interface ProductEconomicsSettings {
   materialCostMode: ProductMaterialCostMode;
+  /** 租户全局物料采购均价统计规则（三选一） */
+  materialPriceRule: MaterialPriceRule;
 }
 
 export const DEFAULT_PRODUCT_ECONOMICS_SETTINGS: ProductEconomicsSettings = {
   materialCostMode: 'consumable',
+  materialPriceRule: { mode: 'all_time' },
 };
 
 export function isProductMaterialCostMode(v: unknown): v is ProductMaterialCostMode {
   return v === 'consumable' || v === 'document_linked';
 }
 
+/** 产品理论成本价组成项 */
+export type TheoreticalCostBreakdownItemKind = 'material' | 'process';
+
+export interface TheoreticalCostBreakdownItem {
+  key: string;
+  kind: TheoreticalCostBreakdownItemKind;
+  label: string;
+  amount: number;
+  pct?: number;
+}
+
+export interface TheoreticalCostBreakdown {
+  total: number;
+  items: TheoreticalCostBreakdownItem[];
+}
+
+function isYmd(v: unknown): v is string {
+  return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+}
+
+export function parseMaterialPriceRule(raw: unknown): MaterialPriceRule | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const mode = o.mode;
+  if (mode === 'all_time') return { mode: 'all_time' };
+  if (mode === 'last_purchase') return { mode: 'last_purchase' };
+  if (mode === 'fixed_range') {
+    if (!isYmd(o.startDate) || !isYmd(o.endDate) || o.startDate > o.endDate) return null;
+    return { mode: 'fixed_range', startDate: o.startDate, endDate: o.endDate };
+  }
+  return null;
+}
+
 export function parseProductEconomicsSettings(raw: unknown): ProductEconomicsSettings {
-  if (!raw || typeof raw !== 'object') return { ...DEFAULT_PRODUCT_ECONOMICS_SETTINGS };
-  const mode = (raw as ProductEconomicsSettings).materialCostMode;
-  if (isProductMaterialCostMode(mode)) return { materialCostMode: mode };
-  return { ...DEFAULT_PRODUCT_ECONOMICS_SETTINGS };
+  const base = { ...DEFAULT_PRODUCT_ECONOMICS_SETTINGS };
+  if (!raw || typeof raw !== 'object') return base;
+  const o = raw as ProductEconomicsSettings;
+  const mode = o.materialCostMode;
+  const materialCostMode = isProductMaterialCostMode(mode) ? mode : base.materialCostMode;
+  const materialPriceRule = parseMaterialPriceRule(o.materialPriceRule) ?? base.materialPriceRule;
+  return { materialCostMode, materialPriceRule };
+}
+
+// ============================================================
+// 报工耗材 · 物料采购均价
+// ============================================================
+
+export const MATERIAL_PRICE_RULE_MODES = ['all_time', 'fixed_range', 'last_purchase'] as const;
+export type MaterialPriceRuleMode = (typeof MATERIAL_PRICE_RULE_MODES)[number];
+
+/** 全局 / 生效规则（三选一，无 inherit） */
+export type MaterialPriceRule =
+  | { mode: 'all_time' }
+  | { mode: 'fixed_range'; startDate: string; endDate: string }
+  | { mode: 'last_purchase' };
+
+/** 成品 BOM 未设定 defaultRule 时的默认统计规则 */
+export const DEFAULT_PARENT_BOM_MATERIAL_PRICE_RULE: MaterialPriceRule = { mode: 'last_purchase' };
+
+/** 成品 BOM 下单物料：inherit 表示沿用成品 defaultRule → 全局 */
+export type MaterialPriceRuleOverride =
+  | { inherit: true }
+  | MaterialPriceRule;
+
+/** 存 parent Product JSON */
+export interface EconomicsBomMaterialPrice {
+  /** 二级「全部设定」；缺省/null = 不覆盖，走全局 */
+  defaultRule?: MaterialPriceRule | null;
+  materialOverrides?: Record<string, MaterialPriceRuleOverride>;
+}
+
+export type MaterialPriceRuleSource = 'global' | 'parent_default' | 'material_override';
+
+export const MATERIAL_PRICE_RULE_SOURCE_LABEL: Record<MaterialPriceRuleSource, string> = {
+  global: '全局规则',
+  parent_default: '成品批量规则',
+  material_override: '单物料规则',
+};
+
+export const MATERIAL_PRICE_PERIOD_MODES = ['all_time', 'rolling_days', 'fixed_range'] as const;
+export type MaterialPricePeriodMode = (typeof MATERIAL_PRICE_PERIOD_MODES)[number];
+
+export type MaterialPriceSource = 'all_time' | 'period' | 'expanded' | 'archive' | 'last_purchase';
+
+export const MATERIAL_PRICE_SOURCE_LABEL: Record<MaterialPriceSource, string> = {
+  all_time: '全部采购入库均价',
+  period: '指定时段均价',
+  expanded: '扩大时段后均价',
+  archive: '档案参考采购价',
+  last_purchase: '最近一次采购价',
+};
+
+export interface MaterialPricePeriod {
+  mode: MaterialPricePeriodMode;
+  rollingDays?: number;
+  startDate?: string;
+  endDate?: string;
+}
+
+export const DEFAULT_MATERIAL_PRICE_PERIOD: MaterialPricePeriod = { mode: 'all_time' };
+
+export interface MaterialPriceSettingsResponse {
+  materialPriceRule: MaterialPriceRule;
+  canEditGlobal: boolean;
+  canEditProduct: boolean;
+}
+
+export interface MaterialPriceParentProductRow {
+  productId: string;
+  name: string;
+  sku: string;
+  materialCount: number;
+}
+
+export interface MaterialPriceBomMaterialsResponse {
+  rows: MaterialPriceBomMaterialRow[];
+  /** 成品批量规则；null 表示沿用租户全局 */
+  parentDefaultRule: MaterialPriceRule | null;
+  /** 租户全局规则（只读参考） */
+  tenantGlobalRule: MaterialPriceRule;
+}
+
+export interface MaterialPriceBomMaterialRow {
+  materialId: string;
+  name: string;
+  sku: string;
+  unitPrice: number | null;
+  priceSource: MaterialPriceSource | null;
+  ruleSource: MaterialPriceRuleSource;
+  ruleLabel: string;
+  hasIndividualOverride: boolean;
+  billCountInPeriod: number;
+}
+
+/** @deprecated 旧 per-material 配置，迁移后不再写入 */
+export type ProductMaterialPricePeriodConfig =
+  | { inherit: true }
+  | {
+      inherit?: false;
+      mode: 'fixed_range' | 'last_purchase' | 'rolling_days';
+      rollingDays?: number;
+      startDate?: string;
+      endDate?: string;
+    };
+
+export function parseMaterialPriceRuleOverride(raw: unknown): MaterialPriceRuleOverride | null {
+  if (raw == null || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  if (o.inherit === true) return { inherit: true };
+  return parseMaterialPriceRule(raw);
+}
+
+/** 报工/外协单价统计规则（存 parent Product JSON） */
+export interface EconomicsNodePriceRules {
+  defaultRule?: MaterialPriceRule | null;
+  nodeOverrides?: Record<string, MaterialPriceRuleOverride>;
+}
+
+export type ProcessNodePriceRuleSource = 'parent_default' | 'node_override';
+
+export const PROCESS_NODE_PRICE_RULE_SOURCE_LABEL: Record<ProcessNodePriceRuleSource, string> = {
+  parent_default: '成品批量规则',
+  node_override: '单工序规则',
+};
+
+export type ProcessPriceSource = 'last_record' | 'period_avg' | 'archive';
+
+export const PROCESS_PRICE_SOURCE_LABEL: Record<ProcessPriceSource, string> = {
+  last_record: '最近一次单价',
+  period_avg: '指定时段均价',
+  archive: '档案参考工价',
+};
+
+export interface ProcessPriceParentProductRow {
+  productId: string;
+  name: string;
+  sku: string;
+  nodeCount: number;
+}
+
+export interface ProcessPriceNodesResponse {
+  rows: ProcessPriceNodeRow[];
+  parentDefaultRule: MaterialPriceRule | null;
+}
+
+export interface ProcessPriceNodeRow {
+  nodeId: string;
+  nodeName: string;
+  unitPrice: number | null;
+  priceSource: ProcessPriceSource | null;
+  ruleSource: ProcessNodePriceRuleSource;
+  ruleLabel: string;
+  hasIndividualOverride: boolean;
+  recordCountInPeriod: number;
+}
+
+export function parseEconomicsNodePriceRules(raw: unknown): EconomicsNodePriceRules | null {
+  if (raw == null || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const result: EconomicsNodePriceRules = {};
+  if ('defaultRule' in o) {
+    if (o.defaultRule == null) {
+      result.defaultRule = null;
+    } else {
+      const rule = parseMaterialPriceRule(o.defaultRule);
+      if (rule) result.defaultRule = rule;
+    }
+  }
+  if (o.nodeOverrides && typeof o.nodeOverrides === 'object') {
+    const overrides: Record<string, MaterialPriceRuleOverride> = {};
+    for (const [k, v] of Object.entries(o.nodeOverrides as Record<string, unknown>)) {
+      const parsed = parseMaterialPriceRuleOverride(v);
+      if (parsed) overrides[k] = parsed;
+    }
+    if (Object.keys(overrides).length > 0) result.nodeOverrides = overrides;
+  }
+  return Object.keys(result).length > 0 ? result : null;
+}
+
+export function parseEconomicsBomMaterialPrice(raw: unknown): EconomicsBomMaterialPrice | null {
+  if (raw == null || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const result: EconomicsBomMaterialPrice = {};
+  if ('defaultRule' in o) {
+    if (o.defaultRule == null) {
+      result.defaultRule = null;
+    } else {
+      const rule = parseMaterialPriceRule(o.defaultRule);
+      if (rule) result.defaultRule = rule;
+    }
+  }
+  if (o.materialOverrides && typeof o.materialOverrides === 'object') {
+    const overrides: Record<string, MaterialPriceRuleOverride> = {};
+    for (const [k, v] of Object.entries(o.materialOverrides as Record<string, unknown>)) {
+      const parsed = parseMaterialPriceRuleOverride(v);
+      if (parsed) overrides[k] = parsed;
+    }
+    if (Object.keys(overrides).length > 0) result.materialOverrides = overrides;
+  }
+  return Object.keys(result).length > 0 ? result : null;
+}
+
+/** @deprecated */
+export function parseProductMaterialPricePeriodConfig(
+  raw: unknown,
+): ProductMaterialPricePeriodConfig | null {
+  if (raw == null) return null;
+  if (typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  if (o.inherit === true) return { inherit: true };
+  const mode = o.mode;
+  if (mode === 'rolling_days') {
+    const days = Number(o.rollingDays);
+    if (!Number.isFinite(days) || days < 1) return null;
+    return { inherit: false, mode: 'rolling_days', rollingDays: Math.floor(days) };
+  }
+  if (mode === 'fixed_range') {
+    if (!isYmd(o.startDate) || !isYmd(o.endDate) || o.startDate > o.endDate) return null;
+    return {
+      inherit: false,
+      mode: 'fixed_range',
+      startDate: o.startDate,
+      endDate: o.endDate,
+    };
+  }
+  if (mode === 'last_purchase') {
+    return { inherit: false, mode: 'last_purchase' };
+  }
+  return null;
 }
 
 /** 待办事项 DTO（个人级；前后端共用形状） */

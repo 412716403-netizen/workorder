@@ -1,5 +1,18 @@
 import { request } from './_client';
-import type { WorkbenchConfig, FeaturePluginsConfig } from '../../types';
+import type {
+  WorkbenchConfig,
+  FeaturePluginsConfig,
+  MaterialPriceSettingsResponse,
+  MaterialPriceParentProductRow,
+  MaterialPriceBomMaterialRow,
+  MaterialPriceBomMaterialsResponse,
+  MaterialPriceRule,
+  MaterialPriceRuleOverride,
+  TheoreticalCostBreakdown,
+  ProcessPriceParentProductRow,
+  ProcessPriceNodesResponse,
+  ProcessPriceNodeRow,
+} from '../../types';
 
 export interface WorkbenchResponse {
   effective: WorkbenchConfig;
@@ -155,6 +168,7 @@ export interface ProductEconomicsRow {
   totalRevenue: number;
   totalCost: number;
   grossProfit: number;
+  theoreticalUnitCost: number;
 }
 
 export interface ProductEconomicsListResponse {
@@ -213,6 +227,8 @@ export interface ProductEconomicsDetailResponse {
   totalRevenue: number;
   totalCost: number;
   grossProfit: number;
+  theoreticalUnitCost: number;
+  theoreticalCostBreakdown: TheoreticalCostBreakdown;
   totalOrderQty: number;
   stockInQty: number;
   byNode: ProductEconomicsNodeRow[];
@@ -333,6 +349,97 @@ export const dashboard = {
       `/dashboard/product-economics/${encodeURIComponent(productId)}${qs ? `?${qs}` : ''}`,
     );
   },
+  getMaterialPriceSettings: () =>
+    request<MaterialPriceSettingsResponse>('/dashboard/material-purchase-prices/settings'),
+  putMaterialPriceSettings: (materialPriceRule: MaterialPriceRule) =>
+    request<{ materialPriceRule: MaterialPriceRule }>('/dashboard/material-purchase-prices/settings', {
+      method: 'PUT',
+      body: JSON.stringify({ materialPriceRule }),
+    }),
+  getMaterialPriceParentProducts: (params: { search?: string } = {}) => {
+    const search = new URLSearchParams();
+    if (params.search?.trim()) search.set('search', params.search.trim());
+    const qs = search.toString();
+    return request<{ rows: MaterialPriceParentProductRow[] }>(
+      `/dashboard/material-purchase-prices/parent-products${qs ? `?${qs}` : ''}`,
+    );
+  },
+  getMaterialPriceBomMaterials: (parentId: string) =>
+    request<MaterialPriceBomMaterialsResponse>(
+      `/dashboard/material-purchase-prices/parent-products/${encodeURIComponent(parentId)}/materials`,
+    ),
+  patchParentMaterialPriceDefaultRule: (parentId: string, defaultRule: MaterialPriceRule | null) =>
+    request<{ defaultRule: MaterialPriceRule | null }>(
+      `/dashboard/material-purchase-prices/parent-products/${encodeURIComponent(parentId)}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ defaultRule }),
+      },
+    ),
+  patchBomMaterialPriceOverride: (
+    parentId: string,
+    materialId: string,
+    rule: MaterialPriceRuleOverride,
+  ) =>
+    request<MaterialPriceBomMaterialRow>(
+      `/dashboard/material-purchase-prices/parent-products/${encodeURIComponent(parentId)}/materials/${encodeURIComponent(materialId)}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ rule }),
+      },
+    ),
+  getReportPriceParentProducts: (params: { search?: string } = {}) => {
+    const search = new URLSearchParams();
+    if (params.search?.trim()) search.set('search', params.search.trim());
+    const qs = search.toString();
+    return request<{ rows: ProcessPriceParentProductRow[] }>(
+      `/dashboard/report-prices/parent-products${qs ? `?${qs}` : ''}`,
+    );
+  },
+  getReportPriceNodes: (parentId: string) =>
+    request<ProcessPriceNodesResponse>(
+      `/dashboard/report-prices/parent-products/${encodeURIComponent(parentId)}/nodes`,
+    ),
+  patchParentReportPriceDefaultRule: (parentId: string, defaultRule: MaterialPriceRule | null) =>
+    request<{ defaultRule: MaterialPriceRule | null }>(
+      `/dashboard/report-prices/parent-products/${encodeURIComponent(parentId)}`,
+      { method: 'PATCH', body: JSON.stringify({ defaultRule }) },
+    ),
+  patchReportPriceNodeOverride: (
+    parentId: string,
+    nodeId: string,
+    rule: MaterialPriceRuleOverride,
+  ) =>
+    request<ProcessPriceNodeRow>(
+      `/dashboard/report-prices/parent-products/${encodeURIComponent(parentId)}/nodes/${encodeURIComponent(nodeId)}`,
+      { method: 'PATCH', body: JSON.stringify({ rule }) },
+    ),
+  getOutsourcePriceParentProducts: (params: { search?: string } = {}) => {
+    const search = new URLSearchParams();
+    if (params.search?.trim()) search.set('search', params.search.trim());
+    const qs = search.toString();
+    return request<{ rows: ProcessPriceParentProductRow[] }>(
+      `/dashboard/outsource-prices/parent-products${qs ? `?${qs}` : ''}`,
+    );
+  },
+  getOutsourcePriceNodes: (parentId: string) =>
+    request<ProcessPriceNodesResponse>(
+      `/dashboard/outsource-prices/parent-products/${encodeURIComponent(parentId)}/nodes`,
+    ),
+  patchParentOutsourcePriceDefaultRule: (parentId: string, defaultRule: MaterialPriceRule | null) =>
+    request<{ defaultRule: MaterialPriceRule | null }>(
+      `/dashboard/outsource-prices/parent-products/${encodeURIComponent(parentId)}`,
+      { method: 'PATCH', body: JSON.stringify({ defaultRule }) },
+    ),
+  patchOutsourcePriceNodeOverride: (
+    parentId: string,
+    nodeId: string,
+    rule: MaterialPriceRuleOverride,
+  ) =>
+    request<ProcessPriceNodeRow>(
+      `/dashboard/outsource-prices/parent-products/${encodeURIComponent(parentId)}/nodes/${encodeURIComponent(nodeId)}`,
+      { method: 'PATCH', body: JSON.stringify({ rule }) },
+    ),
   getFinancePartnerStats: (params: WorkbenchStatsQueryParams = {}) => {
     const search = new URLSearchParams();
     appendWorkbenchStatsQuery(search, params);

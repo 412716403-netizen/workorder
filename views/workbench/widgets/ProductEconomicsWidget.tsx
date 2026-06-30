@@ -54,7 +54,7 @@ const ProductEconomicsWidget: React.FC<ProductEconomicsWidgetProps> = ({
   const fullAccess = useWorkbenchPageFullAccess();
   const showAmount =
     fullAccess || hasPriceAmountModuleAccess(tenantCtx?.tenantRole, tenantCtx?.permissions);
-  const { data, isLoading, isFetching, refetch } = useProductEconomics(filter, materialCostMode);
+  const { data, isLoading, isFetching, isError, error, refetch } = useProductEconomics(filter, materialCostMode);
 
   const headerExtra = (
     <WorkbenchStatsHeaderExtra
@@ -68,7 +68,7 @@ const ProductEconomicsWidget: React.FC<ProductEconomicsWidgetProps> = ({
       isFetching={isFetching}
       onRefresh={() => void refetch()}
       middleExtra={
-        !editing && data ? (
+        !editing ? (
           <button
             type="button"
             onClick={() => setModalOpen(true)}
@@ -113,6 +113,10 @@ const ProductEconomicsWidget: React.FC<ProductEconomicsWidgetProps> = ({
           <div className="flex flex-1 items-center justify-center py-10">
             <Loader2 className="h-6 w-6 animate-spin text-slate-300" />
           </div>
+        ) : isError ? (
+          <p className="py-10 text-center text-sm text-rose-500">
+            加载失败{error instanceof Error && error.message ? `：${error.message}` : ''}
+          </p>
         ) : !data ? (
           <p className="py-10 text-center text-sm text-slate-400">无生产或进销存模块权限</p>
         ) : (

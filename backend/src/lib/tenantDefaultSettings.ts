@@ -111,7 +111,7 @@ export const TENANT_DEFAULT_SETTINGS: Record<string, unknown> = {
     },
   },
   featurePlugins: null as unknown,
-  productEconomicsSettings: { materialCostMode: 'consumable' },
+  productEconomicsSettings: { materialCostMode: 'consumable', materialPriceRule: { mode: 'all_time' } },
 };
 
 type SettingsDb = {

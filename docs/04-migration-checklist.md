@@ -77,7 +77,7 @@
 | 财务记录 CRUD | 已落地 | 已有 `/api/finance/records` | 补充统计、校验与测试说明 |
 | 资金账户余额 | 已落地 | `FinanceAccountType` 加期初余额；`GET /api/finance/account-balances` 实时聚合（期初+收-付）；`FinanceRecord.accountTypeId` 外键（migration `20260625120000` 已回填）；前端「资金账户」Tab | 后续可加按状态过滤（审核流）/账户报表 |
 | 账户间转账 | 已落地 | `POST /api/finance/transfers` 事务内落 PAYMENT+RECEIPT 同组（`ZZD` 单号） | 后续可加转账撤销/红冲 |
-| Dashboard / 工作台 | 已落地 | `/api/dashboard/*`：workbench 配置、feature-plugins、stats、**order-stats / outsource-stats / rework-stats / product-economics**（含 `materialCostMode` 双口径、`linkedPurchaseCost`/`linkedPaymentCost`/`linkedReceiptAmount`）、notifications；**工作台自定义页改为租户共享：仅 owner 可创建/编辑，默认仅创建者可见（不给 owner/admin 自动可见），角色按页授权只读查看**（`workbench:<pageId>`，列表 `GET /dashboard/workbench/pages` 含首页，存于 `system_settings.workbenchSharedPages`，首页仍按用户存 `preferences`）；**页面查看权限＝该页内容整体授权：被授权页内组件全部展示、金额不掩码，统计接口经 `augmentPermissionsWithWorkbench` 临时补齐模块返回完整数据；首页可单独授予 `workbench:<首页id>` 解除金额掩码；**首页可见性也纳入按页面授权**：角色启用按页面授权但未含首页时首页隐藏，未涉及工作台权限的角色首页仍默认可见，前端在无可见页时显示空态** | 前端 `WorkbenchView`（`WorkbenchPageAccessProvider` 下发 `fullAccess`）+ 角色管理「工作台」模块；存量用户旧 `preferences.dashboardWorkbench` 中的自定义页不会自动迁入共享池（仅保留个人首页），需重新创建 |
+| Dashboard / 工作台 | 已落地 | `/api/dashboard/*`：… **material-purchase-prices**、**report-prices** / **outsource-prices**（报工/外协工序单价：`economics_report_node_price` / `economics_outsource_node_price`；理论成本工序段消费）、**product-economics**（含 `theoreticalUnitCost` / `theoreticalCostBreakdown`）、notifications；…**工作台自定义页改为租户共享：仅 owner 可创建/编辑，默认仅创建者可见（不给 owner/admin 自动可见），角色按页授权只读查看**（`workbench:<pageId>`，列表 `GET /dashboard/workbench/pages` 含首页，存于 `system_settings.workbenchSharedPages`，首页仍按用户存 `preferences`）；**页面查看权限＝该页内容整体授权：被授权页内组件全部展示、金额不掩码，统计接口经 `augmentPermissionsWithWorkbench` 临时补齐模块返回完整数据；首页可单独授予 `workbench:<首页id>` 解除金额掩码；**首页可见性也纳入按页面授权**：角色启用按页面授权但未含首页时首页隐藏，未涉及工作台权限的角色首页仍默认可见，前端在无可见页时显示空态** | 前端 `WorkbenchView`（`WorkbenchPageAccessProvider` 下发 `fullAccess`）+ 角色管理「工作台」模块；存量用户旧 `preferences.dashboardWorkbench` 中的自定义页不会自动迁入共享池（仅保留个人首页），需重新创建 |
 | 追溯码插件 | 已落地 | `featurePlugins.traceability`：计划追溯码、扫码累加、扫码称重 UI gate | 插件中心开通；存量租户默认开启 |
 | 资料库 | 已落地 | `/api/knowledge-base/*`：文件夹/文档 CRUD、图片资源上传 | 前端 `KnowledgeBaseView`；插件 `knowledge_base` 可开关 |
 | 收支汇总、库存预警、订单进度 | 部分落地 | 已有后端聚合方向 | 继续按指标逐项校验计算口径 |
@@ -135,3 +135,16 @@
 | 前端 | UI、表单交互、API 调用、轻量展示分组、局部乐观更新、会话缓存恢复 |
 
 **原则**：库存、汇总、状态流转、跨单据校验等应继续以后端为真源；前端不再承担核心业务真相，只承担展示与交互。
+
+---
+
+## 10. 微信小程序
+
+| 模块 | 当前状态 | 说明 | 剩余收口 |
+|------|------|------|------|
+| 登录 / 选企业 / 会话 | 已落地 | JWT + `tenantCtx` 本地缓存；`utils/request.js` 带 Bearer、401 刷新 | 与 Web 会话语义对齐文档 |
+| 首页 / 应用中心 / 我的 | 部分落地 | 菜单对齐 Web `WORKBENCH_SHORTCUT_CATALOG`；权限过滤；生产计划、**工单中心**已深链 | 其余生产模块入口仍待补 |
+| **生产计划** | **部分落地（P2）** | 列表（搜索/状态/分页/采购进度）+ 详情只读 + 简化新建 + 下达工单；`pages/production-plans` / `production-plan-detail` / `production-plan-create` | BOM/PO/追溯/打印/删除留 Web |
+| **工单中心** | **部分落地（P2+）** | 列表（搜索/仅未完成/分组/工序卡）+ 详情 + 手输报工 + 编辑 + 报工流水 + 待入库 + 领料；`pages/production-orders` 及子页 | 删除/打印/表单配置/矩阵报工留 Web |
+| **扫码 Tab** | **部分落地** | TabBar **5 项**（扫码居中）；枢纽五类入口直达会话页；报工/返工页内底部弹窗选工序；外协可搜索加工厂；入库/查询无预备条件 | 产品关联模式外协/外协返工；待入库合并行 `orderIds` |
+| **消息 Tab** | **部分落地** | 聊天式 UI：会话列表（系统消息/待办事项/协作合作单位）+ 聊天详情气泡（`pages/messages-chat`）；融合 `/dashboard/notifications` + `/todos` + `/collaboration/subcontract-transfers`；本地已读；Tab 角标 | 协作单据详情/操作仍依赖电脑端 |

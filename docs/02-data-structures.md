@@ -125,10 +125,13 @@
 - 口径：**累计**（弹窗明细）；卡片可按周期过滤。按产品聚合，仅纳入有任一生产/销售/库存/单据关联活动的产品。
 - **物料成本口径**（租户配置 `system_settings.productEconomicsSettings.materialCostMode`，默认 `consumable`；设置 → 生产）：
   - **`consumable`（默认）** — 报工耗材 + 结余损耗，**并叠加关联收付款**：
-    - **物料成本**：与生产物料面板「报工耗材」同一数量口径（`shared/productMaterialConsumableCost.ts`），再 × 物料单价。未开启称重 → 报工数 × BOM 用量；开启称重且有快照 → 各子物料 `actualWeight` 累加。**物料单价** = 全部 `PURCHASE_BILL` 加权均价；无入库回退 `purchasePrice`。
+    - **物料成本**：与生产物料面板「报工耗材」同一数量口径（`shared/productMaterialConsumableCost.ts`），再 × 物料单价。未开启称重 → 报工数 × BOM 用量；开启称重且有快照 → 各子物料 `actualWeight` 累加。**物料单价**按 **成品上下文** `parentProductId + materialId` 解析；规则优先级：单物料覆盖 → 成品 BOM 规则（**默认最近一次采购价**，可改为自定义时间区间）。成品级规则与单物料覆盖存 `products.economicsBomMaterialPrice`；计价见 `shared/materialPurchasePrice.ts`（`resolveEffectiveMaterialPriceRule`）；仍无数据时回退档案 `purchasePrice`。
+    - **物料采购均价配置入口**：工作台 **产品经营·报工耗材** → **更多** → **物料价格**（`MaterialPurchasePriceModal`）：一级为带 BOM 成品列表；二级设定该成品 BOM 统计规则（默认最近一次采购价 / 自定义时间），单条物料可单独覆盖（同样仅**最近一次采购价 / 自定义时间**；「恢复成品规则」清除覆盖）。**变更成品 BOM 统计规则时会清除该成品下全部单物料覆盖**。
+    - **报工价格 / 外协价格**（同弹窗顶栏按钮；`ReportProcessPriceModal` / `OutsourceProcessPriceModal`）：一级为有标准路线成品；二级为成品默认规则 + 各工序核算单价（**最近一次单价** / **自定义时间**，单工序可覆盖）。规则存 `products.economics_report_node_price` / `products.economics_outsource_node_price`。报工流水：`milestoneReport` + `productProgressReport` 的 `rate`；外协流水：`OUTSOURCE` 已收回单的 `unitPrice`（或 `amount/quantity`）。无流水回退 `nodeRates[nodeId]`。
     - **物料结余（损耗）**：对齐生产物料面板结余口径（仅累计）。`max(0, 净领用 − 报工耗材) × 物料单价`。
     - **关联付款 / 关联收款**：与 `document_linked` 相同规则（分类 `linkProduct` + `productId`），计入成本 / 收入侧；**不含**关联采购入库金额。
     - **毛利参考** = (`salesAmount` + `linkedReceiptAmount`) −（物料+报工+外协+返工+物料结余+报损+`linkedPaymentCost`）。
+    - **产品成本价（理论）**（仅 `consumable`）：单件理论成本 = 根 BOM 物料 + 标准路线各工序单价。工序单价优先级：**外协核算价 → 报工核算价 → 档案 nodeRates**（见报工/外协价格配置）；不含实际累计外协经营成本/返工/结余损耗/关联收付款。列表 `theoreticalUnitCost`；明细 `theoreticalCostBreakdown`（饼图）。顶栏可点击查看组成。
   - **`document_linked`** — 关联采购入库 + 关联收付款（与上项**互斥**，不做系统自动去重）：
     - **关联采购入库**（`linkedPurchaseCost`）：`PURCHASE_BILL` 行 `customData.relatedProductId = 成品 id` 的 `amount`（或 `quantity × purchasePrice`）累计。
     - **关联付款**（`linkedPaymentCost`）：`FinanceRecord` `type=PAYMENT`、`status=COMPLETED`、`productId` 非空，且分类 `linkProduct=true`，需 finance 模块权限。
@@ -141,7 +144,7 @@
   - **返工费**：`ProductionOpRecord`（`type=REWORK_REPORT`）`amount` 汇总。
   - **报损**：数量 = `SCRAP` 流水 `quantity` 汇总；金额 = 报损量 × 单件 BOM 标准物料成本。
   - **详情 `totalOrderQty` / `stockInQty` / `byNode`**：同前。
-- 响应字段：`materialCostMode`、`canFinance`；行级 `linkedPurchaseCost` / `linkedPaymentCost` / `linkedReceiptAmount` / `totalRevenue`（consumable 时 `linkedPurchaseCost=0`；`linkedPaymentCost`/`linkedReceiptAmount` 按 finance 权限累计）。
+- 响应字段：`materialCostMode`、`canFinance`；行级 `linkedPurchaseCost` / `linkedPaymentCost` / `linkedReceiptAmount` / `totalRevenue` / `theoreticalUnitCost`（consumable；`document_linked` 为 0）；明细 `theoreticalCostBreakdown`（consumable 饼图）；consumable 时 `linkedPurchaseCost=0`；`linkedPaymentCost`/`linkedReceiptAmount` 按 finance 权限累计。
 - 库存/销售（需 psi 模块）：库存走 `psi.service.getStock`；销售 = `SALES_BILL` `quantity` / `amount` 汇总。
 
 ### 1.7 资料库

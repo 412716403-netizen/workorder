@@ -4,6 +4,8 @@ import {
   isWeightPurchaseUnit,
   type MaterialBreakdownRowIn,
 } from '../../../shared/productMaterialConsumableCost.js';
+import { buildMaterialPriceMapForEconomics } from './materialPurchasePrice.service.js';
+import { lookupContextMaterialPrice } from '../../../shared/materialPurchasePrice.js';
 
 type MatAcc = {
   issue: number;
@@ -148,53 +150,15 @@ function applyMaterialBreakdownPurchaseUnit(
   return true;
 }
 
-async function extendPriceMap(
+async function buildSurplusLossPriceMap(
   db: TenantPrismaClient,
-  priceMap: Map<string, number>,
-  materialIds: string[],
+  tenantId: string,
+  boms: BomWithItems[],
 ): Promise<Map<string, number>> {
-  const missing = [...new Set(materialIds.filter(id => id && !priceMap.has(id)))];
-  if (missing.length === 0) return priceMap;
-
-  const [products, purchaseBills] = await Promise.all([
-    db.product.findMany({
-      where: { id: { in: missing } },
-      select: { id: true, purchasePrice: true },
-    }),
-    db.psiRecord.findMany({
-      where: {
-        productId: { in: missing },
-        type: 'PURCHASE_BILL',
-        purchasePrice: { not: null },
-        quantity: { not: null },
-      },
-      select: { productId: true, quantity: true, purchasePrice: true },
-    }),
-  ]);
-
-  const weighted = new Map<string, { totalQty: number; totalAmount: number }>();
-  for (const r of purchaseBills) {
-    if (!r.productId) continue;
-    const qty = num(r.quantity);
-    const price = num(r.purchasePrice);
-    if (qty === 0 || !(price > 0)) continue;
-    const prev = weighted.get(r.productId) ?? { totalQty: 0, totalAmount: 0 };
-    prev.totalQty += qty;
-    prev.totalAmount += qty * price;
-    weighted.set(r.productId, prev);
-  }
-
-  const extended = new Map(priceMap);
-  for (const id of missing) {
-    const agg = weighted.get(id);
-    if (agg && agg.totalQty > 0) {
-      extended.set(id, agg.totalAmount / agg.totalQty);
-      continue;
-    }
-    const fallback = num(products.find(p => p.id === id)?.purchasePrice);
-    if (fallback > 0) extended.set(id, fallback);
-  }
-  return extended;
+  const contexts = boms.flatMap(b =>
+    b.items.map(item => ({ parentProductId: b.parentProductId, materialId: item.productId })),
+  );
+  return buildMaterialPriceMapForEconomics(db, tenantId, contexts);
 }
 
 type OrderWithMilestones = {
@@ -367,6 +331,7 @@ function surplusAmountFromMatRows(
   unitNameById: Map<string, string>,
   materialUnitIdByProduct: Map<string, string | null>,
   priceMap: Map<string, number>,
+  parentProductId: string,
 ): number {
   let total = 0;
   for (const [materialId, row] of prodMap.entries()) {
@@ -374,7 +339,7 @@ function surplusAmountFromMatRows(
     const reportQty = matRowReportQtyInPurchaseUnit(row, materialId, unitNameById, materialUnitIdByProduct);
     const balance = Math.max(0, round2(net - reportQty));
     if (!(balance > 0)) continue;
-    total += balance * (priceMap.get(materialId) ?? 0);
+    total += balance * lookupContextMaterialPrice(priceMap, parentProductId, materialId);
   }
   return round2(total);
 }
@@ -385,8 +350,8 @@ function surplusAmountFromMatRows(
  */
 export async function computeMaterialSurplusLossByProduct(
   db: TenantPrismaClient,
+  tenantId: string,
   finishedProductIds: string[],
-  basePriceMap: Map<string, number>,
 ): Promise<Map<string, number>> {
   const uniqueIds = [...new Set(finishedProductIds.filter(Boolean))];
   if (uniqueIds.length === 0) return new Map();
@@ -462,17 +427,13 @@ export async function computeMaterialSurplusLossByProduct(
     bomsByParentProduct.set(b.parentProductId, list);
   }
 
-  const materialIdsFromBoms = boms.flatMap(b => b.items.map(i => i.productId));
-  const materialIdsFromStock = stockRecords.map(r => r.productId);
-  const priceMap = await extendPriceMap(
-    db,
-    basePriceMap,
-    [...materialIdsFromBoms, ...materialIdsFromStock],
-  );
+  const priceMap = await buildSurplusLossPriceMap(db, tenantId, boms as BomWithItems[]);
 
   const productsById = new Map<string, ProductWithVariants>();
   for (const p of finishedProducts) productsById.set(p.id, p);
 
+  const materialIdsFromBoms = boms.flatMap(b => b.items.map(i => i.productId));
+  const materialIdsFromStock = stockRecords.map(r => r.productId);
   const materialUnitIds = [...new Set([...materialIdsFromBoms, ...materialIdsFromStock])];
   if (materialUnitIds.length > 0) {
     const materialProducts = await db.product.findMany({
@@ -526,7 +487,7 @@ export async function computeMaterialSurplusLossByProduct(
     });
     result.set(
       fpId,
-      surplusAmountFromMatRows(prodMap, unitNameById, materialUnitIdByProduct, priceMap),
+      surplusAmountFromMatRows(prodMap, unitNameById, materialUnitIdByProduct, priceMap, fpId),
     );
   }
 

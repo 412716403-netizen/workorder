@@ -384,6 +384,14 @@ model Product {
   categoryId         String?  @map("category_id") @db.VarChar(50)
   salesPrice         Decimal? @map("sales_price") @db.Decimal(12, 2)
   purchasePrice      Decimal? @map("purchase_price") @db.Decimal(12, 2)
+  /** 报工耗材经营核算：物料采购均价统计窗口（inherit / rolling_days / fixed_range） */
+  economicsMaterialPricePeriod Json? @map("economics_material_price_period")
+  /** 报工耗材：该成品 BOM 物料采购均价规则（defaultRule + materialOverrides） */
+  economicsBomMaterialPrice Json? @map("economics_bom_material_price")
+  /** 报工耗材经营：报工单价统计规则（defaultRule + nodeOverrides） */
+  economicsReportNodePrice Json? @map("economics_report_node_price")
+  /** 报工耗材经营：外协单价统计规则（defaultRule + nodeOverrides） */
+  economicsOutsourceNodePrice Json? @map("economics_outsource_node_price")
   supplierId         String?  @map("supplier_id") @db.VarChar(50)
   unitId             String?  @map("unit_id") @db.VarChar(50)
   colorIds           Json     @default("[]") @map("color_ids")

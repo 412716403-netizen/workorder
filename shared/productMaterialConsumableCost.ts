@@ -1,8 +1,8 @@
 /**
  * 报工物料耗材数量 / 成本口径，与生产物料面板 StockMaterialPanel 对齐。
- * - 未开启称重：报工良品数 × BOM 子项用量（theoryCost 路径）
- * - 开启称重且有 materialBreakdown：各子物料 actualWeight 累加（actualCost 路径，与 applyMaterialBreakdown 一致）
  */
+
+import { lookupContextMaterialPrice } from './materialPurchasePrice.js';
 
 export type MaterialBreakdownRowIn = {
   materialProductId?: string;
@@ -59,18 +59,19 @@ export function sumBreakdownConsumableQty(
   );
 }
 
-/** breakdown × 物料单价（数量口径同面板） */
+/** breakdown × 物料单价 */
 export function materialCostFromBreakdownRows(
   breakdown: MaterialBreakdownRowIn[],
   priceMap: Map<string, number>,
   unitNameByMaterialId: Map<string, string>,
+  parentProductId: string,
 ): number {
   return breakdown.reduce((sum, row) => {
     const pid = row.materialProductId;
     if (!pid) return sum;
     const qty = consumableQtyFromBreakdownRow(row, unitNameByMaterialId);
     if (!(qty > 0)) return sum;
-    return sum + qty * (priceMap.get(pid) ?? 0);
+    return sum + qty * lookupContextMaterialPrice(priceMap, parentProductId, pid);
   }, 0);
 }
 
@@ -96,15 +97,17 @@ export function computeReportMaterialConsumableQty(params: {
   return consumableQtyFromBomItems(bomItems, goodQty);
 }
 
-/** BOM × 报工数 × 单价 */
+/** BOM × 报工数 × 单价（按成品 parentProductId 上下文取价） */
 export function materialCostFromBomItems(
   bomItems: BomItemQty[],
   goodQty: number,
   priceMap: Map<string, number>,
+  parentProductId: string,
 ): number {
   if (!(goodQty > 0) || bomItems.length === 0) return 0;
   return bomItems.reduce(
-    (sum, item) => sum + goodQty * num(item.quantity) * (priceMap.get(item.productId) ?? 0),
+    (sum, item) =>
+      sum + goodQty * num(item.quantity) * lookupContextMaterialPrice(priceMap, parentProductId, item.productId),
     0,
   );
 }
@@ -127,10 +130,11 @@ export function computeReportMaterialCost(params: {
   bomItems: BomItemQty[];
   priceMap: Map<string, number>;
   unitNameByMaterialId: Map<string, string>;
+  parentProductId: string;
 }): number {
-  const { weightEnabled, breakdown, goodQty, bomItems, priceMap, unitNameByMaterialId } = params;
+  const { weightEnabled, breakdown, goodQty, bomItems, priceMap, unitNameByMaterialId, parentProductId } = params;
   if (shouldUseMaterialBreakdownForCost(weightEnabled, breakdown)) {
-    return materialCostFromBreakdownRows(breakdown, priceMap, unitNameByMaterialId);
+    return materialCostFromBreakdownRows(breakdown, priceMap, unitNameByMaterialId, parentProductId);
   }
-  return materialCostFromBomItems(bomItems, goodQty, priceMap);
+  return materialCostFromBomItems(bomItems, goodQty, priceMap, parentProductId);
 }
