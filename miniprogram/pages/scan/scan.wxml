@@ -1,0 +1,48 @@
+<tab-shell title="扫码" subtitle="选择类型并配置条件后开始扫码">
+  <view class="scan-types">
+    <view class="tab-section-head">
+      <view class="tab-section-head__accent"></view>
+      <text class="tab-section-head__title">扫码类型</text>
+    </view>
+    <view class="scan-hub__grid">
+      <view
+        wx:for="{{typeEntries}}"
+        wx:key="key"
+        class="scan-hub__card scan-hub__card--tone-{{index % 4}} {{item.allowed ? '' : 'scan-hub__card--disabled'}}"
+        data-key="{{item.key}}"
+        data-allowed="{{item.allowed}}"
+        bindtap="onTypeTap"
+      >
+        <view class="scan-hub__icon-wrap">
+          <image class="scan-hub__icon" src="{{item.icon}}" mode="aspectFit" />
+        </view>
+        <text class="scan-hub__label">{{item.label}}</text>
+        <text class="scan-hub__desc">{{item.desc}}</text>
+        <text wx:if="{{!item.allowed}}" class="scan-hub__lock">无权限</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="tab-panel scan-history">
+    <view class="scan-history__head">
+      <view class="tab-section-head scan-history__section-head">
+        <view class="tab-section-head__accent"></view>
+        <text class="tab-section-head__title">最近扫码</text>
+      </view>
+      <text
+        wx:if="{{history.length > 5}}"
+        class="scan-history__more"
+        bindtap="onToggleHistory"
+      >{{historyExpanded ? '收起' : '查看更多'}}</text>
+    </view>
+    <block wx:if="{{displayHistory.length}}">
+      <view wx:for="{{displayHistory}}" wx:key="id" class="scan-history-row">
+        <view class="scan-pill scan-pill--{{item.status}}">{{item.statusLabel}}</view>
+        <view class="scan-history-row__code">{{item.code}}</view>
+        <view wx:if="{{item.summary}}" class="scan-history-row__summary">{{item.summary}}</view>
+        <view class="scan-history-row__meta">{{item.typeLabel}} · {{item.time}}</view>
+      </view>
+    </block>
+    <empty-state wx:else text="暂无扫码记录" />
+  </view>
+</tab-shell>

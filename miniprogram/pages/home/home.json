@@ -1,4 +1,8 @@
 {
-  "navigationBarTitleText": "工作台",
-  "usingComponents": {}
+  "navigationStyle": "custom",
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "empty-state": "/components/empty-state/empty-state",
+    "workbench-stat-card": "/components/workbench-stat-card/workbench-stat-card"
+  }
 }

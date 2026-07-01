@@ -1,0 +1,28 @@
+<scroll-view
+  wx:if="{{chips.length}}"
+  class="order-process-scroll {{compact ? 'order-process-scroll--compact' : ''}}"
+  scroll-x
+  enhanced
+  show-scrollbar="{{false}}"
+>
+  <view class="order-process-scroll__inner">
+    <view
+      wx:for="{{chips}}"
+      wx:key="milestoneId"
+      class="order-process-chip {{item.isCompleted ? 'order-process-chip--done' : ''}} {{item.disabled ? 'order-process-chip--disabled' : ''}}"
+      data-order-id="{{item.orderId}}"
+      data-milestone-id="{{item.milestoneId}}"
+      data-disabled="{{item.disabled || !canReport}}"
+      bindtap="onChipTap"
+    >
+      <text class="order-process-chip__name">{{item.name}}</text>
+      <view class="order-process-chip__circle">
+        <text class="order-process-chip__count">{{item.completed}}</text>
+      </view>
+      <text class="order-process-chip__meta">{{item.availableQty}} / {{item.remaining}}</text>
+      <view class="order-process-chip__bar">
+        <view class="order-process-chip__bar-fill" style="width: {{item.progress}}%;"></view>
+      </view>
+    </view>
+  </view>
+</scroll-view>

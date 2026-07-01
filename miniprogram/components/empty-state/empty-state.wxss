@@ -1,0 +1,10 @@
+
+.st-empty {
+  padding: 48rpx var(--spacing-card);
+  text-align: center;
+}
+
+.st-empty__text {
+  font-size: var(--font-caption);
+  color: var(--color-text-secondary);
+}

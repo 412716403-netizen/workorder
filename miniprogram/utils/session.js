@@ -30,8 +30,27 @@ function readTenantCtx() {
   }
 }
 
+function readCurrentUser() {
+  const raw = wx.getStorageSync('currentUser');
+  if (!raw) return null;
+  if (typeof raw === 'object') return raw;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function readCurrentUserId() {
+  const user = readCurrentUser();
+  if (!user) return '';
+  return user.id || user.userId || '';
+}
+
 module.exports = {
   clearSession,
   readTenants,
   readTenantCtx,
+  readCurrentUser,
+  readCurrentUserId,
 };

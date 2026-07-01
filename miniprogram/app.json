@@ -1,17 +1,75 @@
 {
   "pages": [
+    "pages/home/home",
+    "pages/apps/apps",
+    "pages/scan/scan",
+    "pages/messages/messages",
+    "pages/messages-chat/messages-chat",
+    "pages/production-plans/production-plans",
+    "pages/production-plan-detail/production-plan-detail",
+    "pages/production-plan-create/production-plan-create",
+    "pages/production-orders/production-orders",
+    "pages/production-order-flow/production-order-flow",
+    "pages/production-order-detail/production-order-detail",
+    "pages/production-order-report/production-order-report",
+    "pages/production-order-report-history/production-order-report-history",
+    "pages/production-order-pending-stock/production-order-pending-stock",
+    "pages/production-order-material/production-order-material",
+    "pages/settings/settings",
+    "pages/settings-tab/settings-tab",
+    "pages/scan-setup/scan-setup",
+    "pages/scan-session/scan-session",
+    "pages/mine/mine",
     "pages/login/login",
     "pages/tenant-select/tenant-select",
     "pages/no-tenant/no-tenant",
-    "pages/onboarding/onboarding",
-    "pages/home/home"
+    "pages/onboarding/onboarding"
   ],
   "window": {
+    "navigationStyle": "custom",
     "navigationBarTitleText": "生产报工",
-    "navigationBarBackgroundColor": "#f2f2f7",
+    "navigationBarBackgroundColor": "#F7F8FA",
     "navigationBarTextStyle": "black",
-    "backgroundColor": "#f2f2f7",
+    "backgroundColor": "#F7F8FA",
     "backgroundTextStyle": "dark"
+  },
+  "tabBar": {
+    "color": "#8F959E",
+    "selectedColor": "#2F6BFF",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/home/home",
+        "text": "首页",
+        "iconPath": "assets/tab/home.png",
+        "selectedIconPath": "assets/tab/home-active.png"
+      },
+      {
+        "pagePath": "pages/apps/apps",
+        "text": "应用",
+        "iconPath": "assets/tab/apps.png",
+        "selectedIconPath": "assets/tab/apps-active.png"
+      },
+      {
+        "pagePath": "pages/scan/scan",
+        "text": "扫码",
+        "iconPath": "assets/tab/scan.png",
+        "selectedIconPath": "assets/tab/scan-active.png"
+      },
+      {
+        "pagePath": "pages/messages/messages",
+        "text": "消息",
+        "iconPath": "assets/tab/messages.png",
+        "selectedIconPath": "assets/tab/messages-active.png"
+      },
+      {
+        "pagePath": "pages/mine/mine",
+        "text": "我的",
+        "iconPath": "assets/tab/mine.png",
+        "selectedIconPath": "assets/tab/mine-active.png"
+      }
+    ]
   },
   "style": "v2",
   "sitemapLocation": "sitemap.json"

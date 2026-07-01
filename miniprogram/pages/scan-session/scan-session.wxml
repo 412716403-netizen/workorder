@@ -1,0 +1,99 @@
+<page-header title="{{pageTitle}}" show-back="{{true}}" center="{{true}}" bind:back="onHeaderBack" />
+
+<view class="scan-page scan-page--minimal">
+  <view wx:if="{{scanType === 'report'}}" class="scan-session-conditions">
+    <node-chip-select
+      label="工序（必选）"
+      sheet-title="选择工序"
+      nodes="{{reportNodes}}"
+      value="{{nodeId}}"
+      placeholder="请选择工序"
+      empty-text="暂无工序，请先在设置中维护"
+      bind:change="onReportNodeChange"
+    />
+  </view>
+
+  <view wx:if="{{scanType === 'rework'}}" class="scan-session-conditions">
+    <node-chip-select
+      label="返工工序（必选）"
+      sheet-title="选择返工工序"
+      nodes="{{reworkNodes}}"
+      value="{{reworkNodeId}}"
+      placeholder="请选择返工工序"
+      empty-text="当前无待返工工序"
+      bind:change="onReworkNodeChange"
+    />
+  </view>
+
+  <view wx:if="{{scanType === 'outsource'}}" class="scan-session-conditions">
+    <searchable-partner-select
+      label="加工厂"
+      partners="{{partnerOptions}}"
+      categories="{{partnerCategories}}"
+      value="{{partnerName}}"
+      placeholder="搜索加工厂名称"
+      bind:change="onPartnerChange"
+    />
+    <text class="scan-session-conditions__hint">选择加工厂后即可扫码收货</text>
+  </view>
+
+  <view class="scan-camera-wrap scan-camera-wrap--session">
+    <camera
+      wx:if="{{useCamera}}"
+      class="scan-camera"
+      mode="scanCode"
+      frame-size="medium"
+      device-position="back"
+      flash="auto"
+      bindscancode="onCameraScan"
+      binderror="onCameraError"
+    />
+    <view wx:else class="scan-camera-fallback">
+      <image class="scan-camera-fallback__icon" src="/assets/icons/scan-line.png" mode="aspectFit" />
+      <text wx:if="{{isDevtools}}" class="scan-camera-fallback__text">开发者工具无摄像头，请使用系统扫码</text>
+      <text wx:elif="{{cameraDenied}}" class="scan-camera-fallback__text">未获得摄像头权限</text>
+      <text wx:else class="scan-camera-fallback__text">正在准备摄像头…</text>
+      <button wx:if="{{cameraDenied && !isDevtools}}" class="scan-fallback-btn" bindtap="onOpenSetting">开启权限</button>
+      <button class="scan-fallback-btn scan-fallback-btn--primary" loading="{{scanning}}" bindtap="onFallbackScan">系统扫码</button>
+    </view>
+
+    <cover-view wx:if="{{useCamera}}" class="scan-overlay">
+      <cover-view class="scan-overlay__dim scan-overlay__dim--top"></cover-view>
+      <cover-view class="scan-overlay__dim scan-overlay__dim--bottom"></cover-view>
+      <cover-view class="scan-overlay__dim scan-overlay__dim--left"></cover-view>
+      <cover-view class="scan-overlay__dim scan-overlay__dim--right"></cover-view>
+      <cover-view class="scan-overlay__frame">
+        <cover-view class="scan-overlay__corner scan-overlay__corner--tl"></cover-view>
+        <cover-view class="scan-overlay__corner scan-overlay__corner--tr"></cover-view>
+        <cover-view class="scan-overlay__corner scan-overlay__corner--bl"></cover-view>
+        <cover-view class="scan-overlay__corner scan-overlay__corner--br"></cover-view>
+        <cover-view class="scan-overlay__line"></cover-view>
+      </cover-view>
+      <cover-view class="scan-overlay__hint">对准条码连续扫描</cover-view>
+    </cover-view>
+  </view>
+
+  <scroll-view class="scan-session-logs" scroll-y enhanced show-scrollbar="{{false}}">
+    <view class="scan-session-logs__head">
+      <text class="scan-session-logs__title">本次扫码</text>
+      <text wx:if="{{sessionLogs.length > 0}}" class="scan-session-logs__count">{{sessionLogs.length}} 条</text>
+    </view>
+    <view wx:if="{{sessionLogs.length === 0}}" class="scan-session-logs__empty">扫码结果将显示在下方</view>
+    <view
+      wx:for="{{sessionLogs}}"
+      wx:key="id"
+      class="scan-session-log scan-session-log--{{item.status}}"
+    >
+      <view class="scan-session-log__head">
+        <text class="scan-session-log__title">{{item.title}}</text>
+        <text class="scan-session-log__time">{{item.time}}</text>
+      </view>
+      <text class="scan-session-log__code">{{item.code}}</text>
+      <view wx:for="{{item.lines}}" wx:for-item="line" wx:key="*this" class="scan-session-log__line">{{line}}</view>
+    </view>
+  </scroll-view>
+
+  <view wx:if="{{processing}}" class="scan-processing">
+    <text>处理中…</text>
+  </view>
+</view>

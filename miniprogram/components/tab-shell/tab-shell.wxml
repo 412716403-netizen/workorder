@@ -1,0 +1,23 @@
+<view class="tab-shell">
+  <view
+    class="tab-header"
+    style="padding-top: {{headerPaddingTop}}px; padding-right: {{headerPaddingRight}}px;"
+  >
+    <block wx:if="{{customHeader}}">
+      <slot name="header"></slot>
+    </block>
+    <block wx:else>
+      <view class="tab-header__main">
+        <text wx:if="{{title}}" class="tab-header__title">{{title}}</text>
+        <text wx:if="{{subtitle}}" class="tab-header__subtitle">{{subtitle}}</text>
+      </view>
+      <slot name="hero"></slot>
+    </block>
+  </view>
+
+  <scroll-view class="tab-scroll" scroll-y show-scrollbar="{{false}}" enhanced>
+    <view class="tab-body">
+      <slot></slot>
+    </view>
+  </scroll-view>
+</view>

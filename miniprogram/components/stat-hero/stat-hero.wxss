@@ -1,0 +1,49 @@
+
+.st-stat-hero {
+  position: relative;
+  margin: 0 var(--spacing-card) var(--spacing-card);
+  padding: 32rpx var(--spacing-card);
+  border-radius: var(--radius-card);
+  background: linear-gradient(135deg, var(--color-primary-gradient-start), var(--color-primary-gradient-end));
+  overflow: hidden;
+  min-height: 160rpx;
+  box-sizing: border-box;
+}
+
+.st-stat-hero__bg {
+  position: absolute;
+  right: 16rpx;
+  bottom: 0;
+  width: 200rpx;
+  height: 140rpx;
+  opacity: 0.35;
+}
+
+.st-stat-hero__content {
+  position: relative;
+  z-index: 1;
+}
+
+.st-stat-hero__label {
+  font-size: var(--font-caption);
+  color: rgba(255, 255, 255, 0.85);
+  margin-bottom: 12rpx;
+}
+
+.st-stat-hero__value-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8rpx;
+}
+
+.st-stat-hero__value {
+  font-size: var(--font-stat-hero);
+  font-weight: 700;
+  color: var(--color-text-inverse);
+  line-height: 1.1;
+}
+
+.st-stat-hero__unit {
+  font-size: var(--font-caption);
+  color: rgba(255, 255, 255, 0.9);
+}

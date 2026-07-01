@@ -80,6 +80,15 @@ Page({
     }
   },
 
+  onHeaderBack() {
+    const { mode } = this.data;
+    if (mode === 'create' || mode === 'join') {
+      this.onModeChoose();
+      return;
+    }
+    this.onBackChoose();
+  },
+
   onJoinBack() {
     this.setData({ mode: 'choose', inviteCode: '', lookupResult: null });
   },
@@ -111,7 +120,7 @@ Page({
         expiresAt: d.expiresAt ?? null,
       }),
     );
-    wx.reLaunch({ url: '/pages/home/home' });
+    wx.switchTab({ url: '/pages/home/home' });
   },
 
   onSubmitCreate() {

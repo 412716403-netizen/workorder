@@ -1,0 +1,60 @@
+<view class="plan-shell">
+  <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-header__title">{{pageTitle}}</text>
+      <view class="plan-header__back plan-header__back--placeholder"></view>
+    </view>
+  </view>
+
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <view class="pending-stock-page {{isListMode ? 'pending-stock-page--list' : ''}}">
+    <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
+
+    <block wx:elif="{{isListMode}}">
+      <view wx:if="{{rows.length}}">
+        <view
+          wx:for="{{rows}}"
+          wx:key="rowKey"
+          class="pending-stock-list-row"
+          bindtap="onListRowTap"
+          data-order-id="{{item.orderId}}"
+        >
+          <view class="pending-stock-list-row__head">
+            <text class="pending-stock-list-row__title">{{item.titleLine}}</text>
+            <text class="pending-stock-list-row__pending">待入库 {{item.pendingTotal}}</text>
+          </view>
+          <text class="pending-stock-list-row__meta">总量 {{item.orderTotal}} · 已入库 {{item.alreadyIn}}</text>
+          <text wx:if="{{item.subtitleLine}}" class="pending-stock-list-row__sub">{{item.subtitleLine}}</text>
+        </view>
+      </view>
+      <view wx:else class="plan-list-empty">暂无待入库工单</view>
+    </block>
+
+    <block wx:else>
+      <view wx:if="{{row}}">
+        <view class="pending-stock-row">
+          <text class="pending-stock-row__title">{{row.orderNumber}}</text>
+          <text class="pending-stock-row__meta">完工 {{row.completed}} 件 · 已入库 {{row.alreadyIn}} 件 · 待入库 {{row.pendingTotal}} 件</text>
+
+          <view wx:if="{{canCreate && row.canStockIn}}" class="pending-stock-form">
+            <input
+              class="pending-stock-input"
+              type="digit"
+              value="{{stockInQty}}"
+              bindinput="onQtyInput"
+              placeholder="入库数量"
+            />
+            <view class="pending-stock-submit" bindtap="onStockIn">确认入库</view>
+          </view>
+        </view>
+      </view>
+      <view wx:else class="plan-list-empty">暂无待入库数量</view>
+    </block>
+  </view>
+
+  <view class="pending-stock-footer">
+    <view class="pending-stock-scan-btn" bindtap="onGoScan">去扫码入库</view>
+  </view>
+</view>

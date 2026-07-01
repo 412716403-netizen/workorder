@@ -1,0 +1,8 @@
+{
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "page-header": "/components/page-header/page-header",
+    "node-chip-select": "/components/node-chip-select/node-chip-select",
+    "searchable-partner-select": "/components/searchable-partner-select/searchable-partner-select"
+  }
+}

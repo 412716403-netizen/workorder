@@ -1,4 +1,6 @@
 {
-  "navigationBarTitleText": "企业入驻",
-  "usingComponents": {}
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "page-header": "/components/page-header/page-header"
+  }
 }

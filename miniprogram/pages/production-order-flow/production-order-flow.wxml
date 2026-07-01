@@ -1,0 +1,102 @@
+<view class="plan-shell">
+  <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-header__title">工单流水</text>
+      <view class="plan-header__back plan-header__back--placeholder"></view>
+    </view>
+
+    <view class="plan-header__tools">
+      <view class="plan-search">
+        <input
+          class="plan-search__input"
+          value="{{searchKeyword}}"
+          bindinput="onSearchInput"
+          placeholder="工单号 / 产品"
+          confirm-type="search"
+          placeholder-class="plan-search__ph"
+        />
+        <view wx:if="{{searchKeyword}}" class="plan-search__clear" bindtap="onSearchClear">×</view>
+      </view>
+      <view
+        class="plan-tool-btn {{showFilterPanel ? 'plan-tool-btn--active' : ''}}"
+        bindtap="onFilterTap"
+      >
+        <image class="plan-tool-btn__icon" src="/assets/icons/list-filter.png" mode="aspectFit" />
+      </view>
+    </view>
+  </view>
+
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <view class="order-flow-page">
+    <view wx:if="{{showFilterPanel}}" class="plan-filter-panel">
+      <view class="plan-filter-panel__row">
+        <text class="plan-filter-panel__label">开始时间</text> 
+        <picker mode="date" value="{{dateFrom}}" bindchange="onDateFromChange">
+          <view class="order-flow-filter order-flow-filter--picker">{{dateFrom || '请选择'}}</view>
+        </picker>
+      </view>
+      <view class="plan-filter-panel__row">
+        <text class="plan-filter-panel__label">结束时间</text>
+        <picker mode="date" value="{{dateTo}}" bindchange="onDateToChange">
+          <view class="order-flow-filter order-flow-filter--picker">{{dateTo || '请选择'}}</view>
+        </picker>
+      </view>
+      <view class="plan-filter-panel__foot">
+        <view class="plan-filter-reset" bindtap="onFilterReset">重置</view>
+        <view class="plan-filter-apply" bindtap="onFilterApply">确定</view>
+      </view>
+    </view>
+
+    <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
+
+    <view wx:elif="{{rows.length}}">
+      <view
+        wx:for="{{rows}}"
+        wx:key="id"
+        class="order-flow-row"
+        bindtap="onRowTap"
+        data-id="{{item.id}}"
+      >
+        <view class="order-flow-row__body">
+          <view class="order-flow-row__left">
+            <view class="order-flow-row__thumb">
+              <image
+                wx:if="{{item.showProductImage}}"
+                class="order-flow-row__img"
+                src="{{item.productImageUrl}}"
+                mode="aspectFill"
+                data-id="{{item.id}}"
+                binderror="onProductImageError"
+              />
+              <view wx:else class="order-flow-row__img order-flow-row__img--placeholder">
+                <image class="order-flow-row__placeholder-icon" src="{{item.placeholderIconSrc}}" mode="aspectFit" />
+              </view>
+            </view>
+          </view>
+          <view class="order-flow-row__content">
+            <view class="order-flow-row__head">
+              <text class="order-flow-row__time">{{item.placedLabel}}</text>
+              <text wx:if="{{item.showDueDate}}" class="order-flow-row__due">交期 {{item.dueDateLabel}}</text>
+            </view>
+            <view class="order-flow-row__main">
+              <text class="order-flow-row__number">{{item.orderNumber}}</text>
+              <text class="order-flow-row__qty">{{item.quantityText}}</text>
+            </view>
+            <view class="order-flow-row__product">
+              <text class="order-flow-row__product-name">{{item.productName}}</text>
+              <text wx:if="{{item.showProductSku}}" class="order-flow-row__sku">{{item.productSku}}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view wx:else class="plan-list-empty">{{emptyText}}</view>
+
+    <view wx:if="{{!loading && rows.length}}" class="order-flow-footer">
+      <text class="order-flow-footer__text">共 {{stats.count}} 条 · 合计 {{stats.totalQty}} 件</text>
+    </view>
+  </view>
+</view>

@@ -71,7 +71,7 @@ Page({
             expiresAt: d.expiresAt ?? null,
           }),
         );
-        wx.reLaunch({ url: '/pages/home/home' });
+        wx.switchTab({ url: '/pages/home/home' });
       })
       .catch((err) => {
         const msg = err && err.message ? err.message : '切换企业失败';

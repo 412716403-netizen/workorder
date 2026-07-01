@@ -1,4 +1,6 @@
 {
-  "navigationBarTitleText": "企业",
-  "usingComponents": {}
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "page-header": "/components/page-header/page-header"
+  }
 }

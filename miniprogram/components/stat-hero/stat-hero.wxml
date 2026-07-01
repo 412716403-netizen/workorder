@@ -1,0 +1,10 @@
+<view class="st-stat-hero">
+  <image wx:if="{{bgImage}}" class="st-stat-hero__bg" src="{{bgImage}}" mode="aspectFit" />
+  <view class="st-stat-hero__content">
+    <view class="st-stat-hero__label">{{label}}</view>
+    <view class="st-stat-hero__value-row">
+      <text class="st-stat-hero__value">{{value}}</text>
+      <text wx:if="{{unit}}" class="st-stat-hero__unit">{{unit}}</text>
+    </view>
+  </view>
+</view>

@@ -1,0 +1,128 @@
+<view wx:if="{{card}}" class="wb-stat-card wb-stat-card--{{card.theme}} {{card.compact ? 'wb-stat-card--compact' : ''}}">
+  <view class="wb-stat-card__head">
+    <view class="wb-stat-card__icon">{{card.iconChar}}</view>
+    <view class="wb-stat-card__titles">
+      <text class="wb-stat-card__title">{{card.title}}</text>
+      <text wx:if="{{card.subtitle && !card.compact}}" class="wb-stat-card__subtitle">{{card.subtitle}}</text>
+    </view>
+    <text class="wb-stat-card__period">{{card.periodLabel}}</text>
+  </view>
+
+  <view wx:if="{{card.loading}}" class="wb-stat-card__skeleton">
+    <view class="wb-skeleton wb-skeleton--lg"></view>
+    <view class="wb-skeleton wb-skeleton--sm"></view>
+  </view>
+
+  <view wx:elif="{{card.noPermission}}" class="wb-stat-card__empty">
+    <text class="wb-stat-card__empty-char">锁</text>
+    <text>无查看权限</text>
+  </view>
+
+  <view wx:elif="{{card.variant === 'node' && card.nodeScroll}}">
+    <scroll-view
+      wx:if="{{card.rows.length}}"
+      class="wb-node-scroll"
+      scroll-x
+      enhanced
+      show-scrollbar="{{false}}"
+    >
+      <view class="wb-node-scroll__inner">
+        <view
+          wx:for="{{card.rows}}"
+          wx:for-index="idx"
+          wx:key="idx"
+          class="wb-node-chip wb-node-chip--tone-{{item.themeIndex}}"
+        >
+          <view class="wb-node-chip__top">
+            <text class="wb-node-chip__name">{{item.name}}</text>
+            <text class="wb-node-chip__pct">{{item.progress}}%</text>
+          </view>
+          <view class="wb-node-chip__body">
+            <view class="wb-node-chip__hero">
+              <text class="wb-node-chip__count">{{item.taskCount}}</text>
+              <text class="wb-node-chip__count-label">{{item.labels.taskCount}}</text>
+            </view>
+            <view class="wb-node-chip__metrics">
+              <view class="wb-node-chip__metric">
+                <text class="wb-node-chip__metric-v">{{item.pending}}</text>
+                <text class="wb-node-chip__metric-l">{{item.labels.pending}}</text>
+              </view>
+              <view class="wb-node-chip__metric">
+                <text class="wb-node-chip__metric-v wb-node-chip__metric-v--ok">{{item.m2}}</text>
+                <text class="wb-node-chip__metric-l">{{item.labels.m2}}</text>
+              </view>
+              <view class="wb-node-chip__metric">
+                <text class="wb-node-chip__metric-v wb-node-chip__metric-v--warn">{{item.m3}}</text>
+                <text class="wb-node-chip__metric-l">{{item.labels.m3}}</text>
+              </view>
+            </view>
+          </view>
+          <view class="wb-node-chip__bar">
+            <view class="wb-node-chip__bar-fill" style="width: {{item.progress}}%;"></view>
+          </view>
+        </view>
+      </view>
+    </scroll-view>
+    <view wx:else class="wb-stat-card__empty wb-stat-card__empty--compact">
+      <text>暂无工序数据</text>
+    </view>
+  </view>
+
+  <view wx:elif="{{card.variant === 'node'}}">
+    <view wx:if="{{card.rows.length}}" class="wb-node-list">
+      <view
+        wx:for="{{card.rows}}"
+        wx:for-index="idx"
+        wx:key="idx"
+        class="wb-node-row"
+      >
+        <view class="wb-node-row__main">
+          <text class="wb-node-row__name">{{item.name}}</text>
+          <text class="wb-node-row__count">{{item.taskCount}}</text>
+        </view>
+        <view class="wb-node-row__meta">
+          <text>{{item.labels.pending}} {{item.pending}}</text>
+          <text class="wb-node-row__ok">{{item.labels.m2}} {{item.m2}}</text>
+          <text class="wb-node-row__pct">{{item.progress}}%</text>
+        </view>
+        <view class="wb-node-row__bar">
+          <view class="wb-node-row__bar-fill" style="width: {{item.progress}}%;"></view>
+        </view>
+      </view>
+    </view>
+    <view wx:else class="wb-stat-card__empty wb-stat-card__empty--compact">
+      <text>暂无工序数据</text>
+    </view>
+  </view>
+
+  <view wx:else class="wb-stat-card__kpi">
+    <view class="wb-kpi-compact">
+      <view class="wb-kpi-compact__hero">
+        <text class="wb-kpi-compact__label">{{card.heroLabel}}</text>
+        <view class="wb-kpi-compact__row">
+          <text class="wb-kpi-compact__value wb-kpi-compact__value--{{card.heroToneClass}}">{{card.heroValue}}</text>
+          <text wx:if="{{card.heroHint}}" class="wb-kpi-compact__hint">{{card.heroHint}}</text>
+        </view>
+      </view>
+      <scroll-view
+        wx:if="{{card.metrics.length}}"
+        class="wb-kpi-scroll"
+        scroll-x
+        enhanced
+        show-scrollbar="{{false}}"
+      >
+        <view class="wb-kpi-scroll__inner">
+          <view
+            wx:for="{{card.metrics}}"
+            wx:key="label"
+            class="wb-kpi-chip wb-kpi-chip--tone-{{item.toneClass}}"
+          >
+            <text class="wb-kpi-chip__value">{{item.value}}</text>
+            <text class="wb-kpi-chip__label">{{item.label}}</text>
+            <text wx:if="{{item.sub}}" class="wb-kpi-chip__sub">{{item.sub}}</text>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+</view>

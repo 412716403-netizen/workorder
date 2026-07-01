@@ -1,0 +1,83 @@
+@import '../../styles/tab-shell.wxss';
+
+.mine-menu__row {
+  display: flex;
+  align-items: center;
+  padding: 26rpx var(--spacing-card);
+  border-bottom: 1rpx solid var(--color-border);
+}
+
+.mine-menu__row:last-child {
+  border-bottom: none;
+}
+
+.mine-menu__row:active {
+  background: var(--color-bg-page);
+}
+
+.mine-menu__icon-wrap {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 18rpx;
+  background: var(--color-primary-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 20rpx;
+  flex-shrink: 0;
+}
+
+.mine-menu__icon-img {
+  width: 40rpx;
+  height: 40rpx;
+}
+
+.mine-menu__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.mine-menu__title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.mine-menu__desc {
+  margin-top: 6rpx;
+  font-size: 24rpx;
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mine-menu__chevron {
+  margin-left: 12rpx;
+  font-size: 40rpx;
+  font-weight: 300;
+  color: var(--color-text-tertiary);
+  line-height: 1;
+}
+
+.mine-logout {
+  width: 100%;
+  margin: 32rpx 0 0;
+  padding: 28rpx 32rpx;
+  border-radius: var(--radius-card);
+  font-size: 30rpx;
+  font-weight: 600;
+  background: var(--color-bg-card);
+  color: var(--color-danger);
+  border: none;
+  box-shadow: var(--shadow-card);
+  text-align: center;
+}
+
+.mine-logout::after {
+  border: none;
+}
+
+.mine-logout:active {
+  background: var(--color-danger-bg);
+}

@@ -1,0 +1,9 @@
+<view class="st-section-card">
+  <view wx:if="{{title || actionText}}" class="st-section-card__head">
+    <text wx:if="{{title}}" class="st-section-card__title">{{title}}</text>
+    <text wx:if="{{actionText}}" class="st-section-card__action" bindtap="onAction">{{actionText}}</text>
+  </view>
+  <view class="st-section-card__body">
+    <slot></slot>
+  </view>
+</view>

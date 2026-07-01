@@ -1,0 +1,8 @@
+<view class="st-header" style="padding-top: {{statusBarHeight}}px;">
+  <view class="st-header__bar {{center ? 'st-header__bar--center' : ''}}" style="height: {{navBarHeight}}px;">
+    <view wx:if="{{showBack}}" class="st-header__back" bindtap="onBack">‹</view>
+    <text class="st-header__title">{{title}}</text>
+    <view wx:if="{{showBack && center}}" class="st-header__back st-header__back--placeholder"></view>
+  </view>
+</view>
+<view class="st-header__placeholder" style="height: {{statusBarHeight + navBarHeight}}px;"></view>

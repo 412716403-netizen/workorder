@@ -1,6 +1,21 @@
 const { API_BASE } = require('../config.js');
+const { clearSession } = require('./session.js');
 
 let refreshPromise = null;
+let authRedirecting = false;
+
+function handleAuthFailure() {
+  if (authRedirecting) return;
+  authRedirecting = true;
+  clearSession();
+  wx.showToast({ title: '登录已过期，请重新登录', icon: 'none' });
+  wx.reLaunch({
+    url: '/pages/login/login',
+    complete: () => {
+      authRedirecting = false;
+    },
+  });
+}
 
 function refreshToken() {
   if (refreshPromise) return refreshPromise;
@@ -38,7 +53,7 @@ function refreshToken() {
  * @param {{ path: string, method?: string, data?: object }} opts path 以 / 开头，如 /auth/me
  */
 function request(opts) {
-  const { path, method = 'GET', data } = opts;
+  const { path, method = 'GET', data, timeout = 45000 } = opts;
   const url = `${API_BASE}${path}`;
   const m = (method || 'GET').toUpperCase();
   const payload = m === 'GET' || m === 'HEAD' ? undefined : data || {};
@@ -49,6 +64,7 @@ function request(opts) {
       wx.request({
         url,
         method: m,
+        timeout,
         ...(payload !== undefined ? { data: payload } : {}),
         header: {
           'Content-Type': 'application/json',
@@ -57,6 +73,10 @@ function request(opts) {
         success(res) {
           if (res.statusCode === 401) {
             reject(Object.assign(new Error('UNAUTHORIZED'), { statusCode: 401 }));
+            return;
+          }
+          if (res.statusCode === 403) {
+            reject(Object.assign(new Error('FORBIDDEN'), { statusCode: 403 }));
             return;
           }
           if (res.statusCode >= 200 && res.statusCode < 300) {
@@ -68,15 +88,25 @@ function request(opts) {
           reject(new Error(typeof msg === 'string' ? msg : JSON.stringify(msg)));
         },
         fail(err) {
+          const errMsg = (err && err.errMsg) || '';
+          // eslint-disable-next-line no-console
+          console.error('[request fail]', url, errMsg || err);
+          if (/timeout/i.test(errMsg)) {
+            reject(new Error('网络请求超时，请稍后重试'));
+            return;
+          }
           reject(err);
         },
       });
     });
 
-  return once().catch(async (err) => {
+  return once().catch((err) => {
     if (err && err.statusCode === 401) {
-      const ok = await refreshToken();
-      if (ok) return once();
+      return refreshToken().then((ok) => {
+        if (ok) return once();
+        handleAuthFailure();
+        throw err;
+      });
     }
     throw err;
   });

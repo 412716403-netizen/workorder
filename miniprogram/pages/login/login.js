@@ -1,4 +1,5 @@
 const { API_BASE } = require('../../config.js');
+const { BRAND_NAME, BRAND_LOGO_PATH, BRAND_TAGLINE } = require('../../config/branding.js');
 
 /**
  * 与网页端 AuthContext.handleLogin 一致：
@@ -8,9 +9,13 @@ const { API_BASE } = require('../../config.js');
  */
 Page({
   data: {
+    brandName: BRAND_NAME,
+    brandTagline: BRAND_TAGLINE,
+    logoPath: BRAND_LOGO_PATH,
     username: '',
     password: '',
     loading: false,
+    showPassword: false,
   },
 
   onUser(e) {
@@ -19,6 +24,10 @@ Page({
 
   onPass(e) {
     this.setData({ password: e.detail.value });
+  },
+
+  onTogglePassword() {
+    this.setData({ showPassword: !this.data.showPassword });
   },
 
   onLogin() {
@@ -66,7 +75,7 @@ Page({
                 expiresAt: matched.expiresAt ?? null,
               }),
             );
-            wx.reLaunch({ url: '/pages/home/home' });
+            wx.switchTab({ url: '/pages/home/home' });
             return;
           }
         }

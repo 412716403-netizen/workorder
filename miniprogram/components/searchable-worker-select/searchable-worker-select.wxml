@@ -1,0 +1,102 @@
+<view class="sps {{embedded ? 'sps--embedded' : ''}} {{cell ? 'sps--cell' : ''}}">
+  <view
+    wx:if="{{cell}}"
+    class="plan-form-cell {{disabled ? 'plan-form-cell--disabled' : ''}}"
+    bindtap="onOpen"
+  >
+    <text class="plan-form-cell__label">
+      <text wx:if="{{required}}" class="plan-form-cell__req">*</text>{{label}}
+    </text>
+    <text class="plan-form-cell__value {{valueName ? '' : 'plan-form-cell__value--ph'}}">{{valueName || placeholder}}</text>
+    <text wx:if="{{!disabled}}" class="plan-form-cell__chevron">›</text>
+  </view>
+
+  <view wx:else class="sps__trigger {{embedded ? 'sps__trigger--embedded' : ''}}" bindtap="onOpen">
+    <text class="sps__label {{embedded ? 'sps__label--embedded' : ''}}">
+      <text wx:if="{{required}}" class="sps__req">*</text>{{label}}
+    </text>
+    <text class="sps__value {{valueName ? '' : 'sps__value--placeholder'}}">{{valueName || placeholder}}</text>
+    <text class="sps__chevron">›</text>
+  </view>
+
+  <view wx:if="{{open}}" class="sps__overlay" catchtouchmove="noop">
+    <view
+      class="sps__mask {{sheetShow ? 'sps__mask--show' : ''}}"
+      bindtap="onClose"
+      catchtouchmove="noop"
+    />
+    <view
+      class="sps__sheet {{cell ? 'sps__sheet--picker' : ''}} {{sheetShow ? 'sps__sheet--show' : ''}}"
+      catchtouchmove="noop"
+    >
+      <view wx:if="{{cell}}" class="sps__picker-bar">
+        <text class="sps__picker-cancel" bindtap="onClose">取消</text>
+        <text class="sps__picker-title">{{label}}</text>
+        <text class="sps__picker-action"></text>
+      </view>
+      <view wx:else class="sps__sheet-head">
+        <text class="sps__sheet-title">选择{{label}}</text>
+        <text class="sps__sheet-close" bindtap="onClose">关闭</text>
+      </view>
+
+      <view class="sps__search-wrap">
+        <text class="sps__search-glyph">⌕</text>
+        <input
+          class="sps__search-input"
+          value="{{search}}"
+          bindinput="onSearchInput"
+          placeholder="搜索姓名、班组..."
+          confirm-type="search"
+          focus="{{sheetShow}}"
+        />
+      </view>
+
+      <scroll-view
+        wx:if="{{visibleNodes.length > 0 || showUnassigned}}"
+        class="sps__tabs"
+        scroll-x
+        enhanced
+        show-scrollbar="{{false}}"
+      >
+        <view class="sps__tabs-row">
+          <view
+            class="sps__tab {{activeTab === 'all' ? 'sps__tab--active' : ''}}"
+            data-tab="all"
+            bindtap="onTabTap"
+          >全部</view>
+          <view
+            wx:for="{{visibleNodes}}"
+            wx:key="id"
+            class="sps__tab {{activeTab === item.id ? 'sps__tab--active' : ''}}"
+            data-tab="{{item.id}}"
+            bindtap="onTabTap"
+          >{{item.name}}</view>
+          <view
+            wx:if="{{showUnassigned}}"
+            class="sps__tab {{activeTab === 'unassigned' ? 'sps__tab--active' : ''}}"
+            data-tab="unassigned"
+            bindtap="onTabTap"
+          >未分配</view>
+        </view>
+      </scroll-view>
+
+      <scroll-view class="sps__list" scroll-y enhanced show-scrollbar="{{true}}">
+        <view wx:if="{{filteredWorkers.length === 0}}" class="sps__empty">未找到匹配的生产人员</view>
+        <view
+          wx:for="{{filteredWorkers}}"
+          wx:key="id"
+          class="sps__row {{valueId === item.id ? 'sps__row--active' : ''}}"
+          data-id="{{item.id}}"
+          data-name="{{item.name}}"
+          bindtap="onSelect"
+        >
+          <view class="sps__row-main">
+            <text class="sps__row-name">{{item.name}}</text>
+            <text wx:if="{{item.groupName}}" class="sps__row-cat">{{item.groupName}}</text>
+          </view>
+          <text wx:if="{{item.role}}" class="sps__row-contact">{{item.role}}</text>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+</view>

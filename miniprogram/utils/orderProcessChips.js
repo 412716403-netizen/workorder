@@ -1,0 +1,96 @@
+/**
+ * 工单工序进度卡计算（对齐 shared/processSequence.ts + OrderListView 列表工序圈）
+ */
+
+function isProcessSequential(processSequenceMode, nodeId, outOfSequenceTemplateIds) {
+  if (processSequenceMode !== 'sequential') return false;
+  if (nodeId && outOfSequenceTemplateIds && outOfSequenceTemplateIds.has(nodeId)) return false;
+  return true;
+}
+
+function findGatingPredecessorIndex(templateIds, currentIndex, outOfSequenceTemplateIds) {
+  for (let i = currentIndex - 1; i >= 0; i -= 1) {
+    const tid = templateIds[i];
+    if (!tid) continue;
+    if (!outOfSequenceTemplateIds || !outOfSequenceTemplateIds.has(tid)) return i;
+  }
+  return -1;
+}
+
+function buildOutOfSequenceTemplateIds(nodes) {
+  const set = new Set();
+  (nodes || []).forEach((n) => {
+    if (n && n.allowOutOfSequence) set.add(n.id);
+  });
+  return set;
+}
+
+function sumOrderQty(order) {
+  return (order.items || []).reduce((s, it) => s + (Number(it.quantity) || 0), 0);
+}
+
+function sumDefectiveAtMilestone(ms) {
+  return (ms.reports || []).reduce((s, r) => s + (Number(r.defectiveQuantity) || 0), 0);
+}
+
+/**
+ * 单工单工序卡 UI 模型
+ * @param {object} order
+ * @param {object} opts
+ */
+function buildOrderProcessChips(order, opts = {}) {
+  const {
+    processSequenceMode = 'sequential',
+    outOfSequenceTemplateIds = new Set(),
+    canReport = false,
+  } = opts;
+
+  const milestones = order.milestones || [];
+  if (!milestones.length) return [];
+
+  const orderTotalQty = sumOrderQty(order);
+  const templateIds = milestones.map((m) => m.templateId);
+
+  return milestones.map((ms, idx) => {
+    const completed = Math.round(Number(ms.completedQuantity) || 0);
+    let baseQty = orderTotalQty;
+    if (isProcessSequential(processSequenceMode, ms.templateId, outOfSequenceTemplateIds)) {
+      const gateIdx = findGatingPredecessorIndex(templateIds, idx, outOfSequenceTemplateIds);
+      if (gateIdx >= 0) {
+        const prev = milestones[gateIdx];
+        baseQty = Number(prev?.completedQuantity) || 0;
+      }
+    }
+    const defective = sumDefectiveAtMilestone(ms);
+    const availableQty = Math.max(0, Math.round(baseQty - defective));
+    const remaining = availableQty - completed;
+    const progress = availableQty > 0
+      ? Math.min(100, Math.round((completed / availableQty) * 100))
+      : (completed > 0 ? 100 : 0);
+    const isCompleted = ms.status === 'COMPLETED' || (availableQty > 0 && completed >= availableQty);
+    const canReportThis = canReport && remaining > 0 && availableQty > 0;
+
+    return {
+      orderId: order.id,
+      milestoneId: ms.id,
+      templateId: ms.templateId,
+      name: ms.name || '工序',
+      completed,
+      availableQty,
+      remaining,
+      progress,
+      isCompleted,
+      canReport: canReportThis,
+      disabled: !canReportThis,
+      toneIndex: idx % 6,
+    };
+  });
+}
+
+module.exports = {
+  isProcessSequential,
+  findGatingPredecessorIndex,
+  buildOutOfSequenceTemplateIds,
+  sumOrderQty,
+  buildOrderProcessChips,
+};

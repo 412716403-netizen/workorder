@@ -1,0 +1,34 @@
+<page-header title="{{title}}" show-back="{{true}}" center="{{true}}" bind:back="onHeaderBack" />
+
+<scroll-view class="chat-scroll" scroll-y show-scrollbar="{{false}}" scroll-into-view="bubble-last">
+  <view class="chat-body">
+    <view wx:if="{{empty}}" class="chat-empty">暂无消息记录</view>
+
+    <view
+      wx:for="{{bubbles}}"
+      wx:for-index="idx"
+      wx:key="id"
+      id="{{idx === bubbles.length - 1 ? 'bubble-last' : ''}}"
+      class="chat-bubble-row chat-bubble-row--{{item.side}}"
+    >
+      <view
+        class="chat-bubble chat-bubble--{{item.side}} chat-bubble--{{item.kind}}"
+        bindtap="onBubbleTap"
+        data-id="{{item.id}}"
+        data-kind="{{item.kind}}"
+        data-title="{{item.title}}"
+        data-body="{{item.body}}"
+      >
+        <view class="chat-bubble__head">
+          <text class="chat-tag chat-tag--{{item.tagTone}}">{{item.tagLabel}}</text>
+          <text class="chat-bubble__time">{{item.timeText}}</text>
+        </view>
+        <text class="chat-bubble__title">{{item.title}}</text>
+        <view wx:for="{{item.bodyLines}}" wx:for-item="line" wx:key="*this" class="chat-bubble__line">{{line}}</view>
+        <view wx:if="{{item.metaParts.length > 0}}" class="chat-bubble__meta">
+          <text wx:for="{{item.metaParts}}" wx:for-item="part" wx:key="*this" class="chat-bubble__meta-item">{{part}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+</scroll-view>

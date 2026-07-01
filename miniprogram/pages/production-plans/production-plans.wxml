@@ -1,0 +1,157 @@
+<view class="plan-shell">
+  <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-header__title">生产计划</text>
+      <view class="plan-header__back plan-header__back--placeholder"></view>
+    </view>
+
+    <view class="plan-header__tools">
+      <view class="plan-search">
+        <image class="plan-search__icon" src="/assets/icons/search.png" mode="aspectFit" />
+        <input
+          class="plan-search__input"
+          value="{{searchKeyword}}"
+          bindinput="onSearchInput"
+          placeholder="计划单号 / 客户 / 状态"
+          confirm-type="search"
+          placeholder-class="plan-search__ph"
+        />
+        <view wx:if="{{searchKeyword}}" class="plan-search__clear" bindtap="onSearchClear">×</view>
+      </view>
+      <view
+        class="plan-tool-btn {{filterActive ? 'plan-tool-btn--active' : ''}}"
+        bindtap="onFilterTap"
+      >
+        <image class="plan-tool-btn__icon" src="/assets/icons/list-filter.png" mode="aspectFit" />
+      </view>
+      <view
+        wx:if="{{canCreate}}"
+        class="plan-tool-btn"
+        bindtap="onCreateTap"
+      >
+        <image class="plan-tool-btn__icon" src="/assets/icons/file-plus.png" mode="aspectFit" />
+      </view>
+    </view>
+  </view>
+
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <view wx:if="{{showFilterPanel}}" class="plan-filter-panel">
+    <view wx:if="{{showStatusTabs}}" class="plan-filter-panel__section">
+      <text class="plan-filter-panel__label">下达状态</text>
+      <view class="plan-filter-chips">
+        <view
+          wx:for="{{statusTabs}}"
+          wx:key="id"
+          class="plan-filter-chip {{statusFilter === item.id ? 'plan-filter-chip--active' : ''}}"
+          data-id="{{item.id}}"
+          bindtap="onStatusTabTap"
+        >{{item.label}}</view>
+      </view>
+    </view>
+    <view wx:if="{{showExcludeToggle}}" class="plan-filter-panel__row" bindtap="onExcludeToggle">
+      <text class="plan-filter-panel__label">仅未完成</text>
+      <view class="plan-filter-switch {{excludeCompleted ? 'plan-filter-switch--on' : ''}}">
+        <view class="plan-filter-switch__knob" />
+      </view>
+    </view>
+    <view class="plan-filter-panel__foot">
+      <view class="plan-filter-reset" bindtap="onFilterReset">重置</view>
+      <view class="plan-filter-apply" bindtap="onFilterApply">确定</view>
+    </view>
+  </view>
+
+  <view class="plan-list-body">
+    <empty-state wx:if="{{loading && !rows.length}}" loading="{{true}}" />
+
+    <view wx:elif="{{!rows.length}}" class="plan-list-empty">{{emptyText}}</view>
+
+    <view wx:else class="plan-list-wrap">
+      <view
+        wx:for="{{rows}}"
+        wx:key="id"
+        class="plan-list-row"
+        data-id="{{item.id}}"
+        bindtap="onRowTap"
+      >
+        <view class="plan-list-row__left">
+          <view class="plan-list-row__thumb">
+            <image
+              wx:if="{{item.showProductImage}}"
+              class="plan-list-row__img"
+              src="{{item.productImageUrl}}"
+              mode="aspectFill"
+              lazy-load="{{true}}"
+              data-id="{{item.id}}"
+              binderror="onProductImageError"
+            />
+            <view wx:else class="plan-list-row__img plan-list-row__img--placeholder">
+              <image
+                class="plan-list-row__placeholder-icon"
+                src="{{item.placeholderIconSrc}}"
+                mode="aspectFit"
+              />
+            </view>
+          </view>
+        </view>
+        <view class="plan-list-row__main">
+          <view class="plan-list-row__head">
+            <text class="plan-list-row__number">{{item.planNumber}}</text>
+            <text wx:if="{{showStatusTabs}}" class="st-pill {{item.dispatchPillClass}}">{{item.dispatchLabel}}</text>
+            <text wx:if="{{item.showCreatedAt}}" class="plan-list-row__meta">{{item.createdAtText}}</text>
+            <text wx:if="{{item.showQuantity}}" class="plan-list-row__qty">{{item.quantityText}}</text>
+          </view>
+          <view class="plan-list-row__product-line">
+            <text class="plan-list-row__product">{{item.productName}}</text>
+            <text wx:if="{{item.showProductSku}}" class="plan-list-row__sku">{{item.productSku}}</text>
+          </view>
+          <view wx:if="{{item.showProductCustomTags}}" class="plan-list-row__custom-tags">
+            <text
+              wx:for="{{item.productCustomTags}}"
+              wx:for-item="tag"
+              wx:key="id"
+              class="plan-list-row__tag"
+            >{{tag.label}}: {{tag.display}}</text>
+          </view>
+          <view wx:if="{{item.showSubRow}}" class="plan-list-row__sub">
+            <view wx:if="{{item.showCustomer}}" class="plan-list-row__sub-customer">
+              <image
+                class="plan-list-row__sub-icon"
+                src="/assets/icons/building-2.png"
+                mode="aspectFit"
+              />
+              <text class="plan-list-row__sub-text">{{item.customer}}</text>
+            </view>
+            <text wx:if="{{item.showCustomer && item.showDueDate}}" class="plan-list-row__sub-sep">·</text>
+            <text wx:if="{{item.showDueDate}}" class="plan-list-row__sub-text">{{item.dueDateLabel}}</text>
+          </view>
+          <view wx:if="{{showPurchaseProgress && item.showProgress}}" class="plan-list-progress">
+            <view class="plan-list-progress__track {{item.progressOverReceived ? 'plan-list-progress__track--split' : ''}}">
+              <block wx:if="{{item.progressOverReceived}}">
+                <view
+                  class="plan-list-progress__bar plan-list-progress__bar--ordered"
+                  style="width: {{item.progressOrderedBarPct}}%;"
+                />
+                <view
+                  class="plan-list-progress__bar plan-list-progress__bar--over"
+                  style="width: {{item.progressOverBarPct}}%;"
+                />
+              </block>
+              <view
+                wx:else
+                class="plan-list-progress__bar {{item.progressComplete ? 'plan-list-progress__bar--complete' : ''}}"
+                style="width: {{item.progressPct}}%;"
+              />
+            </view>
+            <text class="plan-list-progress__text {{item.progressComplete || item.progressOverReceived ? 'plan-list-progress__text--done' : ''}}">{{item.progressLabel}}</text>
+          </view>
+        </view>
+        <text class="st-chevron plan-list-row__chevron">›</text>
+      </view>
+    </view>
+
+    <view wx:if="{{loadingMore}}" class="plan-list-footer">加载中…</view>
+    <view wx:elif="{{!hasMore && rows.length}}" class="plan-list-footer">已加载全部 {{total}} 条</view>
+  </view>
+</view>

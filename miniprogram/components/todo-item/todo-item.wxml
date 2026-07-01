@@ -1,0 +1,10 @@
+<view class="st-todo-item" bindtap="onTap">
+  <view class="st-todo-item__body">
+    <view class="st-todo-item__title">{{title}}</view>
+    <view wx:if="{{desc}}" class="st-todo-item__desc">{{desc}}</view>
+  </view>
+  <view class="st-todo-item__right">
+    <text wx:if="{{count > 0}}" class="st-todo-item__count">{{count}}</text>
+    <text class="st-todo-item__chevron">›</text>
+  </view>
+</view>

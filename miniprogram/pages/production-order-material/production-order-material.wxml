@@ -1,0 +1,39 @@
+<view class="plan-shell">
+  <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-header__title">生产领料</text>
+      <view class="plan-header__back plan-header__back--placeholder"></view>
+    </view>
+  </view>
+
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <view class="material-page">
+    <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
+
+    <view wx:elif="{{rows.length}}">
+      <view wx:for="{{rows}}" wx:key="materialProductId" class="material-row">
+        <text class="material-row__title">{{item.name}}</text>
+        <text class="material-row__meta">计划 {{item.needed}} · 已领 {{item.issued}} · 待发 {{item.pending}}</text>
+        <view wx:if="{{canMaterial && item.canIssue}}" class="material-row__form">
+          <input
+            class="material-input"
+            type="digit"
+            value="{{item.issueQty}}"
+            data-id="{{item.materialProductId}}"
+            bindinput="onIssueQtyInput"
+            placeholder="领料数量"
+          />
+          <view
+            class="material-submit"
+            data-id="{{item.materialProductId}}"
+            bindtap="onIssueTap"
+          >领料</view>
+        </view>
+      </view>
+    </view>
+
+    <view wx:else class="plan-list-empty">暂无 BOM 领料数据</view>
+  </view>
+</view>

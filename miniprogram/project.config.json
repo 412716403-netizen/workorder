@@ -1,9 +1,22 @@
 {
   "compileType": "miniprogram",
-  "libVersion": "3.5.5",
+  "libVersion": "3.15.2",
   "packOptions": {
     "ignore": [],
-    "include": []
+    "include": [
+      {
+        "type": "glob",
+        "value": "pages/production-order-flow/**"
+      },
+      {
+        "type": "glob",
+        "value": "pages/production-order-report-history/**"
+      },
+      {
+        "type": "glob",
+        "value": "pages/production-order-pending-stock/**"
+      }
+    ]
   },
   "setting": {
     "coverView": true,
@@ -29,7 +42,8 @@
     "condition": false,
     "swc": false,
     "disableSWC": true,
-    "packNpmRelationList": []
+    "packNpmRelationList": [],
+    "ignoreDevUnusedFiles": false
   },
   "condition": {},
   "editorSetting": {

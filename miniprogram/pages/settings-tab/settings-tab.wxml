@@ -1,0 +1,32 @@
+<page-header title="{{title}}" show-back="{{true}}" center="{{true}}" bind:back="onHeaderBack" />
+
+<scroll-view class="settings-tab-scroll" scroll-y show-scrollbar="{{false}}">
+  <view class="settings-tab-page">
+    <view wx:if="{{sub}}" class="settings-tab-intro">{{sub}}</view>
+
+    <view wx:if="{{loading}}" class="settings-tab-muted">加载中…</view>
+
+    <view wx:elif="{{mode === 'list' && rows.length}}">
+      <view class="settings-tab-card">
+        <view wx:for="{{rows}}" wx:key="id" class="settings-tab-row">
+          <view class="settings-tab-row__title">{{item.name}}</view>
+          <view wx:if="{{item.subtitle}}" class="settings-tab-row__sub">{{item.subtitle}}</view>
+        </view>
+      </view>
+    </view>
+
+    <view wx:elif="{{mode === 'config' && sections.length}}">
+      <view wx:for="{{sections}}" wx:key="title" class="settings-tab-card settings-tab-section">
+        <view class="settings-tab-section__title">{{item.title}}</view>
+        <view wx:for="{{item.rows}}" wx:for-item="row" wx:key="label" class="settings-tab-config">
+          <view class="settings-tab-config__label">{{row.label}}</view>
+          <view class="settings-tab-config__value">{{row.value}}</view>
+        </view>
+      </view>
+    </view>
+
+    <view wx:elif="{{!loading}}" class="settings-tab-muted">{{emptyText}}</view>
+
+    <view wx:if="{{!loading}}" class="settings-tab-hint">{{hint}}</view>
+  </view>
+</scroll-view>

@@ -1,0 +1,6 @@
+<view class="st-stat-row">
+  <view wx:for="{{items}}" wx:key="label" class="st-stat-row__item">
+    <view class="st-stat-row__value">{{item.value}}</view>
+    <view class="st-stat-row__label">{{item.label}}</view>
+  </view>
+</view>

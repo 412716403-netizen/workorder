@@ -1,0 +1,38 @@
+<page-header title="系统设置" show-back="{{true}}" center="{{true}}" bind:back="onHeaderBack" />
+
+<scroll-view class="settings-scroll" scroll-y show-scrollbar="{{false}}">
+  <view class="settings-page">
+    <view wx:if="{{loading}}" class="settings-muted">加载中…</view>
+
+    <block wx:else>
+      <view wx:if="{{categories.length}}" class="settings-intro">
+        与电脑端系统设置一致，按分类查看与维护基础档案、生产仓储、财务及业务规则。
+      </view>
+
+      <view wx:for="{{categories}}" wx:key="key" class="settings-group">
+        <view class="settings-group__title">{{item.title}}</view>
+        <view class="settings-card">
+          <view
+            wx:for="{{item.items}}"
+            wx:for-item="tab"
+            wx:key="id"
+            class="settings-row"
+            data-id="{{tab.id}}"
+            bindtap="onTabTap"
+          >
+            <view class="settings-row__icon-wrap">
+              <image class="settings-row__icon" src="{{tab.icon}}" mode="aspectFit" />
+            </view>
+            <view class="settings-row__body">
+              <view class="settings-row__title">{{tab.label}}</view>
+              <view class="settings-row__sub">{{tab.sub}}</view>
+            </view>
+            <text class="settings-chevron">›</text>
+          </view>
+        </view>
+      </view>
+
+      <view wx:if="{{!categories.length}}" class="settings-muted">暂无可见设置项</view>
+    </block>
+  </view>
+</scroll-view>

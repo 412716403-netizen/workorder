@@ -1,0 +1,278 @@
+<view class="plan-detail-shell">
+  <view class="plan-detail-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-detail-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-detail-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-detail-header__title">查看生产计划</text>
+      <view class="plan-detail-header__back plan-detail-header__back--placeholder"></view>
+    </view>
+  </view>
+
+  <view class="plan-detail-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view
+    class="plan-detail-scroll"
+    scroll-y
+    show-scrollbar="{{false}}"
+    style="height: {{scrollHeight}}px;"
+  >
+    <view wx:if="{{loading}}" class="plan-detail-muted">加载中…</view>
+
+    <view wx:else class="plan-detail-page">
+      <view wx:if="{{productHero}}" class="plan-detail-hero">
+        <view class="plan-detail-hero__left">
+          <image
+            wx:if="{{productHero.showProductImage}}"
+            class="plan-detail-hero__img"
+            src="{{productHero.productImageUrl}}"
+            mode="aspectFill"
+          />
+          <view wx:else class="plan-detail-hero__img plan-detail-hero__img--placeholder">
+            <image class="plan-detail-hero__placeholder-icon" src="{{productHero.placeholderIconSrc}}" mode="aspectFit" />
+          </view>
+        </view>
+        <view class="plan-detail-hero__text">
+          <view class="plan-detail-hero__product-line">
+            <text class="plan-detail-hero__product">{{productHero.productName}}</text>
+            <text wx:if="{{productHero.showProductSku}}" class="plan-detail-hero__sku">{{productHero.productSku}}</text>
+          </view>
+          <view wx:if="{{productHero.showProductCustomTags}}" class="plan-detail-hero__custom-tags">
+            <text
+              wx:for="{{productHero.productCustomTags}}"
+              wx:for-item="tag"
+              wx:key="id"
+              class="plan-detail-hero__tag"
+            >{{tag.label}}: {{tag.display}}</text>
+          </view>
+        </view>
+      </view>
+
+      <block wx:for="{{sections}}" wx:key="id">
+        <view class="plan-detail-section">
+          <view class="plan-detail-section__head">
+            <text class="plan-detail-section__title">{{item.title}}</text>
+            <text wx:if="{{item.subtitle}}" class="plan-detail-section__sub">{{item.subtitle}}</text>
+          </view>
+
+          <view wx:if="{{item.id === 'basic'}}" class="plan-form-card">
+            <view
+              wx:for="{{item.rows}}"
+              wx:for-item="row"
+              wx:key="label"
+              class="plan-form-cell {{row.isLast ? 'plan-form-cell--last' : ''}}"
+            >
+              <text class="plan-form-cell__label">{{row.label}}</text>
+              <text class="plan-form-cell__value {{row.muted ? 'plan-form-cell__value--ph' : ''}}">{{row.value}}</text>
+            </view>
+          </view>
+
+          <view wx:elif="{{item.id === 'quantity'}}" class="plan-form-card">
+            <view wx:if="{{item.kind === 'matrix' && item.matrixLayout}}" class="plan-detail-matrix-wrap">
+              <view class="plan-form-cell plan-form-cell--matrix-head">
+                <text class="plan-form-cell__label">总量 ({{item.unitName}})</text>
+                <text wx:if="{{item.showTotal}}" class="plan-form-cell__hint">合计 {{item.totalQuantity}} {{item.unitName}}</text>
+              </view>
+              <scroll-view class="plan-detail-matrix-scroll" scroll-x enhanced show-scrollbar="{{false}}">
+                <view class="plan-detail-matrix">
+                  <view class="plan-detail-matrix__head">
+                    <view class="plan-detail-matrix__corner">颜色</view>
+                    <view
+                      wx:for="{{item.matrixLayout.sizeColumns}}"
+                      wx:for-item="col"
+                      wx:key="id"
+                      class="plan-detail-matrix__size"
+                    >{{col.header}}</view>
+                  </view>
+                  <view
+                    wx:for="{{item.matrixLayout.colorRows}}"
+                    wx:for-item="colorRow"
+                    wx:key="key"
+                    class="plan-detail-matrix__row"
+                  >
+                    <view class="plan-detail-matrix__color">
+                      <view
+                        wx:if="{{colorRow.colorSwatch}}"
+                        class="plan-detail-matrix__swatch"
+                        style="background-color: {{colorRow.colorSwatch}};"
+                      />
+                      <text class="plan-detail-matrix__color-text">{{colorRow.colorLabel}}</text>
+                    </view>
+                    <view
+                      wx:for="{{colorRow.cells}}"
+                      wx:for-item="cell"
+                      wx:key="index"
+                      class="plan-detail-matrix__cell"
+                    >
+                      <text wx:if="{{cell.variantId && cell.quantity}}" class="plan-detail-matrix__qty">{{cell.quantity}}</text>
+                      <text wx:elif="{{cell.variantId}}" class="plan-detail-matrix__dash">0</text>
+                      <text wx:else class="plan-detail-matrix__dash">—</text>
+                    </view>
+                  </view>
+                </view>
+              </scroll-view>
+            </view>
+            <view wx:else class="plan-detail-qty-total">
+              <text class="plan-detail-qty-total__label">总量 ({{item.unitName}})</text>
+              <text class="plan-detail-qty-total__value">{{item.totalText}}</text>
+            </view>
+          </view>
+
+          <view wx:elif="{{item.id === 'process'}}" class="plan-detail-process-list">
+            <view wx:if="{{item.emptyText}}" class="plan-detail-empty">{{item.emptyText}}</view>
+            <view
+              wx:for="{{item.nodes}}"
+              wx:for-item="node"
+              wx:key="id"
+              class="plan-detail-process {{node.isAssigned ? 'plan-detail-process--active' : ''}}"
+            >
+              <view class="plan-detail-process__idx">{{node.index}}</view>
+              <view class="plan-detail-process__body">
+                <text class="plan-detail-process__name">{{node.name}}</text>
+                <view wx:if="{{node.showRate}}" class="plan-detail-process__meta">
+                  <text class="plan-detail-process__meta-label">工价</text>
+                  <text class="plan-detail-process__meta-value">{{node.rateText}}</text>
+                </view>
+                <view wx:if="{{node.showWorkers}}" class="plan-detail-process__meta">
+                  <text class="plan-detail-process__meta-label">负责人</text>
+                  <text class="plan-detail-process__meta-value">{{node.workerText}}</text>
+                </view>
+                <view wx:if="{{node.showEquip}}" class="plan-detail-process__meta">
+                  <text class="plan-detail-process__meta-label">设备</text>
+                  <text class="plan-detail-process__meta-value">{{node.equipText}}</text>
+                </view>
+              </view>
+            </view>
+          </view>
+
+          <view wx:elif="{{item.id === 'material'}}" class="plan-detail-material-card">
+            <view wx:if="{{item.loading}}" class="plan-detail-material-loading">用料加载中…</view>
+            <view wx:elif="{{item.loadError}}" class="plan-detail-empty plan-detail-empty--bom">{{item.loadError}}</view>
+            <view wx:elif="{{item.emptyText}}" class="plan-detail-empty plan-detail-empty--bom">{{item.emptyText}}</view>
+            <block wx:else>
+              <view class="plan-detail-bom-scroll-outer">
+                <scroll-view
+                  class="plan-detail-bom-scroll"
+                  scroll-x
+                  enhanced
+                  show-scrollbar="{{false}}"
+                >
+                  <view class="plan-detail-bom-table" style="min-width: {{item.tableMinWidth}}rpx;">
+                    <view class="plan-detail-bom-row plan-detail-bom-row--head">
+                      <view class="plan-detail-bom-col plan-detail-bom-col--material plan-detail-bom-col--sticky">
+                        <text class="plan-detail-bom-th">物料名称</text>
+                        <text class="plan-detail-bom-th-sub">SKU</text>
+                      </view>
+                      <view wx:if="{{item.materialLossEnabled}}" class="plan-detail-bom-col plan-detail-bom-col--loss">
+                        <text class="plan-detail-bom-th">损耗</text>
+                      </view>
+                      <view class="plan-detail-bom-col plan-detail-bom-col--num">
+                        <text class="plan-detail-bom-th">理论总需</text>
+                      </view>
+                      <view class="plan-detail-bom-col plan-detail-bom-col--stock">
+                        <text class="plan-detail-bom-th">库存</text>
+                        <text class="plan-detail-bom-th-sub">仓库汇总</text>
+                      </view>
+                      <view class="plan-detail-bom-col plan-detail-bom-col--short">
+                        <text class="plan-detail-bom-th">缺料数</text>
+                      </view>
+                      <view class="plan-detail-bom-col plan-detail-bom-col--plan">
+                        <text class="plan-detail-bom-th">计划用量</text>
+                      </view>
+                      <view class="plan-detail-bom-col plan-detail-bom-col--status">
+                        <text class="plan-detail-bom-th">状态</text>
+                      </view>
+                    </view>
+
+                    <view
+                      wx:for="{{item.materials}}"
+                      wx:for-item="mat"
+                      wx:key="rowKey"
+                      class="plan-detail-bom-row {{mat.showLevel ? 'plan-detail-bom-row--sub' : ''}} {{index % 2 === 1 ? 'plan-detail-bom-row--alt' : ''}}"
+                    >
+                      <view class="plan-detail-bom-col plan-detail-bom-col--material plan-detail-bom-col--sticky" style="padding-left: {{24 + mat.indentRpx}}rpx;">
+                        <view wx:if="{{mat.showLevel}}" class="plan-detail-bom-level">
+                          <view class="plan-detail-bom-level__bar" />
+                          <text>{{mat.levelLabel}} BOM</text>
+                        </view>
+                        <text class="plan-detail-bom-material-name">{{mat.materialName}}</text>
+                        <text wx:if="{{mat.showSku}}" class="plan-detail-bom-material-sku">{{mat.materialSku}}</text>
+                        <view wx:if="{{mat.showCustomTags}}" class="plan-detail-bom-tags">
+                          <text wx:for="{{mat.customTags}}" wx:for-item="tag" wx:key="id" class="plan-detail-bom-tag">{{tag.label}}: {{tag.display}}</text>
+                        </view>
+                      </view>
+
+                      <view wx:if="{{item.materialLossEnabled}}" class="plan-detail-bom-col plan-detail-bom-col--loss plan-detail-bom-col--vcenter">
+                        <text class="plan-detail-bom-chip {{mat.lossText !== '—' ? 'plan-detail-bom-chip--muted' : 'plan-detail-bom-chip--dash'}}">{{mat.lossText}}</text>
+                      </view>
+
+                      <view class="plan-detail-bom-col plan-detail-bom-col--num plan-detail-bom-col--vcenter">
+                        <text class="plan-detail-bom-num">{{mat.totalNeededText}}</text>
+                      </view>
+
+                      <view class="plan-detail-bom-col plan-detail-bom-col--stock plan-detail-bom-col--vcenter">
+                        <text wx:if="{{mat.stockLoading}}" class="plan-detail-bom-chip plan-detail-bom-chip--dash">…</text>
+                        <text wx:else class="plan-detail-bom-num {{mat.stockLow ? 'plan-detail-bom-num--danger' : 'plan-detail-bom-num--success'}}">{{mat.stockText}}</text>
+                      </view>
+
+                      <view class="plan-detail-bom-col plan-detail-bom-col--short plan-detail-bom-col--vcenter">
+                        <text wx:if="{{mat.stockLoading}}" class="plan-detail-bom-chip plan-detail-bom-chip--dash">…</text>
+                        <text wx:elif="{{mat.shortageIsOk}}" class="plan-detail-bom-badge plan-detail-bom-badge--ok">库存充沛</text>
+                        <text wx:else class="plan-detail-bom-num {{mat.shortageHighlight ? 'plan-detail-bom-num--primary' : ''}}">{{mat.shortageText}}</text>
+                      </view>
+
+                      <view class="plan-detail-bom-col plan-detail-bom-col--plan plan-detail-bom-col--vcenter">
+                        <view class="plan-detail-bom-qty-pill">
+                          <text class="plan-detail-bom-qty-pill__text">{{mat.plannedQtyText}}</text>
+                        </view>
+                      </view>
+
+                      <view class="plan-detail-bom-col plan-detail-bom-col--status plan-detail-bom-col--vcenter">
+                        <view wx:if="{{mat.status.kind === 'progress'}}" class="plan-detail-bom-status-card">
+                          <view class="plan-detail-progress__track {{mat.status.progressOverReceived ? 'plan-detail-progress__track--split' : ''}}">
+                            <block wx:if="{{mat.status.progressOverReceived}}">
+                              <view class="plan-detail-progress__bar plan-detail-progress__bar--ordered" style="width: {{mat.status.progressOrderedBarPct}}%;" />
+                              <view class="plan-detail-progress__bar plan-detail-progress__bar--over" style="width: {{mat.status.progressOverBarPct}}%;" />
+                            </block>
+                            <view
+                              wx:else
+                              class="plan-detail-progress__bar {{mat.status.progressComplete ? 'plan-detail-progress__bar--complete' : ''}}"
+                              style="width: {{mat.status.progressPct}}%;"
+                            />
+                          </view>
+                          <text class="plan-detail-bom-status-card__label">{{mat.status.progressLabel}}</text>
+                        </view>
+                        <text
+                          wx:elif="{{mat.statusTone === 'success'}}"
+                          class="plan-detail-bom-badge plan-detail-bom-badge--success"
+                        >{{mat.status.text}}</text>
+                        <text
+                          wx:elif="{{mat.statusTone === 'info'}}"
+                          class="plan-detail-bom-badge plan-detail-bom-badge--info"
+                        >{{mat.status.text}}</text>
+                        <text
+                          wx:else
+                          class="plan-detail-bom-badge plan-detail-bom-badge--muted"
+                        >{{mat.status.text}}</text>
+                      </view>
+                    </view>
+                  </view>
+                </scroll-view>
+                <view class="plan-detail-bom-fade" />
+              </view>
+            </block>
+          </view>
+        </view>
+      </block>
+
+      <view wx:if="{{!sections.length}}" class="plan-detail-muted">暂无详情</view>
+    </view>
+  </scroll-view>
+
+  <view wx:if="{{showConvertBtn}}" class="plan-detail-footer">
+    <button
+      class="plan-detail-submit"
+      loading="{{converting}}"
+      disabled="{{converting}}"
+      bindtap="onConvertTap"
+    >下达工单</button>
+  </view>
+</view>
