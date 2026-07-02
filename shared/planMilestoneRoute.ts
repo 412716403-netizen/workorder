@@ -1,4 +1,4 @@
-import { milestoneNodeIdsEqual } from './productProcessLock';
+import { milestoneNodeIdsEqual } from './productProcessLock.js';
 
 type PlanLike = { milestoneNodeIds?: readonly string[] | null } | null | undefined;
 type ProductLike = { milestoneNodeIds?: readonly string[] | null } | null | undefined;

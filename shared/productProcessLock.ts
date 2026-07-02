@@ -1,4 +1,4 @@
-import type { ProductionLinkMode } from './types';
+import type { ProductionLinkMode } from './types.js';
 
 /** 待配工序工单：产品尚未绑定工序路线，允许首次配置 milestoneNodeIds */
 export const PROCESS_LOCK_ORDER_STATUS_EXEMPT = 'PENDING_PROCESS';
