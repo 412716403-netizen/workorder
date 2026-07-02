@@ -13,8 +13,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "pwa:icons": "node scripts/generate-pwa-icons.mjs",
-    "miniprogram:icons": "node miniprogram/scripts/export-lucide-icons.mjs"
+    "pwa:icons": "node scripts/generate-pwa-icons.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
