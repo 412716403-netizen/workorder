@@ -15,6 +15,18 @@
       {
         "type": "glob",
         "value": "pages/production-order-pending-stock/**"
+      },
+      {
+        "type": "glob",
+        "value": "pages/production-order-stock-in-confirm/**"
+      },
+      {
+        "type": "glob",
+        "value": "pages/production-order-stock-in-history/**"
+      },
+      {
+        "type": "glob",
+        "value": "pages/production-order-stock-in-detail/**"
       }
     ]
   },

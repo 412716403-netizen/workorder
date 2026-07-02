@@ -64,10 +64,19 @@ Page({
 
   onFilterTap() {
     if (this.data.showFilterPanel) {
-      this.setData({ showFilterPanel: false });
+      this.closeFilterPanel();
       return;
     }
     this.setData({ showFilterPanel: true });
+  },
+
+  closeFilterPanel() {
+    if (!this.data.showFilterPanel) return;
+    this.setData({ showFilterPanel: false });
+  },
+
+  onPageScroll() {
+    this.closeFilterPanel();
   },
 
   onFilterReset() {
@@ -107,6 +116,7 @@ Page({
   },
 
   onRowTap(e) {
+    this.closeFilterPanel();
     const { id } = e.currentTarget.dataset;
     if (!id) return;
     wx.navigateTo({

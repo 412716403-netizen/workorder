@@ -2,7 +2,7 @@
   <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
     <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
       <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
-      <text class="plan-header__title">报工流水</text>
+      <text class="plan-header__title">入库流水</text>
       <view class="plan-header__back plan-header__back--placeholder"></view>
     </view>
 
@@ -12,14 +12,14 @@
           class="plan-search__input"
           value="{{searchKeyword}}"
           bindinput="onSearchInput"
-          placeholder="{{searchPlaceholder}}"
+          placeholder="单号 / 工单 / 产品"
           confirm-type="search"
           placeholder-class="plan-search__ph"
         />
         <view wx:if="{{searchKeyword}}" class="plan-search__clear" bindtap="onSearchClear">×</view>
       </view>
       <view
-        class="plan-tool-btn {{showFilterPanel || milestoneTemplateId ? 'plan-tool-btn--active' : ''}}"
+        class="plan-tool-btn {{filterActive ? 'plan-tool-btn--active' : ''}}"
         bindtap="onFilterTap"
       >
         <image class="plan-tool-btn__icon" src="/assets/icons/list-filter.png" mode="aspectFit" />
@@ -29,38 +29,39 @@
 
   <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
 
-  <view class="report-history-page">
-    <view wx:if="{{showFilterPanel}}" class="plan-filter-panel">
-      <view class="plan-filter-panel__row">
-        <text class="plan-filter-panel__label">开始时间</text>
-        <picker mode="date" value="{{dateFrom}}" bindchange="onDateFromChange">
-          <view class="report-history-filter report-history-filter--picker">{{dateFrom || '请选择'}}</view>
-        </picker>
-      </view>
-      <view class="plan-filter-panel__row">
-        <text class="plan-filter-panel__label">结束时间</text>
-        <picker mode="date" value="{{dateTo}}" bindchange="onDateToChange">
-          <view class="report-history-filter report-history-filter--picker">{{dateTo || '请选择'}}</view>
-        </picker>
-      </view>
-      <view class="plan-filter-panel__row">
-        <text class="plan-filter-panel__label">工序</text>
-        <picker
-          mode="selector"
-          range="{{milestoneOptions}}"
-          range-key="name"
-          value="{{milestoneFilterIndex}}"
-          bindchange="onMilestoneFilterChange"
-        >
-          <view class="report-history-filter report-history-filter--picker">{{milestoneFilterLabel}}</view>
-        </picker>
-      </view>
-      <view class="plan-filter-panel__foot">
-        <view class="plan-filter-reset" bindtap="onFilterReset">重置</view>
-        <view class="plan-filter-apply" bindtap="onFilterApply">确定</view>
-      </view>
+  <view wx:if="{{showFilterPanel}}" class="plan-filter-panel stock-in-flow-filter-panel">
+    <view class="plan-filter-panel__row">
+      <text class="plan-filter-panel__label">开始日期</text>
+      <picker mode="date" value="{{draftDateFrom}}" bindchange="onDraftDateFromChange">
+        <view class="stock-in-flow-filter stock-in-flow-filter--picker">{{draftDateFrom || '请选择'}}</view>
+      </picker>
     </view>
+    <view class="plan-filter-panel__row">
+      <text class="plan-filter-panel__label">结束日期</text>
+      <picker mode="date" value="{{draftDateTo}}" bindchange="onDraftDateToChange">
+        <view class="stock-in-flow-filter stock-in-flow-filter--picker">{{draftDateTo || '请选择'}}</view>
+      </picker>
+    </view>
+    <view class="plan-filter-panel__row">
+      <text class="plan-filter-panel__label">入库仓库</text>
+      <picker
+        mode="selector"
+        range="{{warehouseFilterLabels}}"
+        value="{{draftWarehouseIndex}}"
+        bindchange="onDraftWarehouseFilterChange"
+      >
+        <view class="stock-in-flow-filter stock-in-flow-filter--picker">
+          {{warehouseFilterLabels[draftWarehouseIndex] || '全部仓库'}}
+        </view>
+      </picker>
+    </view>
+    <view class="plan-filter-panel__foot">
+      <view class="plan-filter-reset" bindtap="onFilterReset">重置</view>
+      <view class="plan-filter-apply" bindtap="onFilterApply">确定</view>
+    </view>
+  </view>
 
+  <view class="report-history-page">
     <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
 
     <view wx:elif="{{rows.length}}">
@@ -90,15 +91,16 @@
           <view class="report-history-row__content">
             <view class="report-history-row__head">
               <view class="report-history-row__head-main">
-                <text wx:if="{{item.showOrderNumber}}" class="report-history-row__order-no">{{item.orderNumber}}</text>
-                <text wx:if="{{item.showOrderNumber}}" class="report-history-row__head-dot">·</text>
+                <text wx:if="{{item.showOrderNumber && item.orderNumber}}" class="report-history-row__order-no">{{item.orderNumber}}</text>
+                <text wx:if="{{item.showOrderNumber && item.orderNumber}}" class="report-history-row__head-dot">·</text>
+                <text class="report-history-row__doc-no">{{item.docNo}}</text>
+                <text class="report-history-row__head-dot">·</text>
                 <text class="report-history-row__time">{{item.timeLabel}}</text>
               </view>
-              <text wx:if="{{item.showReportNo}}" class="report-history-row__report-no">{{item.reportNo}}</text>
-            </view>
-            <view class="report-history-row__main">
-              <text class="report-history-row__milestone">{{item.milestoneName}}</text>
-              <text class="report-history-row__qty">{{item.goodQtyText}}</text>
+              <view class="report-history-row__head-right">
+                <text class="report-history-row__qty">{{item.totalQtyText}}</text>
+                <text wx:if="{{item.showWarehouse}}" class="report-history-row__warehouse">{{item.warehouseName}}</text>
+              </view>
             </view>
             <view class="report-history-row__product">
               <view class="report-history-row__product-left">
@@ -107,18 +109,15 @@
               </view>
               <text wx:if="{{item.showOperator}}" class="report-history-row__operator">{{item.operatorLine}}</text>
             </view>
-            <view wx:if="{{item.showDefective}}" class="report-history-row__meta">
-              <text class="report-history-row__defective">{{item.defectiveText}}</text>
-            </view>
           </view>
         </view>
       </view>
     </view>
 
-    <view wx:else class="plan-list-empty">{{emptyText}}</view>
+    <view wx:else class="plan-list-empty">暂无入库记录</view>
+  </view>
 
-    <view wx:if="{{!loading && rows.length}}" class="report-history-footer">
-      <text class="report-history-footer__text">共 {{stats.batchCount}} 批 · 良品 {{stats.goodTotal}} · 不良 {{stats.defectiveTotal}}</text>
-    </view>
+  <view wx:if="{{rows.length}}" class="report-history-footer">
+    <text class="report-history-footer__text">{{stats.batchCount}} 笔 · 合计 {{stats.totalQty}} 件</text>
   </view>
 </view>

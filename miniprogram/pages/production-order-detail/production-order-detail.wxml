@@ -114,7 +114,17 @@
           </view>
 
           <view wx:elif="{{item.id === 'quantity' && item.kind === 'rows'}}" class="plan-form-card">
-            <view class="plan-detail-qty-total">
+            <block wx:if="{{item.rows.length > 1 || (item.rows[0] && item.rows[0].label !== '工单数量')}}">
+              <view wx:for="{{item.rows}}" wx:for-item="row" wx:key="label" class="plan-form-cell">
+                <text class="plan-form-cell__label">{{row.label}}</text>
+                <text class="plan-form-cell__value">{{row.value}}</text>
+              </view>
+              <view wx:if="{{item.totalText}}" class="plan-form-cell plan-form-cell--matrix-head">
+                <text class="plan-form-cell__label">合计</text>
+                <text class="plan-form-cell__hint">{{item.totalText}}</text>
+              </view>
+            </block>
+            <view wx:else class="plan-detail-qty-total">
               <text class="plan-detail-qty-total__label">总量 ({{item.unitName || '件'}})</text>
               <text class="plan-detail-qty-total__value">{{item.totalText || (item.rows[0] && item.rows[0].value) || '—'}}</text>
             </view>

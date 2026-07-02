@@ -1,15 +1,17 @@
-const { listReportHistory, fetchTenantConfig, fetchProductsAll } = require('../../utils/orderApi.js');
+const { listReportHistory, fetchTenantConfig, fetchProductsAll, fetchNodesAll } = require('../../utils/orderApi.js');
 const { normalizeMasterList } = require('../../utils/productionPlans.js');
 const {
   defaultDateRange,
   dateInputToIsoStart,
   dateInputToIsoEndExclusive,
   localTodayYmd,
-  mapOrderReportRow,
-  mapProductReportRow,
   filterReportHistoryRows,
-  computeReportHistoryStats,
 } = require('../../utils/orderReportHistory.js');
+const {
+  buildReportBatches,
+  mapBatchToListRow,
+  computeReportHistoryStatsFromBatches,
+} = require('../../utils/reportBatchDetail.js');
 const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
 
 function computeHeaderBlockHeight(nav) {
@@ -25,9 +27,13 @@ Page({
     dateFrom: '',
     dateTo: '',
     searchKeyword: '',
-    searchPlaceholder: '工单号 / 产品',
+    searchPlaceholder: '工单号 / 产品 / 报工单号 / 操作人',
     showFilterPanel: false,
     isGlobalMode: false,
+    milestoneOptions: [{ id: '', name: '全部工序' }],
+    milestoneFilterIndex: 0,
+    milestoneTemplateId: '',
+    milestoneFilterLabel: '全部工序',
     emptyText: '暂无报工记录',
     stats: { batchCount: 0, goodTotal: 0, defectiveTotal: 0 },
     statusBarHeight: 20,
@@ -56,7 +62,9 @@ Page({
       dateFrom,
       dateTo,
       isGlobalMode: this._isGlobalMode,
-      searchPlaceholder: this._isGlobalMode ? '工单号 / 产品' : '产品 / 工序',
+      searchPlaceholder: this._isGlobalMode
+        ? '工单号 / 产品 / 报工单号 / 操作人'
+        : '产品 / 报工单号 / 操作人',
     });
 
     this.loadRows();
@@ -72,10 +80,19 @@ Page({
 
   onFilterTap() {
     if (this.data.showFilterPanel) {
-      this.setData({ showFilterPanel: false });
+      this.closeFilterPanel();
       return;
     }
     this.setData({ showFilterPanel: true });
+  },
+
+  closeFilterPanel() {
+    if (!this.data.showFilterPanel) return;
+    this.setData({ showFilterPanel: false });
+  },
+
+  onPageScroll() {
+    this.closeFilterPanel();
   },
 
   onFilterReset() {
@@ -83,9 +100,11 @@ Page({
     this.setData({
       dateFrom: today,
       dateTo: today,
+      milestoneFilterIndex: 0,
+      milestoneTemplateId: '',
+      milestoneFilterLabel: '全部工序',
       showFilterPanel: false,
-    });
-    this.loadRows();
+    }, () => this.loadRows());
   },
 
   onFilterApply() {
@@ -113,11 +132,26 @@ Page({
     this.applyClientFilters();
   },
 
+  onShow() {
+    if (this._needReload) {
+      this._needReload = false;
+      this.loadRows();
+    }
+  },
+
   onRowTap(e) {
-    const { orderId } = e.currentTarget.dataset;
-    if (!orderId) return;
+    this.closeFilterPanel();
+    const { batchKey } = e.currentTarget.dataset;
+    if (!batchKey) return;
+    this._needReload = true;
+    const q = [
+      `batchKey=${encodeURIComponent(batchKey)}`,
+      `dateFrom=${encodeURIComponent(this.data.dateFrom || '')}`,
+      `dateTo=${encodeURIComponent(this.data.dateTo || '')}`,
+    ];
+    if (this._orderId) q.push(`orderId=${encodeURIComponent(this._orderId)}`);
     wx.navigateTo({
-      url: `/pages/production-order-detail/production-order-detail?id=${encodeURIComponent(orderId)}`,
+      url: `/pages/production-order-report-batch-detail/production-order-report-batch-detail?${q.join('&')}`,
     });
   },
 
@@ -130,27 +164,54 @@ Page({
     this.setData({ rows });
   },
 
+  onMilestoneFilterChange(e) {
+    const idx = Number(e.detail.value) || 0;
+    const opt = (this.data.milestoneOptions || [])[idx] || { id: '', name: '全部工序' };
+    this.setData({
+      milestoneFilterIndex: idx,
+      milestoneTemplateId: opt.id || '',
+      milestoneFilterLabel: opt.name || '全部工序',
+    });
+    this.applyClientFilters();
+  },
+
   applyClientFilters() {
-    const filtered = filterReportHistoryRows(this._rawRows || [], this.data.searchKeyword);
+    const filtered = filterReportHistoryRows(this._listRows || [], this.data.searchKeyword, {
+      milestoneTemplateId: this.data.milestoneTemplateId,
+    });
     this.setData({
       rows: filtered,
-      stats: computeReportHistoryStats(filtered),
+      stats: computeReportHistoryStatsFromBatches(this._filteredBatches(filtered)),
       emptyText: '所选日期内暂无报工',
     });
+  },
+
+  _filteredBatches(filteredRows) {
+    const keys = new Set((filteredRows || []).map((row) => row.batchKey));
+    return (this._batches || []).filter((b) => keys.has(b.key));
   },
 
   async loadRows() {
     this.setData({ loading: true });
     try {
-      const [config, productsRaw] = await Promise.all([
+      const [config, productsRaw, nodesRaw] = await Promise.all([
         fetchTenantConfig(),
         fetchProductsAll().catch(() => []),
+        fetchNodesAll().catch(() => []),
       ]);
       const productionLinkMode = (config && config.productionLinkMode) || 'order';
       this._productionLinkMode = productionLinkMode;
 
       const products = normalizeMasterList(productsRaw);
+      const nodes = normalizeMasterList(nodesRaw);
       this._productMap = new Map(products.map((p) => [p.id, p]));
+
+      const milestoneOptions = [{ id: '', name: '全部工序' }].concat(
+        nodes.map((n) => ({ id: n.id, name: n.name || n.id })),
+      );
+      let milestoneFilterIndex = this.data.milestoneFilterIndex || 0;
+      if (milestoneFilterIndex >= milestoneOptions.length) milestoneFilterIndex = 0;
+      const milestoneOpt = milestoneOptions[milestoneFilterIndex] || milestoneOptions[0];
 
       const params = {
         startDate: dateInputToIsoStart(this.data.dateFrom),
@@ -169,15 +230,14 @@ Page({
         productMap: this._productMap,
       };
 
-      let mapped = orderReports.map((r, idx) => mapOrderReportRow(r, idx, mapCtx));
-
-      if (productionLinkMode === 'product') {
-        const productMapped = productReports.map((r, idx) => mapProductReportRow(r, idx, mapCtx));
-        mapped = mapped.concat(productMapped);
-      }
-
-      mapped.sort((a, b) => b.timestampMs - a.timestampMs);
-      this._rawRows = mapped;
+      this._batches = buildReportBatches(orderReports, productReports, productionLinkMode);
+      this._listRows = this._batches.map((batch) => mapBatchToListRow(batch, mapCtx));
+      this.setData({
+        milestoneOptions,
+        milestoneFilterIndex,
+        milestoneTemplateId: milestoneOpt.id || '',
+        milestoneFilterLabel: milestoneOpt.name || '全部工序',
+      });
       this.applyClientFilters();
       this.setData({ loading: false });
     } catch (err) {

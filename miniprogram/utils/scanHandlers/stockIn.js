@@ -8,6 +8,7 @@ const {
   rewriteError,
 } = require('../scanCommon.js');
 const { resolveStockInOrder } = require('../resolveStockInOrder.js');
+const { readOperatorDisplayName } = require('../session.js');
 
 const WAREHOUSE_PREF_KEY = 'scanStockInWarehouseId';
 
@@ -58,7 +59,7 @@ async function handleStockInScan(ctx, scanRes, payload) {
       return failScan(ctx, payload.raw, validation.message || '校验未通过');
     }
 
-    const operator = ctx.tenantCtx?.displayName || ctx.tenantCtx?.username || '';
+    const operator = readOperatorDisplayName();
     await createProductionRecord({
       type: 'STOCK_IN',
       orderId,

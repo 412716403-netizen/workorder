@@ -1,4 +1,4 @@
-const { readTenantCtx } = require('../../utils/session.js');
+const { readTenantCtx, readOperatorDisplayName } = require('../../utils/session.js');
 const { hasPermission } = require('../../utils/permissions.js');
 const {
   normalizeMasterList,
@@ -16,8 +16,8 @@ const {
   needEquipmentOnReport,
   buildQtyHintText,
   resolveReportFormMode,
-  buildVariantRemainingMap,
   buildReportMatrixLayout,
+  patchReportMatrixLayout,
   buildMultiVariantRows,
   parseNonNegativeInt,
   parsePositiveInt,
@@ -28,7 +28,6 @@ const {
 } = require('../../utils/orderReportForm.js');
 const {
   getOrder,
-  getOrderReportable,
   createOrderReport,
   fetchTenantConfig,
   fetchProductsAll,
@@ -47,6 +46,12 @@ const {
   getNextMatrixVariantIdInColumn,
   getNextMatrixVariantIdInRow,
 } = require('../../utils/matrixQtyKeyboard.js');
+const {
+  computeOrderReportHints,
+  buildVariantMaxGoodMap,
+  getSingleMaxQty,
+  validateReportEntries,
+} = require('../../utils/reportVariantMaxQty.js');
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
@@ -60,6 +65,55 @@ function computeScrollHeight(nav) {
   const footerPx = Math.ceil(128 * rpx) + (win.safeAreaBottom || 0);
   const headerPx = computeHeaderBlockHeight(nav);
   return Math.max(200, (win.windowHeight || 667) - headerPx - footerPx);
+}
+
+function buildReportQtySummaryView(stats, unitName) {
+  const unit = unitName || '件';
+  const empty = {
+    show: false,
+    maxReportable: 0,
+    remaining: 0,
+    reported: 0,
+    totalQty: 0,
+    defective: 0,
+    maxReportableText: '',
+    remainingText: '',
+    detailText: '',
+    hintText: '',
+  };
+  if (!stats) return empty;
+
+  const totalQty = Math.max(0, Number(stats.totalQty) || 0);
+  const maxReportable = Math.max(0, Number(stats.maxReportable) || 0);
+  const remaining = Math.max(0, Number(stats.remaining) || 0);
+  const reported = Math.max(0, Number(stats.reported) || 0);
+  const defective = Math.max(0, Number(stats.defective) || 0);
+  const hintText = buildQtyHintText(stats, unitName);
+
+  if (!hintText && totalQty <= 0 && maxReportable <= 0 && remaining <= 0) return empty;
+
+  let detailText = `已报 ${reported} ${unit}`;
+  if (maxReportable !== totalQty && totalQty > 0) {
+    detailText = `可报上限 ${maxReportable}/${totalQty} ${unit} · ${detailText}`;
+  } else if (totalQty > 0) {
+    detailText = `工单合计 ${totalQty} ${unit} · ${detailText}`;
+  }
+  if (defective > 0) {
+    detailText += ` · 不良 ${defective} ${unit}`;
+  }
+
+  return {
+    show: true,
+    maxReportable,
+    remaining,
+    reported,
+    totalQty,
+    defective,
+    maxReportableText: `${maxReportable} ${unit}`,
+    remainingText: `${remaining} ${unit}`,
+    detailText,
+    hintText,
+  };
 }
 
 function findEquipmentIndex(equipment, equipmentId) {
@@ -84,6 +138,7 @@ Page({
     productName: '',
     milestoneName: '',
     qtyHint: '',
+    qtySummary: { show: false },
     unitName: '件',
     formMode: 'single',
     useVariantMatrix: false,
@@ -109,6 +164,8 @@ Page({
     reportCustomFields: [],
     customData: {},
     remaining: 0,
+    singleMaxQty: 0,
+    singleMaxQtyLabel: '',
     allowExceedMaxReportQty: false,
     canSubmit: false,
     qtyInputMode: 'good',
@@ -171,7 +228,6 @@ Page({
       const [
         config,
         order,
-        reportableRaw,
         productsRaw,
         categoriesRaw,
         nodesRaw,
@@ -181,7 +237,6 @@ Page({
       ] = await Promise.all([
         fetchTenantConfig(),
         getOrder(orderId),
-        getOrderReportable(orderId),
         fetchProductsAll(),
         fetchCategoriesAll(),
         fetchNodesAll(),
@@ -205,16 +260,6 @@ Page({
         return;
       }
 
-      const reportableList = Array.isArray(reportableRaw)
-        ? reportableRaw
-        : (reportableRaw && reportableRaw.milestones) || [];
-      const reportable = reportableList.find(
-        (m) => m.milestoneId === milestoneId || m.id === milestoneId,
-      );
-      const remaining = reportable && reportable.remaining != null
-        ? Math.max(0, Number(reportable.remaining))
-        : 0;
-
       const equipmentFeaturesEnabled = readTenantCtx()?.equipmentFeaturesEnabled !== false;
       const needEquipment = needEquipmentOnReport(
         globalNodes,
@@ -226,11 +271,40 @@ Page({
       const reportCustomFields = buildReportCustomFields(template);
       const customData = buildInitialReportCustomData(reportCustomFields, product);
       const unitName = getProductUnitName(product, dictionaries);
-      const qtyHint = buildQtyHintText(reportable, unitName);
-
       const orderItems = order.items || [];
       const formMode = resolveReportFormMode(product, category, orderItems);
-      const variantRemainingMap = buildVariantRemainingMap(orderItems, milestone.reports || []);
+
+      const reportHints = computeOrderReportHints(order, milestone, globalNodes, config);
+      const variantMaxGoodMap = buildVariantMaxGoodMap(
+        order,
+        milestone,
+        product,
+        reportHints.opts,
+      );
+      const allowExceedMaxReportQty = !!(config && config.allowExceedMaxReportQty);
+      const remaining = reportHints.hintRemaining;
+      const layoutOpts = {
+        variantMaxGoodMap,
+        effectiveRemainingForModal: reportHints.effectiveRemainingForModal,
+        allowExceedMaxReportQty,
+      };
+
+      const qtySummary = formMode === 'matrix'
+        ? { show: false }
+        : buildReportQtySummaryView({
+          totalQty: reportHints.hintTotalQty,
+          maxReportable: reportHints.hintMaxReportable,
+          reported: reportHints.hintCompletedDisplay,
+          remaining: reportHints.hintRemaining,
+          defective: reportHints.defectiveQtyForHint,
+        }, unitName);
+      const qtyHint = formMode === 'matrix' ? '' : (qtySummary.hintText || buildQtyHintText({
+        totalQty: reportHints.hintTotalQty,
+        maxReportable: reportHints.hintMaxReportable,
+        reported: reportHints.hintCompletedDisplay,
+        remaining: reportHints.hintRemaining,
+        defective: reportHints.defectiveQtyForHint,
+      }, unitName));
 
       const workersNormalized = normalizeWorkersList(workersRaw).filter(
         (w) => !w.status || w.status === 'ACTIVE',
@@ -247,8 +321,10 @@ Page({
       this._category = category;
       this._dictionaries = dictionaries;
       this._reportCustomFields = reportCustomFields;
-      this._variantRemainingMap = variantRemainingMap;
-      this._tenantDisplayName = readTenantCtx()?.displayName || readTenantCtx()?.tenantName || '';
+      this._variantMaxGoodMap = variantMaxGoodMap;
+      this._reportHints = reportHints;
+      this._layoutOpts = layoutOpts;
+      this._tenantDisplayName = readOperatorDisplayName();
 
       this._quantities = {};
       this._defectiveQuantities = {};
@@ -261,7 +337,13 @@ Page({
       let variantRows = [];
 
       if (formMode === 'matrix' && product) {
-        matrixLayout = buildReportMatrixLayout(product, dictionaries, this._quantities, this._defectiveQuantities);
+        matrixLayout = buildReportMatrixLayout(
+          product,
+          dictionaries,
+          this._quantities,
+          this._defectiveQuantities,
+          layoutOpts,
+        );
       } else if (formMode === 'multi' && product) {
         variantRows = buildMultiVariantRows(
           product,
@@ -270,6 +352,8 @@ Page({
           orderItems,
           this._quantities,
           this._defectiveQuantities,
+          variantMaxGoodMap,
+          unitName,
         );
       } else if (formMode === 'single') {
         const uniqueVariantIds = [...new Set(orderItems.map((it) => it.variantId).filter(Boolean))];
@@ -288,12 +372,23 @@ Page({
         }
       }
 
+      const singleMaxQty = formMode === 'single'
+        ? getSingleMaxQty(
+          variantMaxGoodMap,
+          variantId,
+          reportHints.effectiveRemainingForModal,
+          allowExceedMaxReportQty,
+        )
+        : 0;
+      const singleMaxQtyLabel = singleMaxQty > 0 ? `最多 ${singleMaxQty} ${unitName}` : '';
+
       const statePatch = {
         loading: false,
         orderNumber: order.orderNumber || '',
         productName: order.productName || (product && product.name) || '',
         milestoneName: milestone.name || '',
         qtyHint,
+        qtySummary,
         unitName,
         formMode,
         useVariantMatrix: formMode === 'matrix',
@@ -319,7 +414,9 @@ Page({
         reportCustomFields,
         customData,
         remaining,
-        allowExceedMaxReportQty: !!(config && config.allowExceedMaxReportQty),
+        singleMaxQty,
+        singleMaxQtyLabel,
+        allowExceedMaxReportQty,
         qtyInputMode: 'good',
       };
 
@@ -376,10 +473,18 @@ Page({
     const idx = Number(e.detail.value) || 0;
     const opt = (this.data.variantOptions || [])[idx];
     if (!opt) return;
+    const singleMaxQty = getSingleMaxQty(
+      this._variantMaxGoodMap,
+      opt.id,
+      this._reportHints && this._reportHints.effectiveRemainingForModal,
+      this.data.allowExceedMaxReportQty,
+    );
     this.setData({
       variantPickerIndex: idx,
       variantId: opt.id,
       variantLabel: opt.label,
+      singleMaxQty,
+      singleMaxQtyLabel: singleMaxQty > 0 ? `最多 ${singleMaxQty} ${this.data.unitName}` : '',
     });
     this.refreshCanSubmit();
   },
@@ -396,10 +501,10 @@ Page({
 
   onSingleQtyStep(e) {
     const delta = Number(e.currentTarget.dataset.delta) || 0;
-    const { remaining, allowExceedMaxReportQty } = this.data;
+    const { singleMaxQty, allowExceedMaxReportQty } = this.data;
     let next = parsePositiveInt(this.data.singleQuantity, 1) + delta;
     if (next < 0) next = 0;
-    if (!allowExceedMaxReportQty && remaining > 0 && next > remaining) next = remaining;
+    if (!allowExceedMaxReportQty && singleMaxQty > 0 && next > singleMaxQty) next = singleMaxQty;
     this.setData({ singleQuantity: String(next) });
     this.refreshCanSubmit();
   },
@@ -412,16 +517,32 @@ Page({
     this.refreshCanSubmit();
   },
 
-  rebuildMatrixLayout() {
-    this.setData({
-      matrixLayout: buildReportMatrixLayout(
+  rebuildMatrixLayout(useFullBuild) {
+    const matrixLayout = useFullBuild || !this.data.matrixLayout
+      ? buildReportMatrixLayout(
         this._product,
         this._dictionaries,
         this._quantities,
         this._defectiveQuantities,
-      ),
-    });
-    this.syncMatrixKeyboardPreview();
+        this._layoutOpts,
+      )
+      : patchReportMatrixLayout(
+        this.data.matrixLayout,
+        this._quantities,
+        this._defectiveQuantities,
+        this._layoutOpts,
+      );
+    const patch = { matrixLayout };
+    if (this.data.activeMatrixVariantId) {
+      const preview = buildMatrixKeyboardPreview(
+        matrixLayout,
+        this.data.activeMatrixVariantId,
+        this.getActiveMatrixQtyMap(),
+      );
+      patch.matrixKeyboardLabel = preview.label;
+      patch.matrixKeyboardValue = preview.value;
+    }
+    this.setData(patch);
     this.refreshCanSubmit();
   },
 
@@ -558,6 +679,9 @@ Page({
       matrixKeyboardLabel: '',
       matrixKeyboardValue: '',
     });
+    if (this.data.formMode === 'matrix') {
+      this.rebuildMatrixLayout(true);
+    }
   },
 
   onGoScan() {
@@ -607,8 +731,22 @@ Page({
     }
 
     const totalGood = entries.reduce((s, e) => s + e.quantity, 0);
+    const qtyErr = validateReportEntries(entries, {
+      formMode: this.data.formMode,
+      variantMaxGoodMap: this._variantMaxGoodMap,
+      effectiveRemaining: this._reportHints && this._reportHints.hintRemaining,
+      allowExceedMaxReportQty: this.data.allowExceedMaxReportQty,
+      quantities: this._quantities,
+      unitName: this.data.unitName,
+    });
+    if (qtyErr) {
+      wx.showToast({ title: qtyErr, icon: 'none' });
+      return;
+    }
+
     const { remaining, allowExceedMaxReportQty } = this.data;
-    if (!allowExceedMaxReportQty && remaining > 0 && totalGood > remaining) {
+    if (!allowExceedMaxReportQty && remaining > 0 && totalGood > remaining
+      && this.data.formMode !== 'matrix') {
       wx.showToast({ title: `良品最多可报 ${remaining} ${this.data.unitName}`, icon: 'none' });
       return;
     }

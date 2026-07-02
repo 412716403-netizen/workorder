@@ -1,14 +1,9 @@
 const { readTenantCtx } = require('../../utils/session.js');
 const { hasPermission } = require('../../utils/permissions.js');
-const {
-  getOrder,
-  fetchProductionRecords,
-  createProductionRecord,
-  fetchWarehousesAll,
-  fetchTenantConfig,
-} = require('../../utils/orderApi.js');
-const { computeOrderPendingStockRow } = require('../../utils/pendingStockComputeLite.js');
 const { loadPendingStockRows } = require('../../utils/pendingStockBadge.js');
+const { fetchTenantConfig, fetchProductsAll } = require('../../utils/orderApi.js');
+const { normalizeMasterList } = require('../../utils/productionPlans.js');
+const { productMetaFromMap } = require('../../utils/orderReportHistory.js');
 const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
 
 function computeHeaderBlockHeight(nav) {
@@ -17,165 +12,158 @@ function computeHeaderBlockHeight(nav) {
   return nav.statusBarHeight + nav.navBarHeight + tailPx;
 }
 
-function mapListRow(row, productionLinkMode) {
+function mapListRow(row, productionLinkMode, productMap) {
   const isProductMode = productionLinkMode === 'product';
+  const meta = productMetaFromMap(productMap, row.productId, row.productName, '');
   return {
     rowKey: row.rowKey,
     orderId: row.orderId,
-    titleLine: isProductMode ? (row.productName || row.orderNumber) : (row.orderNumber || ''),
-    subtitleLine: isProductMode ? `涉及 ${row.productBlockOrderTotal || row.orderTotal} 件工单总量` : (row.productName || ''),
+    productId: row.productId || '',
+    titleLine: isProductMode ? (meta.name || row.productName || row.orderNumber) : (row.orderNumber || ''),
+    subtitleLine: isProductMode
+      ? `涉及 ${row.productBlockOrderTotal || row.orderTotal} 件工单总量`
+      : (meta.name || row.productName || ''),
+    productName: meta.name || row.productName || '',
+    productSku: meta.sku,
+    showProductSku: meta.showSku,
+    productImageUrl: meta.imageUrl,
+    showProductImage: Boolean(meta.imageUrl),
+    placeholderIconSrc: '/assets/icons/warehouse.png',
     orderTotal: row.orderTotal,
     alreadyIn: row.alreadyIn,
     pendingTotal: row.pendingTotal,
+    selected: false,
   };
 }
 
 Page({
   data: {
     loading: true,
-    isListMode: false,
-    pageTitle: '待入库',
     rows: [],
-    row: null,
-    stockInQty: '1',
+    selectedCount: 0,
     canCreate: false,
+    canViewFlow: false,
+    productionLinkMode: 'order',
     statusBarHeight: 20,
     navBarHeight: 44,
     headerBlockHeight: 88,
   },
 
   onLoad(options) {
+    if (options.orderId) {
+      wx.redirectTo({
+        url: `/pages/production-order-stock-in-confirm/production-order-stock-in-confirm?mode=single&rowKeys=${encodeURIComponent(options.orderId)}`,
+      });
+      return;
+    }
     const nav = readNavBarMetrics();
-    this._orderId = options.orderId ? decodeURIComponent(options.orderId) : '';
-    this._isListMode = !this._orderId;
-
     const ctx = readTenantCtx();
+    const perms = (ctx && ctx.permissions) || [];
     this.setData({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
       headerBlockHeight: computeHeaderBlockHeight(nav),
-      isListMode: this._isListMode,
-      pageTitle: this._isListMode ? '待入库清单' : '待入库',
-      canCreate: hasPermission((ctx && ctx.permissions) || [], 'production:orders_pending_stock_in:create'),
+      canCreate: hasPermission(perms, 'production:orders_pending_stock_in:create'),
+      canViewFlow: hasPermission(perms, 'production:orders_pending_stock_in:view'),
     });
-
-    if (this._isListMode) {
-      this.loadList();
-    } else {
-      this.loadSingle();
-    }
+    this.loadList();
   },
 
   onShow() {
-    if (this._isListMode && !this.data.loading) {
-      this.loadList();
-    } else if (!this._isListMode && this._orderId && !this.data.loading) {
-      this.loadSingle();
-    }
+    if (!this.data.loading) this.loadList();
   },
 
   onPullDownRefresh() {
-    const task = this._isListMode ? this.loadList() : this.loadSingle();
-    task.finally(() => wx.stopPullDownRefresh());
+    this.loadList().finally(() => wx.stopPullDownRefresh());
   },
 
   onHeaderBack() {
     wx.navigateBack();
   },
 
-  onListRowTap(e) {
-    const { orderId } = e.currentTarget.dataset;
-    if (!orderId) return;
-    wx.navigateTo({
-      url: `/pages/production-order-pending-stock/production-order-pending-stock?orderId=${encodeURIComponent(orderId)}`,
-    });
-  },
-
-  onQtyInput(e) {
-    this.setData({ stockInQty: e.detail.value || '' });
+  onGoFlow() {
+    wx.navigateTo({ url: '/pages/production-order-stock-in-history/production-order-stock-in-history' });
   },
 
   onGoScan() {
     const app = getApp();
-    if (app.globalData) app.globalData.scanPreset = { type: 'stockIn' };
+    if (app.globalData) {
+      app.globalData.scanPreset = { type: 'stockIn', fromPendingStock: true };
+    }
     wx.switchTab({ url: '/pages/scan/scan' });
+  },
+
+  onProductImageError(e) {
+    const { rowKey } = e.currentTarget.dataset;
+    if (!rowKey) return;
+    const patch = (row) => (row.rowKey === rowKey ? { ...row, showProductImage: false } : row);
+    this.setData({ rows: (this.data.rows || []).map(patch) });
+  },
+
+  onSelectInbound(e) {
+    const { rowKey } = e.currentTarget.dataset;
+    if (!rowKey) return;
+    this.openConfirm([rowKey]);
+  },
+
+  onListRowTap(e) {
+    const { rowKey } = e.currentTarget.dataset;
+    if (!rowKey) return;
+    this.openConfirm([rowKey]);
+  },
+
+  onToggleSelect(e) {
+    const { rowKey } = e.currentTarget.dataset;
+    if (!rowKey) return;
+    const rows = (this.data.rows || []).map((row) => {
+      if (row.rowKey !== rowKey) return row;
+      return { ...row, selected: !row.selected };
+    });
+    this.setData({
+      rows,
+      selectedCount: rows.filter((r) => r.selected).length,
+    });
+  },
+
+  onBatchInbound() {
+    const keys = (this.data.rows || []).filter((r) => r.selected).map((r) => r.rowKey);
+    if (!keys.length) {
+      wx.showToast({ title: '请先勾选待入库项', icon: 'none' });
+      return;
+    }
+    this.openConfirm(keys);
+  },
+
+  openConfirm(rowKeys) {
+    const encoded = rowKeys.map((k) => encodeURIComponent(k)).join(',');
+    const mode = rowKeys.length > 1 ? 'batch' : 'single';
+    wx.navigateTo({
+      url: `/pages/production-order-stock-in-confirm/production-order-stock-in-confirm?mode=${mode}&rowKeys=${encoded}`,
+    });
   },
 
   async loadList() {
     this.setData({ loading: true });
     try {
-      const config = await fetchTenantConfig();
-      this._productionLinkMode = (config && config.productionLinkMode) || 'order';
-      const rawRows = await loadPendingStockRows();
-      const rows = rawRows.map((row) => mapListRow(row, this._productionLinkMode));
-      this.setData({ loading: false, rows });
-    } catch {
-      this.setData({ loading: false, rows: [] });
-      wx.showToast({ title: '加载失败', icon: 'none' });
-    }
-  },
-
-  async loadSingle() {
-    this.setData({ loading: true });
-    try {
-      const order = await getOrder(this._orderId);
-      const records = await fetchProductionRecords({
-        type: 'STOCK_IN',
-        all: 'true',
-        orderIds: this._orderId,
-      });
-      const list = Array.isArray(records) ? records : (records.data || []);
-      const row = computeOrderPendingStockRow(order, list);
-      this._order = order;
+      const [config, productsRaw, rawRows] = await Promise.all([
+        fetchTenantConfig(),
+        fetchProductsAll().catch(() => []),
+        loadPendingStockRows(),
+      ]);
+      const productionLinkMode = (config && config.productionLinkMode) || 'order';
+      const products = normalizeMasterList(productsRaw);
+      const productMap = new Map(products.map((p) => [p.id, p]));
+      this._rawRows = rawRows;
+      const rows = rawRows.map((row) => mapListRow(row, productionLinkMode, productMap));
       this.setData({
         loading: false,
-        row,
-        stockInQty: row.pendingTotal > 0 ? String(row.pendingTotal) : '1',
+        rows,
+        selectedCount: 0,
+        productionLinkMode,
       });
-      const warehouses = await fetchWarehousesAll();
-      const whList = Array.isArray(warehouses) ? warehouses : (warehouses.data || []);
-      this._defaultWarehouse = whList[0] || null;
     } catch {
-      this.setData({ loading: false, row: null });
+      this.setData({ loading: false, rows: [], selectedCount: 0 });
       wx.showToast({ title: '加载失败', icon: 'none' });
-    }
-  },
-
-  async onStockIn() {
-    if (!this.data.canCreate || !this._order) return;
-    const qty = Number(this.data.stockInQty);
-    if (!Number.isFinite(qty) || qty <= 0) {
-      wx.showToast({ title: '请输入有效数量', icon: 'none' });
-      return;
-    }
-    const row = this.data.row;
-    if (row && row.pendingTotal > 0 && qty > row.pendingTotal) {
-      wx.showToast({ title: `最多入库 ${row.pendingTotal} 件`, icon: 'none' });
-      return;
-    }
-    const wh = this._defaultWarehouse;
-    if (!wh) {
-      wx.showToast({ title: '暂无可用仓库', icon: 'none' });
-      return;
-    }
-    const ctx = readTenantCtx();
-    wx.showLoading({ title: '提交中' });
-    try {
-      await createProductionRecord({
-        type: 'STOCK_IN',
-        orderId: this._order.id,
-        productId: this._order.productId,
-        quantity: qty,
-        warehouseId: wh.id,
-        warehouseName: wh.name,
-        operator: (ctx && (ctx.displayName || ctx.username)) || '',
-      });
-      wx.showToast({ title: '入库成功', icon: 'success' });
-      await this.loadSingle();
-    } catch (err) {
-      wx.showToast({ title: (err && err.message) || '入库失败', icon: 'none' });
-    } finally {
-      wx.hideLoading();
     }
   },
 });

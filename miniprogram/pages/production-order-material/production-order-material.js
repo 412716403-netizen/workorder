@@ -1,4 +1,4 @@
-const { readTenantCtx } = require('../../utils/session.js');
+const { readTenantCtx, readOperatorDisplayName } = require('../../utils/session.js');
 const { hasPermission } = require('../../utils/permissions.js');
 const {
   getOrder,
@@ -113,7 +113,6 @@ Page({
       wx.showToast({ title: '暂无可用仓库', icon: 'none' });
       return;
     }
-    const ctx = readTenantCtx();
     wx.showLoading({ title: '提交中' });
     try {
       await createProductionRecord({
@@ -124,7 +123,7 @@ Page({
         quantity: qty,
         warehouseId: wh.id,
         warehouseName: wh.name,
-        operator: (ctx && (ctx.displayName || ctx.username)) || '',
+        operator: readOperatorDisplayName(),
       });
       wx.showToast({ title: '领料成功', icon: 'success' });
       await this.loadData();

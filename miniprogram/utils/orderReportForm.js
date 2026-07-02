@@ -171,15 +171,65 @@ function buildQtyHintText(stats, unitName) {
   const remaining = Number(stats.remaining) || 0;
   const defective = Number(stats.defective) || 0;
 
-  if (totalQty <= 0) return '';
-  const head = maxReportable !== totalQty
+  if (totalQty <= 0 && maxReportable <= 0 && remaining <= 0) return '';
+  const head = maxReportable !== totalQty && totalQty > 0
     ? `可报 ${maxReportable}/${totalQty} ${unit}`
-    : `合计 ${totalQty} ${unit}`;
+    : (totalQty > 0 ? `合计 ${totalQty} ${unit}` : `最多可报 ${remaining} ${unit}`);
   let text = `${head} · 已报 ${reported} · 剩 ${remaining} ${unit}`;
   if (defective > 0) {
     text += ` · 不良 ${defective} ${unit}`;
   }
   return text;
+}
+
+/** 报工页数量汇总（对齐 Web ReportProductQtyHints） */
+function buildReportQtySummary(stats, unitName) {
+  const unit = unitName || '件';
+  const empty = {
+    show: false,
+    maxReportable: 0,
+    remaining: 0,
+    reported: 0,
+    totalQty: 0,
+    defective: 0,
+    maxReportableText: '',
+    remainingText: '',
+    detailText: '',
+    hintText: '',
+  };
+  if (!stats) return empty;
+
+  const totalQty = Math.max(0, Number(stats.totalQty) || 0);
+  const maxReportable = Math.max(0, Number(stats.maxReportable) || 0);
+  const remaining = Math.max(0, Number(stats.remaining) || 0);
+  const reported = Math.max(0, Number(stats.reported) || 0);
+  const defective = Math.max(0, Number(stats.defective) || 0);
+  const hintText = buildQtyHintText(stats, unitName);
+
+  if (!hintText && totalQty <= 0 && maxReportable <= 0 && remaining <= 0) return empty;
+
+  let detailText = `已报 ${reported} ${unit}`;
+  if (maxReportable !== totalQty && totalQty > 0) {
+    detailText = `可报上限 ${maxReportable}/${totalQty} ${unit} · ${detailText}`;
+  } else if (totalQty > 0) {
+    detailText = `工单合计 ${totalQty} ${unit} · ${detailText}`;
+  }
+  if (defective > 0) {
+    detailText += ` · 不良 ${defective} ${unit}`;
+  }
+
+  return {
+    show: true,
+    maxReportable,
+    remaining,
+    reported,
+    totalQty,
+    defective,
+    maxReportableText: `${maxReportable} ${unit}`,
+    remainingText: `${remaining} ${unit}`,
+    detailText,
+    hintText,
+  };
 }
 
 function resolveReportFormMode(product, category, orderItems) {
@@ -207,23 +257,76 @@ function buildVariantRemainingMap(orderItems, milestoneReports) {
   return map;
 }
 
-function buildReportMatrixLayout(product, dictionaries, quantities, defectiveQuantities) {
-  const matrix = buildVariantMatrixUiModel(product, dictionaries, quantities);
-  if (!matrix) return null;
-  const defMap = defectiveQuantities || {};
-  matrix.colorRows = matrix.colorRows.map((row) => ({
-    ...row,
-    cells: row.cells.map((cell) => ({
+function decorateReportMatrixCell(cell, qtyMap, defMap, layoutOpts, matrixTotal) {
+  if (!cell.variantId) {
+    return {
       ...cell,
-      defectiveQty: cell.variantId && defMap[cell.variantId] != null ? String(defMap[cell.variantId]) : '',
-    })),
-  }));
-  return matrix;
+      defectiveQty: '',
+      maxQty: 0,
+      maxQtyLabel: '',
+    };
+  }
+  const variantMaxMap = (layoutOpts && layoutOpts.variantMaxGoodMap) || {};
+  const effectiveRemaining = layoutOpts && layoutOpts.effectiveRemainingForModal;
+  const allowExceed = !!(layoutOpts && layoutOpts.allowExceedMaxReportQty);
+  const variantMaxGood = Math.max(0, Number(variantMaxMap[cell.variantId]) || 0);
+  const currentQty = Number(qtyMap[cell.variantId]) || 0;
+  const otherTotal = matrixTotal - currentQty;
+  let maxAllowed = variantMaxGood;
+  if (!allowExceed && Number.isFinite(effectiveRemaining)) {
+    maxAllowed = Math.max(0, Math.min(variantMaxGood, effectiveRemaining - otherTotal));
+  }
+  const quantity = qtyMap[cell.variantId] != null ? String(qtyMap[cell.variantId]) : '';
+  const defectiveQty = defMap[cell.variantId] != null ? String(defMap[cell.variantId]) : '';
+  return {
+    ...cell,
+    quantity,
+    defectiveQty,
+    maxQty: maxAllowed,
+    maxQtyLabel: `最多 ${maxAllowed}`,
+  };
 }
 
-function buildMultiVariantRows(product, category, dictionaries, orderItems, quantities, defectiveQuantities) {
+function patchReportMatrixLayout(matrixLayout, quantities, defectiveQuantities, layoutOpts) {
+  if (!matrixLayout) return null;
+  const defMap = defectiveQuantities || {};
+  const qtyMap = quantities || {};
+  const matrixTotal = sumMatrixQuantities(qtyMap);
+  return {
+    sizeColumns: matrixLayout.sizeColumns,
+    colorRows: (matrixLayout.colorRows || []).map((row) => ({
+      ...row,
+      cells: (row.cells || []).map((cell) => decorateReportMatrixCell(
+        cell,
+        qtyMap,
+        defMap,
+        layoutOpts,
+        matrixTotal,
+      )),
+    })),
+  };
+}
+
+function buildReportMatrixLayout(product, dictionaries, quantities, defectiveQuantities, layoutOpts) {
+  const matrix = buildVariantMatrixUiModel(product, dictionaries, quantities);
+  if (!matrix) return null;
+  return patchReportMatrixLayout(matrix, quantities, defectiveQuantities, layoutOpts);
+}
+
+function buildMultiVariantRows(
+  product,
+  category,
+  dictionaries,
+  orderItems,
+  quantities,
+  defectiveQuantities,
+  variantMaxGoodMap,
+  unitName,
+) {
   const qtyMap = quantities || {};
   const defMap = defectiveQuantities || {};
+  const maxMap = variantMaxGoodMap || {};
+  const unit = unitName || '件';
   const itemByVariant = new Map();
   (orderItems || []).forEach((it) => {
     const vid = it.variantId || '';
@@ -235,13 +338,18 @@ function buildMultiVariantRows(product, category, dictionaries, orderItems, quan
     product && product.sizeIds,
   ).filter((v) => itemByVariant.has(v.id));
 
-  return variants.map((v) => ({
-    variantId: v.id,
-    label: variantLabel(v, dictionaries),
-    orderQty: itemByVariant.get(v.id) || 0,
-    quantity: qtyMap[v.id] != null ? String(qtyMap[v.id]) : '',
-    defectiveQty: defMap[v.id] != null ? String(defMap[v.id]) : '',
-  }));
+  return variants.map((v) => {
+    const maxQty = Math.max(0, Number(maxMap[v.id]) || 0);
+    return {
+      variantId: v.id,
+      label: variantLabel(v, dictionaries),
+      orderQty: itemByVariant.get(v.id) || 0,
+      remainingQty: maxQty,
+      remainingMeta: `最多 ${maxQty} ${unit}`,
+      quantity: qtyMap[v.id] != null ? String(qtyMap[v.id]) : '',
+      defectiveQty: defMap[v.id] != null ? String(defMap[v.id]) : '',
+    };
+  });
 }
 
 function parseNonNegativeInt(val, fallback) {
@@ -336,9 +444,11 @@ module.exports = {
   filterEntitiesForNode,
   needEquipmentOnReport,
   buildQtyHintText,
+  buildReportQtySummary,
   resolveReportFormMode,
   buildVariantRemainingMap,
   buildReportMatrixLayout,
+  patchReportMatrixLayout,
   buildMultiVariantRows,
   parseNonNegativeInt,
   parsePositiveInt,

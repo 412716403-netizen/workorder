@@ -70,19 +70,42 @@
 
 .report-history-row__head {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 12rpx;
-  margin-bottom: 8rpx;
+  margin-bottom: 10rpx;
+}
+
+.report-history-row__head-main {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  min-width: 0;
+  flex: 1;
+}
+
+.report-history-row__order-no {
+  font-size: 22rpx;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+
+.report-history-row__head-dot {
+  font-size: 22rpx;
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
 }
 
 .report-history-row__time {
   font-size: 22rpx;
   color: var(--color-text-tertiary);
+  min-width: 0;
 }
 
 .report-history-row__report-no {
-  font-size: 22rpx;
-  color: var(--color-text-secondary);
+  font-size: 20rpx;
+  color: var(--color-text-tertiary);
   flex-shrink: 0;
 }
 
@@ -91,17 +114,19 @@
   align-items: center;
   gap: 12rpx;
   margin-bottom: 8rpx;
-  flex-wrap: wrap;
 }
 
-.report-history-row__main-label {
-  font-size: 28rpx;
+.report-history-row__milestone {
+  flex: 1;
+  min-width: 0;
+  font-size: 30rpx;
   font-weight: 700;
   color: var(--color-text-primary);
 }
 
 .report-history-row__qty {
   margin-left: auto;
+  flex-shrink: 0;
   font-size: 28rpx;
   font-weight: 700;
   color: var(--color-primary-dark);
@@ -109,10 +134,19 @@
 
 .report-history-row__product {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+  margin-bottom: 8rpx;
+}
+
+.report-history-row__product-left {
+  flex: 1;
+  min-width: 0;
+  display: flex;
   flex-wrap: wrap;
   gap: 8rpx;
   align-items: baseline;
-  margin-bottom: 8rpx;
 }
 
 .report-history-row__product-name {
@@ -131,15 +165,13 @@
   gap: 8rpx;
   align-items: baseline;
   font-size: 22rpx;
-  color: var(--color-text-secondary);
-}
-
-.report-history-row__milestone {
-  color: var(--color-text-secondary);
 }
 
 .report-history-row__operator {
+  flex-shrink: 0;
+  font-size: 22rpx;
   color: var(--color-text-secondary);
+  text-align: right;
 }
 
 .report-history-row__defective {

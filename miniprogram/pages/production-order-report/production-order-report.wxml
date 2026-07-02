@@ -26,7 +26,7 @@
               <text wx:if="{{orderNumber && productName}}" class="report-context-card__dot">·</text>
               <text class="report-context-card__product">{{productName}}</text>
             </view>
-            <text wx:if="{{qtyHint}}" class="report-context-card__hint">{{qtyHint}}</text>
+            <text wx:if="{{qtyHint && formMode !== 'matrix'}}" class="report-context-card__hint">{{qtyHint}}</text>
           </view>
           <view class="report-context-card__scan" bindtap="onGoScan">
             <image class="report-context-card__scan-icon" src="/assets/tab/scan.png" mode="aspectFit" />
@@ -82,6 +82,14 @@
           </view>
         </view>
 
+        <view wx:if="{{qtySummary.show && formMode !== 'matrix'}}" class="report-qty-summary">
+          <view class="report-qty-summary__hero">
+            <text class="report-qty-summary__label">最多可报</text>
+            <text class="report-qty-summary__value">{{qtySummary.remainingText}}</text>
+          </view>
+          <text wx:if="{{qtySummary.detailText}}" class="report-qty-summary__detail">{{qtySummary.detailText}}</text>
+        </view>
+
         <block wx:if="{{formMode === 'matrix' && matrixLayout}}">
           <scroll-view class="plan-create-matrix-scroll" scroll-x enhanced show-scrollbar="{{false}}">
             <view class="plan-create-matrix report-matrix">
@@ -113,13 +121,21 @@
                   wx:key="index"
                   class="plan-create-matrix__cell report-matrix__cell"
                 >
-                  <view
-                    wx:if="{{cell.variantId}}"
-                    class="plan-create-matrix__input {{activeMatrixVariantId === cell.variantId ? 'plan-create-matrix__input--active' : ''}} {{(qtyInputMode === 'good' ? cell.quantity : cell.defectiveQty) ? 'plan-create-matrix__input--filled' : 'plan-create-matrix__input--empty'}}"
-                    data-variant-id="{{cell.variantId}}"
-                    bindtap="onMatrixCellTap"
-                  >{{qtyInputMode === 'good' ? cell.quantity : cell.defectiveQty}}</view>
-                  <text wx:else class="plan-create-matrix__dash">—</text>
+                  <view wx:if="{{cell.variantId}}" class="report-matrix__cell-inner">
+                    <view
+                      class="plan-create-matrix__input {{activeMatrixVariantId === cell.variantId ? 'plan-create-matrix__input--active' : ''}} {{(qtyInputMode === 'good' ? cell.quantity : cell.defectiveQty) ? 'plan-create-matrix__input--filled' : 'plan-create-matrix__input--empty'}}"
+                      data-variant-id="{{cell.variantId}}"
+                      bindtap="onMatrixCellTap"
+                    >{{qtyInputMode === 'good' ? cell.quantity : cell.defectiveQty}}</view>
+                    <text
+                      wx:if="{{qtyInputMode === 'good'}}"
+                      class="report-matrix__max"
+                    >{{cell.maxQtyLabel}}</text>
+                  </view>
+                  <view wx:else class="report-matrix__cell-inner report-matrix__cell-inner--empty">
+                    <text class="plan-create-matrix__dash">—</text>
+                    <text class="report-matrix__max report-matrix__max--placeholder"> </text>
+                  </view>
                 </view>
               </view>
             </view>
@@ -134,7 +150,7 @@
           >
             <view class="report-variant-row__head">
               <text class="report-variant-row__label">{{item.label}}</text>
-              <text class="report-variant-row__meta">工单 {{item.orderQty}} {{unitName}}</text>
+              <text class="report-variant-row__meta">工单 {{item.orderQty}} {{unitName}} · {{item.remainingMeta}}</text>
             </view>
             <view class="report-variant-row__inputs">
               <input
@@ -180,27 +196,33 @@
               <text wx:if="{{qtyInputMode === 'good'}}" class="plan-form-cell__req">*</text>
               {{qtyInputMode === 'good' ? '良品数量' : '不良品数量'}}
             </text>
-            <view wx:if="{{qtyInputMode === 'good'}}" class="report-stepper">
-              <view class="report-stepper__btn" data-delta="-1" bindtap="onSingleQtyStep">−</view>
-              <input
-                class="report-stepper__input"
-                type="number"
-                value="{{singleQuantity}}"
-                bindinput="onSingleQtyInput"
-                placeholder="0"
-              />
-              <view class="report-stepper__btn" data-delta="1" bindtap="onSingleQtyStep">+</view>
-            </view>
-            <view wx:else class="report-stepper">
-              <view class="report-stepper__btn" data-delta="-1" bindtap="onSingleDefectiveStep">−</view>
-              <input
-                class="report-stepper__input"
-                type="number"
-                value="{{singleDefectiveQty}}"
-                bindinput="onSingleDefectiveInput"
-                placeholder="0"
-              />
-              <view class="report-stepper__btn" data-delta="1" bindtap="onSingleDefectiveStep">+</view>
+            <view class="report-qty-cell__body">
+              <view wx:if="{{qtyInputMode === 'good'}}" class="report-stepper">
+                <view class="report-stepper__btn" data-delta="-1" bindtap="onSingleQtyStep">−</view>
+                <input
+                  class="report-stepper__input"
+                  type="number"
+                  value="{{singleQuantity}}"
+                  bindinput="onSingleQtyInput"
+                  placeholder="0"
+                />
+                <view class="report-stepper__btn" data-delta="1" bindtap="onSingleQtyStep">+</view>
+              </view>
+              <view wx:else class="report-stepper">
+                <view class="report-stepper__btn" data-delta="-1" bindtap="onSingleDefectiveStep">−</view>
+                <input
+                  class="report-stepper__input"
+                  type="number"
+                  value="{{singleDefectiveQty}}"
+                  bindinput="onSingleDefectiveInput"
+                  placeholder="0"
+                />
+                <view class="report-stepper__btn" data-delta="1" bindtap="onSingleDefectiveStep">+</view>
+              </view>
+              <text
+                wx:if="{{qtyInputMode === 'good' && singleMaxQtyLabel}}"
+                class="report-qty-cell__max"
+              >{{singleMaxQtyLabel}}</text>
             </view>
           </view>
         </block>

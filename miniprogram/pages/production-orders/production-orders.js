@@ -218,9 +218,9 @@ Page({
   },
 
   _pendingExcludeCompleted: false,
-  _expandedBlocks: new Set(),
 
   onLoad(options) {
+    this._expandedBlocks = new Set();
     const nav = readNavBarMetrics();
     this.setData({
       statusBarHeight: nav.statusBarHeight,
@@ -280,11 +280,20 @@ Page({
 
   onFilterTap() {
     if (this.data.showFilterPanel) {
-      this.setData({ showFilterPanel: false });
+      this.closeFilterPanel();
       return;
     }
     this.refreshPendingStockBadge();
     this.setData({ showFilterPanel: true });
+  },
+
+  closeFilterPanel() {
+    if (!this.data.showFilterPanel) return;
+    this.setData({ showFilterPanel: false });
+  },
+
+  onPageScroll() {
+    this.closeFilterPanel();
   },
 
   onShortcutTap(e) {
@@ -386,6 +395,7 @@ Page({
   },
 
   onOrderFlowRowTap(e) {
+    this.closeFilterPanel();
     const { id } = e.currentTarget.dataset;
     if (!id) return;
     wx.navigateTo({
@@ -506,10 +516,11 @@ Page({
   },
 
   onPendingStockListRowTap(e) {
+    this.closeFilterPanel();
     const { orderId } = e.currentTarget.dataset;
     if (!orderId) return;
     wx.navigateTo({
-      url: `/pages/production-order-pending-stock/production-order-pending-stock?orderId=${encodeURIComponent(orderId)}`,
+      url: `/pages/production-order-stock-in-confirm/production-order-stock-in-confirm?mode=single&rowKeys=${encodeURIComponent(orderId)}`,
     });
   },
 
@@ -550,6 +561,7 @@ Page({
   },
 
   onDetailTap(e) {
+    this.closeFilterPanel();
     const { id } = e.currentTarget.dataset;
     if (!id) return;
     wx.navigateTo({
@@ -558,6 +570,7 @@ Page({
   },
 
   onMaterialTap(e) {
+    this.closeFilterPanel();
     const { id } = e.currentTarget.dataset;
     if (!id) return;
     wx.navigateTo({
@@ -566,12 +579,14 @@ Page({
   },
 
   onReworkTap(e) {
+    this.closeFilterPanel();
     const { id } = e.currentTarget.dataset;
     if (!id) return;
     wx.navigateTo({ url: buildScanSessionUrl({ type: 'rework' }) });
   },
 
   onToggleExpand(e) {
+    this.closeFilterPanel();
     const { key } = e.currentTarget.dataset;
     if (!key) return;
     if (this._expandedBlocks.has(key)) {
@@ -583,6 +598,7 @@ Page({
   },
 
   onProcessChipTap(e) {
+    this.closeFilterPanel();
     if (!this.data.canReport) {
       wx.showToast({ title: '暂无报工权限', icon: 'none' });
       return;

@@ -1,0 +1,50 @@
+@import '../production-order-report-history/production-order-report-history.wxss';
+
+.report-history-row__doc-no {
+  font-size: 22rpx;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  flex-shrink: 0;
+}
+
+.report-history-row__head-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex-shrink: 0;
+  gap: 4rpx;
+}
+
+.report-history-row__head-right .report-history-row__qty {
+  margin-left: 0;
+}
+
+.report-history-row__warehouse {
+  font-size: 20rpx;
+  color: var(--color-text-secondary);
+  font-weight: 500;
+  max-width: 200rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stock-in-flow-filter-panel {
+  margin-top: 0;
+}
+
+.stock-in-flow-filter {
+  flex: 1;
+  min-width: 200rpx;
+  padding: 16rpx 20rpx;
+  background: var(--color-bg-page);
+  border-radius: 12rpx;
+  font-size: 24rpx;
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.stock-in-flow-filter--picker {
+  color: var(--color-primary);
+  font-weight: 600;
+}

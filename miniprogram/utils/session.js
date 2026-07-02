@@ -47,10 +47,18 @@ function readCurrentUserId() {
   return user.id || user.userId || '';
 }
 
+/** 生产流水经办人显示名（入库/报工/领料等写入 operator 字段） */
+function readOperatorDisplayName() {
+  const user = readCurrentUser();
+  if (!user) return '';
+  return String(user.displayName || user.username || '').trim();
+}
+
 module.exports = {
   clearSession,
   readTenants,
   readTenantCtx,
   readCurrentUser,
   readCurrentUserId,
+  readOperatorDisplayName,
 };

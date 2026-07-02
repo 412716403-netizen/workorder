@@ -11,6 +11,7 @@ const {
   rewriteError,
 } = require('../scanCommon.js');
 const { resolveReportTarget } = require('../resolveReportTarget.js');
+const { readOperatorDisplayName } = require('../session.js');
 
 /**
  * @param {object} ctx
@@ -54,7 +55,7 @@ async function handleReportScan(ctx, scanRes, payload) {
       itemCodeId,
       virtualBatchId,
       variantId: scanRes.variantId || undefined,
-      operator: ctx.tenantCtx?.displayName || ctx.tenantCtx?.username || '',
+      operator: readOperatorDisplayName(),
     });
 
     const summary = scanSummaryLine(scanRes);

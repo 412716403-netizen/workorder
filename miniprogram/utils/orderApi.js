@@ -85,6 +85,30 @@ function createProductionRecord(body) {
   return request({ path: '/production/records', method: 'POST', data: body });
 }
 
+function createProductionRecordBatch(records) {
+  return request({
+    path: '/production/records/batch',
+    method: 'POST',
+    data: { records },
+    timeout: 60000,
+  });
+}
+
+function updateProductionRecord(id, body) {
+  return request({
+    path: `/production/records/${encodeURIComponent(id)}`,
+    method: 'PUT',
+    data: body,
+  });
+}
+
+function deleteProductionRecord(id) {
+  return request({
+    path: `/production/records/${encodeURIComponent(id)}`,
+    method: 'DELETE',
+  });
+}
+
 function fetchWarehousesAll() {
   return request({ path: '/settings/warehouses?all=true', method: 'GET' }).catch(() => []);
 }
@@ -145,6 +169,36 @@ function getPlan(id) {
   return request({ path: `/plans/${encodeURIComponent(id)}`, method: 'GET' }).catch(() => null);
 }
 
+function updateOrderReport(orderId, milestoneId, reportId, body) {
+  return request({
+    path: `/orders/${encodeURIComponent(orderId)}/milestones/${encodeURIComponent(milestoneId)}/reports/${encodeURIComponent(reportId)}`,
+    method: 'PUT',
+    data: body,
+  });
+}
+
+function deleteOrderReport(orderId, milestoneId, reportId) {
+  return request({
+    path: `/orders/${encodeURIComponent(orderId)}/milestones/${encodeURIComponent(milestoneId)}/reports/${encodeURIComponent(reportId)}`,
+    method: 'DELETE',
+  });
+}
+
+function updateProductReport(reportId, body) {
+  return request({
+    path: `/orders/product-progress/report/${encodeURIComponent(reportId)}`,
+    method: 'PUT',
+    data: body,
+  });
+}
+
+function deleteProductReport(reportId) {
+  return request({
+    path: `/orders/product-progress/report/${encodeURIComponent(reportId)}`,
+    method: 'DELETE',
+  });
+}
+
 module.exports = {
   buildQs,
   parsePaginatedBody,
@@ -159,6 +213,9 @@ module.exports = {
   createProductReport,
   fetchProductionRecords,
   createProductionRecord,
+  createProductionRecordBatch,
+  updateProductionRecord,
+  deleteProductionRecord,
   fetchWarehousesAll,
   fetchTenantConfig,
   fetchProductsAll,
@@ -169,4 +226,8 @@ module.exports = {
   fetchReportableMembers,
   fetchBomsAll,
   getPlan,
+  updateOrderReport,
+  deleteOrderReport,
+  updateProductReport,
+  deleteProductReport,
 };

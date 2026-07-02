@@ -141,14 +141,18 @@ function mapProductReportRow(r, idx, ctx) {
   };
 }
 
-function filterReportHistoryRows(rows, searchKeyword) {
+function filterReportHistoryRows(rows, searchKeyword, opts) {
   const kw = (searchKeyword || '').trim().toLowerCase();
-  if (!kw) return rows || [];
-  return (rows || []).filter((row) =>
-    (row._orderNumber || '').toLowerCase().includes(kw)
-    || (row._productName || '').toLowerCase().includes(kw)
-    || (row._milestoneName || '').toLowerCase().includes(kw),
-  );
+  const milestoneTemplateId = (opts && opts.milestoneTemplateId) || '';
+  return (rows || []).filter((row) => {
+    if (milestoneTemplateId && row._templateId !== milestoneTemplateId) return false;
+    if (!kw) return true;
+    return (row._orderNumber || '').toLowerCase().includes(kw)
+      || (row._productName || '').toLowerCase().includes(kw)
+      || (row._milestoneName || '').toLowerCase().includes(kw)
+      || (row._reportNo || '').toLowerCase().includes(kw)
+      || (row._operator || '').toLowerCase().includes(kw);
+  });
 }
 
 function computeReportHistoryStats(rows) {
@@ -186,6 +190,7 @@ module.exports = {
   dateInputToIsoEndExclusive,
   reportTimestampToYmd,
   formatReportTime,
+  productMetaFromMap,
   mapOrderReportRow,
   mapProductReportRow,
   filterReportHistoryRows,

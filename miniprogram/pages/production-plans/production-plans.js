@@ -190,12 +190,7 @@ Page({
 
   onFilterTap() {
     if (this.data.showFilterPanel) {
-      const snap = this._filterSnapshot || {};
-      this.setData({
-        showFilterPanel: false,
-        statusFilter: snap.statusFilter != null ? snap.statusFilter : 'all',
-        excludeCompleted: !!snap.excludeCompleted,
-      });
+      this.closeFilterPanel();
       return;
     }
     this._filterSnapshot = {
@@ -205,6 +200,20 @@ Page({
     this._pendingStatusFilter = this.data.statusFilter;
     this._pendingExcludeCompleted = this.data.excludeCompleted;
     this.setData({ showFilterPanel: true });
+  },
+
+  closeFilterPanel() {
+    if (!this.data.showFilterPanel) return;
+    const snap = this._filterSnapshot || {};
+    this.setData({
+      showFilterPanel: false,
+      statusFilter: snap.statusFilter != null ? snap.statusFilter : 'all',
+      excludeCompleted: !!snap.excludeCompleted,
+    });
+  },
+
+  onPageScroll() {
+    this.closeFilterPanel();
   },
 
   onFilterReset() {
@@ -279,6 +288,7 @@ Page({
   },
 
   onRowTap(e) {
+    this.closeFilterPanel();
     const { id } = e.currentTarget.dataset;
     if (!id) return;
     wx.navigateTo({

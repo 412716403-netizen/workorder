@@ -2,59 +2,98 @@
   <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
     <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
       <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
-      <text class="plan-header__title">{{pageTitle}}</text>
+      <text class="plan-header__title">待入库清单</text>
       <view class="plan-header__back plan-header__back--placeholder"></view>
     </view>
   </view>
 
   <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
 
-  <view class="pending-stock-page {{isListMode ? 'pending-stock-page--list' : ''}}">
+  <view class="pending-stock-page pending-stock-page--list">
     <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
 
-    <block wx:elif="{{isListMode}}">
+    <block wx:else>
       <view wx:if="{{rows.length}}">
         <view
           wx:for="{{rows}}"
           wx:key="rowKey"
           class="pending-stock-list-row"
           bindtap="onListRowTap"
-          data-order-id="{{item.orderId}}"
+          data-row-key="{{item.rowKey}}"
         >
-          <view class="pending-stock-list-row__head">
-            <text class="pending-stock-list-row__title">{{item.titleLine}}</text>
-            <text class="pending-stock-list-row__pending">待入库 {{item.pendingTotal}}</text>
+        <view
+          wx:if="{{canCreate}}"
+          class="pending-stock-list-row__check"
+          catchtap="onToggleSelect"
+          data-row-key="{{item.rowKey}}"
+        >
+          <view class="pending-stock-check {{item.selected ? 'pending-stock-check--on' : ''}}">
+            <text wx:if="{{item.selected}}" class="pending-stock-check__tick">✓</text>
           </view>
-          <text class="pending-stock-list-row__meta">总量 {{item.orderTotal}} · 已入库 {{item.alreadyIn}}</text>
-          <text wx:if="{{item.subtitleLine}}" class="pending-stock-list-row__sub">{{item.subtitleLine}}</text>
+        </view>
+        <view class="pending-stock-list-row__thumb">
+          <image
+            wx:if="{{item.showProductImage}}"
+            class="pending-stock-list-row__img"
+            src="{{item.productImageUrl}}"
+            mode="aspectFill"
+            data-row-key="{{item.rowKey}}"
+            binderror="onProductImageError"
+          />
+          <view wx:else class="pending-stock-list-row__img pending-stock-list-row__img--placeholder">
+            <image class="pending-stock-list-row__placeholder-icon" src="{{item.placeholderIconSrc}}" mode="aspectFit" />
+          </view>
+        </view>
+        <view class="pending-stock-list-row__main">
+          <view class="pending-stock-list-row__body">
+            <view class="pending-stock-list-row__content">
+              <text class="pending-stock-list-row__title">{{item.titleLine}}</text>
+              <text class="pending-stock-list-row__meta">总量 {{item.orderTotal}} · 已入库 {{item.alreadyIn}}</text>
+              <text wx:if="{{item.subtitleLine}}" class="pending-stock-list-row__sub">{{item.subtitleLine}}</text>
+            </view>
+            <view class="pending-stock-list-row__aside">
+              <text class="pending-stock-list-row__pending">待入库 {{item.pendingTotal}}</text>
+              <view
+                wx:if="{{canCreate}}"
+                class="pending-stock-list-row__action"
+                catchtap="onSelectInbound"
+                data-row-key="{{item.rowKey}}"
+              >选择入库</view>
+            </view>
+          </view>
+        </view>
         </view>
       </view>
+
       <view wx:else class="plan-list-empty">暂无待入库工单</view>
-    </block>
-
-    <block wx:else>
-      <view wx:if="{{row}}">
-        <view class="pending-stock-row">
-          <text class="pending-stock-row__title">{{row.orderNumber}}</text>
-          <text class="pending-stock-row__meta">完工 {{row.completed}} 件 · 已入库 {{row.alreadyIn}} 件 · 待入库 {{row.pendingTotal}} 件</text>
-
-          <view wx:if="{{canCreate && row.canStockIn}}" class="pending-stock-form">
-            <input
-              class="pending-stock-input"
-              type="digit"
-              value="{{stockInQty}}"
-              bindinput="onQtyInput"
-              placeholder="入库数量"
-            />
-            <view class="pending-stock-submit" bindtap="onStockIn">确认入库</view>
-          </view>
-        </view>
-      </view>
-      <view wx:else class="plan-list-empty">暂无待入库数量</view>
     </block>
   </view>
 
-  <view class="pending-stock-footer">
-    <view class="pending-stock-scan-btn" bindtap="onGoScan">去扫码入库</view>
+  <view wx:if="{{!loading && (canViewFlow || canCreate)}}" class="pending-stock-footer">
+    <view wx:if="{{canCreate && rows.length}}" class="pending-stock-footer__batch">
+      <view
+        class="pending-stock-batch-btn {{selectedCount ? '' : 'pending-stock-batch-btn--disabled'}}"
+        bindtap="onBatchInbound"
+      >批量入库{{selectedCount ? '（' + selectedCount + '）' : ''}}</view>
+    </view>
+    <view class="pending-stock-footer__actions">
+      <view
+        wx:if="{{canViewFlow}}"
+        class="pending-stock-footer__flow"
+        bindtap="onGoFlow"
+      >
+        <text class="pending-stock-footer__flow-text">入库流水</text>
+      </view>
+      <view
+        wx:if="{{canCreate}}"
+        class="pending-stock-footer__scan"
+        bindtap="onGoScan"
+      >
+        <view class="pending-stock-footer__scan-icon-wrap">
+          <image class="pending-stock-footer__scan-icon" src="/assets/icons/scan-line.png" mode="aspectFit" />
+        </view>
+        <text class="pending-stock-footer__scan-label">扫码入库</text>
+      </view>
+    </view>
   </view>
 </view>

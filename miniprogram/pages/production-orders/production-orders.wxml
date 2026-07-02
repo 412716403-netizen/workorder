@@ -309,5 +309,6 @@
   <!-- 隐藏的 navigator，强制代码依赖分析器打包这三个独立页面（解决跳转白屏问题） -->
   <navigator url="/pages/production-order-flow/production-order-flow" style="display:none"></navigator>
   <navigator url="/pages/production-order-report-history/production-order-report-history" style="display:none"></navigator>
+  <navigator url="/pages/production-order-report-batch-detail/production-order-report-batch-detail" style="display:none"></navigator>
   <navigator url="/pages/production-order-pending-stock/production-order-pending-stock" style="display:none"></navigator>
 </view>

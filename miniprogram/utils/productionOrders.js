@@ -10,6 +10,7 @@ const { buildOrderProcessChips, sumOrderQty } = require('./orderProcessChips.js'
 const { mapProductCustomTags } = require('./reportCustomDocField.js');
 const { buildVariantMatrixUiModel } = require('./variantQtyMatrix.js');
 const { normalizeListBody } = require('./listResponse.js');
+const { productHasColorSizeMatrix, variantLabel } = require('./productionPlans.js');
 
 function pad(n) {
   return String(n).padStart(2, '0');
@@ -366,8 +367,7 @@ function buildQuantitySection(order, product, category, dictionaries) {
     return { id: 'quantity', title: '工单明细', kind: 'rows', rows: [{ label: '工单数量', value: '—' }], unitName };
   }
 
-  const hasMatrix = product && product.variants && product.variants.length > 1
-    && (category?.hasColorSize || (product.colorIds?.length && product.sizeIds?.length));
+  const hasMatrix = productHasColorSizeMatrix(product, category);
 
   if (hasMatrix) {
     const matrixLayout = buildVariantMatrixUiModel(
@@ -375,15 +375,35 @@ function buildQuantitySection(order, product, category, dictionaries) {
       dictionaries,
       buildOrderItemQtyMap(order),
     );
+    if (matrixLayout) {
+      const total = sumOrderQty(order);
+      return {
+        id: 'quantity',
+        title: '工单明细',
+        kind: 'matrix',
+        matrixLayout,
+        totalQuantity: total,
+        showTotal: total > 0,
+        unitName,
+      };
+    }
+  }
+
+  if (items.some((it) => it.variantId != null) && product && product.variants) {
+    const rows = items.map((item) => {
+      const variant = product.variants.find((v) => v.id === item.variantId);
+      const label = variantLabel(variant, dictionaries) || (variant && variant.skuSuffix) || '规格';
+      const qty = item.quantity != null ? Number(item.quantity) : 0;
+      return { label, value: `${qty} ${unitName}` };
+    });
     const total = sumOrderQty(order);
     return {
       id: 'quantity',
       title: '工单明细',
-      kind: 'matrix',
-      matrixLayout,
-      totalQuantity: total,
-      showTotal: total > 0,
+      kind: 'rows',
+      rows,
       unitName,
+      totalText: `${total} ${unitName}`,
     };
   }
 

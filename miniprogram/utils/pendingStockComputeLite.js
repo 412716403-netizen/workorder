@@ -112,6 +112,7 @@ function computeOrderMode(orders, prodRecords) {
     list.push({
       rowKey: order.id,
       orderId: order.id,
+      productId: order.productId || '',
       orderNumber: order.orderNumber || '',
       productName: order.productName || '',
       orderTotal,
@@ -192,6 +193,7 @@ function computeProductMode(orders, prodRecords, pmp) {
     merged.push({
       rowKey: productId,
       orderId: rep.id,
+      productId,
       orderNumber: rep.orderNumber || '',
       productName: rep.productName || '',
       orderTotal: blockOrderTotal,
@@ -241,6 +243,7 @@ function computeOrderPendingStockRow(order, prodRecords) {
   return {
     rowKey: order.id,
     orderId: order.id,
+    productId: order.productId || '',
     orderNumber: order.orderNumber || '',
     productName: order.productName || '',
     orderTotal,

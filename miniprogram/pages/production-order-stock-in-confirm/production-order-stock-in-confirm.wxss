@@ -1,0 +1,68 @@
+@import '../../styles/tokens.wxss';
+@import '../../styles/plan-form-cell.wxss';
+@import '../production-plan-create/production-plan-create.wxss';
+@import '../production-order-report/production-order-report.wxss';
+
+page {
+  background: var(--color-bg-page);
+  height: 100%;
+}
+
+.stock-in-summary-card {
+  padding: 24rpx var(--spacing-card);
+}
+
+.stock-in-summary-card__title {
+  display: block;
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.stock-in-summary-card__meta {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: var(--color-text-secondary);
+}
+
+.stock-in-batch-line {
+  padding: 16rpx var(--spacing-card);
+  border-bottom: 1rpx solid var(--color-border);
+}
+
+.stock-in-batch-line:last-child {
+  border-bottom: none;
+}
+
+.stock-in-batch-line__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+  margin-bottom: 12rpx;
+}
+
+.stock-in-batch-line__title {
+  flex: 1;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.stock-in-batch-line__meta {
+  font-size: 22rpx;
+  color: var(--color-text-secondary);
+}
+
+.stock-in-batch-line__input {
+  width: 100%;
+  height: 72rpx;
+  padding: 0 16rpx;
+  box-sizing: border-box;
+  border: 1rpx solid var(--color-border);
+  border-radius: 12rpx;
+  font-size: 28rpx;
+  text-align: center;
+  background: #fff;
+}

@@ -209,7 +209,7 @@ Page({
   onPendingStockTap() {
     if (!this.data.canViewPendingStock || !this._orderId) return;
     wx.navigateTo({
-      url: `/pages/production-order-pending-stock/production-order-pending-stock?orderId=${encodeURIComponent(this._orderId)}`,
+      url: `/pages/production-order-stock-in-confirm/production-order-stock-in-confirm?mode=single&rowKeys=${encodeURIComponent(this._orderId)}`,
     });
   },
 

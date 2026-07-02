@@ -13,6 +13,7 @@ const {
   findReworkPathForScan,
   collectReworkOrderIdsForProduct,
 } = require('../reworkReportPathsLite.js');
+const { readOperatorDisplayName } = require('../session.js');
 
 /**
  * @param {object} ctx
@@ -61,7 +62,7 @@ async function handleReworkScan(ctx, scanRes, payload) {
     }
 
     const orderId = src.orderId || orderIds[0];
-    const operator = ctx.tenantCtx?.displayName || ctx.tenantCtx?.username || '';
+    const operator = readOperatorDisplayName();
     await createProductionRecord({
       type: 'REWORK_REPORT',
       orderId,

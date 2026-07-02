@@ -1,5 +1,13 @@
 @import '../../styles/tokens.wxss';
 
+.order-process-scroll-wrap {
+  width: 100%;
+}
+
+.order-process-scroll-wrap--compact {
+  margin-top: 0;
+}
+
 .order-process-scroll {
   width: 100%;
   margin-top: 8rpx;

@@ -9,6 +9,7 @@ const {
   rewriteError,
 } = require('../scanCommon.js');
 const { findReceiveRowByProduct } = require('../outsourceReceiveAggregates.js');
+const { readOperatorDisplayName } = require('../session.js');
 
 /**
  * @param {object} ctx
@@ -62,7 +63,7 @@ async function handleOutsourceScan(ctx, scanRes, payload) {
       return failScan(ctx, payload.raw, validation.message || '校验未通过');
     }
 
-    const operator = ctx.tenantCtx?.displayName || ctx.tenantCtx?.username || '';
+    const operator = readOperatorDisplayName();
     await createProductionRecord({
       type: 'OUTSOURCE',
       status: '已收回',
