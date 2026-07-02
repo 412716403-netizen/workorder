@@ -41,11 +41,14 @@ import {
 import { getProductCategoryCustomFieldEntries } from '../utils/reportCustomDocField';
 import DocPhaseModal, { DocPhaseEditToolbarPortalContext } from '../components/DocPhaseModal';
 import { DocSummaryCard, DocInlineMetaRow, DocCustomFieldInlineReadList } from '../components/doc-modal';
+import OutsourcePartnerStatCard from './production-ops/OutsourcePartnerStatCard';
 import OutsourceFlowListModal, { type OutsourceFlowOpenSeed } from './production-ops/OutsourceFlowListModal';
 import OutsourcePartnerFlowDetailModal, { type PartnerFlowDetailSeed } from './production-ops/OutsourcePartnerFlowDetailModal';
 import OutsourceFlowDocumentDetailModal from './production-ops/OutsourceFlowDocumentDetailModal';
-import { hasOpsPerm } from './production-ops/types';
-import OrderMaterialInfoSection from './order-list/OrderMaterialInfoSection';
+import { hasOpsPerm, getOrderFamilyIds } from './production-ops/types';
+import OrderMaterialInfoSection, { type StockFlowInitialSeed } from './order-list/OrderMaterialInfoSection';
+import type { ReportHistoryInitialSeed } from './order-list/ReportHistoryModal';
+import { resolveRootOrderIdForMaterial } from '../utils/computeOrderMaterialStats';
 import AddTodoButton from '../components/AddTodoButton';
 
 function reportFieldToPlanForm(cf: ReportFieldDefinition): PlanFormFieldConfig {
@@ -108,9 +111,11 @@ interface OrderDetailModalProps {
   detailFromFlowLayout?: boolean;
   /** 详情打印：打开工单表单配置「打印模版」页签 */
   onOpenOrderFormPrintTab?: () => void;
-  /** 工单模式下：打开报工流水并预填本工单筛选 */
-  onOpenReportHistory?: (seed: { orderNumber: string; dateFrom: string; dateTo: string }) => void;
+  /** 工单模式下：打开报工流水并预填本工单筛选（不限日期） */
+  onOpenReportHistory?: (seed: ReportHistoryInitialSeed) => void;
   canViewReportHistory?: boolean;
+  canViewMaterialFlow?: boolean;
+  onOpenMaterialFlow?: (seed: StockFlowInitialSeed) => void;
   outsourceFormSettings?: OutsourceFormSettings;
   planFormSettings?: PlanFormSettings;
   partners?: Partner[];
@@ -126,10 +131,15 @@ interface OrderDetailModalProps {
 }
 
 const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
-  orderId, onClose, orders, products, boms, prodRecords, dictionaries, categories, orderFormSettings, printTemplates = [], productionLinkMode, productMilestoneProgresses = [], globalNodes = [], detailFromFlowLayout = false, onOpenOrderFormPrintTab, onOpenReportHistory, canViewReportHistory = false, outsourceFormSettings = DEFAULT_OUTSOURCE_FORM_SETTINGS, planFormSettings, partners = [], partnerCategories = [], userPermissions, tenantRole, onAddRecord, onAddRecordBatch, onUpdateRecord, onDeleteRecord, onUpdateOrder, onDeleteOrder
+  orderId, onClose, orders, products, boms, prodRecords, dictionaries, categories, orderFormSettings, printTemplates = [], productionLinkMode, productMilestoneProgresses = [], globalNodes = [], detailFromFlowLayout = false, onOpenOrderFormPrintTab, onOpenReportHistory, canViewReportHistory = false, canViewMaterialFlow = false, onOpenMaterialFlow, outsourceFormSettings = DEFAULT_OUTSOURCE_FORM_SETTINGS, planFormSettings, partners = [], partnerCategories = [], userPermissions, tenantRole, onAddRecord, onAddRecordBatch, onUpdateRecord, onDeleteRecord, onUpdateOrder, onDeleteOrder
 }) => {
   const showInDetail = (id: string) => orderFormSettings?.standardFields.find(f => f.id === id)?.showInDetail ?? true;
   const order = orders.find(o => o.id === orderId);
+  const reportHistoryFamilyOrderIds = useMemo(() => {
+    if (!order) return [] as string[];
+    const rootId = order.parentOrderId ? resolveRootOrderIdForMaterial(order.id, orders) : order.id;
+    return getOrderFamilyIds(orders, rootId);
+  }, [order, orders]);
   const product = products.find(p => p.id === order?.productId);
   const category = categories?.find(c => c.id === product?.categoryId);
   const hasColorSize = productHasColorSizeMatrix(product, category);
@@ -582,6 +592,8 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 globalNodes={globalNodes ?? []}
                 productionLinkMode="product"
                 productMilestoneProgresses={productMilestoneProgresses}
+                canViewMaterialFlow={canViewMaterialFlow}
+                onOpenMaterialFlow={onOpenMaterialFlow}
               />
             ) : null}
           </div>
@@ -956,13 +968,11 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      const ymds = order.milestones.flatMap(m =>
-                        (m.reports ?? []).map(r => toLocalDateYmd(r.timestamp)).filter(Boolean),
-                      );
-                      const today = toLocalDateYmd(new Date().toISOString());
-                      const dateFrom = ymds.length > 0 ? ymds.reduce((a, b) => (a < b ? a : b)) : today;
-                      const dateTo = ymds.length > 0 ? ymds.reduce((a, b) => (a > b ? a : b)) : today;
-                      onOpenReportHistory({ orderNumber: order.orderNumber ?? '', dateFrom, dateTo });
+                      const ids = reportHistoryFamilyOrderIds.length > 0 ? reportHistoryFamilyOrderIds : [order.id];
+                      onOpenReportHistory({
+                        orderNumber: order.orderNumber ?? '',
+                        orderIds: ids.join(','),
+                      });
                     }}
                     className="inline-flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-colors"
                   >
@@ -1013,6 +1023,8 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
               globalNodes={globalNodes ?? []}
               productionLinkMode={productionLinkMode ?? 'order'}
               productMilestoneProgresses={productMilestoneProgresses}
+              canViewMaterialFlow={canViewMaterialFlow}
+              onOpenMaterialFlow={onOpenMaterialFlow}
             />
           ) : null}
 
@@ -1022,38 +1034,18 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
               <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-3">
                 <Truck className="w-3.5 h-3.5" /> 外协管理
               </h4>
-              <div className="flex flex-wrap gap-4">
+              <div className="flex flex-wrap gap-2">
                 {displayOutsourceStatsForOrder.map((row, idx) => (
-                  <div
+                  <OutsourcePartnerStatCard
                     key={`${row.partner}|${row.nodeId}|${idx}`}
-                    className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 min-w-[140px] flex flex-col items-center gap-2"
-                  >
-                    <div className="w-full text-center">
-                      <p className="text-[11px] font-bold text-emerald-600">{row.nodeName}</p>
-                      <p className="text-sm font-bold text-slate-900 truncate" title={row.partner}>{row.partner}</p>
-                    </div>
-                    <div
-                      className={`w-16 h-16 rounded-full border-2 bg-white flex items-center justify-center shrink-0 ${row.pending > 0 ? 'border-indigo-300' : 'border-emerald-400'}`}
-                      title="已收回数量"
-                    >
-                      <span className="text-xl font-black text-slate-900">{row.received}</span>
-                    </div>
-                    <div className="flex items-center justify-center gap-1.5 w-full">
-                      <span className="text-xs font-bold text-slate-600" title="发出 / 剩余">{row.dispatched} / {row.pending}</span>
-                      <button
-                        type="button"
-                        onClick={() => openOutsourcePartnerFlow(row)}
-                        className="p-0.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors"
-                        title={
-                          outsourceFormSettings.showPartnerFlowDetailOnList
-                            ? '加工厂往来数量明细'
-                            : '查看外协流水'
-                        }
-                      >
-                        <FileText className="w-4 h-4 shrink-0" />
-                      </button>
-                    </div>
-                  </div>
+                    row={row}
+                    flowButtonTitle={
+                      outsourceFormSettings.showPartnerFlowDetailOnList
+                        ? '加工厂往来数量明细'
+                        : '查看外协流水'
+                    }
+                    onOpenFlow={() => openOutsourcePartnerFlow(row)}
+                  />
                 ))}
               </div>
             </div>

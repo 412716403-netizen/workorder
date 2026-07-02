@@ -23,6 +23,7 @@ import {
   RefreshCw,
   Wrench,
   Plus,
+  Split,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useConfirm } from '../../contexts/ConfirmContext';
@@ -67,6 +68,8 @@ import { isEquipmentAssignmentEnabled, isWorkerAssignmentEnabled } from '../../u
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 import PlanTraceSection from './PlanTraceSection';
 import PlanPrintOverlays from './PlanPrintOverlays';
+import PlanSplitModal from './PlanSplitModal';
+import PlanProcessRouteModal from './PlanProcessRouteModal';
 import { SupplierSelect } from '../../components/SupplierSelect';
 import {
   formStandardControlClass,
@@ -80,6 +83,11 @@ import {
   purchaseOrderRecordMatchesPlanPanel,
 } from '../../utils/planDetailHelpers';
 import { getMaterialLossRates, applyLoss, MATERIAL_LOSS_RATES_KEY } from '../../utils/materialLoss';
+import {
+  getEffectivePlanMilestoneNodeIds,
+  normalizePlanMilestoneNodeIdsForSave,
+} from '../../utils/planMilestoneRoute';
+import { milestoneNodeIdsEqual } from '../../shared/productProcessLock';
 
 // formatPlanCreatedDateList / effectiveSupplierIdFromProduct / purchaseOrderRecordMatchesPlanPanel
 // 已抽离至 utils/planDetailHelpers.ts
@@ -133,6 +141,10 @@ export interface PlanDetailPanelProps {
   onAddPSIRecordBatch?: (records: any[]) => Promise<void>;
   onCreateSubPlan?: (params: { productId: string; quantity: number; planId: string; bomNodeId: string }) => void;
   onCreateSubPlans?: (params: { planId: string; items: Array<{ productId: string; quantity: number; bomNodeId: string; parentProductId?: string; parentNodeId?: string }> }) => void;
+  onSplitPlan?: (
+    planId: string,
+    items: Array<{ variantId?: string; quantity: number }>,
+  ) => Promise<{ sourcePlan: PlanOrder; newPlan: PlanOrder } | null>;
 
   // Shared UI actions
   onImagePreview: (url: string) => void;
@@ -175,6 +187,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   onAddPSIRecordBatch,
   onCreateSubPlan,
   onCreateSubPlans,
+  onSplitPlan,
   onImagePreview,
   onFilePreview,
   onPrintRun,
@@ -191,6 +204,8 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   const { traceEnabled } = useTraceabilityPlugin();
   const confirm = useConfirm();
   const [labelPrintTemplateManageOpen, setLabelPrintTemplateManageOpen] = useState(false);
+  const [splitModalOpen, setSplitModalOpen] = useState(false);
+  const [processRouteModalOpen, setProcessRouteModalOpen] = useState(false);
 
   // --- State ---
   const [tempAssignments, setTempAssignments] = useState<Record<string, NodeAssignment>>({});
@@ -204,6 +219,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
 
   const [isSaving, setIsSaving] = useState(false);
   const [tempNodeRates, setTempNodeRates] = useState<Record<string, number>>({});
+  const [tempMilestoneNodeIds, setTempMilestoneNodeIds] = useState<string[]>([]);
   const [proposedOrders, setProposedOrders] = useState<ProposedOrder[]>([]);
   const [isProcessingPO, setIsProcessingPO] = useState(false);
   const [plannedQtyByKey, setPlannedQtyByKey] = useState<Record<string, number | null>>({});
@@ -238,6 +254,20 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
     if (!viewPlan) return false;
     return orders.some(o => o.planOrderId === viewPlan.id);
   }, [viewPlan, orders]);
+  const splitPlanEnabled = planFormSettings.listDisplay?.splitPlanEnabled === true;
+  const sourcePlanTotalQty = useMemo(
+    () => (viewPlan?.items ?? []).reduce((s, it) => s + (Number(it.quantity) || 0), 0),
+    [viewPlan?.items],
+  );
+  const canSplitPlan = Boolean(
+    splitPlanEnabled &&
+      onSplitPlan &&
+      viewPlan &&
+      !viewPlan.parentPlanId &&
+      viewPlan.status !== PlanStatus.CONVERTED &&
+      !planWorkOrdersDispatched &&
+      sourcePlanTotalQty > 1,
+  );
   const parentPlan = viewPlan?.parentPlanId ? plans.find(p => p.id === viewPlan.parentPlanId) : null;
   const effectivePlanForMaterial = parentPlan || viewPlan;
 
@@ -395,12 +425,22 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
     return groups;
   }, [viewProduct]);
 
-  const productNodes = useMemo(() => {
-    if (!viewProduct || !viewProduct.milestoneNodeIds) return [];
-    return viewProduct.milestoneNodeIds
+  const productMilestoneNodeIds = useMemo(
+    () => viewProduct?.milestoneNodeIds ?? [],
+    [viewProduct?.milestoneNodeIds],
+  );
+
+  const planProcessNodes = useMemo(() => {
+    if (tempMilestoneNodeIds.length === 0) return [];
+    return tempMilestoneNodeIds
       .map(id => globalNodes.find(gn => gn.id === id))
       .filter((n): n is GlobalNodeTemplate => Boolean(n));
-  }, [viewProduct, globalNodes]);
+  }, [tempMilestoneNodeIds, globalNodes]);
+
+  const hasPlanProcessOverride = Boolean(
+    viewPlan?.milestoneNodeIds && viewPlan.milestoneNodeIds.length > 0,
+  );
+  const isRouteCustomized = !milestoneNodeIdsEqual(tempMilestoneNodeIds, productMilestoneNodeIds);
 
   const findSubPlanForMaterial = (materialId: string, nodeId: string, rootPlanId: string): PlanOrder | null => {
     const queue: string[] = [rootPlanId];
@@ -717,8 +757,11 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   }, [viewProduct?.id]);
 
   useEffect(() => {
-    if (viewPlan) {
+    if (viewPlan && viewProduct) {
       setTempAssignments(viewPlan.assignments || {});
+      setTempMilestoneNodeIds(
+        getEffectivePlanMilestoneNodeIds(viewPlan, viewProduct),
+      );
       const createdDate = formatPlanCreatedDateList(viewPlan.createdAt || planIdToLocalYmd(viewPlan.id) || localTodayYmd());
       setTempPlanInfo({
         customer: viewPlan.customer,
@@ -731,7 +774,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
       });
       setProposedOrders([]);
     }
-  }, [viewPlan]);
+  }, [viewPlan, viewProduct]);
 
   useEffect(() => {
     setVirtualBatches([]);
@@ -763,7 +806,11 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
 
   // --- Callbacks ---
   const handleUpdateDetail = async () => {
-    if (!planId || !viewPlan) return;
+    if (!planId || !viewPlan || !viewProduct) return;
+    if (tempMilestoneNodeIds.length === 0) {
+      toast.error('工序路线不能为空，请至少选择一道工序');
+      return;
+    }
     setIsSaving(true);
     try {
       const showDelivery = planFormSettings.listDisplay?.showDeliveryDate === true;
@@ -774,13 +821,26 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
       const nextDueNorm = nextDueStr ?? '';
       const dueChanged = showDelivery && nextDueNorm !== prevDueNorm;
 
+      const activeNodeIds = new Set(tempMilestoneNodeIds);
+      const sanitizedAssignments = Object.fromEntries(
+        Object.entries(tempAssignments).filter(([nodeId]) => activeNodeIds.has(nodeId)),
+      );
+
       const planPayload: Partial<PlanOrder> = {
-        assignments: tempAssignments,
+        assignments: sanitizedAssignments,
         customer: tempPlanInfo.customer,
         createdAt: tempPlanInfo.createdAt,
         ...(showDelivery ? { dueDate: nextDueStr } : {}),
         ...(!planWorkOrdersDispatched ? { items: tempPlanInfo.items } : {}),
         customData: tempPlanInfo.customData,
+        ...(!planWorkOrdersDispatched
+          ? {
+              milestoneNodeIds: normalizePlanMilestoneNodeIdsForSave(
+                tempMilestoneNodeIds,
+                productMilestoneNodeIds,
+              ),
+            }
+          : {}),
       };
 
       await onUpdatePlan?.(planId, planPayload);
@@ -1360,12 +1420,22 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
 
              {/* 3. 工序任务 */}
              <div ref={sectionProcessRef} className="space-y-4 scroll-mt-4">
-                <div className="flex items-center gap-3 border-b border-slate-100 pb-4 ml-2">
-                  <Users className="w-5 h-5 text-indigo-600" />
-                  <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">3. 工序任务</h3>
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4 ml-2">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Users className="w-5 h-5 text-indigo-600 shrink-0" />
+                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">3. 工序任务</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setProcessRouteModalOpen(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border transition-all shrink-0 border-indigo-200 text-indigo-700 bg-indigo-50/80 hover:bg-indigo-100 hover:border-indigo-300"
+                  >
+                    <ClipboardCheck className="w-3.5 h-3.5" />
+                    {planWorkOrdersDispatched ? '查看工艺路线' : '修改工艺路线'}
+                  </button>
                 </div>
                 <div className="space-y-4">
-                   {productNodes.map((node, idx) => {
+                   {planProcessNodes.map((node, idx) => {
                      const isAssigned = (tempAssignments[node.id] as NodeAssignment)?.workerIds?.length > 0;
                      const enableWorker =
                       equipmentFeaturesOn && isWorkerAssignmentEnabled(node);
@@ -1999,6 +2069,15 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                        <ArrowRightCircle className="w-4 h-4" /> 下达工单
                      </button>
                  )}
+                 {canSplitPlan && viewPlan && viewProduct && (
+                   <button
+                     type="button"
+                     onClick={() => setSplitModalOpen(true)}
+                     className="px-4 py-2 text-sm font-black text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl flex items-center gap-2 border border-indigo-200 active:scale-[0.98] transition-all"
+                   >
+                     <Split className="w-4 h-4" /> 拆单
+                   </button>
+                 )}
                  {viewPlan.status === PlanStatus.CONVERTED && !viewPlan.parentPlanId && hasUnconvertedSubPlans(viewPlan.id) && (
                    <button
                      type="button"
@@ -2115,6 +2194,44 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
           plans={plans}
           orders={orders ?? []}
           products={products}
+        />
+      )}
+
+      {processRouteModalOpen && viewPlan && (
+        <PlanProcessRouteModal
+          open={processRouteModalOpen}
+          onClose={() => setProcessRouteModalOpen(false)}
+          planNumber={viewPlan.planNumber}
+          globalNodes={globalNodes}
+          value={tempMilestoneNodeIds}
+          productMilestoneNodeIds={productMilestoneNodeIds}
+          hasPlanOverride={hasPlanProcessOverride || isRouteCustomized}
+          disabled={planWorkOrdersDispatched}
+          onConfirm={next => {
+            setTempMilestoneNodeIds(next);
+            const activeNodeIds = new Set(next);
+            setTempAssignments(prev =>
+              Object.fromEntries(Object.entries(prev).filter(([nodeId]) => activeNodeIds.has(nodeId))),
+            );
+          }}
+        />
+      )}
+
+      {splitModalOpen && viewPlan && viewProduct && onSplitPlan && (
+        <PlanSplitModal
+          open={splitModalOpen}
+          onClose={() => setSplitModalOpen(false)}
+          plan={viewPlan}
+          product={viewProduct}
+          category={categories.find(c => c.id === viewProduct.categoryId)}
+          dictionaries={dictionaries}
+          onConfirm={async items => {
+            const result = await onSplitPlan(viewPlan.id, items);
+            if (result) {
+              setTempPlanInfo(prev => ({ ...prev, items: result.sourcePlan.items }));
+              setSplitModalOpen(false);
+            }
+          }}
         />
       )}
     </>

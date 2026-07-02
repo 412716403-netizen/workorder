@@ -23,6 +23,7 @@ import {
   ProcessSequenceMode,
   Warehouse,
   OrderDispatchStatus,
+  DEFAULT_MATERIAL_FORM_SETTINGS,
 } from '../types';
 import { getOrderDispatchStatusStyle } from '../utils/dispatchStatusStyle';
 import {
@@ -43,6 +44,10 @@ import PendingStockPanel from './order-list/PendingStockPanel';
 import MaterialIssueModal from './order-list/MaterialIssueModal';
 import ReportModal from './order-list/ReportModal';
 import ReportHistoryModal, { type ReportHistoryInitialSeed } from './order-list/ReportHistoryModal';
+import type { StockFlowInitialSeed } from './production-ops/stockFlowListUtils';
+import StockFlowListModal from './production-ops/StockFlowListModal';
+import StockDocDetailModal from './production-ops/StockDocDetailModal';
+import { hasOpsPerm, type StockDocDetail } from './production-ops/types';
 import ReportBatchDetailModal from './order-list/ReportBatchDetailModal';
 import OrderFormConfigModal from './order-list/OrderFormConfigModal';
 import ReworkDetailModal from './order-list/ReworkDetailModal';
@@ -204,6 +209,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
     if (userPermissions.some(p => p.startsWith(`${permKey}:`))) return true;
     return false;
   };
+  const canViewMaterialFlow = hasOpsPerm(tenantRole, userPermissions, 'production:material_records:view');
   /**
    * 主列表「工序圈圈」点击报工的门控：受角色「报工流水 · 添加」复选框
    * （`production:orders_report_records:create`）控制。
@@ -261,6 +267,9 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   /** 从工单详情打开报工流水时预填筛选 */
   const [reportHistorySeed, setReportHistorySeed] = useState<ReportHistoryInitialSeed | null>(null);
+  const [showStockFlowModal, setShowStockFlowModal] = useState(false);
+  const [stockFlowSeed, setStockFlowSeed] = useState<StockFlowInitialSeed | null>(null);
+  const [stockDocDetail, setStockDocDetail] = useState<StockDocDetail | null>(null);
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search, 300);
   const [currentPage, setCurrentPage] = useState(1);
@@ -1621,6 +1630,35 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
         initialSeed={reportHistorySeed}
       />
 
+      <StockFlowListModal
+        visible={showStockFlowModal}
+        onClose={() => { setShowStockFlowModal(false); setStockFlowSeed(null); }}
+        orders={orders}
+        products={products}
+        productionLinkMode={productionLinkMode}
+        onOpenDocDetail={setStockDocDetail}
+        userPermissions={userPermissions}
+        tenantRole={tenantRole}
+        initialSeed={stockFlowSeed}
+      />
+
+      <StockDocDetailModal
+        detail={stockDocDetail}
+        onClose={() => setStockDocDetail(null)}
+        onDetailChange={setStockDocDetail}
+        records={effectiveProdRecords}
+        orders={orders}
+        products={products}
+        warehouses={warehouses}
+        dictionaries={dictionaries}
+        materialFormSettings={DEFAULT_MATERIAL_FORM_SETTINGS}
+        printTemplates={printTemplates}
+        onUpdateRecord={onUpdateRecord}
+        onDeleteRecord={onDeleteRecord}
+        userPermissions={userPermissions}
+        tenantRole={tenantRole}
+      />
+
       {/* 待入库清单弹窗 */}
       <PendingStockPanel
         open={showPendingStockModal}
@@ -1706,6 +1744,11 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
           setReportHistorySeed(seed);
           setShowHistoryModal(true);
         }}
+        canViewMaterialFlow={canViewMaterialFlow}
+        onOpenMaterialFlow={(seed) => {
+          setStockFlowSeed(seed);
+          setShowStockFlowModal(true);
+        }}
         onOpenOrderDetail={
           hasOrderPerm('production:orders_detail:view')
             ? (id) => {
@@ -1742,6 +1785,11 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
         onOpenReportHistory={(seed) => {
           setReportHistorySeed(seed);
           setShowHistoryModal(true);
+        }}
+        canViewMaterialFlow={canViewMaterialFlow}
+        onOpenMaterialFlow={(seed) => {
+          setStockFlowSeed(seed);
+          setShowStockFlowModal(true);
         }}
         outsourceFormSettings={outsourceFormSettings}
         planFormSettings={planFormSettings}

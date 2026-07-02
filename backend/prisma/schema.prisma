@@ -493,6 +493,7 @@ model PlanOrder {
   assignments      Json      @default("{}")
   customData       Json      @default("{}") @map("custom_data")
   nodePricingModes Json?     @map("node_pricing_modes")
+  milestoneNodeIds Json?     @map("milestone_node_ids")
   createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
 

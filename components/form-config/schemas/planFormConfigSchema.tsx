@@ -191,6 +191,39 @@ export const planFormConfigSchema: FormConfigSchema<PlanFormSettings> = {
         },
         {
           kind: 'customSlot',
+          id: 'planOrderSplitPlanToggle',
+          render: ctx => {
+            const ld = (ctx.get('listDisplay') as PlanFormSettings['listDisplay']) ?? {};
+            const checked = ld.splitPlanEnabled === true;
+            return (
+              <div className="mt-4">
+                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                  <label className="flex cursor-pointer items-start gap-3 text-sm font-bold text-slate-800">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4 shrink-0 rounded text-indigo-600"
+                      checked={checked}
+                      onChange={e => {
+                        ctx.set('listDisplay', {
+                          ...ld,
+                          splitPlanEnabled: e.target.checked,
+                        });
+                      }}
+                    />
+                    <span>
+                      计划单拆单
+                      <p className="mt-1 text-xs font-medium text-slate-500">
+                        开启后，计划详情底部显示「拆单」按钮，可将当前计划数量拆成多条独立计划单；每次操作仅拆出 1 条新计划，原单保留剩余数量。已下达工单或 BOM 子计划不可拆单。
+                      </p>
+                    </span>
+                  </label>
+                </div>
+              </div>
+            );
+          },
+        },
+        {
+          kind: 'customSlot',
           id: 'planOrderMaterialLossToggle',
           render: ctx => {
             const ld = (ctx.get('listDisplay') as PlanFormSettings['listDisplay']) ?? {};

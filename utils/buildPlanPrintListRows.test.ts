@@ -349,4 +349,81 @@ describe('buildColorMaterialMatrixPayloadForPlan', () => {
     expect(payload.nodeBlocks[0]?.colorRows[0]?.materials[0]?.name).toBe('纱线A');
     expect(payload.nodeBlocks[0]?.colorRows[0]?.materials[0]?.ratio).toBe('300');
   });
+
+  it('同色多尺码 BOM 用量不同时逐规格累加（与计划单用料清单一致）', () => {
+    const mat: Product = {
+      id: 'mat-a',
+      sku: 'MA',
+      name: '纱线A',
+      colorIds: [],
+      sizeIds: [],
+      variants: [],
+      milestoneNodeIds: [],
+      categoryCustomData: {},
+    };
+
+    const product: Product = {
+      id: 'prod1',
+      sku: 'SKU1',
+      name: '毛衣',
+      colorIds: ['c-black'],
+      sizeIds: ['s-m', 's-l'],
+      variants: [
+        { id: 'v-black-m', colorId: 'c-black', sizeId: 's-m', skuSuffix: 'M' },
+        { id: 'v-black-l', colorId: 'c-black', sizeId: 's-l', skuSuffix: 'L' },
+      ],
+      milestoneNodeIds: ['node-knit'],
+      categoryCustomData: {},
+    };
+
+    const boms: BOM[] = [
+      {
+        id: 'bom-m',
+        name: 'M',
+        parentProductId: 'prod1',
+        variantId: 'v-black-m',
+        nodeId: 'node-knit',
+        version: '1',
+        items: [{ productId: 'mat-a', quantity: 1 }],
+      },
+      {
+        id: 'bom-l',
+        name: 'L',
+        parentProductId: 'prod1',
+        variantId: 'v-black-l',
+        nodeId: 'node-knit',
+        version: '1',
+        items: [{ productId: 'mat-a', quantity: 1.2 }],
+      },
+    ];
+
+    const globalNodes: GlobalNodeTemplate[] = [{ id: 'node-knit', name: '织造', hasBOM: true, reportTemplate: [] }];
+    const plan: PlanOrder = {
+      id: 'p1',
+      planNumber: 'PL-1',
+      productId: 'prod1',
+      items: [
+        { variantId: 'v-black-m', quantity: 10 },
+        { variantId: 'v-black-l', quantity: 20 },
+      ],
+      startDate: '2026-01-01',
+      status: 'PLANNING',
+      customer: '',
+      priority: 'Medium',
+    };
+
+    const payload = buildColorMaterialMatrixPayloadForPlan({
+      plan,
+      product,
+      dictionaries: { colors: [{ id: 'c-black', name: '黑', value: '黑' }], sizes: [], units: [] },
+      globalNodes,
+      boms,
+      products: [product, mat],
+      hasVariantQty: true,
+      qtyNoVariant: 0,
+    });
+
+    // 10×1 + 20×1.2 = 34（旧算法会算成 30×1 = 30）
+    expect(payload.nodeBlocks[0]?.colorRows[0]?.materials[0]?.ratio).toBe('34');
+  });
 });

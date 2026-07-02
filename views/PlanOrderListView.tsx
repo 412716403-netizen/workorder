@@ -98,6 +98,10 @@ interface PlanOrderListViewProps {
   onAddPSIRecordBatch?: (records: any[]) => Promise<void>;
   onCreateSubPlan?: (params: { productId: string; quantity: number; planId: string; bomNodeId: string }) => void;
   onCreateSubPlans?: (params: { planId: string; items: Array<{ productId: string; quantity: number; bomNodeId: string; parentProductId?: string; parentNodeId?: string }> }) => void;
+  onSplitPlan?: (
+    planId: string,
+    items: Array<{ variantId?: string; quantity: number }>,
+  ) => Promise<{ sourcePlan: PlanOrder; newPlan: PlanOrder } | null>;
   /** 深链打开「生产计划详情」 */
   initialDetailPlanId?: string | null;
   onClearDetailPlanIdFromState?: () => void;
@@ -233,7 +237,7 @@ function renderPlanListCustomFieldValue(
   );
 }
 
-const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMode = 'order', plans, products, categories, dictionaries, workers, equipment, globalNodes, boms, partners, partnerCategories = [], planFormSettings, onUpdatePlanFormSettings, printTemplates, onUpdatePrintTemplates, onRefreshPrintTemplates, orders = [], onCreatePlan, onConvertToOrder, onDeletePlan, onUpdateProduct, onUpdatePlan, onUpdateOrder, onAddPSIRecord, onAddPSIRecordBatch, onCreateSubPlan, onCreateSubPlans, initialDetailPlanId, onClearDetailPlanIdFromState }) => {
+const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMode = 'order', plans, products, categories, dictionaries, workers, equipment, globalNodes, boms, partners, partnerCategories = [], planFormSettings, onUpdatePlanFormSettings, printTemplates, onUpdatePrintTemplates, onRefreshPrintTemplates, orders = [], onCreatePlan, onConvertToOrder, onDeletePlan, onUpdateProduct, onUpdatePlan, onUpdateOrder, onAddPSIRecord, onAddPSIRecordBatch, onCreateSubPlan, onCreateSubPlans, onSplitPlan, initialDetailPlanId, onClearDetailPlanIdFromState }) => {
   const { tenantCtx } = useAuth();
   const [showModal, setShowModal] = useState(false);
   const [viewDetailPlanId, setViewDetailPlanId] = useState<string | null>(initialDetailPlanId ?? null);
@@ -999,6 +1003,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
           onAddPSIRecordBatch={onAddPSIRecordBatch}
           onCreateSubPlan={onCreateSubPlan}
           onCreateSubPlans={onCreateSubPlans}
+          onSplitPlan={onSplitPlan}
           onImagePreview={(url) => setImagePreviewUrl(url)}
           onFilePreview={(url, type) => { setFilePreviewUrl(url); setFilePreviewType(type); }}
           onPrintRun={setPlanListPrintRun}
@@ -1024,6 +1029,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
             boms,
             products,
             categories,
+            materialLossEnabled: planFormSettings.listDisplay?.materialLossEnabled === true,
           });
           setPlanListPrintRun({
             template: t,

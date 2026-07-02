@@ -81,6 +81,7 @@ import {
   outsourceReceiveProductAggKey,
   resolveOutsourceReceiveEntry,
 } from './outsourceReceiveKeys';
+import OutsourcePartnerStatCard from './OutsourcePartnerStatCard';
 import OutsourceFlowListModal, { type OutsourceFlowOpenSeed } from './OutsourceFlowListModal';
 import OutsourcePartnerFlowDetailModal from './OutsourcePartnerFlowDetailModal';
 import OutsourceFlowDocumentDetailModal from './OutsourceFlowDocumentDetailModal';
@@ -1433,60 +1434,40 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
                   </div>
                   <div className="flex items-start gap-2 flex-wrap flex-1 min-w-0 -my-0.5">
                     {ptnrs.map(({ partner, nodeId, nodeName, dispatched, received, pending }) => (
-                      <div
+                      <OutsourcePartnerStatCard
                         key={`${partner}|${nodeId}`}
-                        className="flex flex-col items-center justify-center shrink-0 min-w-[88px] min-h-[118px] py-2.5 px-2 rounded-xl border transition-colors border-slate-100 bg-slate-50 hover:bg-slate-100 hover:border-slate-200"
-                      >
-                        <div className="mb-1 w-full text-center leading-tight">
-                          <div className="text-[10px] font-bold text-emerald-600 truncate" title={nodeName}>{nodeName}</div>
-                          <div className="text-[10px] font-bold text-slate-600 truncate" title={partner}>{partner}</div>
-                        </div>
-                        <div
-                          className={`w-12 h-12 rounded-full border-2 bg-white flex items-center justify-center mb-1 shrink-0 ${pending > 0 ? 'border-indigo-300' : 'border-emerald-400'}`}
-                          title="已收回数量"
-                        >
-                          <span className="text-base font-black text-slate-900 leading-none">{received}</span>
-                        </div>
-                        <div className="flex items-center justify-center gap-1.5 leading-tight">
-                          <span className="text-[10px] font-bold text-slate-500" title="发出 / 剩余">{dispatched} / <span className={pending < 0 ? 'text-rose-500' : ''}>{pending}</span></span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const seed: PartnerFlowDetailSeed = {
-                                productionLinkMode,
-                                orderId: productionLinkMode === 'product' ? undefined : orderId,
-                                productId,
-                                productName,
-                                orderNumber: productionLinkMode === 'product' ? undefined : orderNumber,
-                                nodeId,
-                                nodeName,
-                                partner,
-                              };
-                              if (outsourceFormSettings.showPartnerFlowDetailOnList) {
-                                setPartnerQtyDetailSeed(seed);
-                                return;
-                              }
-                              setFlowOpenSeed({
-                                orderKeyword: productionLinkMode === 'product' ? '' : (orderNumber ?? ''),
-                                productKeyword: productName,
-                                milestoneNodeId: nodeId,
-                                partnerKeyword: partner,
-                              });
-                              setFlowOpenNonce(n => n + 1);
-                              setPartnerQtyDetailSeed(null);
-                              setOutsourceModal('flow');
-                            }}
-                            className="p-0.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors"
-                            title={
-                              outsourceFormSettings.showPartnerFlowDetailOnList
-                                ? '加工厂往来数量明细'
-                                : '查看外协流水'
-                            }
-                          >
-                            <FileText className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
+                        row={{ partner, nodeId, nodeName, dispatched, received, pending }}
+                        flowButtonTitle={
+                          outsourceFormSettings.showPartnerFlowDetailOnList
+                            ? '加工厂往来数量明细'
+                            : '查看外协流水'
+                        }
+                        onOpenFlow={() => {
+                          const seed: PartnerFlowDetailSeed = {
+                            productionLinkMode,
+                            orderId: productionLinkMode === 'product' ? undefined : orderId,
+                            productId,
+                            productName,
+                            orderNumber: productionLinkMode === 'product' ? undefined : orderNumber,
+                            nodeId,
+                            nodeName,
+                            partner,
+                          };
+                          if (outsourceFormSettings.showPartnerFlowDetailOnList) {
+                            setPartnerQtyDetailSeed(seed);
+                            return;
+                          }
+                          setFlowOpenSeed({
+                            orderKeyword: productionLinkMode === 'product' ? '' : (orderNumber ?? ''),
+                            productKeyword: productName,
+                            milestoneNodeId: nodeId,
+                            partnerKeyword: partner,
+                          });
+                          setFlowOpenNonce(n => n + 1);
+                          setPartnerQtyDetailSeed(null);
+                          setOutsourceModal('flow');
+                        }}
+                      />
                     ))}
                   </div>
                   {hasOpsPerm(tenantRole, userPermissions, 'production:outsource_material:allow') && (

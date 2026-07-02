@@ -33,6 +33,16 @@ describe('normalizePlanFormSettings listDisplay', () => {
     expect(n.listDisplay?.showDeliveryDate).toBe(true);
   });
 
+  it('defaults splitPlanEnabled to false when unset', () => {
+    const n = normalizePlanFormSettings({});
+    expect(n.listDisplay?.splitPlanEnabled).toBe(false);
+  });
+
+  it('preserves splitPlanEnabled true when set', () => {
+    const n = normalizePlanFormSettings({ listDisplay: { splitPlanEnabled: true } });
+    expect(n.listDisplay?.splitPlanEnabled).toBe(true);
+  });
+
   it('strips legacy standard field id dueDate from normalized standardFields', () => {
     const n = normalizePlanFormSettings({
       standardFields: [{ id: 'dueDate', label: '旧交期', showInList: true, showInCreate: false, showInDetail: true }],

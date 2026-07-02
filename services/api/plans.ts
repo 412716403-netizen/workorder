@@ -30,4 +30,9 @@ export const plans = {
   convert: (id: string) => request<PlanOrder>(`/plans/${id}/convert`, { method: 'POST' }),
   createSubPlans: (id: string, subPlans: unknown[]) =>
     request<PlanOrder[]>(`/plans/${id}/sub-plans`, { method: 'POST', body: JSON.stringify({ subPlans }) }),
+  split: (id: string, body: { items: Array<{ variantId?: string; quantity: number }> }) =>
+    request<{ sourcePlan: PlanOrder; newPlan: PlanOrder }>(`/plans/${id}/split`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 };

@@ -17,6 +17,7 @@ const updatePlanSchema = z.object({
   items: z.array(z.object({
     quantity: z.number().positive('数量必须大于0'),
   }).passthrough()).optional(),
+  milestoneNodeIds: z.array(z.string()).optional().nullable(),
 }).passthrough();
 
 const createSubPlansSchema = z.object({
@@ -35,5 +36,14 @@ router.delete('/:id', requireSubPermission('production:plans:delete'), ctrl.dele
 
 router.post('/:id/convert', requireSubPermission('production:plans:edit'), ctrl.convertToOrder);
 router.post('/:id/sub-plans', requireSubPermission('production:plans:edit'), validate(createSubPlansSchema), ctrl.createSubPlans);
+
+const splitPlanSchema = z.object({
+  items: z.array(z.object({
+    quantity: z.number().positive('拆出数量须大于 0'),
+    variantId: z.string().optional(),
+  }).passthrough()).min(1, '至少需要一条拆出明细'),
+});
+
+router.post('/:id/split', requireSubPermission('production:plans:edit'), validate(splitPlanSchema), ctrl.splitPlan);
 
 export default router;

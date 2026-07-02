@@ -27,15 +27,15 @@ import {
   aggregateProductOutsourcePartners,
   aggregateProductReportSummaryByNode,
   aggregateProductVariantQuantities,
-  reportDateRangeFromProductOrders,
 } from '../../utils/productProductionDetailStats';
 import { getOrderStockInAggregates, getProductStockInAggregates } from '../../utils/pendingStockCompute';
+import OutsourcePartnerStatCard from '../production-ops/OutsourcePartnerStatCard';
 import OutsourceFlowListModal, { type OutsourceFlowOpenSeed } from '../production-ops/OutsourceFlowListModal';
 import OutsourcePartnerFlowDetailModal, { type PartnerFlowDetailSeed } from '../production-ops/OutsourcePartnerFlowDetailModal';
 import OutsourceFlowDocumentDetailModal from '../production-ops/OutsourceFlowDocumentDetailModal';
 import { hasOpsPerm } from '../production-ops/types';
 import type { ReportHistoryInitialSeed } from './ReportHistoryModal';
-import OrderMaterialInfoSection from './OrderMaterialInfoSection';
+import OrderMaterialInfoSection, { type StockFlowInitialSeed } from './OrderMaterialInfoSection';
 
 function reportFieldToPlanForm(cf: ReportFieldDefinition): PlanFormFieldConfig {
   return {
@@ -69,6 +69,8 @@ export interface ProductProductionDetailModalProps {
   tenantRole?: string;
   canViewReportHistory?: boolean;
   onOpenReportHistory?: (seed: ReportHistoryInitialSeed) => void;
+  canViewMaterialFlow?: boolean;
+  onOpenMaterialFlow?: (seed: StockFlowInitialSeed) => void;
   onOpenOrderDetail?: (orderId: string) => void;
   onAddRecord?: (record: ProductionOpRecord) => void;
   onAddRecordBatch?: (records: ProductionOpRecord[]) => Promise<void>;
@@ -94,6 +96,8 @@ const ProductProductionDetailModal: React.FC<ProductProductionDetailModalProps> 
   tenantRole,
   canViewReportHistory = false,
   onOpenReportHistory,
+  canViewMaterialFlow = false,
+  onOpenMaterialFlow,
   onOpenOrderDetail,
   onAddRecord,
   onAddRecordBatch,
@@ -330,7 +334,6 @@ const ProductProductionDetailModal: React.FC<ProductProductionDetailModalProps> 
 
   if (!productId || !product) return null;
 
-  const reportDateRange = reportDateRangeFromProductOrders(productOrders, pmpsForProduct, productId);
   const hasReportSection = reportSummaryRows.length > 0;
 
   return (
@@ -510,8 +513,7 @@ const ProductProductionDetailModal: React.FC<ProductProductionDetailModalProps> 
                       onClick={() =>
                         onOpenReportHistory({
                           productKeyword: product.name,
-                          dateFrom: reportDateRange.dateFrom,
-                          dateTo: reportDateRange.dateTo,
+                          productIds: productId,
                         })
                       }
                       className="inline-flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-colors"
@@ -561,6 +563,8 @@ const ProductProductionDetailModal: React.FC<ProductProductionDetailModalProps> 
                 globalNodes={globalNodes}
                 productionLinkMode="product"
                 productMilestoneProgresses={productMilestoneProgresses}
+                canViewMaterialFlow={canViewMaterialFlow}
+                onOpenMaterialFlow={onOpenMaterialFlow}
               />
             ) : null}
 
@@ -569,42 +573,18 @@ const ProductProductionDetailModal: React.FC<ProductProductionDetailModalProps> 
                 <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-3">
                   <Truck className="w-3.5 h-3.5" /> 外协管理
                 </h4>
-                <div className="flex flex-wrap gap-4">
+                <div className="flex flex-wrap gap-2">
                   {displayOutsourcePartners.map((row, idx) => (
-                    <div
+                    <OutsourcePartnerStatCard
                       key={`${row.partner}|${row.nodeId}|${idx}`}
-                      className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 min-w-[140px] flex flex-col items-center gap-2"
-                    >
-                      <div className="w-full text-center">
-                        <p className="text-[11px] font-bold text-emerald-600">{row.nodeName}</p>
-                        <p className="text-sm font-bold text-slate-900 truncate" title={row.partner}>
-                          {row.partner}
-                        </p>
-                      </div>
-                      <div
-                        className={`w-16 h-16 rounded-full border-2 bg-white flex items-center justify-center shrink-0 ${row.pending > 0 ? 'border-indigo-300' : 'border-emerald-400'}`}
-                        title="已收回数量"
-                      >
-                        <span className="text-xl font-black text-slate-900">{row.received}</span>
-                      </div>
-                      <div className="flex items-center justify-center gap-1.5 w-full">
-                        <span className="text-xs font-bold text-slate-600" title="发出 / 剩余">
-                          {row.dispatched} / {row.pending}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => openOutsourcePartnerFlow(row)}
-                          className="p-0.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors"
-                          title={
-                            outsourceFormSettings.showPartnerFlowDetailOnList
-                              ? '加工厂往来数量明细'
-                              : '查看外协流水'
-                          }
-                        >
-                          <FileText className="w-4 h-4 shrink-0" />
-                        </button>
-                      </div>
-                    </div>
+                      row={row}
+                      flowButtonTitle={
+                        outsourceFormSettings.showPartnerFlowDetailOnList
+                          ? '加工厂往来数量明细'
+                          : '查看外协流水'
+                      }
+                      onOpenFlow={() => openOutsourcePartnerFlow(row)}
+                    />
                   ))}
                 </div>
               </div>

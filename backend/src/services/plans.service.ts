@@ -3,10 +3,16 @@ import type { TenantPrismaClient } from '../lib/prisma.js';
 import { prisma as basePrisma } from '../lib/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { getNextPlanNumber, planNumberToOrderNumber } from '../utils/docNumber.js';
+import { resolveNextSplitPlanNumber } from '../utils/planSplitNumber.js';
 import { genId } from '../utils/genId.js';
 import { sanitizeCreate, sanitizeUpdate, sanitizeItems, normalizeDates } from '../utils/request.js';
 import { deleteItemCodesAndVirtualBatchesForPlan } from './itemCodes.service.js';
 import { PlanDispatchStatus, PlanStatus } from '../types/index.js';
+import { milestoneNodeIdsEqual } from '../../../shared/productProcessLock.js';
+import {
+  getEffectivePlanMilestoneNodeIds,
+  parseMilestoneNodeIdsJson,
+} from '../../../shared/planMilestoneRoute.js';
 
 type PlanWithItems = PlanOrder & { items: PlanItem[] };
 
@@ -212,6 +218,30 @@ export async function updatePlan(
   const data = sanitizeUpdate(rest);
   normalizeDates(data);
 
+  if ('milestoneNodeIds' in data) {
+    const raw = data.milestoneNodeIds;
+    let normalized: string[] | null = null;
+    if (raw != null) {
+      normalized = parseMilestoneNodeIdsJson(raw);
+      if (!normalized || normalized.length === 0) {
+        throw new AppError(400, '工序路线不能为空');
+      }
+    }
+    const prevOverride = parseMilestoneNodeIdsJson(existing.milestoneNodeIds);
+    const prevNorm = prevOverride ?? [];
+    const nextNorm = normalized ?? [];
+    const routeChanged =
+      (prevOverride == null) !== (normalized == null)
+      || !milestoneNodeIdsEqual(prevNorm, nextNorm);
+    if (routeChanged) {
+      const orderCount = await db.productionOrder.count({ where: { planOrderId: planId } });
+      if (orderCount > 0) {
+        throw new AppError(400, '已下达工单的计划单不可修改工序路线');
+      }
+    }
+    data.milestoneNodeIds = normalized;
+  }
+
   await basePrisma.$transaction(async (tx) => {
     await tx.planOrder.update({ where: { id: planId }, data });
     if (items) {
@@ -367,7 +397,10 @@ export async function convertPlanToOrders(db: TenantPrismaClient, tenantId: stri
     const orderId = genId('order');
     planToOrderMap.set(p.id, orderId);
 
-    const milestoneNodeIds = (prod?.milestoneNodeIds as string[]) || [];
+    const milestoneNodeIds = getEffectivePlanMilestoneNodeIds(
+      { milestoneNodeIds: p.milestoneNodeIds as string[] | null | undefined },
+      { milestoneNodeIds: (prod?.milestoneNodeIds as string[]) ?? [] },
+    );
     const milestones = milestoneNodeIds.map((nodeId, idx) => {
       const node = nodes.find(n => n.id === nodeId);
       return {
@@ -490,4 +523,131 @@ export async function createSubPlans(
   }
 
   return created;
+}
+
+type SplitPlanItemInput = { variantId?: string | null; quantity: number };
+
+function planItemGroupKey(variantId: string | null | undefined): string {
+  const v = variantId == null ? '' : String(variantId).trim();
+  return v || '__none__';
+}
+
+/** 将计划单按数量拆出 1 条新计划（单号 `{源}-N`），原单扣减对应数量 */
+export async function splitPlan(
+  db: TenantPrismaClient,
+  tenantId: string,
+  planId: string,
+  body: { items: SplitPlanItemInput[] },
+) {
+  const plan = await db.planOrder.findUnique({
+    where: { id: planId },
+    include: {
+      items: true,
+      productionOrders: { select: { id: true } },
+    },
+  });
+  if (!plan) throw new AppError(404, '计划单不存在');
+  if (plan.parentPlanId) throw new AppError(400, 'BOM 子计划不可拆单');
+  if (plan.status === 'CONVERTED') throw new AppError(400, '已下达工单的计划单不可拆单');
+  if ((plan.productionOrders?.length ?? 0) > 0) {
+    throw new AppError(400, '已关联工单的计划单不可拆单');
+  }
+
+  const splitRows = Array.isArray(body.items) ? body.items : [];
+  if (splitRows.length === 0) throw new AppError(400, '请填写拆出数量');
+
+  const sourceQtyByKey = new Map<string, number>();
+  const sourceVariantByKey = new Map<string, string | null>();
+  for (const row of plan.items) {
+    const k = planItemGroupKey(row.variantId);
+    sourceQtyByKey.set(k, (sourceQtyByKey.get(k) ?? 0) + Number(row.quantity) || 0);
+    if (!sourceVariantByKey.has(k)) {
+      sourceVariantByKey.set(k, row.variantId ?? null);
+    }
+  }
+
+  const splitQtyByKey = new Map<string, number>();
+  for (const row of splitRows) {
+    const q = Number(row.quantity);
+    if (!Number.isFinite(q) || q <= 0) continue;
+    const k = planItemGroupKey(row.variantId);
+    splitQtyByKey.set(k, (splitQtyByKey.get(k) ?? 0) + q);
+  }
+
+  if (splitQtyByKey.size === 0) throw new AppError(400, '拆出数量须大于 0');
+
+  let totalSplit = 0;
+  for (const [k, splitQ] of splitQtyByKey) {
+    const srcQ = sourceQtyByKey.get(k);
+    if (srcQ == null) {
+      throw new AppError(400, '拆出规格不在当前计划中');
+    }
+    if (splitQ > srcQ) {
+      throw new AppError(400, '拆出数量不能超过当前计划剩余数量');
+    }
+    totalSplit += splitQ;
+  }
+
+  const sourceTotal = [...sourceQtyByKey.values()].reduce((s, q) => s + q, 0);
+  if (totalSplit <= 0) throw new AppError(400, '拆出数量须大于 0');
+  if (sourceTotal - totalSplit < 1) {
+    throw new AppError(400, '拆单后原单须至少保留 1 件，请减少拆出数量');
+  }
+
+  const newPlanNumber = await resolveNextSplitPlanNumber(db, tenantId, plan.planNumber);
+  const newPlanId = genId('plan');
+
+  const splitItemsCreate: Array<{ variantId: string | null; quantity: number }> = [];
+  for (const [k, q] of splitQtyByKey) {
+    const vid = sourceVariantByKey.get(k);
+    splitItemsCreate.push({
+      variantId: k === '__none__' ? null : (vid ?? k),
+      quantity: q,
+    });
+  }
+
+  const remainingItemsCreate: Array<{ variantId: string | null; quantity: number }> = [];
+  for (const [k, srcQ] of sourceQtyByKey) {
+    const remain = srcQ - (splitQtyByKey.get(k) ?? 0);
+    if (remain <= 0) continue;
+    const vid = sourceVariantByKey.get(k);
+    remainingItemsCreate.push({
+      variantId: k === '__none__' ? null : (vid ?? k),
+      quantity: remain,
+    });
+  }
+
+  await basePrisma.$transaction(async (tx) => {
+    await tx.planItem.deleteMany({ where: { planOrderId: planId } });
+    if (remainingItemsCreate.length > 0) {
+      await tx.planItem.createMany({
+        data: remainingItemsCreate.map(row => ({ ...row, planOrderId: planId })),
+      });
+    }
+    await tx.planOrder.create({
+      data: {
+        id: newPlanId,
+        tenantId,
+        planNumber: newPlanNumber,
+        productId: plan.productId,
+        startDate: plan.startDate,
+        dueDate: plan.dueDate,
+        status: 'DRAFT',
+        customer: plan.customer,
+        priority: plan.priority,
+        assignments: plan.assignments ?? {},
+        customData: plan.customData ?? {},
+        nodePricingModes: plan.nodePricingModes ?? undefined,
+        milestoneNodeIds: plan.milestoneNodeIds ?? undefined,
+        items: { create: splitItemsCreate },
+      },
+    });
+  });
+
+  const [sourcePlan, newPlan] = await Promise.all([
+    db.planOrder.findUnique({ where: { id: planId }, include: { items: true } }),
+    db.planOrder.findUnique({ where: { id: newPlanId }, include: { items: true } }),
+  ]);
+  if (!sourcePlan || !newPlan) throw new AppError(500, '拆单后读取计划失败');
+  return { sourcePlan, newPlan };
 }

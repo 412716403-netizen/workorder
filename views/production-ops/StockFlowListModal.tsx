@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   ArrowUpFromLine,
@@ -13,7 +13,6 @@ import {
 import type { ProductionOpRecord, ProductionOrder, Product } from '../../types';
 import { hasOpsPerm, type StockDocDetail } from './types';
 import { formatLocalDateTimeZh, parseProductionOpTimestampMs, toLocalDateYmdFromProductionTimestamp } from '../../utils/localDateTime';
-import { flowRecordsEarliestMs } from '../../utils/flowDocSort';
 import {
   fetchProductionByFilter,
   dateInputToIsoStart,
@@ -24,18 +23,16 @@ import {
 import FlowListSummaryFooter from '../../components/flow/FlowListSummaryFooter';
 import FlowListTableShell from '../../components/flow/FlowListTableShell';
 import FlowListProductCell from '../../components/flow/FlowListProductCell';
+import {
+  type StockFlowBizType,
+  type StockFlowInitialSeed,
+  getStockFlowBizType,
+  getStockFlowTypeLabel,
+  sortStockFlowRecordsByDoc,
+  buildStockDocDetailFromRecords,
+} from './stockFlowListUtils';
 
-type StockFlowBizType =
-  | 'all'
-  | 'ISSUE_INTERNAL'
-  | 'RETURN_INTERNAL'
-  | 'ISSUE_OUTSOURCE'
-  | 'RETURN_OUTSOURCE';
-
-function getStockFlowBizType(r: ProductionOpRecord): Exclude<StockFlowBizType, 'all'> {
-  if (r.type === 'STOCK_OUT') return r.partner ? 'ISSUE_OUTSOURCE' : 'ISSUE_INTERNAL';
-  return r.partner ? 'RETURN_OUTSOURCE' : 'RETURN_INTERNAL';
-}
+export type { StockFlowInitialSeed } from './stockFlowListUtils';
 
 export interface StockFlowListModalProps {
   visible: boolean;
@@ -46,6 +43,8 @@ export interface StockFlowListModalProps {
   onOpenDocDetail: (detail: StockDocDetail) => void;
   userPermissions?: string[];
   tenantRole?: string;
+  /** 从工单详情等入口打开时预填筛选（含 orderIds 服务端窄拉） */
+  initialSeed?: StockFlowInitialSeed | null;
 }
 
 const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
@@ -57,6 +56,7 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
   onOpenDocDetail,
   userPermissions,
   tenantRole,
+  initialSeed = null,
 }) => {
   const todayDate = useMemo(() => isoToDateInput(getTodayRangeIso().from), []);
   const [stockFlowFilterType, setStockFlowFilterType] = useState<StockFlowBizType>('all');
@@ -65,42 +65,64 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
   const [stockFlowFilterDocNo, setStockFlowFilterDocNo] = useState('');
   const [stockFlowFilterDateFrom, setStockFlowFilterDateFrom] = useState(todayDate);
   const [stockFlowFilterDateTo, setStockFlowFilterDateTo] = useState(todayDate);
+  const [scopedOrderIds, setScopedOrderIds] = useState('');
+  const [scopedSourceProductId, setScopedSourceProductId] = useState('');
+
+  useEffect(() => {
+    if (!visible) return;
+    if (initialSeed) {
+      const scoped = !!(initialSeed.orderIds || initialSeed.sourceProductId);
+      setStockFlowFilterOrderKeyword(initialSeed.orderKeyword ?? initialSeed.productKeyword ?? '');
+      setStockFlowFilterProductKeyword('');
+      setStockFlowFilterDocNo('');
+      setStockFlowFilterType('all');
+      setStockFlowFilterDateFrom(initialSeed.dateFrom ?? (scoped ? '' : todayDate));
+      setStockFlowFilterDateTo(initialSeed.dateTo ?? (scoped ? '' : todayDate));
+      setScopedOrderIds(initialSeed.orderIds ?? '');
+      setScopedSourceProductId(initialSeed.sourceProductId ?? '');
+    } else {
+      setStockFlowFilterOrderKeyword('');
+      setStockFlowFilterProductKeyword('');
+      setStockFlowFilterDocNo('');
+      setStockFlowFilterType('all');
+      setStockFlowFilterDateFrom(todayDate);
+      setStockFlowFilterDateTo(todayDate);
+      setScopedOrderIds('');
+      setScopedSourceProductId('');
+    }
+  }, [visible, initialSeed, todayDate]);
 
   const stockFlowQuery = useQuery({
-    queryKey: ['flow.stock', stockFlowFilterDateFrom, stockFlowFilterDateTo],
-    queryFn: () =>
-      fetchProductionByFilter({
+    queryKey: [
+      'flow.stock',
+      stockFlowFilterDateFrom,
+      stockFlowFilterDateTo,
+      scopedOrderIds,
+      scopedSourceProductId,
+    ],
+    queryFn: () => {
+      const params: Parameters<typeof fetchProductionByFilter>[0] = {
         types: 'STOCK_OUT,STOCK_RETURN',
-        startDate: dateInputToIsoStart(stockFlowFilterDateFrom),
-        endDate: dateInputToIsoEndExclusive(stockFlowFilterDateTo),
-      }),
+      };
+      const startDate = dateInputToIsoStart(stockFlowFilterDateFrom);
+      const endDate = dateInputToIsoEndExclusive(stockFlowFilterDateTo);
+      if (startDate) params.startDate = startDate;
+      if (endDate) params.endDate = endDate;
+      if (scopedOrderIds) params.orderIds = scopedOrderIds;
+      if (scopedSourceProductId) params.sourceProductIds = scopedSourceProductId;
+      return fetchProductionByFilter(params);
+    },
     enabled: visible,
     staleTime: 15_000,
   });
   const records = stockFlowQuery.data ?? [];
 
-  /** 按单据号聚合：整张单按组内最早时间倒序，单内明细按 id 稳定序 */
-  const stockFlowRecords = useMemo(() => {
-    const list = records.filter(r => r.type === 'STOCK_OUT' || r.type === 'STOCK_RETURN');
-    const byDoc = new Map<string, ProductionOpRecord[]>();
-    for (const r of list) {
-      const k = (r.docNo && String(r.docNo).trim()) ? String(r.docNo) : r.id;
-      if (!byDoc.has(k)) byDoc.set(k, []);
-      byDoc.get(k)!.push(r);
-    }
-    const entries = [...byDoc.entries()].sort(([ka, ra], [kb, rb]) => {
-      const da = flowRecordsEarliestMs(ra);
-      const db = flowRecordsEarliestMs(rb);
-      if (db !== da) return db - da;
-      return ka.localeCompare(kb);
-    });
-    return entries.flatMap(([, rs]) => [...rs].sort((a, b) => (a.id || '').localeCompare(b.id || '')));
-  }, [records]);
+  const stockFlowRecords = useMemo(() => sortStockFlowRecordsByDoc(records), [records]);
 
   const { filteredStockFlowRecords, totalIssueQty, totalReturnQty } = useMemo(() => {
     let list = stockFlowRecords;
     if (stockFlowFilterType !== 'all') list = list.filter(r => getStockFlowBizType(r) === stockFlowFilterType);
-    if (stockFlowFilterOrderKeyword.trim()) {
+    if (stockFlowFilterOrderKeyword.trim() && !scopedOrderIds) {
       const kw = stockFlowFilterOrderKeyword.trim().toLowerCase();
       if (productionLinkMode === 'product') {
         list = list.filter(r => {
@@ -131,7 +153,6 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
       const kw = stockFlowFilterDocNo.trim().toLowerCase();
       list = list.filter(r => ((r.docNo ?? '').toLowerCase()).includes(kw));
     }
-    // 服务端已按日期窗口窄拉；客户端再按 YMD 兜底确保边界精确（用户改输入框后视觉一致）
     if (stockFlowFilterDateFrom) {
       const from = stockFlowFilterDateFrom;
       list = list.filter(r => {
@@ -155,34 +176,31 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
       totalIssueQty,
       totalReturnQty,
     };
-  }, [stockFlowRecords, stockFlowFilterType, stockFlowFilterOrderKeyword, stockFlowFilterProductKeyword, stockFlowFilterDocNo, stockFlowFilterDateFrom, stockFlowFilterDateTo, orders, products, productionLinkMode]);
+  }, [
+    stockFlowRecords,
+    stockFlowFilterType,
+    stockFlowFilterOrderKeyword,
+    stockFlowFilterProductKeyword,
+    stockFlowFilterDocNo,
+    stockFlowFilterDateFrom,
+    stockFlowFilterDateTo,
+    scopedOrderIds,
+    orders,
+    products,
+    productionLinkMode,
+  ]);
 
-  const buildStockDocDetailFromDocNo = (docNo: string): StockDocDetail | null => {
-    const docRecords = stockFlowRecords.filter(r => r.docNo === docNo);
-    if (docRecords.length === 0) return null;
-    const first = docRecords[0];
-    return {
-      docNo,
-      type: first.type as 'STOCK_OUT' | 'STOCK_RETURN',
-      orderId: first.orderId ?? '',
-      sourceProductId: first.sourceProductId,
-      timestamp: first.timestamp,
-      warehouseId: first.warehouseId ?? '',
-      lines: docRecords.map(r => ({
-        productId: r.productId,
-        quantity: r.quantity,
-        ...(r.batchNo ? { batchNo: r.batchNo } : {}),
-      })),
-      reason: first.reason,
-      operator: first.operator ?? '',
-      partner: first.partner,
-    };
-  };
+  const buildStockDocDetailFromDocNo = (docNo: string): StockDocDetail | null =>
+    buildStockDocDetailFromRecords(docNo, stockFlowRecords);
+
+  const filterHint = scopedOrderIds || scopedSourceProductId
+    ? '已按当前工单/产品窄拉，不限日期；可手动补充日期或其它筛选项'
+    : '默认显示当天，扩大日期范围需手动改';
 
   if (!visible) return null;
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[88] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} aria-hidden />
       <div className="relative bg-white w-full max-w-6xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
         <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
@@ -193,7 +211,7 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
           <div className="flex items-center gap-2 mb-3">
             <Filter className="w-4 h-4 text-slate-500" />
             <span className="text-xs font-bold text-slate-500 uppercase">筛选</span>
-            <span className="text-[10px] text-slate-400">默认显示当天，扩大日期范围需手动改</span>
+            <span className="text-[10px] text-slate-400">{filterHint}</span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
             <div>
@@ -236,7 +254,8 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
                   value={stockFlowFilterOrderKeyword}
                   onChange={e => setStockFlowFilterOrderKeyword(e.target.value)}
                   placeholder="工单号模糊搜索"
-                  className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200"
+                  disabled={!!scopedOrderIds}
+                  className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200 disabled:bg-slate-100 disabled:text-slate-500"
                 />
               </div>
             ) : (
@@ -247,7 +266,8 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
                   value={stockFlowFilterOrderKeyword}
                   onChange={e => setStockFlowFilterOrderKeyword(e.target.value)}
                   placeholder="成品名称模糊搜索"
-                  className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200"
+                  disabled={!!scopedSourceProductId}
+                  className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200 disabled:bg-slate-100 disabled:text-slate-500"
                 />
               </div>
             )}
@@ -340,13 +360,7 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
                         : rec.orderId
                           ? order?.orderNumber ?? '—'
                           : matProduct?.name ?? '—';
-                    const typeLabel = isOutsourceReturn
-                      ? '外协生产退料'
-                      : isReturn
-                        ? '生产退料'
-                        : isOutsourceDispatch
-                          ? '外协领料发出'
-                          : '领料发出';
+                    const typeLabel = getStockFlowTypeLabel(rec);
                     const typeClass = isOutsourceReturn
                       ? 'bg-orange-100 text-orange-800'
                       : isReturn

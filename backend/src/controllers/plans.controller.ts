@@ -64,3 +64,10 @@ export const createSubPlans = asyncHandler(async (req, res) => {
   const created = await planService.createSubPlans(db, tenantId, str(req.params.id), req.body);
   res.status(201).json(created);
 });
+
+export const splitPlan = asyncHandler(async (req, res) => {
+  const tenantId = req.tenantId!;
+  const db = getTenantPrisma(tenantId);
+  const result = await planService.splitPlan(db, tenantId, str(req.params.id), req.body);
+  res.status(201).json(result);
+});

@@ -27,8 +27,12 @@ import FlowListProductCell from '../../components/flow/FlowListProductCell';
 
 export type ReportHistoryInitialSeed = {
   orderNumber?: string;
+  /** 工单详情入口：服务端按工单族窄拉（逗号分隔） */
+  orderIds?: string;
   /** 产品名模糊搜索（报工流水筛选「产品」字段） */
   productKeyword?: string;
+  /** 产品详情入口：服务端按成品 id 窄拉（逗号分隔） */
+  productIds?: string;
   dateFrom?: string;
   dateTo?: string;
 };
@@ -71,19 +75,24 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
     dateTo: string;
     reportNo: string;
   }>({ productId: '', orderNumber: '', milestoneName: '', operator: '', dateFrom: todayDate, dateTo: todayDate, reportNo: '' });
+  const [scopedOrderIds, setScopedOrderIds] = useState('');
+  const [scopedProductIds, setScopedProductIds] = useState('');
 
   useEffect(() => {
     if (!open) return;
     if (initialSeed) {
+      const scoped = !!(initialSeed.orderIds || initialSeed.productIds);
       setReportHistoryFilter({
         productId: initialSeed.productKeyword ?? '',
         orderNumber: initialSeed.orderNumber ?? '',
         milestoneName: '',
         operator: '',
-        dateFrom: initialSeed.dateFrom ?? todayDate,
-        dateTo: initialSeed.dateTo ?? todayDate,
+        dateFrom: initialSeed.dateFrom ?? (scoped ? '' : todayDate),
+        dateTo: initialSeed.dateTo ?? (scoped ? '' : todayDate),
         reportNo: '',
       });
+      setScopedOrderIds(initialSeed.orderIds ?? '');
+      setScopedProductIds(initialSeed.productIds ?? '');
       return;
     }
     setReportHistoryFilter({
@@ -95,6 +104,8 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
       dateTo: todayDate,
       reportNo: '',
     });
+    setScopedOrderIds('');
+    setScopedProductIds('');
   }, [open, initialSeed, todayDate]);
 
   /**
@@ -102,11 +113,20 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
    * 不再依赖 props.orders 全量遍历。详情链路仍用 props.orders / productMilestoneProgresses 兜底解析。
    */
   const historyQuery = useQuery({
-    queryKey: ['flow.reportHistory', reportHistoryFilter.dateFrom, reportHistoryFilter.dateTo, productionLinkMode],
+    queryKey: [
+      'flow.reportHistory',
+      reportHistoryFilter.dateFrom,
+      reportHistoryFilter.dateTo,
+      scopedOrderIds,
+      scopedProductIds,
+      productionLinkMode,
+    ],
     queryFn: () =>
       ordersApi.listReportHistory({
         startDate: dateInputToIsoStart(reportHistoryFilter.dateFrom),
         endDate: dateInputToIsoEndExclusive(reportHistoryFilter.dateTo),
+        orderIds: scopedOrderIds || undefined,
+        productIds: scopedProductIds || undefined,
         productionLinkMode,
       }),
     enabled: open,
@@ -342,6 +362,9 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
 
   const { batches, totalGood, totalDefective, totalAmount, summaryUnit, uniqueMilestones, uniqueOperators, getUnitName } = reportHistoryData;
   const f = reportHistoryFilter;
+  const filterHint = scopedOrderIds || scopedProductIds
+    ? '已按当前工单/产品窄拉，不限日期；可手动补充日期或其它筛选项'
+    : '默认显示当天，扩大日期范围需手动改';
 
   return (
     <div className="fixed inset-0 z-[88] flex items-center justify-center p-4">
@@ -355,7 +378,7 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
           <div className="flex items-center gap-2 mb-3">
             <Filter className="w-4 h-4 text-slate-500" />
             <span className="text-xs font-bold text-slate-500 uppercase">筛选</span>
-            <span className="text-[10px] text-slate-400">默认显示当天，扩大日期范围需手动改</span>
+            <span className="text-[10px] text-slate-400">{filterHint}</span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-7 gap-3">
             <div>
@@ -373,7 +396,8 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
                 value={f.productId}
                 onChange={e => setReportHistoryFilter(prev => ({ ...prev, productId: e.target.value }))}
                 placeholder="产品名称模糊搜索"
-                className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200"
+                disabled={!!scopedProductIds}
+                className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200 disabled:bg-slate-100 disabled:text-slate-500"
               />
             </div>
             <div>
@@ -401,7 +425,8 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
                   value={f.orderNumber}
                   onChange={e => setReportHistoryFilter(prev => ({ ...prev, orderNumber: e.target.value }))}
                   placeholder="模糊搜索"
-                  className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200"
+                  disabled={!!scopedOrderIds}
+                  className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200 disabled:bg-slate-100 disabled:text-slate-500"
                 />
               </div>
             )}

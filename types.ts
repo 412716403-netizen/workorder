@@ -733,6 +733,8 @@ export interface PlanOrder {
   updatedAt?: string;
   /** 本计划单各工序计价方式（仅本单使用，不同步到商品）；未设时用产品的 nodePricingModes 或计件 */
   nodePricingModes?: Record<string, ProcessPricingMode>;
+  /** 本计划单工序路线覆盖；null/空/未设时沿用产品 milestoneNodeIds */
+  milestoneNodeIds?: string[] | null;
   /**
    * 计划单派发完成状态（响应派生字段，由后端 `listPlans` / `getPlan` 注入；不写库）。
    * 仅在「关联工单模式 productionLinkMode='order'」的列表上展示徽章。
@@ -798,6 +800,11 @@ export interface PlanListDisplaySettings {
    * 损耗率按计划单持久化于 `PlanOrder.customData.materialLossRates`（按 rowKey）。
    */
   materialLossEnabled?: boolean;
+  /**
+   * 为 true 时计划详情底部显示「拆单」按钮：每次从当前计划拆出 1 条新计划单（单号 `{源单号}-1`…`-99`），
+   * 用户填写拆出数量，原单保留剩余量。与子计划（parentPlanId / `-S` 后缀）无关。
+   */
+  splitPlanEnabled?: boolean;
 }
 
 /** 计划单表单配置：列表/新增/详情页显示哪些字段，及自定义项 */

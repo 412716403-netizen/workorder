@@ -35,7 +35,7 @@
 
 | 模块 | 当前状态 | 说明 | 剩余收口 |
 |------|------|------|------|
-| 计划单 CRUD、拆单、下达工单、子计划 | 已落地 | 已有 `/api/plans` 及相关动作接口；`listPlans` / `getPlan` 注入 `derivedStatus`（关联工单模式徽章数据源） | 继续核对前端是否仍保留旧计算路径 |
+| 计划单 CRUD、拆单、工序路线覆盖、下达工单、子计划 | 已落地 | `PlanOrder.milestoneNodeIds` 可选覆盖产品标准路线；详情可编辑；`POST /api/plans/:id/split` 继承源计划路线；`convertPlanToOrders` 优先计划路线 | 继续核对前端是否仍保留旧计算路径 |
 | 工单 CRUD、报工、可报量查询 | 已落地 | 已有 `/api/orders`、报工与产品进度接口；`GET /:id/reportable` 已合并 PMP；`createReport` / `createProductReport` 受 `allowExceedMaxReportQty` 控制做硬校验；新增 `PATCH /:id/dispatch-status` 用于关联工单模式下手动切换派发完成徽章（写 `dispatchStatusManual=true`） | 继续补充服务层与测试 |
 | 工单派发完成状态（关联工单模式） | 已落地 | `ProductionOrder.dispatchStatus` / `dispatchStatusManual` 持久化字段；`recalcOrderDispatchStatusByStockIn` 在入库达标时返回 `dispatchCompletionPending` 供前端确认，确认后 `PATCH dispatch-status` 写 COMPLETED；回退仍自动写 IN_PROGRESS（`manual=true` 时跳过）；计划单徽章基于工单聚合（详见 `docs/01-business-rules.md §3.10`） | 后续如需"恢复自动判定"按钮，可补 `dispatchStatusManual=false` 重置接口 |
 | 生产操作记录 | 已落地 | 已有 `/api/production/records` 等接口；`createRecord` / `createRecordBatch` 在 `OUTSOURCE 已收回` 写入前调用 `enforceOutsourceReceiveQuantity`，受 `allowExceedMaxOutsourceReceiveQty` 控制做硬校验 | 梳理大体量前端页面与复杂业务校验 |

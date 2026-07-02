@@ -101,6 +101,7 @@ const ProductionManagementView: React.FC = () => {
   const onReportSubmit = a.onReportSubmit;
   const onCreateSubPlan = a.onCreateSubPlan;
   const onCreateSubPlans = a.onCreateSubPlans;
+  const onSplitPlan = a.onSplitPlan;
   const onUpdateOrder = a.onUpdateOrder;
   const onUpdateOrderDispatchStatus = a.onUpdateOrderDispatchStatus;
   const onDeleteOrder = a.onDeleteOrder;
@@ -284,6 +285,7 @@ const ProductionManagementView: React.FC = () => {
             onAddPSIRecordBatch={onAddPSIRecordBatch}
             onCreateSubPlan={onCreateSubPlan}
             onCreateSubPlans={onCreateSubPlans}
+            onSplitPlan={hasProdPerm('production:plans:edit') ? onSplitPlan : undefined}
           />
           </Suspense>
         )}

@@ -146,5 +146,6 @@ export function useOrderMaterialStats({
     isError: stockProdQuery.isError,
     rootOrderId,
     familyOrderIds,
+    stockRecords: stockProdQuery.data ?? [],
   };
 }

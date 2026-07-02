@@ -170,6 +170,11 @@ export interface AppDataContextValue {
   onConvertToOrder: (id: string) => Promise<void>;
   onCreateSubPlan: (data: { productId: string; quantity: number; planId: string; bomNodeId?: string }) => Promise<void>;
   onCreateSubPlans: (data: { planId: string; items: Array<{ productId: string; quantity: number; bomNodeId?: string; parentProductId?: string; parentNodeId?: string }> }) => Promise<void>;
+  /** 拆出 1 条新计划单；成功返回 source/new，失败 toast 并返回 null */
+  onSplitPlan: (
+    planId: string,
+    items: Array<{ variantId?: string; quantity: number }>,
+  ) => Promise<{ sourcePlan: PlanOrder; newPlan: PlanOrder } | null>;
   // Orders / reports
   onReportSubmit: (oId: string, mId: string, qty: number, data: Record<string, any> | null, vId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string, weight?: number) => Promise<void>;
   onReportSubmitProduct: (productId: string, milestoneTemplateId: string, qty: number, data: Record<string, any> | null, vId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string, weight?: number) => Promise<void>;
@@ -790,6 +795,24 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     } catch (err: any) { toast.error(err.message || '创建子计划失败'); }
   }, [refreshPlans]);
 
+  const onSplitPlan = useCallback(async (
+    planId: string,
+    items: Array<{ variantId?: string; quantity: number }>,
+  ): Promise<{ sourcePlan: PlanOrder; newPlan: PlanOrder } | null> => {
+    try {
+      const result = await api.plans.split(planId, { items });
+      setPlans(prev => {
+        const rest = prev.filter(p => p.id !== planId && p.id !== result.newPlan.id);
+        return [...rest, norm1(result.sourcePlan), norm1(result.newPlan)];
+      });
+      toast.success(`已拆出新计划 ${result.newPlan.planNumber}`);
+      return { sourcePlan: norm1(result.sourcePlan), newPlan: norm1(result.newPlan) };
+    } catch (err: any) {
+      toast.error(err.message || '拆单失败');
+      return null;
+    }
+  }, []);
+
   // ── Order / report handlers ──
   // Phase 3.D follow-up：报工成功后不再 `refreshProdRecords()` 全表刷新；
   //   `OrderListView` / `ProductionMgmtOpsView` 在挂载时按当前 tab 的 type 集合 react-query 窄拉，
@@ -1114,7 +1137,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     onUpdateMaterialPanelSettings, onUpdateMaterialFormSettings, onUpdateOutsourceFormSettings, onUpdateReworkFormSettings, onUpdatePrintTemplates,
     onUpdateProduct, onDeleteProduct, onUpdateBOM,
     onCreatePlan, onUpdatePlan, onDeletePlan, onConvertToOrder,
-    onCreateSubPlan, onCreateSubPlans,
+    onCreateSubPlan, onCreateSubPlans, onSplitPlan,
     onReportSubmit, onReportSubmitProduct,
     onUpdateReport, onDeleteReport, onUpdateReportProduct, onDeleteReportProduct,
     onUpdateOrder, onUpdateOrderDispatchStatus, onDeleteOrder,
@@ -1136,7 +1159,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     onUpdateMaterialPanelSettings, onUpdateMaterialFormSettings, onUpdateOutsourceFormSettings, onUpdateReworkFormSettings, onUpdatePrintTemplates,
     onUpdateProduct, onDeleteProduct, onUpdateBOM,
     onCreatePlan, onUpdatePlan, onDeletePlan, onConvertToOrder,
-    onCreateSubPlan, onCreateSubPlans,
+    onCreateSubPlan, onCreateSubPlans, onSplitPlan,
     onReportSubmit, onReportSubmitProduct,
     onUpdateReport, onDeleteReport, onUpdateReportProduct, onDeleteReportProduct,
     onUpdateOrder, onUpdateOrderDispatchStatus, onDeleteOrder,
