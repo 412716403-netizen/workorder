@@ -33,12 +33,10 @@ function planNumbersWithAncestors(plan: PlanOrder, byId: Map<string, PlanOrder>)
  *
  * - `visiblePlans`：当前页计划（仅为这些计划请求进度）。
  * - `allPlans`：全量计划，用于回溯祖先计划单号（子计划口径与详情面板一致）。
- * - `enabled`：开关 listDisplay.showPurchaseProgress 是否开启；关闭时不发请求。
  */
 export function usePlanPurchaseProgress(
   visiblePlans: PlanOrder[],
   allPlans: PlanOrder[],
-  enabled: boolean,
 ): Map<string, PlanPurchaseProgress> {
   const { tenantCtx } = useAuth();
   const tenantId = tenantCtx?.tenantId;
@@ -61,7 +59,7 @@ export function usePlanPurchaseProgress(
   const query = useQuery({
     queryKey: ['plan.purchaseProgress', tenantId, planIdsKey],
     queryFn: () => psi.plansPurchaseProgress(requestPlans),
-    enabled: enabled && !!tenantId && requestPlans.length > 0,
+    enabled: !!tenantId && requestPlans.length > 0,
     staleTime: 15_000,
   });
 

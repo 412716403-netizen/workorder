@@ -320,10 +320,8 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
   const displayPlans = fetchedPlans.length > 0 || debouncedPlanSearch || planPage > 1 ? fetchedPlans : plans;
   /** 列表统一按单据生成时间新在前（与后端分页 orderBy 一致，并修正子计划与父计划交错时的展示顺序） */
   const plansForView = useMemo(() => [...displayPlans].sort(comparePlansNewestFirst), [displayPlans]);
-  const showPurchaseProgress = planFormSettings.listDisplay?.showPurchaseProgress === true;
   // 列表会展开父/子计划，进度需覆盖当前页计划及其全部子孙
   const plansForPurchaseProgress = useMemo(() => {
-    if (!showPurchaseProgress) return [] as PlanOrder[];
     const seen = new Set<string>();
     const result: PlanOrder[] = [];
     for (const p of plansForView) {
@@ -335,8 +333,8 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
       }
     }
     return result;
-  }, [showPurchaseProgress, plansForView, plans]);
-  const purchaseProgressByPlan = usePlanPurchaseProgress(plansForPurchaseProgress, plans, showPurchaseProgress);
+  }, [plansForView, plans]);
+  const purchaseProgressByPlan = usePlanPurchaseProgress(plansForPurchaseProgress, plans);
   const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
   const renderProductCustomTags = useCallback(
     (product: Product | undefined) => {
@@ -705,7 +703,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                               交货 {toLocalDateYmd(plan.dueDate) || String(plan.dueDate).slice(0, 10)}
                             </span>
                           )}
-                          {showPurchaseProgress && renderPlanListPurchaseProgress(purchaseProgressByPlan.get(plan.id))}
+                          {renderPlanListPurchaseProgress(purchaseProgressByPlan.get(plan.id))}
                           {customListFields.map(cf =>
                             renderPlanListCustomFieldValue(cf, plan, setImagePreviewUrl, setFilePreviewUrl, setFilePreviewType),
                           )}
@@ -803,7 +801,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                                       交货 {toLocalDateYmd(plan.dueDate) || String(plan.dueDate).slice(0, 10)}
                                     </span>
                                   )}
-                                  {showPurchaseProgress && renderPlanListPurchaseProgress(purchaseProgressByPlan.get(plan.id))}
+                                  {renderPlanListPurchaseProgress(purchaseProgressByPlan.get(plan.id))}
                                   {customListFields.map(cf =>
                             renderPlanListCustomFieldValue(cf, plan, setImagePreviewUrl, setFilePreviewUrl, setFilePreviewType),
                           )}
@@ -907,7 +905,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                                     交货 {toLocalDateYmd(plan.dueDate) || String(plan.dueDate).slice(0, 10)}
                                   </span>
                                 )}
-                                {showPurchaseProgress && renderPlanListPurchaseProgress(purchaseProgressByPlan.get(plan.id))}
+                                {renderPlanListPurchaseProgress(purchaseProgressByPlan.get(plan.id))}
                                 {customListFields.map(cf =>
                             renderPlanListCustomFieldValue(cf, plan, setImagePreviewUrl, setFilePreviewUrl, setFilePreviewType),
                           )}

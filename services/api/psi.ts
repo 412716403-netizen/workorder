@@ -65,7 +65,7 @@ export const psi = {
     ),
   /**
    * 计划单列表「采购订单进度」批量汇总：按数量加权返回每个计划的 { received, ordered }，
-   * 百分比由前端计算（Σ已收 / Σ已订购）。开关 listDisplay.showPurchaseProgress 开启时调用。
+   * 百分比由前端计算（Σ已收 / Σ已订购）。计划单列表默认调用。
    */
   plansPurchaseProgress: (plans: Array<{ planId: string; planNumbers?: string[] }>) =>
     request<Array<{ planId: string; received: number; ordered: number }>>(

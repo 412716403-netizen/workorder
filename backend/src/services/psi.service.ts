@@ -727,7 +727,7 @@ export async function listPlanRelatedPsi(
 }
 
 /**
- * 计划单列表「采购订单进度」批量汇总（开关 listDisplay.showPurchaseProgress 开启时调用）。
+ * 计划单列表「采购订单进度」批量汇总（计划单列表默认调用）。
  *
  * 与 `listPlanRelatedPsi` 同口径软关联（customData.sourcePlanId / sourcePlanNumber，
  * 历史 note 含 `计划单[<no>]`），但：

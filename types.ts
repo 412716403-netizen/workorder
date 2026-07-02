@@ -790,8 +790,7 @@ export interface PlanListDisplaySettings {
    */
   onlyShowNotCompleted?: boolean;
   /**
-   * 为 true 时计划单列表每行显示该计划关联采购订单的汇总到货进度（Σ已收/Σ已订购，单一百分比）。
-   * 数据由 `psi.plansPurchaseProgress` 批量取回；无关联采购订单的行不展示。
+   * 计划单列表采购订单进度（normalize 后恒为 true，无表单开关；保留字段兼容历史租户配置）。
    */
   showPurchaseProgress?: boolean;
   /**

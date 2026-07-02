@@ -79,7 +79,7 @@ export const DEFAULT_PLAN_FORM_SETTINGS: PlanFormSettings = {
     { id: 'createdAt', label: '创建时间', showInList: false, showInCreate: false, showInDetail: true },
   ],
   customFields: [],
-  listDisplay: { showDeliveryDate: false, showPurchaseProgress: false, materialLossEnabled: false, splitPlanEnabled: false },
+  listDisplay: { showDeliveryDate: false, showPurchaseProgress: true, materialLossEnabled: false, splitPlanEnabled: false },
   listPrint: { showPrintButton: false },
 };
 
@@ -132,7 +132,7 @@ export function normalizePlanFormSettings(raw: PlanFormSettings | null | undefin
     listDisplay: {
       showDeliveryDate: s.listDisplay?.showDeliveryDate === true,
       onlyShowNotCompleted: s.listDisplay?.onlyShowNotCompleted === true,
-      showPurchaseProgress: s.listDisplay?.showPurchaseProgress === true,
+      showPurchaseProgress: true,
       materialLossEnabled: s.listDisplay?.materialLossEnabled === true,
       splitPlanEnabled: s.listDisplay?.splitPlanEnabled === true,
     },

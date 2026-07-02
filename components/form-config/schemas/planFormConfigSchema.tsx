@@ -158,39 +158,6 @@ export const planFormConfigSchema: FormConfigSchema<PlanFormSettings> = {
         },
         {
           kind: 'customSlot',
-          id: 'planOrderPurchaseProgressToggle',
-          render: ctx => {
-            const ld = (ctx.get('listDisplay') as PlanFormSettings['listDisplay']) ?? {};
-            const checked = ld.showPurchaseProgress === true;
-            return (
-              <div className="mt-4">
-                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white px-4 py-4">
-                  <label className="flex cursor-pointer items-start gap-3 text-sm font-bold text-slate-800">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5 h-4 w-4 shrink-0 rounded text-indigo-600"
-                      checked={checked}
-                      onChange={e => {
-                        ctx.set('listDisplay', {
-                          ...ld,
-                          showPurchaseProgress: e.target.checked,
-                        });
-                      }}
-                    />
-                    <span>
-                      列表上显示采购订单进度
-                      <p className="mt-1 text-xs font-medium text-slate-500">
-                        开启后，计划单列表每行显示该计划关联采购订单的汇总到货进度（按数量加权的「已收 / 已订购」总百分比），不展示每个物料的明细；无关联采购订单的计划不显示。
-                      </p>
-                    </span>
-                  </label>
-                </div>
-              </div>
-            );
-          },
-        },
-        {
-          kind: 'customSlot',
           id: 'planOrderSplitPlanToggle',
           render: ctx => {
             const ld = (ctx.get('listDisplay') as PlanFormSettings['listDisplay']) ?? {};
