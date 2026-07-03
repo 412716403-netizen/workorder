@@ -123,7 +123,8 @@
 - **工作台卡片**：支持 `period=today|yesterday|month`，或 `startDate` + `endDate`（`YYYY-MM-DD`，含起止日全天）自定义区间；按报工/外协/返工/报损/销售单据 `timestamp` 过滤。**不传 period / 日期为累计**（弹窗明细用累计口径）。
 - 弹窗明细：`GET /api/dashboard/product-economics/:productId` 始终累计。
 - 口径：**累计**（弹窗明细）；卡片可按周期过滤。按产品聚合，仅纳入有任一生产/销售/库存/单据关联活动的产品。
-- **物料成本口径**（租户配置 `system_settings.productEconomicsSettings.materialCostMode`，默认 `consumable`；设置 → 生产）：
+- **物料成本口径**：由工作台组件决定，**无租户级开关**。添加 **产品经营·报工耗材**（`consumable`）或 **产品经营·单据关联**（`document_linked`）组件即可；API 请求带 `materialCostMode` 查询参数。未传参时后端回退 `productEconomicsSettings.materialCostMode`（默认 `consumable`，仅兼容旧调用）。
+- **`productEconomicsSettings.materialPriceRule`**（租户配置，默认 `all_time`）：报工耗材口径下的**物料采购均价**统计规则；在 **产品经营·报工耗材 → 更多 → 物料价格** 维护，不由业务配置页切换。
   - **`consumable`（默认）** — 报工耗材 + 结余损耗，**并叠加关联收付款**：
     - **物料成本**：与生产物料面板「报工耗材」同一数量口径（`shared/productMaterialConsumableCost.ts`），再 × 物料单价。未开启称重 → 报工数 × BOM 用量；开启称重且有快照 → 各子物料 `actualWeight` 累加。**物料单价**按 **成品上下文** `parentProductId + materialId` 解析；规则优先级：单物料覆盖 → 成品 BOM 规则（**默认最近一次采购价**，可改为自定义时间区间）。成品级规则与单物料覆盖存 `products.economicsBomMaterialPrice`；计价见 `shared/materialPurchasePrice.ts`（`resolveEffectiveMaterialPriceRule`）；仍无数据时回退档案 `purchasePrice`。
     - **物料采购均价配置入口**：工作台 **产品经营·报工耗材** → **更多** → **物料价格**（`MaterialPurchasePriceModal`）：一级为带 BOM 成品列表；二级设定该成品 BOM 统计规则（默认最近一次采购价 / 自定义时间），单条物料可单独覆盖（同样仅**最近一次采购价 / 自定义时间**；「恢复成品规则」清除覆盖）。**变更成品 BOM 统计规则时会清除该成品下全部单物料覆盖**。

@@ -1425,14 +1425,16 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                     <Users className="w-5 h-5 text-indigo-600 shrink-0" />
                     <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">3. 工序任务</h3>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setProcessRouteModalOpen(true)}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border transition-all shrink-0 border-indigo-200 text-indigo-700 bg-indigo-50/80 hover:bg-indigo-100 hover:border-indigo-300"
-                  >
-                    <ClipboardCheck className="w-3.5 h-3.5" />
-                    {planWorkOrdersDispatched ? '查看工艺路线' : '修改工艺路线'}
-                  </button>
+                  {productionLinkMode !== 'product' && (
+                    <button
+                      type="button"
+                      onClick={() => setProcessRouteModalOpen(true)}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border transition-all shrink-0 border-indigo-200 text-indigo-700 bg-indigo-50/80 hover:bg-indigo-100 hover:border-indigo-300"
+                    >
+                      <ClipboardCheck className="w-3.5 h-3.5" />
+                      {planWorkOrdersDispatched ? '查看工艺路线' : '修改工艺路线'}
+                    </button>
+                  )}
                 </div>
                 <div className="space-y-4">
                    {planProcessNodes.map((node, idx) => {
@@ -2197,7 +2199,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
         />
       )}
 
-      {processRouteModalOpen && viewPlan && (
+      {productionLinkMode !== 'product' && processRouteModalOpen && viewPlan && (
         <PlanProcessRouteModal
           open={processRouteModalOpen}
           onClose={() => setProcessRouteModalOpen(false)}

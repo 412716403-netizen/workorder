@@ -641,8 +641,9 @@ export const PRODUCT_MATERIAL_COST_MODE_LABEL: Record<ProductMaterialCostMode, s
 };
 
 export interface ProductEconomicsSettings {
+  /** API 未传 materialCostMode 时的回退值；工作台组件各自固定传参，业务配置无 UI */
   materialCostMode: ProductMaterialCostMode;
-  /** 租户全局物料采购均价统计规则（三选一） */
+  /** 租户全局物料采购均价统计规则（三选一）；在「产品经营·报工耗材 → 物料价格」维护 */
   materialPriceRule: MaterialPriceRule;
 }
 
