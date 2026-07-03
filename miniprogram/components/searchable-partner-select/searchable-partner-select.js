@@ -23,6 +23,8 @@ Component({
   data: {
     open: false,
     sheetShow: false,
+    sheetMotion: false,
+    sheetHeightPx: 0,
     search: '',
     activeTab: 'all',
     filteredPartners: [],
@@ -56,7 +58,7 @@ Component({
 
     onOpen() {
       if (this.data.disabled) return;
-      openBottomSheet(this, { search: '', activeTab: 'all' });
+      openBottomSheet(this, { search: '', activeTab: 'all' }, { picker: this.properties.cell });
       this.refreshFiltered();
     },
 

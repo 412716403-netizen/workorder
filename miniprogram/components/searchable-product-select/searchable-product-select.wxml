@@ -32,7 +32,8 @@
       catchtouchmove="noop"
     />
     <view
-      class="sps__sheet {{cell ? 'sps__sheet--picker' : ''}} {{sheetShow ? 'sps__sheet--show' : ''}}"
+      class="sps__sheet {{cell ? 'sps__sheet--picker' : ''}} {{sheetMotion ? 'sps__sheet--motion' : ''}} {{sheetShow ? 'sps__sheet--show' : ''}}"
+      style="height: {{sheetHeightPx}}px; max-height: {{sheetHeightPx}}px;"
       catchtouchmove="noop"
     >
     <view wx:if="{{cell}}" class="sps__picker-bar">
@@ -53,7 +54,6 @@
         bindinput="onSearchInput"
         placeholder="搜索产品名称、SKU、自定义内容..."
         confirm-type="search"
-        focus="{{sheetShow}}"
       />
     </view>
 

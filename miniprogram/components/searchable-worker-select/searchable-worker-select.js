@@ -25,6 +25,8 @@ Component({
   data: {
     open: false,
     sheetShow: false,
+    sheetMotion: false,
+    sheetHeightPx: 0,
     search: '',
     activeTab: 'all',
     filteredWorkers: [],
@@ -70,7 +72,7 @@ Component({
 
     onOpen() {
       if (this.properties.disabled) return;
-      openBottomSheet(this, { search: '', activeTab: this.resolveDefaultTab() });
+      openBottomSheet(this, { search: '', activeTab: this.resolveDefaultTab() }, { picker: this.properties.cell });
       this.refreshFiltered();
     },
 
