@@ -1,0 +1,117 @@
+<view class="plan-shell">
+  <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-header__title">领料退料流水</text>
+      <view class="plan-header__back plan-header__back--placeholder"></view>
+    </view>
+
+    <view class="plan-header__tools">
+      <view class="plan-search">
+        <input
+          class="plan-search__input"
+          value="{{searchKeyword}}"
+          bindinput="onSearchInput"
+          placeholder="单号 / 工单 / 物料"
+          confirm-type="search"
+          placeholder-class="plan-search__ph"
+        />
+        <view wx:if="{{searchKeyword}}" class="plan-search__clear" bindtap="onSearchClear">×</view>
+      </view>
+      <view
+        class="plan-tool-btn {{filterActive ? 'plan-tool-btn--active' : ''}}"
+        bindtap="onFilterTap"
+      >
+        <image class="plan-tool-btn__icon" src="/assets/icons/list-filter.png" mode="aspectFit" />
+      </view>
+    </view>
+  </view>
+
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <view class="report-history-page">
+    <view wx:if="{{showFilterPanel}}" class="plan-filter-panel stock-in-flow-filter-panel">
+      <view class="plan-filter-panel__row">
+        <text class="plan-filter-panel__label">开始日期</text>
+        <picker mode="date" value="{{draftDateFrom}}" bindchange="onDraftDateFromChange">
+          <view class="stock-in-flow-filter stock-in-flow-filter--picker">{{draftDateFrom || '请选择'}}</view>
+        </picker>
+      </view>
+      <view class="plan-filter-panel__row">
+        <text class="plan-filter-panel__label">结束日期</text>
+        <picker mode="date" value="{{draftDateTo}}" bindchange="onDraftDateToChange">
+          <view class="stock-in-flow-filter stock-in-flow-filter--picker">{{draftDateTo || '请选择'}}</view>
+        </picker>
+      </view>
+      <view class="plan-filter-panel__row">
+        <text class="plan-filter-panel__label">业务类型</text>
+        <picker
+          mode="selector"
+          range="{{typeFilterLabels}}"
+          value="{{draftTypeIndex}}"
+          bindchange="onDraftTypeChange"
+        >
+          <view class="stock-in-flow-filter stock-in-flow-filter--picker">
+            {{typeFilterLabels[draftTypeIndex] || '全部类型'}}
+          </view>
+        </picker>
+      </view>
+      <view class="plan-filter-panel__foot">
+        <view class="plan-filter-reset" bindtap="onFilterReset">重置</view>
+        <view class="plan-filter-apply" bindtap="onFilterApply">确定</view>
+      </view>
+    </view>
+
+    <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
+
+    <view wx:elif="{{rows.length}}">
+      <view
+        wx:for="{{rows}}"
+        wx:key="batchKey"
+        class="report-history-row"
+        bindtap="onRowTap"
+        data-batch-key="{{item.batchKey}}"
+      >
+        <view class="report-history-row__body">
+          <view class="report-history-row__left">
+            <view class="report-history-row__thumb">
+              <view class="report-history-row__img report-history-row__img--placeholder {{item.type === 'STOCK_RETURN' ? 'material-flow-thumb--return' : 'material-flow-thumb--issue'}}">
+                <image class="report-history-row__placeholder-icon" src="{{item.placeholderIconSrc}}" mode="aspectFit" />
+              </view>
+            </view>
+          </view>
+          <view class="report-history-row__content">
+            <view class="report-history-row__head">
+              <view class="report-history-row__head-main">
+                <text wx:if="{{item.showOrderNumber && item.orderNumber}}" class="report-history-row__order-no">{{item.orderNumber}}</text>
+                <text wx:if="{{item.showOrderNumber && item.orderNumber}}" class="report-history-row__head-dot">·</text>
+                <text class="report-history-row__time">{{item.timeLabel}}</text>
+              </view>
+              <text class="report-history-row__report-no">{{item.docNo}}</text>
+            </view>
+            <view class="report-history-row__main">
+              <view class="material-flow-main-left">
+                <text class="material-flow-type {{item.type === 'STOCK_RETURN' ? 'material-flow-type--return' : ''}}">{{item.typeLabel}}</text>
+                <text wx:if="{{item.showWarehouse}}" class="material-flow-warehouse-inline"> · {{item.warehouseName}}</text>
+              </view>
+              <text class="report-history-row__qty {{item.type === 'STOCK_RETURN' ? 'report-history-row__qty--return' : ''}}">{{item.totalQtyText}}</text>
+            </view>
+            <view class="report-history-row__product">
+              <view class="report-history-row__product-left">
+                <text class="report-history-row__product-name">{{item.materialName}}</text>
+                <text wx:if="{{item.showMaterialSku}}" class="report-history-row__sku">{{item.materialSku}}</text>
+              </view>
+              <text wx:if="{{item.showOperator}}" class="report-history-row__operator">{{item.operatorLine}}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view wx:else class="plan-list-empty">所选条件下暂无流水</view>
+
+    <view wx:if="{{!loading && rows.length}}" class="report-history-footer">
+      <text class="report-history-footer__text">{{stats.footerText}}</text>
+    </view>
+  </view>
+</view>

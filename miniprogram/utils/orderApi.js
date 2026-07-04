@@ -1,5 +1,6 @@
 const { request } = require('./request.js');
 const { createMilestoneReport } = require('./scanApi.js');
+const { normalizeListBody } = require('./listResponse.js');
 
 function buildQs(params) {
   const parts = [];
@@ -128,6 +129,11 @@ function fetchCategoriesAll() {
   return request({ path: '/settings/categories?all=true', method: 'GET' }).catch(() => []);
 }
 
+function fetchStockBatches(params) {
+  return request({ path: `/psi/stock/batches${buildQs(params)}`, method: 'GET', timeout: 60000 })
+    .catch(() => []);
+}
+
 function fetchNodesAll() {
   return request({ path: '/settings/nodes?all=true', method: 'GET' }).catch(() => []);
 }
@@ -161,7 +167,9 @@ function fetchWorkersForReport(tenantId) {
 }
 
 function fetchBomsAll() {
-  return request({ path: '/products/boms/all', method: 'GET', timeout: 60000 }).catch(() => []);
+  return request({ path: '/products/boms/all?all=true', method: 'GET', timeout: 60000 })
+    .then((body) => normalizeListBody(body))
+    .catch(() => []);
 }
 
 function getPlan(id) {
@@ -220,6 +228,7 @@ module.exports = {
   fetchTenantConfig,
   fetchProductsAll,
   fetchCategoriesAll,
+  fetchStockBatches,
   fetchNodesAll,
   fetchWorkersAll,
   fetchWorkersForReport,

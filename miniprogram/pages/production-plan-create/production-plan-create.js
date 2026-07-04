@@ -431,18 +431,13 @@ Page({
 
     this.setData({ submitting: true });
     try {
-      const created = await createPlan(body);
+      await createPlan(body);
       wx.showToast({ title: '创建成功', icon: 'success' });
-      const id = created && created.id;
-      if (id) {
-        setTimeout(() => {
-          wx.redirectTo({
-            url: `/pages/production-plan-detail/production-plan-detail?id=${encodeURIComponent(id)}`,
-          });
-        }, 400);
-      } else {
-        setTimeout(() => wx.navigateBack(), 400);
-      }
+      setTimeout(() => {
+        wx.redirectTo({
+          url: '/pages/production-plans/production-plans',
+        });
+      }, 400);
     } catch (err) {
       wx.showToast({
         title: (err && err.message) || '创建失败',

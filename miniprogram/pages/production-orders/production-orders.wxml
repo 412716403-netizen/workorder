@@ -232,14 +232,6 @@
                 <image class="order-list-row__placeholder-icon" src="{{item.placeholderIconSrc}}" mode="aspectFit" />
               </view>
             </view>
-            <view wx:if="{{item.showSideTags}}" class="order-list-row__tags">
-              <text
-                wx:for="{{item.sideTags}}"
-                wx:for-item="tag"
-                wx:key="id"
-                class="order-list-row__tag"
-              >{{tag.text}}</text>
-            </view>
           </view>
 
           <view class="order-list-row__content">
@@ -259,6 +251,14 @@
                 wx:key="id"
                 class="order-list-row__custom-tag"
               >{{tag.label}}: {{tag.display}}</text>
+            </view>
+            <view wx:if="{{item.showCustomer}}" class="order-list-row__customer">
+              <image
+                class="order-list-row__customer-icon"
+                src="/assets/icons/user.png"
+                mode="aspectFit"
+              />
+              <text class="order-list-row__customer-text">{{item.customer}}</text>
             </view>
           </view>
         </view>
@@ -288,6 +288,8 @@
               class="order-list-row__action order-list-row__action--detail"
               catchtap="onMaterialTap"
               data-id="{{item.id}}"
+              data-product-id="{{item.productId}}"
+              data-block-type="{{item.blockType}}"
             >物料</view>
             <view
               wx:if="{{canRework}}"

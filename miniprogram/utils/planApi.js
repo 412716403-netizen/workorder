@@ -1,4 +1,5 @@
 const { request } = require('./request.js');
+const { normalizeListBody } = require('./listResponse.js');
 
 function buildQs(params) {
   const parts = [];
@@ -108,7 +109,9 @@ function fetchEquipmentAll() {
 }
 
 function fetchBomsAll() {
-  return request({ path: '/products/boms/all', method: 'GET', timeout: 60000 }).catch(() => []);
+  return request({ path: '/products/boms/all?all=true', method: 'GET', timeout: 60000 })
+    .then((body) => normalizeListBody(body))
+    .catch(() => []);
 }
 
 function fetchStockMap() {

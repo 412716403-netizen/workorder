@@ -36,6 +36,15 @@ function customerShowInDetail(planFormSettings, productionLinkMode) {
   return !!(customerField && customerField.showInDetail === true);
 }
 
+function customerShowInList(planFormSettings, productionLinkMode) {
+  if (productionLinkMode === 'product') return false;
+  const fields = normalizePlanFormFieldConfigArray(
+    planFormSettings && planFormSettings.standardFields,
+  );
+  const customerField = fields.find((f) => f.id === 'customer');
+  return !!(customerField && customerField.showInList === true);
+}
+
 function standardFieldShowInDetail(planFormSettings, fieldId, defaultShow = true) {
   const fields = normalizePlanFormFieldConfigArray(
     planFormSettings && planFormSettings.standardFields,
@@ -129,6 +138,7 @@ module.exports = {
   normalizePlanFormFieldConfigArray,
   customerShowInCreate,
   customerShowInDetail,
+  customerShowInList,
   standardFieldShowInDetail,
   buildPlanCreateCustomFields,
   buildPlanDetailCustomFields,

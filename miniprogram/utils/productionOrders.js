@@ -269,11 +269,12 @@ function mapOrderListRow(order, ctx = {}) {
     expanded = true,
     hasChildren = false,
     canReport = false,
+    productionLinkMode = 'order',
   } = ctx;
 
   const dispatchStatus = order.dispatchStatus || OrderDispatchStatus.IN_PROGRESS;
   const qty = sumOrderQty(order);
-  const customer = order.customer || '';
+  const customer = String(order.customer || '').trim();
   const dueDateLabel = showDeliveryDate && order.dueDate
     ? `交期 ${formatOrderDate(order.dueDate)}`
     : '';
@@ -292,7 +293,7 @@ function mapOrderListRow(order, ctx = {}) {
     showProductCustomTags: (productCustomTags || []).length > 0,
     placeholderIconSrc: '/assets/icons/clipboard-list.png',
     customer,
-    showCustomer: Boolean(customer),
+    showCustomer: productionLinkMode !== 'product' && Boolean(customer),
     dueDateLabel,
     showDueDate: Boolean(dueDateLabel),
     showSubRow: Boolean(customer || dueDateLabel),

@@ -422,13 +422,13 @@ Page({
         this._progressMap = new Map();
       }
 
-      const pageRows = this.mapRowsFromPlans(pagePlans);
+      const pageRows = this.mapRowsFromPlans(this._allPlans);
 
-      const loaded = append ? this.data.rows.length + pageRows.length : pageRows.length;
+      const loaded = pageRows.length;
       const hasMore = loaded < (result.total || 0);
 
       this.setData({
-        rows: append ? this.data.rows.concat(pageRows) : pageRows,
+        rows: pageRows,
         page,
         total: result.total || 0,
         hasMore,

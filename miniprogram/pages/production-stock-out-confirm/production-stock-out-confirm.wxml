@@ -1,0 +1,76 @@
+<view class="plan-shell">
+  <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-header__title">{{pageTitle}}</text>
+      <view class="plan-header__back plan-header__back--placeholder"></view>
+    </view>
+  </view>
+
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <view class="material-confirm-page">
+    <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
+
+    <block wx:else>
+      <view class="material-confirm-hero">
+        <text class="material-confirm-hero__label">{{modeLabel}}</text>
+        <view class="material-confirm-hero__title">
+          <text wx:if="{{partnerLabel}}">{{partnerLabel}} · </text>
+          <text wx:if="{{orderNumber}}">{{orderNumber}} · </text>{{productName}}
+        </view>
+      </view>
+
+      <view class="material-confirm-wh">
+        <view class="material-confirm-wh__label">出库仓库</view>
+        <picker
+          mode="selector"
+          range="{{warehouseNames}}"
+          value="{{warehouseIndex}}"
+          bindchange="onWarehouseChange"
+        >
+          <view class="material-confirm-wh__picker">{{warehouseNames[warehouseIndex] || '请选择仓库'}}</view>
+        </picker>
+      </view>
+
+      <view wx:for="{{rows}}" wx:key="productId" class="material-row">
+        <text class="material-row__title">{{item.name}}</text>
+        <text wx:if="{{item.sku}}" class="material-row__meta">{{item.sku}}</text>
+        <text wx:if="{{item.maxQty !== undefined}}" class="material-row__hint">可退 {{item.maxQty}} {{item.unitName}}</text>
+        <view class="material-row__form">
+          <picker
+            wx:if="{{showBatchCol && item.needsBatch}}"
+            class="material-row__batch-picker-wrap"
+            mode="selector"
+            range="{{item.batchPickerRange}}"
+            value="{{item.batchIndex}}"
+            data-id="{{item.productId}}"
+            bindchange="onBatchChange"
+          >
+            <view class="material-row__batch-picker">
+              {{item.batchNo || item.batchPickerRange[item.batchIndex] || '选择批次'}}
+            </view>
+          </picker>
+          <view class="material-row__qty-wrap">
+            <input
+              class="material-row__qty-input"
+              type="digit"
+              value="{{item.quantity}}"
+              data-id="{{item.productId}}"
+              bindinput="onQtyInput"
+              placeholder="数量"
+            />
+            <text class="material-row__unit">{{item.unitName}}</text>
+          </view>
+        </view>
+      </view>
+    </block>
+  </view>
+
+  <view wx:if="{{!loading && rows.length}}" class="material-confirm-footer">
+    <view
+      class="material-confirm-submit {{mode === 'stock_return' ? 'material-confirm-submit--return' : ''}} {{submitting ? 'material-confirm-submit--disabled' : ''}}"
+      bindtap="onSubmitTap"
+    >确认{{modeLabel}}</view>
+  </view>
+</view>

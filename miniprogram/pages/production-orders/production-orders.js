@@ -119,17 +119,7 @@ function computeHeaderBlockHeight(nav) {
   return nav.statusBarHeight + nav.navBarHeight + toolsPx;
 }
 
-/** 图片下方标签列：客户等元信息（交期在标题行状态后展示） */
-function buildSideTags(row) {
-  const tags = [];
-  if (row.customer) {
-    tags.push({ id: 'customer', text: row.customer });
-  }
-  return tags.slice(0, 3);
-}
-
 function slimOrderListRow(row) {
-  const sideTags = buildSideTags(row);
   const productCustomTags = (row.productCustomTags || []).slice(0, 5).map((t) => ({
     id: t.id,
     label: t.label,
@@ -148,8 +138,8 @@ function slimOrderListRow(row) {
     productImageUrl: row.productImageUrl,
     showProductImage: row.showProductImage,
     placeholderIconSrc: row.placeholderIconSrc,
-    sideTags,
-    showSideTags: sideTags.length > 0,
+    customer: row.customer || '',
+    showCustomer: !!row.showCustomer,
     quantityText: row.quantityText,
     showQuantity: row.showQuantity,
     dispatchLabel: row.dispatchLabel,
@@ -159,6 +149,7 @@ function slimOrderListRow(row) {
     processChips: row.processChips,
     showProcessChips: row.showProcessChips,
     reworkOrderId: row.reworkOrderId,
+    productId: row.productId,
     depth: row.depth,
     blockType: row.blockType,
     productGroupLabel: row.productGroupLabel,
@@ -571,7 +562,13 @@ Page({
 
   onMaterialTap(e) {
     this.closeFilterPanel();
-    const { id } = e.currentTarget.dataset;
+    const { id, productId, blockType } = e.currentTarget.dataset;
+    if (this._productionLinkMode === 'product' && productId) {
+      wx.navigateTo({
+        url: `/pages/production-order-material/production-order-material?productId=${encodeURIComponent(productId)}`,
+      });
+      return;
+    }
     if (!id) return;
     wx.navigateTo({
       url: `/pages/production-order-material/production-order-material?orderId=${encodeURIComponent(id)}`,
@@ -683,6 +680,7 @@ Page({
           expanded,
           hasChildren: idx === 0 && hasChildren,
           canReport,
+          productionLinkMode: this._productionLinkMode || 'order',
         });
         out.push(slimOrderListRow({
           ...row,

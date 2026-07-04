@@ -1,0 +1,223 @@
+<view class="plan-shell">
+  <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-header__title">生产物料</text>
+      <view class="plan-header__back plan-header__back--placeholder"></view>
+    </view>
+
+    <view class="plan-header__tools">
+      <view class="plan-search">
+        <input
+          class="plan-search__input"
+          value="{{searchKeyword}}"
+          bindinput="onSearchInput"
+          placeholder="{{groupByPartner ? '工单 / 产品 / 物料 / 加工厂' : '工单 / 产品 / 物料'}}"
+          confirm-type="search"
+          placeholder-class="plan-search__ph"
+        />
+        <view wx:if="{{searchKeyword}}" class="plan-search__clear" bindtap="onSearchClear">×</view>
+      </view>
+      <view
+        wx:if="{{canViewFlow}}"
+        class="material-flow-btn"
+        bindtap="onFlowTap"
+      >
+        <image class="material-flow-btn__icon" src="/assets/icons/scroll-text.png" mode="aspectFit" />
+        <text class="material-flow-btn__label">流水</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <view class="material-stock-page">
+    <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
+    <empty-state wx:elif="{{!canViewList}}" text="无权限查看生产物料列表" />
+
+    <!-- 按委外加工厂分组 -->
+    <view wx:elif="{{groupByPartner && partnerGroups.length}}">
+      <view wx:for="{{partnerGroups}}" wx:key="partnerKey" class="material-partner-group">
+        <view class="material-partner-group__head {{item.isInternal ? 'material-partner-group__head--internal' : 'material-partner-group__head--partner'}}">
+          <text class="material-partner-group__label">{{item.partnerLabel}}</text>
+          <text class="material-partner-group__count">{{item.cardCount}} 项</text>
+        </view>
+
+        <view wx:for="{{item.cards}}" wx:for-item="card" wx:key="scopeKey" class="material-stock-card material-stock-card--nested">
+          <view class="material-stock-card__head">
+            <view class="material-stock-card__head-main">
+              <text wx:if="{{card.orderNumber}}" class="material-stock-card__order">{{card.orderNumber}}</text>
+              <view class="material-stock-card__product-line">
+                <text class="material-stock-card__title">{{card.productName}}</text>
+                <text wx:if="{{card.productSku}}" class="material-stock-card__sku">{{card.productSku}}</text>
+              </view>
+            </view>
+            <view class="material-stock-card__head-actions">
+              <block wx:if="{{card.selecting}}">
+                <text class="material-stock-select-count">已选 {{card.selectedCount}}</text>
+                <view
+                  class="material-stock-action material-stock-action--primary"
+                  bindtap="onConfirmSelectTap"
+                  data-scope-key="{{card.scopeKey}}"
+                  data-partner-key="{{card.partnerKey}}"
+                >确认</view>
+                <view
+                  class="material-stock-action material-stock-action--muted"
+                  bindtap="onCancelSelectTap"
+                  data-scope-key="{{card.scopeKey}}"
+                  data-partner-key="{{card.partnerKey}}"
+                >取消</view>
+              </block>
+              <block wx:else>
+                <view
+                  wx:if="{{canIssue}}"
+                  class="material-stock-action"
+                  bindtap="onStartSelectTap"
+                  data-scope-key="{{card.scopeKey}}"
+                  data-partner-key="{{card.partnerKey}}"
+                  data-mode="stock_out"
+                >领料</view>
+                <view
+                  wx:if="{{canReturn}}"
+                  class="material-stock-action material-stock-action--danger"
+                  bindtap="onStartSelectTap"
+                  data-scope-key="{{card.scopeKey}}"
+                  data-partner-key="{{card.partnerKey}}"
+                  data-mode="stock_return"
+                >退料</view>
+              </block>
+            </view>
+          </view>
+
+          <view class="mat-table {{card.selecting ? 'mat-table--selecting' : ''}}">
+            <view class="mat-table__thead">
+              <view wx:if="{{card.selecting}}" class="mat-table__th mat-table__th--check"></view>
+              <view class="mat-table__th mat-table__th--name">物料</view>
+              <view class="mat-table__th mat-table__th--num">领料(+)</view>
+              <view class="mat-table__th mat-table__th--num">退料(-)</view>
+              <view class="mat-table__th mat-table__th--num">净领用</view>
+              <view class="mat-table__th mat-table__th--num">报工耗材</view>
+              <view class="mat-table__th mat-table__th--num mat-table__th--surplus">结余</view>
+            </view>
+
+            <view
+              wx:for="{{card.materialRows}}"
+              wx:for-item="mat"
+              wx:key="productId"
+              class="mat-table__tr {{card.selecting ? 'mat-table__tr--selecting' : ''}}"
+              bindtap="onMaterialRowTap"
+              data-scope-key="{{card.scopeKey}}"
+              data-partner-key="{{card.partnerKey}}"
+              data-product-id="{{mat.productId}}"
+            >
+              <view wx:if="{{card.selecting}}" class="mat-table__td mat-table__td--check">
+                <checkbox checked="{{mat.selected}}" color="#2F6BFF" />
+              </view>
+              <view class="mat-table__td mat-table__td--name">
+                <text class="mat-table__name">{{mat.name}}</text>
+                <text wx:if="{{mat.sku}}" class="mat-table__sku">{{mat.sku}}</text>
+              </view>
+              <view class="mat-table__td mat-table__td--num">{{mat.issueText}}</view>
+              <view class="mat-table__td mat-table__td--num">{{mat.returnText}}</view>
+              <view class="mat-table__td mat-table__td--num">{{mat.netText}}</view>
+              <view class="mat-table__td mat-table__td--num">{{mat.reportCostText}}</view>
+              <view class="mat-table__td mat-table__td--num mat-table__td--surplus">{{mat.surplusText}}</view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view wx:if="{{hasMore}}" class="material-stock-load-more">上拉加载更多</view>
+    </view>
+
+    <!-- 默认平铺列表 -->
+    <view wx:elif="{{cards.length}}">
+      <view wx:for="{{cards}}" wx:key="scopeKey" class="material-stock-card">
+        <view class="material-stock-card__head">
+          <view class="material-stock-card__head-main">
+            <text wx:if="{{item.orderNumber}}" class="material-stock-card__order">{{item.orderNumber}}</text>
+            <view class="material-stock-card__product-line">
+              <text class="material-stock-card__title">{{item.productName}}</text>
+              <text wx:if="{{item.productSku}}" class="material-stock-card__sku">{{item.productSku}}</text>
+            </view>
+          </view>
+          <view class="material-stock-card__head-actions">
+            <block wx:if="{{item.selecting}}">
+              <text class="material-stock-select-count">已选 {{item.selectedCount}}</text>
+              <view
+                class="material-stock-action material-stock-action--primary"
+                bindtap="onConfirmSelectTap"
+                data-scope-key="{{item.scopeKey}}"
+                data-partner-key="{{item.partnerKey}}"
+              >确认</view>
+              <view
+                class="material-stock-action material-stock-action--muted"
+                bindtap="onCancelSelectTap"
+                data-scope-key="{{item.scopeKey}}"
+                data-partner-key="{{item.partnerKey}}"
+              >取消</view>
+            </block>
+            <block wx:else>
+              <view
+                wx:if="{{canIssue}}"
+                class="material-stock-action"
+                bindtap="onStartSelectTap"
+                data-scope-key="{{item.scopeKey}}"
+                data-partner-key="{{item.partnerKey}}"
+                data-mode="stock_out"
+              >领料</view>
+              <view
+                wx:if="{{canReturn}}"
+                class="material-stock-action material-stock-action--danger"
+                bindtap="onStartSelectTap"
+                data-scope-key="{{item.scopeKey}}"
+                data-partner-key="{{item.partnerKey}}"
+                data-mode="stock_return"
+              >退料</view>
+            </block>
+          </view>
+        </view>
+
+        <view class="mat-table {{item.selecting ? 'mat-table--selecting' : ''}}">
+          <view class="mat-table__thead">
+            <view wx:if="{{item.selecting}}" class="mat-table__th mat-table__th--check"></view>
+            <view class="mat-table__th mat-table__th--name">物料</view>
+            <view class="mat-table__th mat-table__th--num">领料(+)</view>
+            <view class="mat-table__th mat-table__th--num">退料(-)</view>
+            <view class="mat-table__th mat-table__th--num">净领用</view>
+            <view class="mat-table__th mat-table__th--num">报工耗材</view>
+            <view class="mat-table__th mat-table__th--num mat-table__th--surplus">结余</view>
+          </view>
+
+          <view
+            wx:for="{{item.materialRows}}"
+            wx:for-item="mat"
+            wx:key="productId"
+            class="mat-table__tr {{item.selecting ? 'mat-table__tr--selecting' : ''}}"
+            bindtap="onMaterialRowTap"
+            data-scope-key="{{item.scopeKey}}"
+            data-partner-key="{{item.partnerKey}}"
+            data-product-id="{{mat.productId}}"
+          >
+            <view wx:if="{{item.selecting}}" class="mat-table__td mat-table__td--check">
+              <checkbox checked="{{mat.selected}}" color="#2F6BFF" />
+            </view>
+            <view class="mat-table__td mat-table__td--name">
+              <text class="mat-table__name">{{mat.name}}</text>
+              <text wx:if="{{mat.sku}}" class="mat-table__sku">{{mat.sku}}</text>
+            </view>
+            <view class="mat-table__td mat-table__td--num">{{mat.issueText}}</view>
+            <view class="mat-table__td mat-table__td--num">{{mat.returnText}}</view>
+            <view class="mat-table__td mat-table__td--num">{{mat.netText}}</view>
+            <view class="mat-table__td mat-table__td--num">{{mat.reportCostText}}</view>
+            <view class="mat-table__td mat-table__td--num mat-table__td--surplus">{{mat.surplusText}}</view>
+          </view>
+        </view>
+      </view>
+
+      <view wx:if="{{hasMore}}" class="material-stock-load-more">上拉加载更多</view>
+    </view>
+
+    <empty-state wx:else text="{{emptyText}}" />
+  </view>
+</view>

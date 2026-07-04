@@ -1,0 +1,54 @@
+@import '../production-order-stock-in-detail/production-order-stock-in-detail.wxss';
+
+.order-detail-summary__value--danger {
+  color: #ff4d4f;
+}
+
+.material-detail-type {
+  font-size: 22rpx;
+  font-weight: 600;
+  padding: 6rpx 14rpx;
+  border-radius: 8rpx;
+  background: #f0f5ff;
+  color: var(--color-primary);
+}
+
+.material-detail-type--return {
+  background: #fff1f0;
+  color: #ff4d4f;
+}
+
+.material-detail-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid var(--color-border-light);
+}
+
+.material-detail-line:last-child {
+  border-bottom: none;
+}
+
+.material-detail-line__name {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.material-detail-line__sku {
+  display: block;
+  margin-top: 4rpx;
+  font-size: 22rpx;
+  color: var(--color-text-secondary);
+}
+
+.material-detail-line__qty {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.material-detail-line__qty--return {
+  color: #ff4d4f;
+}
