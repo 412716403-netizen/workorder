@@ -313,4 +313,5 @@
   <navigator url="/pages/production-order-report-history/production-order-report-history" style="display:none"></navigator>
   <navigator url="/pages/production-order-report-batch-detail/production-order-report-batch-detail" style="display:none"></navigator>
   <navigator url="/pages/production-order-pending-stock/production-order-pending-stock" style="display:none"></navigator>
+  <navigator url="/pages/production-rework-detail/production-rework-detail" style="display:none"></navigator>
 </view>

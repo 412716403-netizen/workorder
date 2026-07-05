@@ -19,7 +19,6 @@ const {
   listReportHistory,
 } = require('../../utils/orderApi.js');
 const { mapProductCustomTags } = require('../../utils/reportCustomDocField.js');
-const { buildScanSessionUrl } = require('../../utils/scanNav.js');
 const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
 const { computePendingStockCount, loadPendingStockRows, fetchAllOrdersPaginated } = require('../../utils/pendingStockBadge.js');
 const {
@@ -579,7 +578,9 @@ Page({
     this.closeFilterPanel();
     const { id } = e.currentTarget.dataset;
     if (!id) return;
-    wx.navigateTo({ url: buildScanSessionUrl({ type: 'rework' }) });
+    wx.navigateTo({
+      url: `/pages/production-rework-detail/production-rework-detail?reworkOrderId=${encodeURIComponent(id)}&source=orders`,
+    });
   },
 
   onToggleExpand(e) {

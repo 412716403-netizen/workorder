@@ -5,10 +5,20 @@
  * 产品名称 + 编号展示约定见 listProductNameSkuFields / listProductDisplayFields。
  */
 
-const { productNameSkuParts } = require('./productionPlans.js');
-
 /** 与工单中心列表 `productionOrders.js` 一致 */
 const DEFAULT_PRODUCT_PLACEHOLDER_ICON = '/assets/icons/clipboard-list.png';
+
+/** 产品名称 + 编号（与 productionPlans.productNameSkuParts 口径一致） */
+function productNameSkuParts(product) {
+  if (!product) return { name: '—', sku: '', showSku: false };
+  const name = product.name || product.sku || '—';
+  const sku = product.sku || '';
+  return {
+    name,
+    sku,
+    showSku: Boolean(sku && product.name),
+  };
+}
 
 /**
  * 产品名称 + 编号三件套（对齐报工流水 production-order-report-history）
@@ -78,6 +88,7 @@ function listProductThumbFromUrl(imageUrl, opts) {
 
 module.exports = {
   DEFAULT_PRODUCT_PLACEHOLDER_ICON,
+  productNameSkuParts,
   listProductNameSkuFields,
   listProductNameSkuFromMap,
   listProductDisplayFields,

@@ -89,6 +89,7 @@
                 wx:for="{{variantColumns}}"
                 wx:key="id"
                 class="partner-flow-table__th partner-flow-table__th--variant"
+                style="flex: 0 0 {{item.minWidth}}rpx; width: {{item.minWidth}}rpx; max-width: {{item.minWidth}}rpx;"
               >{{item.label}}</view>
             </view>
 
@@ -114,6 +115,7 @@
                   wx:for-item="cell"
                   wx:key="id"
                   class="partner-flow-table__td partner-flow-table__td--variant {{cell.isEmpty ? 'partner-flow-table__td--empty' : ''}}"
+                  style="flex: 0 0 {{cell.minWidth}}rpx; width: {{cell.minWidth}}rpx; max-width: {{cell.minWidth}}rpx;"
                 >{{cell.qtyText}}</view>
               </view>
 
@@ -131,6 +133,7 @@
                   wx:for-item="cell"
                   wx:key="id"
                   class="partner-flow-table__td partner-flow-table__td--variant {{cell.isEmpty ? 'partner-flow-table__td--empty' : ''}} {{cell.isNegative ? 'partner-flow-table__td--warn' : ''}}"
+                  style="flex: 0 0 {{cell.minWidth}}rpx; width: {{cell.minWidth}}rpx; max-width: {{cell.minWidth}}rpx;"
                 >{{cell.qtyText}}</view>
               </view>
             </block>

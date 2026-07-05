@@ -57,6 +57,7 @@
 .partner-flow-table__thead {
   background: rgba(248, 250, 252, 0.95);
   border-bottom: 1rpx solid var(--color-border);
+  align-items: stretch;
 }
 
 .partner-flow-table__tr {
@@ -126,12 +127,25 @@
 
 .partner-flow-table__th--variant,
 .partner-flow-table__td--variant {
-  width: 120rpx;
+  flex: 0 0 auto;
+  min-width: 136rpx;
+  padding: 20rpx 16rpx;
   text-align: right;
+}
+
+.partner-flow-table__th--variant {
+  text-align: right;
+  white-space: normal;
+  overflow: hidden;
+  text-overflow: clip;
+  word-break: keep-all;
+  line-height: 1.35;
 }
 
 .partner-flow-table__td--variant {
   font-weight: 600;
+  white-space: nowrap;
+  text-overflow: clip;
 }
 
 .partner-flow-table__td--empty {

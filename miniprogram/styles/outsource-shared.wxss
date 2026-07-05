@@ -13,9 +13,26 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-wrap: nowrap;
   gap: 4rpx;
   width: 100%;
+  min-width: 0;
   margin-bottom: 4rpx;
+}
+
+.order-process-chip--outsource .order-process-chip__meta-row .order-process-chip__meta {
+  width: auto;
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.order-process-scroll--compact .order-process-chip--outsource .order-process-chip__meta-row .order-process-chip__meta {
+  font-size: 18rpx;
+  letter-spacing: -0.5rpx;
 }
 
 .order-process-chip__detail {

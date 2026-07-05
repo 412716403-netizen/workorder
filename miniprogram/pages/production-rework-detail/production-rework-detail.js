@@ -72,6 +72,7 @@ Page({
     });
 
     this._reworkOrderId = options.reworkOrderId ? decodeURIComponent(options.reworkOrderId) : '';
+    this._source = options.source ? decodeURIComponent(options.source) : '';
     if (!this._reworkOrderId) {
       wx.showToast({ title: '缺少返工工单 ID', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 800);
@@ -106,7 +107,10 @@ Page({
       wx.reLaunch({ url: '/pages/tenant-select/tenant-select' });
       return;
     }
-    if (!hasPermission(ctx.permissions || [], 'production:rework_detail:allow')) {
+    if (
+      !hasPermission(ctx.permissions || [], 'production:rework_detail:allow')
+      && !(this._source === 'orders' && hasPermission(ctx.permissions || [], 'production:orders_rework:allow'))
+    ) {
       wx.showToast({ title: '无查看权限', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 800);
       return;

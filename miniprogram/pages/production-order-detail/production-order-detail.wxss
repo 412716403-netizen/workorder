@@ -1,4 +1,5 @@
 @import '../../pages/production-plan-detail/production-plan-detail.wxss';
+@import '../../styles/outsource-shared.wxss';
 
 .plan-detail-header__edit {
   width: auto;
@@ -203,4 +204,103 @@
 .order-detail-edit-bar__btn--primary {
   background: var(--color-primary);
   color: #fff;
+}
+
+.order-detail-section__hint {
+  display: block;
+  margin: -8rpx 0 16rpx;
+  font-size: 22rpx;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+.order-detail-empty {
+  padding: 48rpx 24rpx;
+  text-align: center;
+  font-size: 26rpx;
+  color: var(--color-text-secondary);
+}
+
+.order-detail-material-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.order-detail-material-scroll {
+  width: 100%;
+}
+
+.order-detail-material-table {
+  min-width: 680rpx;
+}
+
+.order-detail-material-table__head,
+.order-detail-material-table__row {
+  display: flex;
+  align-items: center;
+  padding: 0 16rpx;
+}
+
+.order-detail-material-table__head {
+  background: var(--color-bg-page);
+  border-bottom: 1rpx solid var(--color-border);
+}
+
+.order-detail-material-table__row {
+  border-bottom: 1rpx solid var(--color-border);
+}
+
+.order-detail-material-table__row:last-child {
+  border-bottom: none;
+}
+
+.order-detail-material-table__th,
+.order-detail-material-table__td {
+  padding: 18rpx 8rpx;
+  box-sizing: border-box;
+}
+
+.order-detail-material-table__th {
+  font-size: 20rpx;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+}
+
+.order-detail-material-table__td {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.order-detail-material-table__th--name,
+.order-detail-material-table__td--name {
+  flex: 1;
+  min-width: 180rpx;
+}
+
+.order-detail-material-table__th--num,
+.order-detail-material-table__td--num {
+  flex: 0 0 96rpx;
+  width: 96rpx;
+  text-align: right;
+}
+
+.order-detail-material-table__name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.order-detail-material-table__sku {
+  display: block;
+  margin-top: 4rpx;
+  font-size: 20rpx;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.order-detail-outsource-scroll {
+  margin-top: 0;
 }

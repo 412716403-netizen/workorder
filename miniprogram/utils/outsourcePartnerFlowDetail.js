@@ -221,30 +221,47 @@ function filterPartnerFlowDocRows(rows, opts) {
   });
 }
 
+function variantColumnMinWidthRpx(label) {
+  const text = String(label || '—');
+  let units = 0;
+  for (const ch of text) {
+    units += ch.charCodeAt(0) > 255 ? 1.1 : 0.55;
+  }
+  // 表头与数据列同宽；略放宽避免换行后撑破对齐
+  return Math.max(140, Math.ceil(units * 30 + 32));
+}
+
 function buildVariantColumns(variantIds, product, dictionaries) {
   return (variantIds || []).map((vid) => {
     const variant = ((product && product.variants) || []).find((v) => v.id === vid);
+    const label = variant
+      ? (variantLabel(variant, dictionaries) || variant.skuSuffix || vid)
+      : vid;
     return {
       id: vid,
-      label: variant ? (variantLabel(variant, dictionaries) || variant.skuSuffix || vid) : vid,
+      label,
+      minWidth: variantColumnMinWidthRpx(label),
     };
   });
 }
 
-function mapVariantCells(variantQty, variantIds) {
-  return (variantIds || []).map((vid) => {
+function mapVariantCells(variantQty, variantColumns) {
+  return (variantColumns || []).map((col) => {
+    const vid = col.id;
     const q = variantQty && variantQty[vid];
     const hasQty = q != null && Number(q) > 0;
     return {
       id: vid,
       qtyText: hasQty ? String(q) : '—',
       isEmpty: !hasQty,
+      minWidth: col.minWidth,
     };
   });
 }
 
-function mapSummaryVariantCells(byVariant, variantIds, warnNegative) {
-  return (variantIds || []).map((vid) => {
+function mapSummaryVariantCells(byVariant, variantColumns, warnNegative) {
+  return (variantColumns || []).map((col) => {
+    const vid = col.id;
     const q = (byVariant && byVariant[vid]) || 0;
     const isNegative = warnNegative && q < 0;
     return {
@@ -252,15 +269,16 @@ function mapSummaryVariantCells(byVariant, variantIds, warnNegative) {
       qtyText: q !== 0 ? String(q) : '—',
       isEmpty: q === 0,
       isNegative,
+      minWidth: col.minWidth,
     };
   });
 }
 
-function mapPartnerFlowDocRowsForUi(rows, variantIds) {
+function mapPartnerFlowDocRowsForUi(rows, variantColumns) {
   return (rows || []).map((row, index) => ({
     ...row,
     rowKey: `${row.docNo || '—'}|${index}`,
-    variantCells: mapVariantCells(row.variantQty, variantIds),
+    variantCells: mapVariantCells(row.variantQty, variantColumns),
   }));
 }
 
@@ -332,7 +350,7 @@ function buildPartnerDetailViewModel(params) {
 
   return {
     header: mapPartnerDetailHeader({ ...seed, productionLinkMode }, headerTotals),
-    rows: mapPartnerFlowDocRowsForUi(docRowsFiltered, variantColumnIds),
+    rows: mapPartnerFlowDocRowsForUi(docRowsFiltered, variantColumns),
     docCount: docRowsFiltered.length,
     showVariantCols,
     showDeliveryDateColumn: !!showDeliveryDateColumn,
@@ -342,20 +360,20 @@ function buildPartnerDetailViewModel(params) {
         label: '发出',
         total: filteredAgg.dispatchTotal,
         accentClass: 'partner-flow-table__summary--dispatch',
-        variantCells: mapSummaryVariantCells(filteredAgg.dispatchByVariant, variantColumnIds, false),
+        variantCells: mapSummaryVariantCells(filteredAgg.dispatchByVariant, variantColumns, false),
       },
       {
         label: '收回',
         total: filteredAgg.receiveTotal,
         accentClass: 'partner-flow-table__summary--receive',
-        variantCells: mapSummaryVariantCells(filteredAgg.receiveByVariant, variantColumnIds, false),
+        variantCells: mapSummaryVariantCells(filteredAgg.receiveByVariant, variantColumns, false),
       },
       {
         label: '剩余',
         total: filteredAgg.remainingTotal,
         accentClass: 'partner-flow-table__summary--remain',
         isNegative: filteredAgg.remainingTotal < 0,
-        variantCells: mapSummaryVariantCells(filteredAgg.remainingByVariant, variantColumnIds, true),
+        variantCells: mapSummaryVariantCells(filteredAgg.remainingByVariant, variantColumns, true),
       },
     ],
     hasAnyRows: docRowsAll.length > 0,

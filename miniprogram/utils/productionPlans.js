@@ -18,7 +18,7 @@ const {
   getProductUnitName,
   normalizePlanFormFieldConfigArray,
 } = require('./planFormCustomField.js');
-const { DEFAULT_PRODUCT_PLACEHOLDER_ICON } = require('./listProductThumb.js');
+const { DEFAULT_PRODUCT_PLACEHOLDER_ICON, productNameSkuParts } = require('./listProductThumb.js');
 
 function pad(n) {
   return String(n).padStart(2, '0');
@@ -205,18 +205,6 @@ function planListPlaceholderIcon(plan) {
 function planListPlaceholderIconSrc(plan) {
   const name = planListPlaceholderIcon(plan);
   return `/assets/icons/${name}.png`;
-}
-
-/** 产品名称 + 编号（列表/详情/已选展示） */
-function productNameSkuParts(product) {
-  if (!product) return { name: '—', sku: '', showSku: false };
-  const name = product.name || product.sku || '—';
-  const sku = product.sku || '';
-  return {
-    name,
-    sku,
-    showSku: Boolean(sku && product.name),
-  };
 }
 
 function formatProductLabelWithSku(product) {

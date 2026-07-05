@@ -19,10 +19,37 @@ const {
   fetchProductsAll,
   fetchCategoriesAll,
   fetchProductionRecords,
+  fetchBomsAll,
+  fetchNodesAll,
+  listProductProgressAll,
   getPlan,
+  listOrdersPaginated,
 } = require('../../utils/orderApi.js');
+const {
+  buildOrderFamilyIds,
+  buildOrderDetailMaterialRows,
+  buildOrderDetailOutsourceCards,
+} = require('../../utils/orderDetailExtras.js');
+const { buildMaterialIndexes } = require('../../utils/materialStockPanel.js');
 const { fetchDictionaries } = require('../../utils/planApi.js');
 const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
+
+async function fetchOrdersByProductId(productId) {
+  const pageSize = 200;
+  let page = 1;
+  let total = Infinity;
+  const all = [];
+  while (all.length < total) {
+    const result = await listOrdersPaginated({ page, pageSize, productId });
+    const batch = result.data || [];
+    all.push(...batch);
+    total = typeof result.total === 'number' ? result.total : all.length;
+    if (!batch.length || batch.length < pageSize) break;
+    page += 1;
+    if (page > 40) break;
+  }
+  return all;
+}
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
@@ -75,6 +102,15 @@ Page({
     sections: [],
     reportSummaryRows: [],
     showReportSummary: false,
+    showMaterialSection: false,
+    materialRows: [],
+    materialEmptyText: '',
+    showMaterialHint: false,
+    showOutsourceSection: false,
+    outsourceCards: [],
+    canViewOutsourceFlow: false,
+    canViewOutsourcePartnerDetail: false,
+    showPartnerFlowDetailOnList: false,
     editing: false,
     editForm: { customer: '', dueDate: '', startDate: '' },
     canEdit: false,
@@ -229,6 +265,61 @@ Page({
     });
   },
 
+  onOutsourceChipTap(e) {
+    this.navigateOutsourceFromChip(e.currentTarget.dataset);
+  },
+
+  onOutsourceDetailTap(e) {
+    this.navigateOutsourceFromChip(e.currentTarget.dataset);
+  },
+
+  navigateOutsourceFromChip(d) {
+    const {
+      orderId,
+      productId,
+      nodeId,
+      nodeName,
+      partner,
+      productName,
+      orderNumber,
+    } = d || {};
+    if (!partner || !nodeId) return;
+
+    if (this.data.showPartnerFlowDetailOnList) {
+      if (!this.data.canViewOutsourcePartnerDetail) {
+        wx.showToast({ title: '无查看权限', icon: 'none' });
+        return;
+      }
+      const q = [
+        `productId=${encodeURIComponent(productId || '')}`,
+        `nodeId=${encodeURIComponent(nodeId || '')}`,
+        `partner=${encodeURIComponent(partner || '')}`,
+        `nodeName=${encodeURIComponent(nodeName || '')}`,
+        `productName=${encodeURIComponent(productName || '')}`,
+        `orderNumber=${encodeURIComponent(orderNumber || '')}`,
+      ];
+      if (orderId) q.push(`orderId=${encodeURIComponent(orderId)}`);
+      wx.navigateTo({
+        url: `/pages/production-outsource-partner-detail/production-outsource-partner-detail?${q.join('&')}`,
+      });
+      return;
+    }
+
+    if (!this.data.canViewOutsourceFlow) {
+      wx.showToast({ title: '无查看权限', icon: 'none' });
+      return;
+    }
+    const q = [
+      `orderKeyword=${encodeURIComponent(orderNumber || '')}`,
+      `productKeyword=${encodeURIComponent(productName || '')}`,
+      `partnerKeyword=${encodeURIComponent(partner || '')}`,
+      `milestoneNodeId=${encodeURIComponent(nodeId || '')}`,
+    ];
+    wx.navigateTo({
+      url: `/pages/production-outsource-flow/production-outsource-flow?${q.join('&')}`,
+    });
+  },
+
   async loadDetail() {
     const ctx = readTenantCtx();
     if (!ctx || !ctx.tenantId) {
@@ -243,11 +334,15 @@ Page({
     const canEdit = hasPermission(perms, 'production:orders_detail:edit');
     const canViewReportHistory = hasPermission(perms, 'production:orders_report_records:view');
     const canViewPendingStock = hasPrefixPermission(perms, 'production:orders_pending_stock_in');
+    const canViewOutsourceFlow = hasPermission(perms, 'production:outsource_records:view');
+    const canViewOutsourcePartnerDetail = hasPermission(perms, 'production:outsource_list:allow');
 
     this.setData({
       canEdit,
       canViewReportHistory,
       canViewPendingStock,
+      canViewOutsourceFlow,
+      canViewOutsourcePartnerDetail,
       loading: true,
     });
 
@@ -268,7 +363,7 @@ Page({
 
       this.setData({ title: order.orderNumber || '工单详情' });
 
-      const [productsRaw, categoriesRaw, plan, prodRecordsRaw] = await Promise.all([
+      const [productsRaw, categoriesRaw, plan, prodRecordsRaw, relatedOrders, bomsRaw, nodesRaw, pmpRaw] = await Promise.all([
         fetchProductsAll(),
         fetchCategoriesAll(),
         order.planOrderId ? getPlan(order.planOrderId) : Promise.resolve(null),
@@ -276,20 +371,68 @@ Page({
           types: 'STOCK_IN',
           orderIds: this._orderId,
         }),
+        order.productId ? fetchOrdersByProductId(order.productId) : Promise.resolve([order]),
+        fetchBomsAll(),
+        fetchNodesAll(),
+        this._productionLinkMode === 'product' ? listProductProgressAll() : Promise.resolve([]),
       ]);
+      if (seq !== this._loadSeq) return;
+
+      const orders = (relatedOrders && relatedOrders.length) ? relatedOrders : [order];
+      const familyOrderIds = buildOrderFamilyIds(order, orders, buildMaterialIndexes(productsRaw, bomsRaw, orders));
+      const stockRecordsRaw = await fetchProductionRecords({
+        types: 'STOCK_OUT,STOCK_RETURN',
+        orderIds: familyOrderIds.join(','),
+        ...(this._productionLinkMode === 'product' && order.productId
+          ? { sourceProductIds: order.productId }
+          : {}),
+      });
+      const outsourceRecordsRaw = await fetchProductionRecords({
+        types: 'OUTSOURCE',
+        orderIds: this._orderId,
+      });
       if (seq !== this._loadSeq) return;
 
       const products = normalizeMasterList(productsRaw);
       const categories = normalizeMasterList(categoriesRaw);
+      const nodes = normalizeMasterList(nodesRaw);
+      const boms = normalizeMasterList(bomsRaw);
+      const productMilestoneProgresses = Array.isArray(pmpRaw) ? pmpRaw : [];
       const product = products.find((p) => p.id === order.productId) || null;
       const category = product ? categories.find((c) => c.id === product.categoryId) : null;
       const prodRecords = Array.isArray(prodRecordsRaw)
         ? prodRecordsRaw
         : (prodRecordsRaw && prodRecordsRaw.data) || [];
+      const stockRecords = Array.isArray(stockRecordsRaw)
+        ? stockRecordsRaw
+        : (stockRecordsRaw && stockRecordsRaw.data) || [];
+      const outsourceRecords = Array.isArray(outsourceRecordsRaw)
+        ? outsourceRecordsRaw
+        : (outsourceRecordsRaw && outsourceRecordsRaw.data) || [];
+      const outsourceFormSettings = (config && config.outsourceFormSettings) || {};
 
       const unitName = getProductUnitName(product, dictionaries);
       const reportSummaryRows = buildOrderReportSummaryRows(order, prodRecords, unitName);
       const summaryStats = buildSummaryStats(order, product, dictionaries, prodRecords);
+
+      const { rows: materialRows, emptyText: materialEmptyText } = buildOrderDetailMaterialRows({
+        order,
+        orders,
+        products,
+        boms,
+        nodes,
+        stockRecords,
+        productMilestoneProgresses,
+        productionLinkMode: this._productionLinkMode,
+      });
+      const outsourceCards = buildOrderDetailOutsourceCards({
+        order,
+        records: outsourceRecords,
+        hideZeroPendingPartnerOnList: outsourceFormSettings.hideZeroPendingPartnerOnList === true,
+        productName: (product && product.name) || order.productName || '',
+        orderNumber: order.orderNumber || '',
+        productionLinkMode: this._productionLinkMode,
+      });
 
       const view = mapOrderDetailView(order, {
         product,
@@ -314,6 +457,13 @@ Page({
         sections,
         reportSummaryRows,
         showReportSummary: reportSummaryRows.length > 0,
+        showMaterialSection: true,
+        materialRows,
+        materialEmptyText,
+        showMaterialHint: this._productionLinkMode === 'product',
+        showOutsourceSection: outsourceCards.length > 0,
+        outsourceCards,
+        showPartnerFlowDetailOnList: outsourceFormSettings.showPartnerFlowDetailOnList === true,
       });
       this.updateScrollHeight(this.data.editing);
     } catch (err) {
@@ -325,6 +475,10 @@ Page({
         summaryStats: null,
         reportSummaryRows: [],
         showReportSummary: false,
+        showMaterialSection: false,
+        materialRows: [],
+        showOutsourceSection: false,
+        outsourceCards: [],
       });
       wx.showToast({ title: (err && err.message) || '加载失败', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 1000);
