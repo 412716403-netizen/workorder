@@ -455,7 +455,7 @@ Page({
       }
       wx.hideLoading();
       afterSaveReturnToList({
-        listUrl: LIST_ROUTES.OUTSOURCE_HUB,
+        listUrl: LIST_ROUTES.OUTSOURCE_RECEIVE,
         toastTitle: '收回成功',
       });
     } catch (submitErr) {

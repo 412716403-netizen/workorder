@@ -3,6 +3,7 @@
  */
 
 const { OrderDispatchStatus } = require('../config/productionOrders.js');
+const { listProductNameSkuFields } = require('./listProductThumb.js');
 const {
   computeAllParentMaterialStats,
   computeAllProductMaterialStats,
@@ -105,6 +106,7 @@ function buildOrderScopeCard(scopeKey, materials, idx, partnerKey) {
   const order = idx.ordersById.get(scopeKey);
   if (!order) return null;
   const product = idx.productsById.get(order.productId);
+  const nameSku = listProductNameSkuFields(product, { name: order.productName, sku: order.sku });
   return {
     partnerKey: partnerKey || INTERNAL_PARTNER_KEY,
     scopeKey: order.id,
@@ -112,8 +114,9 @@ function buildOrderScopeCard(scopeKey, materials, idx, partnerKey) {
     orderId: order.id,
     sourceProductId: order.productId || '',
     orderNumber: order.orderNumber || '',
-    productName: (product && product.name) || order.productName || '—',
-    productSku: (product && product.sku) || order.sku || '',
+    productName: nameSku.productName,
+    productSku: nameSku.productSku,
+    showProductSku: nameSku.showProductSku,
     customerName: order.customerName || '',
     materialRows: materials.map((m) => matRowToUiRow(m, idx.productsById)),
   };
@@ -121,6 +124,7 @@ function buildOrderScopeCard(scopeKey, materials, idx, partnerKey) {
 
 function buildProductScopeCard(scopeKey, materials, idx, partnerKey) {
   const product = idx.productsById.get(scopeKey);
+  const nameSku = listProductNameSkuFields(product, { name: scopeKey });
   return {
     partnerKey: partnerKey || INTERNAL_PARTNER_KEY,
     scopeKey,
@@ -128,8 +132,9 @@ function buildProductScopeCard(scopeKey, materials, idx, partnerKey) {
     orderId: '',
     sourceProductId: scopeKey,
     orderNumber: '',
-    productName: (product && product.name) || scopeKey,
-    productSku: (product && product.sku) || '',
+    productName: nameSku.productName,
+    productSku: nameSku.productSku,
+    showProductSku: nameSku.showProductSku,
     customerName: '',
     materialRows: materials.map((m) => matRowToUiRow(m, idx.productsById)),
   };

@@ -18,7 +18,10 @@ const {
   buildBomMaterialsForProductGroup,
   buildIssuedMapForOrder,
   buildIssuedMapForProduct,
+  buildReworkIssuedMapForOrder,
+  buildReworkIssuedMapForProduct,
   buildMaterialIssueUiRows,
+  buildReworkMaterialIssueUiRows,
 } = require('../../utils/orderMaterialLite.js');
 const {
   decorateRowsWithBatchFlags,
@@ -75,7 +78,22 @@ function applyPageLabels(page, opts) {
     isReturn,
     isOutsource,
     isMaterialCenter,
+    isRework,
   } = opts;
+  if (isRework) {
+    page.setData({
+      isReturnMode: false,
+      returnLayout: '',
+      warehouseLabel: '出库仓库',
+      pageTitle: '返工领料',
+      progressColLabel: '累计领料',
+      inputColLabel: '本次领料',
+      submitLabel: '确认返工领料',
+      emptyText: '该工单未配置 BOM 物料，无法进行返工领料',
+      showPartner: false,
+    });
+    return;
+  }
   if (isReturn) {
     page.setData({
       isReturnMode: true,
@@ -149,6 +167,7 @@ Page({
     const perms = (ctx && ctx.permissions) || [];
     this._source = options.source ? decodeURIComponent(options.source) : '';
     this._isOutsource = this._source === 'outsource';
+    this._isRework = this._source === 'rework';
     this._isMaterialCenter = this._source === 'material_center';
     this._isReturn = options.mode === 'return';
     this._partnerKey = options.partner ? decodeURIComponent(options.partner) : '';
@@ -178,6 +197,8 @@ Page({
       }
     } else if (this._isOutsource) {
       canMaterial = hasPermission(perms, 'production:outsource_material:allow');
+    } else if (this._isRework) {
+      canMaterial = hasPermission(perms, 'production:rework_material:allow');
     } else {
       canMaterial = hasPermission(perms, 'production:orders_material:allow')
         || hasPermission(perms, 'production:material_issue:allow');
@@ -193,6 +214,7 @@ Page({
       isReturn: this._isReturn,
       isOutsource: this._isOutsource,
       isMaterialCenter: this._isMaterialCenter,
+      isRework: this._isRework,
     });
 
     this._orderId = options.orderId ? decodeURIComponent(options.orderId) : '';
@@ -452,6 +474,8 @@ Page({
           sourceProductId: this._productId,
           orderIds,
         }, this._partnerKey);
+      } else if (this._isRework) {
+        issuedMap = buildReworkIssuedMapForProduct(records, groupOrders, this._productId);
       } else {
         issuedMap = buildIssuedMapForProduct(records, groupOrders, this._productId);
       }
@@ -481,13 +505,17 @@ Page({
           sourceProductId: order.productId || '',
           orderIds,
         }, this._partnerKey);
+      } else if (this._isRework) {
+        issuedMap = buildReworkIssuedMapForOrder(records, order.id);
       } else {
         issuedMap = buildIssuedMapForOrder(records, order.id);
       }
       this._sourceProductId = order.productId || '';
     }
 
-    let rows = buildMaterialIssueUiRows(bomMaterials, issuedMap);
+    let rows = this._isRework
+      ? buildReworkMaterialIssueUiRows(bomMaterials, issuedMap)
+      : buildMaterialIssueUiRows(bomMaterials, issuedMap);
     rows = decorateRowsWithBatchFlags(rows, this._productsById, this._categoryById);
     const showBatchCol = rowsNeedBatchColumn(rows, this._productsById, this._categoryById);
     rows = await attachBatchOptionsToRows(
@@ -687,6 +715,7 @@ Page({
       sourceProductId: this._scopeMode === 'product' ? (this._sourceProductId || undefined) : undefined,
       warehouse,
       operator: readOperatorDisplayName(),
+      reason: this._isRework ? '来自于返工' : undefined,
       partner: (() => {
         if (this._isOutsource && this._partnerKey) return this._partnerKey;
         if (this._isMaterialCenter && this._partnerKey && this._partnerKey !== INTERNAL_PARTNER_KEY) {
@@ -706,6 +735,9 @@ Page({
       if (this._isOutsource) {
         listUrl = LIST_ROUTES.OUTSOURCE_HUB;
         toastTitle = this._isReturn ? '外协退料成功' : '外协领料成功';
+      } else if (this._isRework) {
+        listUrl = LIST_ROUTES.REWORK_HUB;
+        toastTitle = '返工领料成功';
       } else if (this._isMaterialCenter) {
         listUrl = LIST_ROUTES.STOCK_OUT;
         toastTitle = this._isReturn ? '退料成功' : '领料成功';

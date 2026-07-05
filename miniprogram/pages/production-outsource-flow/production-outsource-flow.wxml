@@ -99,7 +99,10 @@
               </view>
               <text class="outsource-flow-row__qty">{{item.totalQtyText}}</text>
             </view>
-            <view class="outsource-flow-row__product">{{item.productName}}</view>
+            <view class="outsource-flow-row__product">
+              <text class="outsource-flow-row__product-name">{{item.productName}}</text>
+              <text wx:if="{{item.showProductSku}}" class="outsource-flow-row__sku">{{item.productSku}}</text>
+            </view>
           </view>
         </view>
       </view>

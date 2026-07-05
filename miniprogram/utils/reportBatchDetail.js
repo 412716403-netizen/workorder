@@ -4,7 +4,7 @@
 const { formatReportTime, productMetaFromMap } = require('./orderReportHistory.js');
 const { productHasColorSizeMatrix, variantLabel, normalizeAppDictionaries } = require('./productionPlans.js');
 const { buildVariantMatrixUiModel } = require('./variantQtyMatrix.js');
-const { DEFAULT_PRODUCT_PLACEHOLDER_ICON } = require('./listProductThumb.js');
+const { DEFAULT_PRODUCT_PLACEHOLDER_ICON, listProductNameSkuFields } = require('./listProductThumb.js');
 
 function isOutsourceReceiveReport(r) {
   const customData = r.customData || {};
@@ -230,6 +230,10 @@ function buildBatchDetailView(batch, ctx) {
   const node = nodes.find((n) => n.id === templateId);
   const milestoneName = first.milestoneName || (node && node.name) || '工序';
   const nodeUsesWeight = Boolean(node && node.enableWeightOnReport);
+  const nameSku = listProductNameSkuFields(product, {
+    name: first.productName,
+    sku: first.sku,
+  });
 
   const qtyMap = {};
   batch.rows.forEach((row) => {
@@ -264,7 +268,9 @@ function buildBatchDetailView(batch, ctx) {
       milestoneId: r.milestoneId || '',
       progressId: r.progressId || '',
       source: row.source,
-      productName: r.productName || (product && product.name) || '—',
+      productName: nameSku.productName,
+      productSku: nameSku.productSku,
+      showProductSku: nameSku.showProductSku,
       orderNumber: r.orderNumber || '',
       showOrderNumber: batch.source === 'order',
       variantLabel: vLabel,
@@ -303,7 +309,9 @@ function buildBatchDetailView(batch, ctx) {
     isOutsourceReceive: isOutsource,
     orderNumber: batch.source === 'order' ? (first.orderNumber || '') : '',
     showOrderNumber: batch.source === 'order',
-    productName: first.productName || (product && product.name) || '—',
+    productName: nameSku.productName,
+    productSku: nameSku.productSku,
+    showProductSku: nameSku.showProductSku,
     reportNo: batch.reportNo || '',
     showReportNo: Boolean(batch.reportNo),
     milestoneName,

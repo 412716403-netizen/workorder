@@ -1,0 +1,85 @@
+<view class="plan-shell">
+  <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-header__title">待处理不良</text>
+      <view class="plan-header__back plan-header__back--placeholder"></view>
+    </view>
+    <view class="plan-header__tools">
+      <view class="plan-search">
+        <input
+          class="plan-search__input"
+          value="{{searchKeyword}}"
+          bindinput="onSearchInput"
+          placeholder="工单 / 产品"
+          placeholder-class="plan-search__ph"
+        />
+        <view wx:if="{{searchKeyword}}" class="plan-search__clear" bindtap="onSearchClear">×</view>
+      </view>
+      <view
+        class="plan-tool-btn {{filterActive ? 'plan-tool-btn--active' : ''}}"
+        bindtap="onFilterTap"
+      >
+        <image class="plan-tool-btn__icon" src="/assets/icons/list-filter.png" mode="aspectFit" />
+      </view>
+    </view>
+  </view>
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <view class="rework-pending-body">
+    <view wx:if="{{showFilterPanel}}" class="plan-filter-panel">
+      <view class="plan-filter-panel__row">
+        <text class="plan-filter-panel__label">工序</text>
+        <picker
+          mode="selector"
+          range="{{milestoneOptions}}"
+          range-key="name"
+          value="{{draftMilestoneFilterIndex}}"
+          bindchange="onDraftMilestoneChange"
+        >
+          <view class="plan-filter-chip plan-filter-chip--active">{{draftMilestoneFilterLabel}}</view>
+        </picker>
+      </view>
+      <view class="plan-filter-panel__foot">
+        <view class="plan-filter-reset" bindtap="onFilterReset">重置</view>
+        <view class="plan-filter-apply" bindtap="onFilterApply">确定</view>
+      </view>
+    </view>
+    <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
+    <view wx:elif="{{rows.length}}" class="plan-list-wrap rework-pending-wrap">
+      <view
+        wx:for="{{rows}}"
+        wx:key="rowKey"
+        class="rework-pending-row"
+        bindtap="onRowTap"
+        data-key="{{item.rowKey}}"
+      >
+        <view class="rework-pending-row__thumb">
+          <image
+            wx:if="{{item.showProductImage}}"
+            class="rework-pending-row__img"
+            src="{{item.productImageUrl}}"
+            mode="aspectFill"
+            data-key="{{item.rowKey}}"
+            binderror="onProductImageError"
+          />
+          <view wx:else class="rework-pending-row__img rework-pending-row__img--placeholder">
+            <image class="rework-pending-row__placeholder-icon" src="{{item.placeholderIconSrc}}" mode="aspectFit" />
+          </view>
+        </view>
+        <view class="rework-pending-row__body">
+          <text class="rework-pending-row__subtitle">{{item.subtitleLine}}</text>
+          <view class="rework-pending-row__highlight">
+            <text class="rework-pending-row__milestone">{{item.milestoneName}}</text>
+            <view class="rework-pending-row__qty-wrap">
+              <text class="rework-pending-row__qty-label">待处理</text>
+              <text class="rework-pending-row__qty">{{item.pendingQtyText}}</text>
+            </view>
+          </view>
+        </view>
+        <text class="rework-pending-row__chevron">›</text>
+      </view>
+    </view>
+    <view wx:else class="plan-list-empty">{{emptyText}}</view>
+  </view>
+</view>

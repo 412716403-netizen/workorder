@@ -4,7 +4,7 @@
 
 const { formatReportTime } = require('./orderReportHistory.js');
 const { flowRecordsEarliestMs } = require('./flowDocSortLite.js');
-const { listProductThumbFromProduct } = require('./listProductThumb.js');
+const { listProductThumbFromProduct, listProductNameSkuFields } = require('./listProductThumb.js');
 const { productHasColorSizeMatrix, variantLabel } = require('./productionPlans.js');
 const { buildVariantMatrixUiModel } = require('./variantQtyMatrix.js');
 const { getProductUnitName } = require('./planFormCustomField.js');
@@ -169,6 +169,10 @@ function buildOutsourceFlowDetailView(params) {
     ? `${milestoneLabel} · ${partnerLabel}`
     : milestoneLabel;
   const thumb = listProductThumbFromProduct(product);
+  const nameSku = listProductNameSkuFields(product, {
+    name: first.productName || (order && order.productName),
+    sku: first.sku || (order && order.sku),
+  });
 
   const typeLabel = dispatchRows.length && receiveRows.length
     ? '发出、收回'
@@ -186,7 +190,9 @@ function buildOutsourceFlowDetailView(params) {
     milestonePartnerLine,
     orderNumber: (order && order.orderNumber) || first.orderNumber || '',
     showOrderNumber: !isProductMode && !!((order && order.orderNumber) || first.orderNumber),
-    productName: (product && product.name) || first.productName || '—',
+    productName: nameSku.productName,
+    productSku: nameSku.productSku,
+    showProductSku: nameSku.showProductSku,
     unitName,
     dispatchSection,
     receiveSection,

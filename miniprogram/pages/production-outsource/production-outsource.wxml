@@ -94,7 +94,7 @@
             </view>
             <view class="order-list-row__product-line">
               <text class="order-list-row__product">{{item.productName}}</text>
-              <text wx:if="{{item.productSku}}" class="order-list-row__sku">{{item.productSku}}</text>
+              <text wx:if="{{item.showProductSku}}" class="order-list-row__sku">{{item.productSku}}</text>
             </view>
             <view wx:if="{{item.showCustomer}}" class="order-list-row__customer">
               <image class="order-list-row__customer-icon" src="/assets/icons/user.png" mode="aspectFit" />
@@ -111,7 +111,7 @@
                   wx:for="{{item.partners}}"
                   wx:for-item="chip"
                   wx:key="chipKey"
-                  class="order-process-chip {{chip.isCompleted ? 'order-process-chip--done' : ''}}"
+                  class="order-process-chip order-process-chip--outsource {{chip.isCompleted ? 'order-process-chip--done' : ''}}"
                   bindtap="onPartnerChipTap"
                   data-order-id="{{item.orderId}}"
                   data-product-id="{{item.productId}}"
@@ -121,8 +121,10 @@
                   data-product-name="{{item.productName}}"
                   data-order-number="{{item.orderNumber}}"
                 >
-                  <text class="order-process-chip__name">{{chip.nodeName}}</text>
-                  <text class="order-process-chip__name order-process-chip__partner">{{chip.partner}}</text>
+                  <view class="order-process-chip__head">
+                    <text class="order-process-chip__name">{{chip.nodeName}}</text>
+                    <text class="order-process-chip__name order-process-chip__partner">{{chip.partner}}</text>
+                  </view>
                   <view class="order-process-chip__circle">
                     <text class="order-process-chip__count">{{chip.received}}</text>
                   </view>

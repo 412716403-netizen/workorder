@@ -102,19 +102,93 @@ function getSeqRemainingForVariant(order, milestoneTemplateId, variantId, opts) 
   return Math.max(0, prevQty - curQty);
 }
 
-/** 某规格良品最多可报（顺序余量 − 本工序该规格不良） */
-function getVariantMaxGood(order, milestone, variantId, opts) {
-  const seqRemaining = getSeqRemainingForVariant(
-    order,
-    milestone.templateId,
-    variantId,
-    opts,
-  );
-  const defective = sumDefectiveForVariantAtMilestone(milestone, variantId);
-  return Math.max(0, seqRemaining - defective);
+/** 本工序各规格外协未收回净量（对齐 Web outsourcedByVariantId） */
+function sumOutsourceRemainingByVariant(prodRecords, orderId, templateId) {
+  const dispatched = {};
+  const received = {};
+  (prodRecords || []).forEach((r) => {
+    if (r.type !== 'OUTSOURCE' || r.sourceReworkId) return;
+    if (r.orderId !== orderId || r.nodeId !== templateId) return;
+    const vid = r.variantId || '';
+    if (r.status === '加工中') {
+      dispatched[vid] = (dispatched[vid] || 0) + (Number(r.quantity) || 0);
+    } else if (r.status === '已收回') {
+      received[vid] = (received[vid] || 0) + (Number(r.quantity) || 0);
+    }
+  });
+  const result = {};
+  const keys = new Set([...Object.keys(dispatched), ...Object.keys(received)]);
+  keys.forEach((vid) => {
+    const net = (dispatched[vid] || 0) - (received[vid] || 0);
+    if (net > 0) result[vid] = net;
+  });
+  return result;
 }
 
-function buildVariantMaxGoodMap(order, milestone, product, opts) {
+function reworkMergeBucketOrderId(orderId, orders) {
+  const o = (orders || []).find((x) => x.id === orderId);
+  return (o && o.parentOrderId) ? o.parentOrderId : orderId;
+}
+
+function buildDefectiveReworkMapForOrders(orders, prodRecords) {
+  const map = new Map();
+  (orders || []).forEach((o) => {
+    (o.milestones || []).forEach((m) => {
+      const defective = (m.reports || []).reduce(
+        (s, r) => s + (Number(r.defectiveQuantity) || 0),
+        0,
+      );
+      map.set(`${o.id}|${m.templateId}`, { defective, rework: 0, reworkByVariant: {} });
+    });
+  });
+
+  (prodRecords || []).filter((r) => r.type === 'REWORK_REPORT').forEach((rr) => {
+    const oid = rr.orderId;
+    const nodeId = rr.nodeId;
+    if (!oid || !nodeId) return;
+    const key = `${oid}|${nodeId}`;
+    const entry = map.get(key) || { defective: 0, rework: 0, reworkByVariant: {} };
+    entry.rework += Number(rr.quantity) || 0;
+    const vid = rr.variantId || '';
+    entry.reworkByVariant[vid] = (entry.reworkByVariant[vid] || 0) + (Number(rr.quantity) || 0);
+    map.set(key, entry);
+  });
+  return map;
+}
+
+function getReworkByVariantForReport(order, templateId, prodRecords) {
+  const drMap = buildDefectiveReworkMapForOrders([order], prodRecords);
+  const bucketId = reworkMergeBucketOrderId(order.id, [order]);
+  const merged = {};
+  const mergeEntry = (orderId) => {
+    const rw = (drMap.get(`${orderId}|${templateId}`) || {}).reworkByVariant || {};
+    Object.entries(rw).forEach(([k, q]) => {
+      merged[k] = (merged[k] || 0) + (Number(q) || 0);
+    });
+  };
+  mergeEntry(bucketId);
+  if (order.id !== bucketId) mergeEntry(order.id);
+  return merged;
+}
+
+/**
+ * 某规格良品最多可报（对齐 Web ReportVariantMatrixInput variantRemainingBaseMap）
+ * = 顺序余量 − 本规格不良 + 返工完成 − 外协剩余
+ */
+function getVariantMaxGood(order, milestone, variantId, opts, prodRecords) {
+  const tid = milestone.templateId;
+  const seqRemaining = getSeqRemainingForVariant(order, tid, variantId, opts);
+  const defectiveForVariant = sumDefectiveForVariantAtMilestone(milestone, variantId);
+  const base = Math.max(0, seqRemaining - defectiveForVariant);
+  const reworkByVariant = getReworkByVariantForReport(order, tid, prodRecords);
+  const outsourcedByVariant = sumOutsourceRemainingByVariant(prodRecords, order.id, tid);
+  const vid = variantId || '';
+  const reworkForVariant = reworkByVariant[vid] || 0;
+  const outsourcedForVariant = outsourcedByVariant[vid] || 0;
+  return Math.max(0, base + reworkForVariant - outsourcedForVariant);
+}
+
+function buildVariantMaxGoodMap(order, milestone, product, opts, prodRecords) {
   const map = {};
   const variantIds = new Set();
   if (product && product.variants && product.variants.length) {
@@ -126,15 +200,27 @@ function buildVariantMaxGoodMap(order, milestone, product, opts) {
     variantIds.add(it.variantId || '');
   });
   variantIds.forEach((vid) => {
-    map[vid] = getVariantMaxGood(order, milestone, vid, opts);
+    map[vid] = getVariantMaxGood(order, milestone, vid, opts, prodRecords);
   });
   return map;
+}
+
+function sumOutsourceRemainingAtNode(prodRecords, orderId, templateId) {
+  let totalDispatched = 0;
+  let totalReceived = 0;
+  (prodRecords || []).forEach((r) => {
+    if (r.type !== 'OUTSOURCE' || r.sourceReworkId) return;
+    if (r.orderId !== orderId || r.nodeId !== templateId) return;
+    if (r.status === '加工中') totalDispatched += Number(r.quantity) || 0;
+    else if (r.status === '已收回') totalReceived += Number(r.quantity) || 0;
+  });
+  return Math.max(0, totalDispatched - totalReceived);
 }
 
 /**
  * 单工单报工表头数量 hint（对齐 Web computeReportRowDerivations 工单模式）
  */
-function computeOrderReportHints(order, milestone, globalNodes, config) {
+function computeOrderReportHints(order, milestone, globalNodes, config, prodRecords) {
   const processSequenceMode = (config && config.processSequenceMode) || 'sequential';
   const outOfSequenceTemplateIds = buildOutOfSequenceTemplateIds(globalNodes);
   const opts = { processSequenceMode, outOfSequenceTemplateIds };
@@ -153,16 +239,23 @@ function computeOrderReportHints(order, milestone, globalNodes, config) {
       base = Number(order.milestones[gateIdx]?.completedQuantity) || 0;
     }
   }
-  const defectiveQtyForHint = (milestone.reports || []).reduce(
-    (s, r) => s + (Number(r.defectiveQuantity) || 0),
-    0,
-  );
-  const hintMaxReportable = Math.max(0, Math.round(base - defectiveQtyForHint));
+
+  const defectiveReworkMap = buildDefectiveReworkMapForOrders([order], prodRecords);
+  const getDr = (oid, nodeTemplateId) => defectiveReworkMap.get(`${oid}|${nodeTemplateId}`)
+    || { defective: 0, rework: 0, reworkByVariant: {} };
+  const { defective, rework } = getDr(order.id, tid);
+  const defectiveQtyForHint = defective;
+  const totalRework = getDr(reworkMergeBucketOrderId(order.id, [order]), tid).rework;
+  const hintMaxReportable = Math.max(0, Math.round(base - defective + rework));
   const hintCompletedDisplay = Math.max(0, Number(milestone.completedQuantity) || 0);
-  const totalOutsourcedAtNode = 0;
+  const totalOutsourcedAtNode = sumOutsourceRemainingAtNode(prodRecords, order.id, tid);
   const hintRemaining = Math.max(
     0,
     hintMaxReportable - hintCompletedDisplay - totalOutsourcedAtNode,
+  );
+  const effectiveRemainingForModal = Math.max(
+    0,
+    base - defective + totalRework - hintCompletedDisplay - totalOutsourcedAtNode,
   );
 
   return {
@@ -172,8 +265,8 @@ function computeOrderReportHints(order, milestone, globalNodes, config) {
     hintRemaining,
     defectiveQtyForHint,
     totalOutsourcedAtNode,
-    totalRework: 0,
-    effectiveRemainingForModal: hintRemaining,
+    totalRework,
+    effectiveRemainingForModal,
     processSequenceMode,
     outOfSequenceTemplateIds,
     opts,

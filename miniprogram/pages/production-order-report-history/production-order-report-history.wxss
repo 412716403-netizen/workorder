@@ -125,11 +125,19 @@
 }
 
 .report-history-row__qty {
-  margin-left: auto;
   flex-shrink: 0;
   font-size: 28rpx;
   font-weight: 700;
   color: var(--color-primary-dark);
+}
+
+.report-history-row__aside {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4rpx;
 }
 
 .report-history-row__product {
@@ -169,14 +177,21 @@
 
 .report-history-row__operator {
   flex-shrink: 0;
-  font-size: 22rpx;
-  color: var(--color-text-secondary);
+  font-size: 20rpx;
+  color: var(--color-text-tertiary);
   text-align: right;
+  max-width: 200rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .report-history-row__defective {
+  flex-shrink: 0;
+  font-size: 20rpx;
   color: #d97706;
   font-weight: 600;
+  text-align: right;
 }
 
 .report-history-footer {

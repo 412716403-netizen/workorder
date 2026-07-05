@@ -39,7 +39,7 @@ const WORKBENCH_SHORTCUT_CATALOG = [
   { id: 'production-orders', label: '工单中心', group: '生产管理', icon: 'ClipboardList', module: 'production', perm: 'production:orders_list:allow', path: '/pages/production-orders/production-orders' },
   { id: 'production-stock-out', label: '生产物料', group: '生产管理', icon: 'ArrowUpFromLine', module: 'production', perm: 'production:material_list', path: '/pages/production-stock-out/production-stock-out' },
   { id: 'production-outsource', label: '外协管理', group: '生产管理', icon: 'Truck', module: 'production', perm: 'production:outsource:view', path: '/pages/production-outsource/production-outsource' },
-  { id: 'production-rework', label: '返工管理', group: '生产管理', icon: 'RotateCcw', module: 'production', perm: 'production:rework:view' },
+  { id: 'production-rework', label: '返工管理', group: '生产管理', icon: 'RotateCcw', module: 'production', perm: 'production:rework:view', path: '/pages/production-rework/production-rework' },
 
   { id: 'psi-purchase-order', label: '采购订单', group: '进销存', icon: 'ClipboardList', module: 'psi', perm: 'psi:purchase_order:view' },
   { id: 'psi-purchase-bill', label: '采购入库', group: '进销存', icon: 'Receipt', module: 'psi', perm: 'psi:purchase_bill:view' },

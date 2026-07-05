@@ -1,6 +1,12 @@
 /**
  * 单据保存成功后统一回到所属列表页。
- * 若目标页已在页面栈内则 navigateBack，避免 redirectTo 叠层导致左上角返回仍停在列表。
+ *
+ * 规则（新功能必须遵守，详见 docs/10-miniprogram-ui.md §保存后导航）：
+ * 1. 新建 / 确认 / 处置类提交页 → 回到**模块 Hub 主列表**（如返工管理、工单中心、外协中心）
+ *    例外：从明确子清单进入的确认页（待发/待收回/待入库）→ 回到该子清单
+ * 2. 流水 / 批次详情编辑或删除 → 回到对应流水列表（非 Hub、非详情）
+ * 3. 优先 navigateBack 到栈内已有列表并标记 _refreshOnNextShow；否则 redirectTo
+ * 4. 扫码连续作业 scan-session 除外；详情页内联编辑（不离开页）除外
  */
 
 const DEFAULT_DELAY_MS = 400;
@@ -15,6 +21,19 @@ const LIST_ROUTES = {
   STOCK_IN_HISTORY: '/pages/production-order-stock-in-history/production-order-stock-in-history',
   PRODUCTION_ORDERS: '/pages/production-orders/production-orders',
   PRODUCTION_PLANS: '/pages/production-plans/production-plans',
+  REWORK_DEFECT_FLOW: '/pages/production-rework-defect-flow/production-rework-defect-flow',
+  REWORK_REPORT_FLOW: '/pages/production-rework-report-flow/production-rework-report-flow',
+  REWORK_HUB: '/pages/production-rework/production-rework',
+  REWORK_PENDING: '/pages/production-rework-pending/production-rework-pending',
+};
+
+/** 各业务模块 Hub 主列表（处置/报工/领料等默认回到此处） */
+const MODULE_HUB_ROUTES = {
+  rework: LIST_ROUTES.REWORK_HUB,
+  outsource: LIST_ROUTES.OUTSOURCE_HUB,
+  orders: LIST_ROUTES.PRODUCTION_ORDERS,
+  plans: LIST_ROUTES.PRODUCTION_PLANS,
+  stockOut: LIST_ROUTES.STOCK_OUT,
 };
 
 function buildReportHistoryListUrl(params) {
@@ -82,6 +101,7 @@ function afterSaveReturnToList(opts) {
 
 module.exports = {
   LIST_ROUTES,
+  MODULE_HUB_ROUTES,
   buildReportHistoryListUrl,
   normalizePageRoute,
   findNavigateBackDelta,

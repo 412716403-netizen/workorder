@@ -31,6 +31,7 @@
 .order-process-chip {
   flex-shrink: 0;
   width: 176rpx;
+  min-height: 236rpx;
   padding: 16rpx 12rpx;
   border-radius: 16rpx;
   background: var(--color-bg-page);
@@ -38,10 +39,13 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: flex-start;
+  box-sizing: border-box;
 }
 
 .order-process-scroll--compact .order-process-chip {
   width: 128rpx;
+  min-height: 164rpx;
   padding: 8rpx 6rpx 10rpx;
   border-radius: 12rpx;
 }
@@ -55,6 +59,20 @@
   opacity: 0.55;
 }
 
+.order-process-chip__head {
+  width: 100%;
+  min-height: 44rpx;
+  margin-bottom: 4rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.order-process-scroll--compact .order-process-chip__head {
+  min-height: 40rpx;
+}
+
 .order-process-chip__name {
   font-size: 20rpx;
   font-weight: 600;
@@ -64,12 +82,25 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-bottom: 8rpx;
+  line-height: 1.2;
 }
 
 .order-process-scroll--compact .order-process-chip__name {
   font-size: 20rpx;
+}
+
+.order-process-chip__partner {
+  margin-top: -4rpx;
   margin-bottom: 4rpx;
+  color: var(--color-text-secondary);
+}
+
+.order-process-chip__partner--placeholder {
+  color: transparent;
+}
+
+.order-process-chip--outsource .order-process-chip__name:first-child {
+  color: #059669;
 }
 
 .order-process-chip__circle {
@@ -82,6 +113,7 @@
   align-items: center;
   justify-content: center;
   margin-bottom: 8rpx;
+  flex-shrink: 0;
 }
 
 .order-process-scroll--compact .order-process-chip__circle {
@@ -103,6 +135,7 @@
 .order-process-chip__count {
   font-size: 32rpx;
   font-weight: 700;
+  line-height: 1;
 }
 
 .order-process-scroll--compact .order-process-chip__count {
@@ -115,6 +148,8 @@
   margin-bottom: 8rpx;
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
+  text-align: center;
+  width: 100%;
 }
 
 .order-process-scroll--compact .order-process-chip__meta {
@@ -128,6 +163,7 @@
   background: #eef0f3;
   border-radius: 3rpx;
   overflow: hidden;
+  margin-top: auto;
 }
 
 .order-process-scroll--compact .order-process-chip__bar {

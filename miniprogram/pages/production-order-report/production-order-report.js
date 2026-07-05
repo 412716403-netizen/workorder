@@ -34,6 +34,7 @@ const {
   fetchCategoriesAll,
   fetchNodesAll,
   fetchWorkersForReport,
+  fetchProductionRecords,
 } = require('../../utils/orderApi.js');
 const {
   fetchEquipmentAll,
@@ -67,6 +68,18 @@ function computeScrollHeight(nav) {
   const footerPx = Math.ceil(128 * rpx) + (win.safeAreaBottom || 0);
   const headerPx = computeHeaderBlockHeight(nav);
   return Math.max(200, (win.windowHeight || 667) - headerPx - footerPx);
+}
+
+function buildReportQtyHint(reportHints, unitName) {
+  return buildQtyHintText({
+    totalQty: reportHints.hintTotalQty,
+    maxReportable: reportHints.hintMaxReportable,
+    reported: reportHints.hintCompletedDisplay,
+    remaining: reportHints.hintRemaining,
+    defective: reportHints.defectiveQtyForHint,
+    totalOutsourcedAtNode: reportHints.totalOutsourcedAtNode,
+    totalRework: reportHints.totalRework,
+  }, unitName);
 }
 
 function buildReportQtySummaryView(stats, unitName) {
@@ -239,6 +252,7 @@ Page({
         workersRaw,
         equipmentRaw,
         dictionariesRaw,
+        prodRecordsRaw,
       ] = await Promise.all([
         fetchTenantConfig(),
         getOrder(orderId),
@@ -248,6 +262,11 @@ Page({
         fetchWorkersForReport(ctx && ctx.tenantId),
         fetchEquipmentAll(),
         fetchDictionaries(),
+        fetchProductionRecords({
+          orderIds: orderId,
+          types: 'OUTSOURCE,REWORK,REWORK_REPORT',
+          all: 'true',
+        }),
       ]);
 
       const products = normalizeMasterList(productsRaw);
@@ -279,12 +298,19 @@ Page({
       const orderItems = order.items || [];
       const formMode = resolveReportFormMode(product, category, orderItems);
 
-      const reportHints = computeOrderReportHints(order, milestone, globalNodes, config);
+      const reportHints = computeOrderReportHints(
+        order,
+        milestone,
+        globalNodes,
+        config,
+        prodRecordsRaw || [],
+      );
       const variantMaxGoodMap = buildVariantMaxGoodMap(
         order,
         milestone,
         product,
         reportHints.opts,
+        prodRecordsRaw || [],
       );
       const allowExceedMaxReportQty = !!(config && config.allowExceedMaxReportQty);
       const remaining = reportHints.hintRemaining;
@@ -302,14 +328,10 @@ Page({
           reported: reportHints.hintCompletedDisplay,
           remaining: reportHints.hintRemaining,
           defective: reportHints.defectiveQtyForHint,
+          totalOutsourcedAtNode: reportHints.totalOutsourcedAtNode,
+          totalRework: reportHints.totalRework,
         }, unitName);
-      const qtyHint = formMode === 'matrix' ? '' : (qtySummary.hintText || buildQtyHintText({
-        totalQty: reportHints.hintTotalQty,
-        maxReportable: reportHints.hintMaxReportable,
-        reported: reportHints.hintCompletedDisplay,
-        remaining: reportHints.hintRemaining,
-        defective: reportHints.defectiveQtyForHint,
-      }, unitName));
+      const qtyHint = buildReportQtyHint(reportHints, unitName);
 
       const workersNormalized = normalizeWorkersList(workersRaw).filter(
         (w) => !w.status || w.status === 'ACTIVE',

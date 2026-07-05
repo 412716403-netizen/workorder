@@ -1,0 +1,101 @@
+@import '../production-plan-detail/production-plan-detail.wxss';
+@import '../production-order-report-batch-detail/production-order-report-batch-detail.wxss';
+
+.rework-detail-table {
+  margin: 0 24rpx;
+  border-radius: 20rpx;
+  overflow: hidden;
+  background: #fff;
+  border: 1rpx solid var(--color-border);
+}
+
+.rework-detail-table__head,
+.rework-detail-table__row {
+  display: flex;
+  align-items: center;
+  padding: 20rpx 16rpx;
+  border-bottom: 1rpx solid var(--color-border);
+}
+
+.rework-detail-table__head {
+  background: #f8fafc;
+}
+
+.rework-detail-table__row:last-child {
+  border-bottom: none;
+}
+
+.rework-detail-table__col {
+  flex: 1;
+  min-width: 0;
+  font-size: 24rpx;
+  color: var(--color-text);
+  text-align: center;
+}
+
+.rework-detail-table__col--name {
+  flex: 1.4;
+  text-align: left;
+  font-weight: 600;
+}
+
+.rework-detail-table__col--head {
+  font-size: 22rpx;
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+
+.rework-detail-table__col--pending {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+.rework-detail-record {
+  margin: 0 24rpx 16rpx;
+  padding: 24rpx;
+  border-radius: 20rpx;
+  background: #fff;
+  border: 1rpx solid var(--color-border);
+}
+
+.rework-detail-record:last-child {
+  margin-bottom: 0;
+}
+
+.rework-detail-record__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 12rpx;
+}
+
+.rework-detail-record__doc {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.rework-detail-record__badge {
+  font-size: 20rpx;
+  padding: 4rpx 12rpx;
+  border-radius: 999rpx;
+  background: #eef2ff;
+  color: #4338ca;
+  font-weight: 600;
+}
+
+.rework-detail-record__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8rpx 20rpx;
+  font-size: 22rpx;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.rework-detail-record__qty {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #4338ca;
+}

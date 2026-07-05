@@ -3,7 +3,7 @@
  */
 
 const { flowRecordsEarliestMs } = require('./flowDocSortLite.js');
-const { listProductThumbFromProduct } = require('./listProductThumb.js');
+const { listProductDisplayFields } = require('./listProductThumb.js');
 
 const TYPE_FILTER_LABELS = ['全部类型', '外协发出', '外协收回'];
 const TYPE_FILTER_VALUES = ['', 'dispatch', 'receive'];
@@ -63,7 +63,10 @@ function buildOutsourceFlowSummaryRows(records, opts) {
     const typeStr = typeStrFromRecords(sorted);
     const isReceiveOnly = sorted.every((r) => r.status === '已收回');
     const flowType = isReceiveOnly ? 'receive' : 'dispatch';
-    const thumb = listProductThumbFromProduct(product);
+    const productDisplay = listProductDisplayFields(product, {
+      name: first.productName || (order && order.productName),
+      sku: first.sku || (order && order.sku),
+    });
     const partnerLabel = first.partner || '—';
     const milestoneLabel = (node && node.name) || first.nodeId || '—';
     const milestonePartnerLine = partnerLabel !== '—'
@@ -86,12 +89,11 @@ function buildOutsourceFlowSummaryRows(records, opts) {
       milestonePartnerLine,
       nodeId: first.nodeId || '',
       orderNumber: (order && order.orderNumber) || first.orderNumber || '',
-      productName: (product && product.name) || first.productName || '—',
       showOrderNumber: !isProductMode && !!((order && order.orderNumber) || first.orderNumber),
       titleLine: isProductMode
-        ? ((product && product.name) || first.productName || '—')
-        : `${(order && order.orderNumber) || first.orderNumber || '—'} · ${(product && product.name) || first.productName || '—'}`,
-      ...thumb,
+        ? productDisplay.productName
+        : `${(order && order.orderNumber) || first.orderNumber || '—'} · ${productDisplay.productName}`,
+      ...productDisplay,
     });
   });
 
@@ -115,7 +117,7 @@ function filterOutsourceFlowRows(rows, opts) {
   const q = String(searchKeyword || '').trim().toLowerCase();
   if (q) {
     out = out.filter((row) => {
-      const parts = [row.docNo, row.orderNumber, row.productName, row.partner, row.milestoneStr, row.typeStr];
+      const parts = [row.docNo, row.orderNumber, row.productName, row.productSku, row.partner, row.milestoneStr, row.typeStr];
       return parts.join(' ').toLowerCase().includes(q);
     });
   }

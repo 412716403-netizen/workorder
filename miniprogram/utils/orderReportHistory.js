@@ -1,6 +1,8 @@
 const { localTodayYmd, addDaysYmd } = require('./dateYmd.js');
-const { productNameSkuParts } = require('./productionPlans.js');
-const { DEFAULT_PRODUCT_PLACEHOLDER_ICON } = require('./listProductThumb.js');
+const {
+  DEFAULT_PRODUCT_PLACEHOLDER_ICON,
+  listProductNameSkuFromMap,
+} = require('./listProductThumb.js');
 
 function defaultDateRange() {
   const end = localTodayYmd();
@@ -42,21 +44,16 @@ function formatReportTime(iso) {
 }
 
 function productMetaFromMap(productMap, productId, fallbackName, fallbackSku) {
+  const nameSku = listProductNameSkuFromMap(productMap, productId, {
+    name: fallbackName,
+    sku: fallbackSku,
+  });
   const product = productMap && productId ? productMap.get(productId) : null;
-  if (!product) {
-    return {
-      name: fallbackName || '',
-      sku: fallbackSku || '',
-      showSku: Boolean(fallbackSku),
-      imageUrl: '',
-    };
-  }
-  const display = productNameSkuParts(product);
   return {
-    name: display.name || fallbackName || '',
-    sku: display.sku || fallbackSku || '',
-    showSku: display.showSku,
-    imageUrl: product.imageUrl || '',
+    name: nameSku.productName,
+    sku: nameSku.productSku,
+    showSku: nameSku.showProductSku,
+    imageUrl: (product && product.imageUrl) || '',
   };
 }
 

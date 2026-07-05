@@ -104,7 +104,7 @@
         <view wx:if="{{!detail.showMatrix}}" class="plan-form-card">
           <view wx:for="{{detail.lineItems}}" wx:key="reportId" class="report-batch-line">
             <view class="report-batch-line__head">
-              <text class="report-batch-line__product">{{item.productName}}</text>
+              <text class="report-batch-line__product">{{item.productName}}<text wx:if="{{item.showProductSku}}" class="list-product-sku"> {{item.productSku}}</text></text>
               <text wx:if="{{item.showVariantLabel}}" class="report-batch-line__variant">{{item.variantLabel}}</text>
             </view>
             <view class="report-batch-line__grid">

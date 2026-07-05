@@ -99,6 +99,7 @@
               </view>
               <view class="report-history-row__head-right">
                 <text class="report-history-row__qty">{{item.totalQtyText}}</text>
+                <text wx:if="{{item.showOperator}}" class="report-history-row__operator">{{item.operatorLine}}</text>
                 <text wx:if="{{item.showWarehouse}}" class="report-history-row__warehouse">{{item.warehouseName}}</text>
               </view>
             </view>
@@ -107,7 +108,6 @@
                 <text class="report-history-row__product-name">{{item.productName}}</text>
                 <text wx:if="{{item.showProductSku}}" class="report-history-row__sku">{{item.productSku}}</text>
               </view>
-              <text wx:if="{{item.showOperator}}" class="report-history-row__operator">{{item.operatorLine}}</text>
             </view>
           </view>
         </view>

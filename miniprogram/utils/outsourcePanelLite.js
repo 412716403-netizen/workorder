@@ -3,7 +3,7 @@
  */
 
 const { OrderDispatchStatus } = require('../config/productionOrders.js');
-const { DEFAULT_PRODUCT_PLACEHOLDER_ICON } = require('./listProductThumb.js');
+const { DEFAULT_PRODUCT_PLACEHOLDER_ICON, listProductNameSkuFields } = require('./listProductThumb.js');
 
 function orderCreatedMs(order) {
   if (!order) return 0;
@@ -90,11 +90,13 @@ function buildOutsourceStatsByOrder(params) {
           if (d !== 0) return d;
           return String(a.partner || '').localeCompare(String(b.partner || ''));
         });
+        const nameSku = listProductNameSkuFields(product);
         return {
           productId,
-          productName: (product && product.name) || '—',
+          productName: nameSku.productName,
           productImageUrl: (product && product.imageUrl) || '',
-          productSku: (product && product.sku) || '',
+          productSku: nameSku.productSku,
+          showProductSku: nameSku.showProductSku,
           partners: sortedPartners,
         };
       })
@@ -154,13 +156,18 @@ function buildOutsourceStatsByOrder(params) {
       const sortedPartners = [...partners].sort(
         (a, b) => milestoneIndex(a.nodeId) - milestoneIndex(b.nodeId),
       );
+      const nameSku = listProductNameSkuFields(product, {
+        name: order && order.productName,
+        sku: order && order.sku,
+      });
       return {
         orderId,
         orderNumber: (order && order.orderNumber) || orderId,
         productId: order && order.productId,
-        productName: (product && product.name) || (order && order.productName) || '—',
+        productName: nameSku.productName,
         productImageUrl: (product && product.imageUrl) || '',
-        productSku: (product && product.sku) || '',
+        productSku: nameSku.productSku,
+        showProductSku: nameSku.showProductSku,
         customer: (order && order.customer) || '',
         dueDate: (order && order.dueDate) ? String(order.dueDate).trim().slice(0, 10) : '',
         orderTotalQty: (order && order.items || []).reduce(
@@ -248,6 +255,9 @@ function mapOutsourceCardForUi(item, productionLinkMode) {
     productName: item.productName || '—',
     productImageUrl,
     productSku: item.productSku || '',
+    showProductSku: item.showProductSku != null
+      ? !!item.showProductSku
+      : Boolean(item.productSku && item.productName && item.productSku !== item.productName),
     customer: item.customer || '',
     dueDate,
     dueDateLabel: dueDate ? `交期 ${dueDate}` : '',

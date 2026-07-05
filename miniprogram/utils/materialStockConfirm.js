@@ -125,6 +125,7 @@ function buildProductionRecordBatchPayload(params) {
     warehouse,
     operator,
     partner,
+    reason,
   } = params;
 
   const type = mode === 'stock_return' ? 'STOCK_RETURN' : 'STOCK_OUT';
@@ -140,6 +141,7 @@ function buildProductionRecordBatchPayload(params) {
     if (orderId) body.orderId = orderId;
     if (sourceProductId) body.sourceProductId = sourceProductId;
     if (partner) body.partner = partner;
+    if (reason) body.reason = reason;
     const batchNo = resolveBatchNoForWrite(row.batchNo);
     if (batchNo) body.batchNo = batchNo;
     return body;

@@ -28,7 +28,7 @@
               <text wx:if="{{orderNumber && productName}}" class="report-context-card__dot">·</text>
               <text class="report-context-card__product">{{productName}}</text>
             </view>
-            <text wx:if="{{qtyHint && formMode !== 'matrix'}}" class="report-context-card__hint">{{qtyHint}}</text>
+            <text wx:if="{{qtyHint}}" class="report-context-card__hint">{{qtyHint}}</text>
           </view>
           <view class="report-context-card__scan" bindtap="onGoScan">
             <image class="report-context-card__scan-icon" src="/assets/tab/scan.png" mode="aspectFit" />

@@ -98,17 +98,17 @@
             </view>
             <view class="report-history-row__main">
               <text class="report-history-row__milestone">{{item.milestoneName}}</text>
-              <text class="report-history-row__qty">{{item.goodQtyText}}</text>
+              <view class="report-history-row__aside">
+                <text class="report-history-row__qty">{{item.goodQtyText}}</text>
+                <text wx:if="{{item.showDefective}}" class="report-history-row__defective">{{item.defectiveText}}</text>
+                <text wx:if="{{item.showOperator}}" class="report-history-row__operator">{{item.operatorLine}}</text>
+              </view>
             </view>
             <view class="report-history-row__product">
               <view class="report-history-row__product-left">
                 <text class="report-history-row__product-name">{{item.productName}}</text>
                 <text wx:if="{{item.showProductSku}}" class="report-history-row__sku">{{item.productSku}}</text>
               </view>
-              <text wx:if="{{item.showOperator}}" class="report-history-row__operator">{{item.operatorLine}}</text>
-            </view>
-            <view wx:if="{{item.showDefective}}" class="report-history-row__meta">
-              <text class="report-history-row__defective">{{item.defectiveText}}</text>
             </view>
           </view>
         </view>

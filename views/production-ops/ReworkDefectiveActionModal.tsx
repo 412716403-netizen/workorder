@@ -572,9 +572,6 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
                 <p className="text-base sm:text-lg font-bold text-slate-900 leading-tight">{reworkActionRow.productName}</p>
               </div>
               <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setReworkActionMode('scrap')} className="flex-1 py-3 rounded-xl text-sm font-bold border-2 border-slate-200 text-slate-700 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-800 transition-colors">
-                  报损
-                </button>
                 <button type="button" onClick={() => setReworkActionMode('rework')} className="flex-1 py-3 rounded-xl text-sm font-bold border-2 border-indigo-200 text-indigo-700 hover:border-indigo-400 hover:bg-indigo-50 transition-colors">
                   返工到指定工序
                 </button>
@@ -583,6 +580,9 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
                     <Truck className="w-4 h-4" /> 委外返工
                   </button>
                 )}
+                <button type="button" onClick={() => setReworkActionMode('scrap')} className="flex-1 py-3 rounded-xl text-sm font-bold border-2 border-slate-200 text-slate-700 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-800 transition-colors">
+                  报损
+                </button>
               </div>
             </>
           ) : (

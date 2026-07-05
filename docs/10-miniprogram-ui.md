@@ -99,6 +99,31 @@ SmartTrack Pro 微信小程序采用 **企业蓝 + 卡片化 + 底部 Tab** 的 
 5. 登录后进入 Tab 页使用 `wx.switchTab`，勿对 Tab 页使用 `reLaunch`
 6. 验证安全区与 TabBar 遮挡（`st-page--tab` 已预留底部间距）
 7. **表单录入**（合作单位 / 产品 / 色码矩阵 / 数量键盘）遵循下方 §表单录入标准，以 [`production-plan-create`](../miniprogram/pages/production-plan-create/) 为参考实现
+8. **列表/流水/清单**展示产品名称时遵循下方 §产品名称与编号，以 [`production-order-report-history`](../miniprogram/pages/production-order-report-history/) 为参考实现
+
+## 产品名称与编号（列表 / 流水 / 清单 · 默认）
+
+凡展示**成品产品名称**的流水行、清单行、主列表卡片（含详情区产品标题），名称后须显示**产品编号（sku）**，与报工流水一致。
+
+### 数据层
+
+| 工具 | 路径 | 用途 |
+|------|------|------|
+| `listProductNameSkuFields` | [`utils/listProductThumb.js`](../miniprogram/utils/listProductThumb.js) | 从 `product` + 回退字段生成三件套 |
+| `listProductDisplayFields` | 同上 | 三件套 + 缩略图 |
+| `productMetaFromMap` | [`utils/orderReportHistory.js`](../miniprogram/utils/orderReportHistory.js) | 带 `productMap` 的列表行（含 `imageUrl`） |
+
+行模型字段：`productName`、`productSku`、`showProductSku`。`showProductSku` 仅在「有名称且有编号且二者不同」时为 `true`。
+
+### 视图层
+
+- **双字段分行**：`product-name` + `sku` 两个 `<text>`（报工流水、工单列表、外协/返工流水行）
+- **单行后缀**：`{{productName}}<text class="list-product-sku"> {{productSku}}</text>`（详情 hero、部分副标题）
+- 样式：列表行用各页 `__sku`；通用后缀用全局 `.list-product-sku`（[`styles/list.wxss`](../miniprogram/styles/list.wxss)）
+
+### Cursor 规则
+
+[`.cursor/rules/miniprogram-lists.mdc`](../.cursor/rules/miniprogram-lists.mdc)
 
 ## 表单录入标准（默认）
 
@@ -163,14 +188,42 @@ const {
 
 ## 保存后导航
 
-单据保存/提交成功后**统一回到所属列表页**，工具：[`utils/saveNavigation.js`](../miniprogram/utils/saveNavigation.js) 的 `afterSaveReturnToList` + `LIST_ROUTES`。
+单据保存/提交成功后**统一回到所属列表页**，工具：[`utils/saveNavigation.js`](../miniprogram/utils/saveNavigation.js) 的 `afterSaveReturnToList` + `LIST_ROUTES` / `MODULE_HUB_ROUTES`。
 
-- 使用 `wx.redirectTo(listUrl)`，避免确认页留在页面栈
-- 成功后先 `wx.showToast`，约 400ms 后跳转
-- 不跳流水/批次详情；列表即用户继续操作的入口
-- 扫码连续作业（`scan-session`）除外
+### 规则
 
-详见 `.cursor/rules/miniprogram-forms.mdc` §列表/流水产品缩略图。
+1. **新建 / 确认 / 处置类**（一次性提交）→ 回到**模块 Hub 主列表**（见下表 `MODULE_HUB_ROUTES`）
+   - 例外：从明确**子清单**进入的确认页（待发/待收回/待入库）→ 回到该子清单
+2. **流水 / 批次详情**编辑或删除 → 回到对应**流水列表**（不跳详情、不停留在编辑页）
+3. 栈内已有目标列表时 `navigateBack` + `_refreshOnNextShow`；否则 `redirectTo`
+4. 成功后先 `wx.showToast`，约 400ms 后跳转
+5. **除外**：`scan-session` 扫码连续作业；详情页内联保存（不离开当前页）
+
+### 页面 → 成功后列表
+
+| 页面 | `listUrl` |
+|------|-----------|
+| 处理不良（报损/厂内返工/委外返工） | `REWORK_HUB` |
+| 返工报工 | `REWORK_HUB` |
+| 返工领料 | `REWORK_HUB` |
+| 处理不良流水详情 | `REWORK_DEFECT_FLOW` |
+| 返工报工流水详情 | `REWORK_REPORT_FLOW` |
+| 工单报工 | `PRODUCTION_ORDERS` |
+| 报工批次详情 | `buildReportHistoryListUrl(...)` |
+| 工单领料 / 退料 | `PRODUCTION_ORDERS` |
+| 外协发出确认 | `OUTSOURCE_DISPATCH` |
+| 外协收回确认 | `OUTSOURCE_RECEIVE` |
+| 外协领退料 | `OUTSOURCE_HUB` |
+| 外协流水详情 | `OUTSOURCE_FLOW` |
+| 待入库确认 | `PENDING_STOCK` |
+| 入库流水详情 | `STOCK_IN_HISTORY` |
+| 领退料确认 | `STOCK_OUT`（外协来源 → `OUTSOURCE_HUB`） |
+| 领退料流水详情 | `STOCK_OUT` |
+| 新建计划 | `PRODUCTION_PLANS` |
+
+新功能登记：在 `LIST_ROUTES` 增加路径常量，上表与 `.cursor/rules/miniprogram-forms.mdc` 同步补充一行。
+
+详见 `.cursor/rules/miniprogram-forms.mdc` §保存后导航。
 
 ## 图标资源
 
@@ -283,9 +336,47 @@ npm run miniprogram:icons
 
 **深链**：`/pages/production-orders/production-orders?orderId=<id>` 重定向至详情。计划下达成功可跳转首个新工单详情。
 
-**留 Web**：工单新建（仅计划下达）、删除、表单配置、打印、报工批次编辑/删除、色码矩阵报工、待入库批量/矩阵/入库流水、外协/返工详情。
+**留 Web**：工单新建（仅计划下达）、删除、表单配置、打印、色码矩阵报工、待入库批量/矩阵/入库流水。
 
 入口：[`menus.js`](../miniprogram/config/menus.js) `production-orders` → `/pages/production-orders/production-orders`。
+
+## 返工管理
+
+对齐 Web [`ReworkPanel`](../views/production-ops/ReworkPanel.tsx)（P2+ 移动端口径）：
+
+| 页面 | 路径 | 职责 |
+|------|------|------|
+| 返工 Hub | [`pages/production-rework/`](../miniprogram/pages/production-rework/) | 主列表（工单/产品 × 返工工序标签）、搜索/筛选、待处理不良/流水快捷入口、详情/物料/扫码报工 |
+| 待处理不良 | [`pages/production-rework-pending/`](../miniprogram/pages/production-rework-pending/) | 不良待处理列表 + 搜索/工序筛选 |
+| 处理不良 | [`pages/production-rework-defect-action/`](../miniprogram/pages/production-rework-defect-action/) | 报损/厂内返工/委外返工；返工目标工序与 Web 一致（产品工艺全工序 + 其他工序，可多选） |
+| 返工报工 | [`pages/production-rework-report/`](../miniprogram/pages/production-rework-report/) | 手输返工报工（路径分组、矩阵、人员/设备/加工费、跳转扫码）；单产品时价格区为「数量 + 单价 + 金额」一行（简单路径可编辑数量，矩阵为已填合计只读） |
+| 返工详情 | [`pages/production-rework-detail/`](../miniprogram/pages/production-rework-detail/) | 工序不良汇总、返工进度、处理/报工记录只读 |
+| 处理不良流水 | [`pages/production-rework-defect-flow/`](../miniprogram/pages/production-rework-defect-flow/) | REWORK+SCRAP 按 docNo 聚合列表 |
+| 处理不良详情 | [`pages/production-rework-defect-flow-detail/`](../miniprogram/pages/production-rework-defect-flow-detail/) | 查看/编辑/删除 |
+| 返工报工流水 | [`pages/production-rework-report-flow/`](../miniprogram/pages/production-rework-report-flow/) | REWORK_REPORT 流水列表 |
+| 报工流水详情 | [`pages/production-rework-report-flow-detail/`](../miniprogram/pages/production-rework-report-flow-detail/) | 查看/编辑/删除 |
+
+| 工具 / 配置 | 作用 |
+|-------------|------|
+| [`config/productionRework.js`](../miniprogram/config/productionRework.js) | 快捷入口、`DESKTOP_HINT` |
+| [`utils/reworkPanelLite.js`](../miniprogram/utils/reworkPanelLite.js) | 主列表聚合与搜索 |
+| [`utils/reworkPendingLite.js`](../miniprogram/utils/reworkPendingLite.js) | 待处理不良行计算 |
+| [`utils/reworkReportGroupLite.js`](../miniprogram/utils/reworkReportGroupLite.js) | 返工报工路径分组（扫码/手输共用） |
+| [`utils/reworkDefectAction.js`](../miniprogram/utils/reworkDefectAction.js) | 处理不良提交 payload |
+| [`utils/reworkReportSubmit.js`](../miniprogram/utils/reworkReportSubmit.js) | 手输返工报工提交 |
+| [`utils/reworkDefectFlow.js`](../miniprogram/utils/reworkDefectFlow.js) / [`reworkReportFlow.js`](../miniprogram/utils/reworkReportFlow.js) | 流水列表 |
+| [`utils/reworkDetailLite.js`](../miniprogram/utils/reworkDetailLite.js) | 详情视图 |
+| 返工领料 | 复用 [`production-order-material`](../miniprogram/pages/production-order-material/) `?source=rework`，`reason: 来自于返工` |
+
+**API**：`GET /production/records`（`types=REWORK,REWORK_REPORT,SCRAP,OUTSOURCE`）· `POST /production/records` · `POST /production/records/batch` · `PUT/DELETE /production/records/:id` · `POST /item-codes/scan/validate-usage`（`purpose: REWORK_REPORT`）· `GET /settings/config`（`productionLinkMode` / `reworkFormSettings` 只读）
+
+**权限**：`production:rework:view`（入口）· `production:rework_list:allow` · `production:rework_defective:allow` · `production:rework_records:view/edit/delete` · `production:rework_report_records:view/edit/delete` · `production:rework_outsource:allow` · `production:rework_detail:allow` · `production:rework_material:allow`
+
+**深链**：`/pages/production-rework/production-rework?reworkOrderId=<id>` 重定向至详情。
+
+**留 Web**：表单配置、打印。
+
+入口：[`menus.js`](../miniprogram/config/menus.js) `production-rework` → `/pages/production-rework/production-rework`。
 
 ## 外协管理
 

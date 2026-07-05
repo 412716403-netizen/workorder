@@ -27,6 +27,8 @@ function mapListRow(row, productionLinkMode, productMap) {
     productName: meta.name || row.productName || '',
     productSku: meta.sku,
     showProductSku: meta.showSku,
+    showTitleSku: isProductMode && meta.showSku,
+    showSubtitleSku: !isProductMode && meta.showSku,
     productImageUrl: meta.imageUrl,
     showProductImage: Boolean(meta.imageUrl),
     placeholderIconSrc: DEFAULT_PRODUCT_PLACEHOLDER_ICON,

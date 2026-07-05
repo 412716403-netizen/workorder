@@ -1,0 +1,51 @@
+---
+description: 小程序列表/流水/清单中产品名称与编号展示约定
+globs: miniprogram/**/*
+alwaysApply: false
+---
+
+# 小程序列表 · 产品名称 + 编号
+
+凡**流水、清单、主列表卡片**展示成品/产品名称时，名称后须跟**产品编号（sku）**，口径对齐报工流水 `production-order-report-history`。
+
+## 数据层（必做）
+
+- 使用 [`listProductThumb.js`](../miniprogram/utils/listProductThumb.js)：
+  - `listProductNameSkuFields(product, fallback?)` → `{ productName, productSku, showProductSku }`
+  - 有 `productsById` / `productMap` 时用 `listProductNameSkuFromMap` 或 `listProductDisplayFieldsFromMap`
+  - 已有 `productMetaFromMap`（[`orderReportHistory.js`](../miniprogram/utils/orderReportHistory.js)）可继续用于带缩略图场景
+- `showProductSku` 规则：有 `product.name` 且 `product.sku` 非空且二者不同才为 `true`（见 `productionPlans.productNameSkuParts`）
+- 列表搜索/筛选须把 `productSku` 纳入关键词字段
+
+## 视图层（WXML）
+
+**分行展示**（报工流水 / 工单列表 / 外协流水等，推荐）：
+
+```xml
+<text class="…__product-name">{{item.productName}}</text>
+<text wx:if="{{item.showProductSku}}" class="…__sku">{{item.productSku}}</text>
+```
+
+- 外协/返工流水行复用 `outsource-flow-row__product-name` + `outsource-flow-row__sku`（[`outsource-shared.wxss`](../miniprogram/styles/outsource-shared.wxss)）
+- 报工流水用 `report-history-row__product-name` + `report-history-row__sku`
+
+**单行/详情标题**（可选，与入库详情一致）：
+
+```xml
+{{detail.productName}}<text wx:if="{{detail.showProductSku}}" class="list-product-sku"> {{detail.productSku}}</text>
+```
+
+全局样式：`.list-product-sku`（[`styles/list.wxss`](../miniprogram/styles/list.wxss)）
+
+## 禁止
+
+- 仅写 `productName: product.name` 而不提供 `productSku` / `showProductSku`
+- 在 WXML 用 `wx:if="{{item.productSku}}"` 代替 `showProductSku`（无名称时编号单独展示会误判）
+- 各页自创「名称+编号」拼接字符串（应用 util 保持搜索与展示一致）
+
+## 参考实现
+
+- 报工流水：[`orderReportHistory.js`](../miniprogram/utils/orderReportHistory.js) + [`production-order-report-history.wxml`](../miniprogram/pages/production-order-report-history/production-order-report-history.wxml)
+- 工单中心列表：[`productionOrders.js`](../miniprogram/utils/productionOrders.js) + [`production-orders.wxml`](../miniprogram/pages/production-orders/production-orders.wxml)
+
+完整说明见 [`docs/10-miniprogram-ui.md`](../docs/10-miniprogram-ui.md) §产品名称与编号。

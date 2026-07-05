@@ -1,0 +1,149 @@
+<view class="plan-detail-shell">
+  <view class="plan-detail-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-detail-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-detail-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-detail-header__title">返工详情</text>
+      <view class="plan-detail-header__back plan-detail-header__back--placeholder"></view>
+    </view>
+  </view>
+
+  <view class="plan-detail-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view
+    class="plan-detail-scroll"
+    scroll-y
+    show-scrollbar="{{false}}"
+    style="height: {{scrollHeight}}px;"
+  >
+    <view wx:if="{{loading}}" class="plan-detail-muted">加载中…</view>
+
+    <view wx:else class="plan-detail-page">
+      <view wx:if="{{productHero}}" class="plan-detail-hero">
+        <view class="plan-detail-hero__left">
+          <image
+            wx:if="{{productHero.showProductImage}}"
+            class="plan-detail-hero__img"
+            src="{{productHero.productImageUrl}}"
+            mode="aspectFill"
+            binderror="onProductImageError"
+          />
+          <view wx:else class="plan-detail-hero__img plan-detail-hero__img--placeholder">
+            <image class="plan-detail-hero__placeholder-icon" src="{{productHero.placeholderIconSrc}}" mode="aspectFit" />
+          </view>
+        </view>
+        <view class="plan-detail-hero__text">
+          <view class="plan-detail-hero__product-line">
+            <text class="plan-detail-hero__product">{{productHero.productName}}</text>
+            <text wx:if="{{productHero.showProductSku}}" class="plan-detail-hero__sku">{{productHero.productSku}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="plan-detail-section">
+        <view class="plan-detail-section__head">
+          <text class="plan-detail-section__title">基本信息</text>
+        </view>
+        <view class="plan-form-card">
+          <view
+            wx:for="{{basicRows}}"
+            wx:for-item="row"
+            wx:key="label"
+            class="plan-form-cell {{row.isLast ? 'plan-form-cell--last' : ''}}"
+          >
+            <text class="plan-form-cell__label">{{row.label}}</text>
+            <text class="plan-form-cell__value">{{row.value}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="plan-detail-section">
+        <view class="plan-detail-section__head">
+          <text class="plan-detail-section__title">不良汇总</text>
+        </view>
+        <view wx:if="{{defectRows.length}}" class="rework-detail-table">
+          <view class="rework-detail-table__head">
+            <text class="rework-detail-table__col rework-detail-table__col--name rework-detail-table__col--head">工序</text>
+            <text class="rework-detail-table__col rework-detail-table__col--head">不良</text>
+            <text class="rework-detail-table__col rework-detail-table__col--head">返工</text>
+            <text class="rework-detail-table__col rework-detail-table__col--head">报损</text>
+            <text class="rework-detail-table__col rework-detail-table__col--head">待处理</text>
+          </view>
+          <view wx:for="{{defectRows}}" wx:key="nodeId" class="rework-detail-table__row">
+            <text class="rework-detail-table__col rework-detail-table__col--name">{{item.name}}</text>
+            <text class="rework-detail-table__col">{{item.defective}}</text>
+            <text class="rework-detail-table__col">{{item.rework}}</text>
+            <text class="rework-detail-table__col">{{item.scrap}}</text>
+            <text class="rework-detail-table__col rework-detail-table__col--pending">{{item.pending}}</text>
+          </view>
+        </view>
+        <view wx:else class="plan-detail-empty">暂无不良数据</view>
+      </view>
+
+      <view class="plan-detail-section">
+        <view class="plan-detail-section__head">
+          <text class="plan-detail-section__title">返工进度</text>
+        </view>
+        <view wx:if="{{reworkStatRows.length}}" class="rework-detail-table">
+          <view class="rework-detail-table__head">
+            <text class="rework-detail-table__col rework-detail-table__col--name rework-detail-table__col--head">工序</text>
+            <text class="rework-detail-table__col rework-detail-table__col--head">总量</text>
+            <text class="rework-detail-table__col rework-detail-table__col--head">已完成</text>
+            <text class="rework-detail-table__col rework-detail-table__col--head">待完成</text>
+          </view>
+          <view wx:for="{{reworkStatRows}}" wx:key="nodeId" class="rework-detail-table__row">
+            <text class="rework-detail-table__col rework-detail-table__col--name">{{item.name}}</text>
+            <text class="rework-detail-table__col">{{item.totalQty}}</text>
+            <text class="rework-detail-table__col">{{item.completedQty}}</text>
+            <text class="rework-detail-table__col rework-detail-table__col--pending">{{item.pendingQty}}</text>
+          </view>
+        </view>
+        <view wx:else class="plan-detail-empty">暂无返工进度</view>
+      </view>
+
+      <view class="plan-detail-section">
+        <view class="plan-detail-section__head">
+          <text class="plan-detail-section__title">返工/报损记录</text>
+          <text class="plan-detail-section__sub">共 {{defectRecordsList.length}} 条</text>
+        </view>
+        <view wx:if="{{defectRecordsList.length}}">
+          <view wx:for="{{defectRecordsList}}" wx:key="id" class="rework-detail-record">
+            <view class="rework-detail-record__head">
+              <text class="rework-detail-record__doc">{{item.docNo}}</text>
+              <text class="rework-detail-record__badge">{{item.typeLabel}}</text>
+            </view>
+            <text class="rework-detail-record__qty">{{item.qtyText}}</text>
+            <view class="rework-detail-record__meta">
+              <text>来源：{{item.sourceName}}</text>
+              <text>目标：{{item.targetLabel}}</text>
+              <text wx:if="{{item.status}}">状态：{{item.status}}</text>
+              <text>{{item.timeLabel}}</text>
+            </view>
+          </view>
+        </view>
+        <view wx:else class="plan-detail-empty">暂无返工/报损记录</view>
+      </view>
+
+      <view class="plan-detail-section">
+        <view class="plan-detail-section__head">
+          <text class="plan-detail-section__title">返工报工记录</text>
+          <text class="plan-detail-section__sub">共 {{reworkReportList.length}} 条</text>
+        </view>
+        <view wx:if="{{reworkReportList.length}}">
+          <view wx:for="{{reworkReportList}}" wx:key="id" class="rework-detail-record">
+            <view class="rework-detail-record__head">
+              <text class="rework-detail-record__doc">{{item.docNo}}</text>
+              <text class="rework-detail-record__badge">返工报工</text>
+            </view>
+            <text class="rework-detail-record__qty">{{item.qtyText}}</text>
+            <view class="rework-detail-record__meta">
+              <text>工序：{{item.nodeName}}</text>
+              <text>经办：{{item.operator}}</text>
+              <text>{{item.timeLabel}}</text>
+            </view>
+          </view>
+        </view>
+        <view wx:else class="plan-detail-empty">暂无返工报工记录</view>
+      </view>
+    </view>
+  </scroll-view>
+</view>

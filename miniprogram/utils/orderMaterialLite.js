@@ -211,6 +211,58 @@ function buildProgressUi(issued, needed) {
   };
 }
 
+function buildReworkIssuedMapForOrder(prodRecords, orderId) {
+  const issuedMap = new Map();
+  (prodRecords || []).forEach((r) => {
+    if (r.type !== 'STOCK_OUT') return;
+    if (r.orderId !== orderId) return;
+    if (r.reason !== '来自于返工') return;
+    const pid = r.productId;
+    issuedMap.set(pid, (issuedMap.get(pid) || 0) + (Number(r.quantity) || 0));
+  });
+  return issuedMap;
+}
+
+function buildReworkIssuedMapForProduct(prodRecords, groupOrders, sourceProductId) {
+  const familyIds = new Set((groupOrders || []).map((o) => o.id));
+  const issuedMap = new Map();
+  (prodRecords || []).forEach((r) => {
+    if (r.type !== 'STOCK_OUT' || r.reason !== '来自于返工') return;
+    let inScope = false;
+    if (sourceProductId) {
+      if (r.sourceProductId === sourceProductId) inScope = true;
+      else if (r.orderId && familyIds.has(r.orderId)) inScope = true;
+    } else if (r.orderId && familyIds.has(r.orderId)) {
+      inScope = true;
+    }
+    if (!inScope) return;
+    const pid = r.productId;
+    issuedMap.set(pid, (issuedMap.get(pid) || 0) + (Number(r.quantity) || 0));
+  });
+  return issuedMap;
+}
+
+function buildReworkMaterialIssueUiRows(bomMaterials, issuedMap) {
+  return (bomMaterials || []).map((m) => {
+    const issued = issuedMap.get(m.productId) || 0;
+    const nodeNames = m.nodeNames || [];
+    return {
+      materialProductId: m.productId,
+      name: m.name,
+      sku: m.sku || '',
+      showSku: Boolean(m.sku),
+      unitNeeded: roundQty(m.unitNeeded),
+      issued: roundQty(issued),
+      issuedText: formatQtyDisplay(issued),
+      nodeNames,
+      showNodeTags: nodeNames.length > 0,
+      issueQty: '',
+      progressLabel: `累计领料 ${formatQtyDisplay(issued)}`,
+      showOverIssue: false,
+    };
+  });
+}
+
 function buildMaterialIssueUiRows(bomMaterials, issuedMap) {
   return (bomMaterials || []).map((m) => {
     const issued = issuedMap.get(m.productId) || 0;
@@ -263,6 +315,9 @@ module.exports = {
   buildBomMaterialsForProductGroup,
   buildIssuedMapForOrder,
   buildIssuedMapForProduct,
+  buildReworkIssuedMapForOrder,
+  buildReworkIssuedMapForProduct,
+  buildReworkMaterialIssueUiRows,
   buildMaterialIssueUiRows,
   buildMaterialIssueRows,
   issuedQtyForMaterial,

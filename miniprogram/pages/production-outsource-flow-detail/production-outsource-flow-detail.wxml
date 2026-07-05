@@ -41,7 +41,7 @@
             <text wx:if="{{detail.showOrderNumber}}" class="report-batch-hero__badge">{{detail.orderNumber}}</text>
             <text class="report-batch-hero__badge outsource-flow-detail__type">{{detail.typeLabel}}</text>
           </view>
-          <text class="report-batch-hero__milestone">{{detail.productName}}</text>
+          <text class="report-batch-hero__milestone">{{detail.productName}}<text wx:if="{{detail.showProductSku}}" class="list-product-sku"> {{detail.productSku}}</text></text>
           <view class="outsource-flow-detail__milestone">
             <text>工序：{{detail.milestoneName}}</text>
             <text wx:if="{{detail.showPartner}}" class="outsource-flow-detail__partner"> · {{detail.partner}}</text>
