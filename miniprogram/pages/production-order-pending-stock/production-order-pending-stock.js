@@ -4,6 +4,7 @@ const { loadPendingStockRows } = require('../../utils/pendingStockBadge.js');
 const { fetchTenantConfig, fetchProductsAll } = require('../../utils/orderApi.js');
 const { normalizeMasterList } = require('../../utils/productionPlans.js');
 const { productMetaFromMap } = require('../../utils/orderReportHistory.js');
+const { DEFAULT_PRODUCT_PLACEHOLDER_ICON } = require('../../utils/listProductThumb.js');
 const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
 
 function computeHeaderBlockHeight(nav) {
@@ -28,7 +29,7 @@ function mapListRow(row, productionLinkMode, productMap) {
     showProductSku: meta.showSku,
     productImageUrl: meta.imageUrl,
     showProductImage: Boolean(meta.imageUrl),
-    placeholderIconSrc: '/assets/icons/warehouse.png',
+    placeholderIconSrc: DEFAULT_PRODUCT_PLACEHOLDER_ICON,
     orderTotal: row.orderTotal,
     alreadyIn: row.alreadyIn,
     pendingTotal: row.pendingTotal,

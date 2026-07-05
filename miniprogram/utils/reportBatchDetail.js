@@ -4,6 +4,7 @@
 const { formatReportTime, productMetaFromMap } = require('./orderReportHistory.js');
 const { productHasColorSizeMatrix, variantLabel, normalizeAppDictionaries } = require('./productionPlans.js');
 const { buildVariantMatrixUiModel } = require('./variantQtyMatrix.js');
+const { DEFAULT_PRODUCT_PLACEHOLDER_ICON } = require('./listProductThumb.js');
 
 function isOutsourceReceiveReport(r) {
   const customData = r.customData || {};
@@ -186,7 +187,7 @@ function mapBatchToListRow(batch, ctx) {
     showProductSku: meta.showSku,
     productImageUrl: meta.imageUrl,
     showProductImage: Boolean(meta.imageUrl),
-    placeholderIconSrc: '/assets/icons/clipboard-list.png',
+    placeholderIconSrc: DEFAULT_PRODUCT_PLACEHOLDER_ICON,
     goodQtyText: `${qty} 件`,
     showDefective: defective > 0,
     defectiveText: defective > 0 ? `不良 ${defective}` : '',
@@ -333,7 +334,7 @@ function buildBatchDetailView(batch, ctx) {
     editOperator: first.operator || '',
     productImageUrl: (product && product.imageUrl) || '',
     showProductImage: Boolean(product && product.imageUrl),
-    placeholderIconSrc: '/assets/icons/clipboard-list.png',
+    placeholderIconSrc: DEFAULT_PRODUCT_PLACEHOLDER_ICON,
   };
 }
 

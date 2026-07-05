@@ -131,6 +131,19 @@ function normalizeMoneyFields(data: Record<string, unknown>): void {
   }
 }
 
+function normalizeQuantityField(data: Record<string, unknown>): void {
+  if (!('quantity' in data) || data.quantity == null || data.quantity === '') return;
+  const n = Number(data.quantity);
+  if (!Number.isFinite(n)) {
+    throw new AppError(400, '数量无效');
+  }
+  data.quantity = new Prisma.Decimal(n);
+}
+
+function isNestedTransactionClient(db: TenantPrismaClient): boolean {
+  return typeof (db as { $transaction?: unknown }).$transaction !== 'function';
+}
+
 function parseWeightKg(raw: unknown): number | null {
   const n = typeof raw === 'number' ? raw : typeof raw === 'string' && raw !== '' ? parseFloat(raw) : NaN;
   return Number.isFinite(n) && n > 0 ? n : null;
@@ -396,6 +409,7 @@ export async function createRecord(
   if (!data.id) data.id = genId('prodop');
   normalizeDates(data);
   normalizeMoneyFields(data);
+  normalizeQuantityField(data);
   if (!data.timestamp) data.timestamp = new Date();
   // sanitizeCreate 会剥掉 tenantId，正常情况下 getTenantPrisma 的 Proxy 会自动回填；
   // 但 createRecordBatch 内部把裸 $transaction 的 tx 强转成 TenantPrismaClient 传进来，
@@ -406,7 +420,14 @@ export async function createRecord(
   if (!data.docNo) {
     if (data.type === 'OUTSOURCE' && data.partner && tenantId) {
       const kind = data.status === '已收回' ? 'receive' : 'dispatch';
-      data.docNo = await nextOutsourceDocNoForPartner(tenantId, kind, String(data.partner));
+      data.docNo = isNestedTransactionClient(db)
+        ? await nextOutsourceDocNoForPartnerTx(
+          db as unknown as Prisma.TransactionClient,
+          tenantId,
+          kind,
+          String(data.partner),
+        )
+        : await nextOutsourceDocNoForPartner(tenantId, kind, String(data.partner));
     } else if (DOC_PREFIX[data.type as string]) {
       data.docNo = await generateDocNo(
         DOC_PREFIX[data.type as string],
@@ -484,7 +505,7 @@ export async function createRecord(
     : await (async () => {
         await validateStockReturnBatchOnWrite(db, data as Record<string, unknown>);
         await validateStockOutBatchOnWrite(db, data as Record<string, unknown>, undefined);
-        return db.productionOpRecord.create({ data });
+        return db.productionOpRecord.create({ data: data as any });
       })();
 
   if (data.type === 'OUTSOURCE' && data.status === '已收回' && !data.sourceReworkId) {
@@ -526,6 +547,9 @@ export async function createRecordBatch(
   records: Record<string, unknown>[],
   tenantId?: string,
 ) {
+  if (!tenantId) {
+    throw new AppError(400, '租户上下文缺失，无法批量写入生产流水');
+  }
   if (!Array.isArray(records) || records.length === 0) {
     return { records: [] as unknown[], dispatchCompletionPending: [] as DispatchCompletionPending[] };
   }
@@ -564,7 +588,7 @@ export async function createRecordBatch(
       const out: unknown[] = [];
       const pendingByOrder = new Map<string, DispatchCompletionPending>();
       for (const r of records) {
-        const body = { ...r };
+        const body: Record<string, unknown> = { ...r, tenantId };
         if (!body.docNo && sharedDocNo) body.docNo = sharedDocNo;
         const result = await createRecord(txDb, body, tenantId, { skipNestedStockTransaction: true });
         out.push(result.record);

@@ -19,26 +19,29 @@ const {
   buildStockInEditSaveOperations,
 } = require('../../utils/stockInDetailEdit.js');
 const {
-  applyMatrixKeyPress,
+  activateMatrixKeyboardCell,
+  applyMatrixKeyboardKey,
   buildMatrixKeyboardPreview,
+  createMatrixKeyboardInputSession,
   getNextMatrixVariantIdInColumn,
   getNextMatrixVariantIdInRow,
 } = require('../../utils/matrixQtyKeyboard.js');
-const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
+const { readNavBarMetrics, readWindowMetrics, computePlanCreateHeaderHeight } = require('../../utils/windowMetrics.js');
+const { afterMatrixKeyboardOpen } = require('../../utils/matrixKeyboardLayout.js');
+const { LIST_ROUTES, afterSaveReturnToList } = require('../../utils/saveNavigation.js');
+
+function computeHeaderBlockHeight(nav) {
+  return computePlanCreateHeaderHeight(nav);
+}
 
 function emptyMatrixKeyboardState() {
   return {
     matrixKeyboardVisible: false,
+    matrixInputReplaceAll: false,
     activeMatrixVariantId: '',
     matrixKeyboardLabel: '',
     matrixKeyboardValue: '',
   };
-}
-
-function computeHeaderBlockHeight(nav) {
-  const win = readWindowMetrics();
-  const tailPx = Math.ceil((win.windowWidth / 750) * 16);
-  return nav.statusBarHeight + nav.navBarHeight + tailPx;
 }
 
 function computeScrollHeight(nav, hasFooter) {
@@ -66,9 +69,11 @@ Page({
     editWarehouseName: '',
     editMatrixLayout: null,
     matrixKeyboardVisible: false,
+    matrixInputReplaceAll: false,
     activeMatrixVariantId: '',
     matrixKeyboardLabel: '',
     matrixKeyboardValue: '',
+    matrixScrollTop: 0,
     saving: false,
     statusBarHeight: 20,
     navBarHeight: 44,
@@ -85,6 +90,7 @@ Page({
     this._rows = (detail && detail.rows) || [];
     this._canEdit = hasPermission(perms, 'production:orders_pending_stock_in:edit');
     this._canDelete = hasPermission(perms, 'production:orders_pending_stock_in:delete');
+    this._matrixKbInput = createMatrixKeyboardInputSession();
 
     this.setData({
       docNo: this._docNo,
@@ -255,6 +261,7 @@ Page({
   onMatrixCellTap(e) {
     const { variantId } = e.currentTarget.dataset;
     if (!variantId) return;
+    activateMatrixKeyboardCell(this._matrixKbInput);
     const preview = buildMatrixKeyboardPreview(
       this.data.editMatrixLayout,
       variantId,
@@ -262,9 +269,12 @@ Page({
     );
     this.setData({
       matrixKeyboardVisible: true,
+      matrixInputReplaceAll: true,
       activeMatrixVariantId: variantId,
       matrixKeyboardLabel: preview.label,
       matrixKeyboardValue: preview.value,
+    }, () => {
+      afterMatrixKeyboardOpen(this, '.plan-detail-scroll');
     });
   },
 
@@ -278,11 +288,15 @@ Page({
     if (action === 'enter') {
       const nextId = getNextMatrixVariantIdInRow(editMatrixLayout, activeMatrixVariantId);
       if (nextId) {
+        activateMatrixKeyboardCell(this._matrixKbInput);
         const preview = buildMatrixKeyboardPreview(editMatrixLayout, nextId, this._quantities);
         this.setData({
           activeMatrixVariantId: nextId,
+          matrixInputReplaceAll: true,
           matrixKeyboardLabel: preview.label,
           matrixKeyboardValue: preview.value,
+        }, () => {
+          afterMatrixKeyboardOpen(this, '.plan-detail-scroll');
         });
       } else {
         this.setData(emptyMatrixKeyboardState());
@@ -292,11 +306,15 @@ Page({
     if (action === 'next') {
       const nextId = getNextMatrixVariantIdInColumn(editMatrixLayout, activeMatrixVariantId);
       if (nextId) {
+        activateMatrixKeyboardCell(this._matrixKbInput);
         const preview = buildMatrixKeyboardPreview(editMatrixLayout, nextId, this._quantities);
         this.setData({
           activeMatrixVariantId: nextId,
+          matrixInputReplaceAll: true,
           matrixKeyboardLabel: preview.label,
           matrixKeyboardValue: preview.value,
+        }, () => {
+          afterMatrixKeyboardOpen(this, '.plan-detail-scroll');
         });
       } else {
         this.setData(emptyMatrixKeyboardState());
@@ -305,7 +323,11 @@ Page({
     }
     if (!activeMatrixVariantId) return;
     const current = this._quantities[activeMatrixVariantId] || '';
-    this._quantities[activeMatrixVariantId] = applyMatrixKeyPress(current, action, digit);
+    const { value, replaceConsumed } = applyMatrixKeyboardKey(this._matrixKbInput, current, action, digit);
+    this._quantities[activeMatrixVariantId] = value;
+    if (replaceConsumed) {
+      this.setData({ matrixInputReplaceAll: false });
+    }
     this.rebuildEditMatrixLayout();
   },
 
@@ -382,8 +404,10 @@ Page({
         await this.executeSaveOp(ops[i]);
       }
       wx.hideLoading();
-      wx.showToast({ title: '已保存', icon: 'success' });
-      setTimeout(() => wx.navigateBack(), 400);
+      afterSaveReturnToList({
+        listUrl: LIST_ROUTES.STOCK_IN_HISTORY,
+        toastTitle: '已保存',
+      });
     } catch (err) {
       wx.hideLoading();
       this.setData({ saving: false });
@@ -403,8 +427,11 @@ Page({
           for (let i = 0; i < this._rows.length; i += 1) {
             await deleteProductionRecord(this._rows[i].id);
           }
-          wx.showToast({ title: '已删除', icon: 'success' });
-          setTimeout(() => wx.navigateBack(), 400);
+          wx.hideLoading();
+          afterSaveReturnToList({
+            listUrl: LIST_ROUTES.STOCK_IN_HISTORY,
+            toastTitle: '已删除',
+          });
         } catch (err) {
           wx.showToast({ title: (err && err.message) || '删除失败', icon: 'none' });
         } finally {

@@ -133,8 +133,9 @@ Page({
   },
 
   onShow() {
-    if (this._needReload) {
+    if (this._needReload || this._refreshOnNextShow) {
       this._needReload = false;
+      this._refreshOnNextShow = false;
       this.loadRows();
     }
   },

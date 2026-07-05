@@ -1,0 +1,113 @@
+<view class="plan-shell">
+  <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-header__title">外协流水</text>
+      <view class="plan-header__back plan-header__back--placeholder"></view>
+    </view>
+    <view class="plan-header__tools">
+      <view class="plan-search">
+        <input class="plan-search__input" value="{{searchKeyword}}" bindinput="onSearchInput" placeholder="单号 / 工单 / 产品 / 加工厂" placeholder-class="plan-search__ph" />
+        <view wx:if="{{searchKeyword}}" class="plan-search__clear" bindtap="onSearchClear">×</view>
+      </view>
+      <view class="plan-tool-btn {{filterActive ? 'plan-tool-btn--active' : ''}}" bindtap="onFilterTap">
+        <image class="plan-tool-btn__icon" src="/assets/icons/list-filter.png" mode="aspectFit" />
+      </view>
+    </view>
+  </view>
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <view class="outsource-flow-page">
+    <view wx:if="{{showFilterPanel}}" class="plan-filter-panel">
+      <view class="plan-filter-panel__row">
+        <text class="plan-filter-panel__label">开始日期</text>
+        <picker mode="date" value="{{draftDateFrom}}" bindchange="onDraftDateFromChange">
+          <view class="plan-filter-chip plan-filter-chip--active">{{draftDateFrom || '请选择'}}</view>
+        </picker>
+      </view>
+      <view class="plan-filter-panel__row">
+        <text class="plan-filter-panel__label">结束日期</text>
+        <picker mode="date" value="{{draftDateTo}}" bindchange="onDraftDateToChange">
+          <view class="plan-filter-chip plan-filter-chip--active">{{draftDateTo || '请选择'}}</view>
+        </picker>
+      </view>
+      <view class="plan-filter-panel__row">
+        <text class="plan-filter-panel__label">业务类型</text>
+        <picker mode="selector" range="{{typeFilterLabels}}" value="{{draftTypeIndex}}" bindchange="onDraftTypeChange">
+          <view class="plan-filter-chip plan-filter-chip--active">{{typeFilterLabels[draftTypeIndex] || '全部类型'}}</view>
+        </picker>
+      </view>
+      <view class="plan-filter-panel__row">
+        <text class="plan-filter-panel__label">工序</text>
+        <picker
+          mode="selector"
+          range="{{milestoneOptions}}"
+          range-key="name"
+          value="{{draftMilestoneFilterIndex}}"
+          bindchange="onDraftMilestoneChange"
+        >
+          <view class="plan-filter-chip plan-filter-chip--active">{{draftMilestoneFilterLabel}}</view>
+        </picker>
+      </view>
+      <view class="plan-filter-panel__foot">
+        <view class="plan-filter-reset" bindtap="onFilterReset">重置</view>
+        <view class="plan-filter-apply" bindtap="onFilterApply">确定</view>
+      </view>
+    </view>
+
+    <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
+
+    <view wx:elif="{{rows.length}}" class="plan-list-wrap">
+      <view
+        wx:for="{{rows}}"
+        wx:key="batchKey"
+        class="outsource-flow-row"
+        bindtap="onRowTap"
+        data-batch-key="{{item.batchKey}}"
+      >
+        <view class="outsource-flow-row__body">
+          <view class="outsource-flow-row__left">
+            <view class="outsource-flow-row__thumb">
+              <image
+                wx:if="{{item.showProductImage}}"
+                class="outsource-flow-row__img"
+                src="{{item.productImageUrl}}"
+                mode="aspectFill"
+                data-key="{{item.batchKey}}"
+                binderror="onProductImageError"
+              />
+              <view wx:else class="outsource-flow-row__img outsource-flow-row__img--placeholder">
+                <image class="outsource-flow-row__placeholder-icon" src="{{item.placeholderIconSrc}}" mode="aspectFit" />
+              </view>
+            </view>
+          </view>
+          <view class="outsource-flow-row__content">
+            <view class="outsource-flow-row__head">
+              <view class="outsource-flow-row__head-main">
+                <text class="outsource-flow-row__type {{item.flowType === 'receive' ? 'outsource-flow-row__type--receive' : ''}}">{{item.typeStr}}</text>
+                <text wx:if="{{item.showOrderNumber && item.orderNumber}}" class="outsource-flow-row__head-dot">·</text>
+                <text wx:if="{{item.showOrderNumber && item.orderNumber}}" class="outsource-flow-row__order-no">{{item.orderNumber}}</text>
+                <text class="outsource-flow-row__head-dot">·</text>
+                <text class="outsource-flow-row__time">{{item.timeLabel}}</text>
+              </view>
+              <text class="outsource-flow-row__doc-no">{{item.docNo}}</text>
+            </view>
+            <view class="outsource-flow-row__main">
+              <view class="outsource-flow-row__milestone-wrap">
+                <text class="outsource-flow-row__milestone">{{item.milestoneStr}}</text>
+                <text wx:if="{{item.showPartner}}" class="outsource-flow-row__partner"> · {{item.partner}}</text>
+              </view>
+              <text class="outsource-flow-row__qty">{{item.totalQtyText}}</text>
+            </view>
+            <view class="outsource-flow-row__product">{{item.productName}}</view>
+          </view>
+        </view>
+      </view>
+    </view>
+    <view wx:else class="plan-list-empty">所选条件下暂无流水</view>
+
+    <view wx:if="{{!loading && rows.length}}" class="outsource-flow-footer">
+      <text class="outsource-flow-footer__text">{{stats.footerText}}</text>
+    </view>
+  </view>
+</view>

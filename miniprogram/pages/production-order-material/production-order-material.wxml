@@ -2,7 +2,7 @@
   <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
     <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
       <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
-      <text class="plan-header__title">物料发出</text>
+      <text class="plan-header__title">{{pageTitle}}</text>
       <view class="plan-header__back plan-header__back--placeholder"></view>
     </view>
   </view>
@@ -14,6 +14,7 @@
 
     <block wx:elif="{{hasRows}}">
       <view class="material-issue-hero">
+        <view wx:if="{{showPartner}}" class="material-issue-hero__partner">加工厂：{{partnerLabel}}</view>
         <view class="material-issue-hero__line material-issue-hero__line--tap" catchtap="onProductHeroTap">
           <text wx:if="{{showOrderNumber}}" class="material-issue-hero__order">{{orderNumber}}</text>
           <text wx:if="{{showOrderNumber}}" class="material-issue-hero__sep"> — </text>
@@ -23,7 +24,7 @@
       </view>
 
       <view wx:if="{{warehouseNames.length}}" class="material-issue-wh">
-        <view class="material-issue-wh__label">出库仓库</view>
+        <view class="material-issue-wh__label">{{warehouseLabel}}</view>
         <picker
           mode="selector"
           range="{{warehouseNames}}"
@@ -35,13 +36,136 @@
       </view>
 
       <scroll-view scroll-x show-scrollbar="{{false}}" class="material-issue-table-scroll">
-        <view class="material-issue-table {{showBatchCol ? 'material-issue-table--batch' : ''}}">
+        <!-- 外协退料：已外发 / 已消耗 / 已退回 / 可退 -->
+        <view
+          wx:if="{{isReturnMode && returnLayout === 'outsource'}}"
+          class="material-issue-table material-issue-table--return-outsource {{showBatchCol ? 'material-issue-table--batch' : ''}}"
+        >
+          <view class="material-issue-table__thead">
+            <view class="material-issue-table__th material-issue-table__th--name">物料</view>
+            <view class="material-issue-table__th material-issue-table__th--stat">已领料</view>
+            <view class="material-issue-table__th material-issue-table__th--stat">已消耗</view>
+            <view class="material-issue-table__th material-issue-table__th--stat">已退料</view>
+            <view class="material-issue-table__th material-issue-table__th--stat material-issue-table__th--highlight">可退</view>
+            <view wx:if="{{showBatchCol}}" class="material-issue-table__th material-issue-table__th--batch">批次</view>
+            <view class="material-issue-table__th material-issue-table__th--input">{{inputColLabel}}</view>
+          </view>
+
+          <view wx:for="{{rows}}" wx:key="materialProductId" class="material-issue-table__tr">
+            <view
+              class="material-issue-table__td material-issue-table__td--name material-issue-table__td--tap"
+              catchtap="onMaterialNameTap"
+              data-id="{{item.materialProductId}}"
+            >
+              <view class="material-issue-table__name-line">
+                <text class="material-issue-table__name">{{item.name}}</text>
+                <text wx:if="{{item.showSku}}" class="material-issue-table__sku">{{item.sku}}</text>
+              </view>
+            </view>
+            <view class="material-issue-table__td material-issue-table__td--stat material-issue-table__td--stat-dispatch">{{item.dispatchedText}}</view>
+            <view class="material-issue-table__td material-issue-table__td--stat material-issue-table__td--stat-consume">{{item.consumedText}}</view>
+            <view class="material-issue-table__td material-issue-table__td--stat">{{item.returnedText}}</view>
+            <view class="material-issue-table__td material-issue-table__td--stat material-issue-table__td--stat-surplus">{{item.returnableText}}</view>
+            <view wx:if="{{showBatchCol}}" class="material-issue-table__td material-issue-table__td--batch">
+              <picker
+                wx:if="{{item.needsBatch && canMaterial}}"
+                mode="selector"
+                range="{{item.batchPickerRange}}"
+                value="{{item.batchIndex}}"
+                data-id="{{item.materialProductId}}"
+                bindchange="onBatchChange"
+              >
+                <view class="material-issue-batch-picker">
+                  {{item.batchDisplayText || item.batchPickerRange[item.batchIndex] || '选择批次'}}
+                </view>
+              </picker>
+              <text wx:elif="{{item.needsBatch}}" class="material-issue-batch-picker material-issue-batch-picker--readonly">—</text>
+            </view>
+            <view class="material-issue-table__td material-issue-table__td--input">
+              <input
+                wx:if="{{canMaterial}}"
+                class="material-issue-input"
+                type="digit"
+                value="{{item.issueQty}}"
+                data-id="{{item.materialProductId}}"
+                bindinput="onIssueQtyInput"
+                placeholder="0"
+              />
+              <text wx:else class="material-issue-input material-issue-input--readonly">—</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- 本厂退料：领料 / 退料 / 净领用 / 报工耗材 / 结余 -->
+        <view
+          wx:elif="{{isReturnMode}}"
+          class="material-issue-table material-issue-table--return-internal {{showBatchCol ? 'material-issue-table--batch' : ''}}"
+        >
+          <view class="material-issue-table__thead">
+            <view class="material-issue-table__th material-issue-table__th--name">物料</view>
+            <view class="material-issue-table__th material-issue-table__th--stat">领料</view>
+            <view class="material-issue-table__th material-issue-table__th--stat">退料</view>
+            <view class="material-issue-table__th material-issue-table__th--stat">净领用</view>
+            <view class="material-issue-table__th material-issue-table__th--stat">报工耗材</view>
+            <view class="material-issue-table__th material-issue-table__th--stat material-issue-table__th--highlight">结余</view>
+            <view wx:if="{{showBatchCol}}" class="material-issue-table__th material-issue-table__th--batch">批次</view>
+            <view class="material-issue-table__th material-issue-table__th--input">{{inputColLabel}}</view>
+          </view>
+
+          <view wx:for="{{rows}}" wx:key="materialProductId" class="material-issue-table__tr">
+            <view
+              class="material-issue-table__td material-issue-table__td--name material-issue-table__td--tap"
+              catchtap="onMaterialNameTap"
+              data-id="{{item.materialProductId}}"
+            >
+              <view class="material-issue-table__name-line">
+                <text class="material-issue-table__name">{{item.name}}</text>
+                <text wx:if="{{item.showSku}}" class="material-issue-table__sku">{{item.sku}}</text>
+              </view>
+            </view>
+            <view class="material-issue-table__td material-issue-table__td--stat material-issue-table__td--stat-dispatch">{{item.issueText}}</view>
+            <view class="material-issue-table__td material-issue-table__td--stat">{{item.returnText}}</view>
+            <view class="material-issue-table__td material-issue-table__td--stat">{{item.netText}}</view>
+            <view class="material-issue-table__td material-issue-table__td--stat material-issue-table__td--stat-consume">{{item.reportCostText}}</view>
+            <view class="material-issue-table__td material-issue-table__td--stat material-issue-table__td--stat-surplus">{{item.surplusText}}</view>
+            <view wx:if="{{showBatchCol}}" class="material-issue-table__td material-issue-table__td--batch">
+              <picker
+                wx:if="{{item.needsBatch && canMaterial}}"
+                mode="selector"
+                range="{{item.batchPickerRange}}"
+                value="{{item.batchIndex}}"
+                data-id="{{item.materialProductId}}"
+                bindchange="onBatchChange"
+              >
+                <view class="material-issue-batch-picker">
+                  {{item.batchDisplayText || item.batchPickerRange[item.batchIndex] || '选择批次'}}
+                </view>
+              </picker>
+              <text wx:elif="{{item.needsBatch}}" class="material-issue-batch-picker material-issue-batch-picker--readonly">—</text>
+            </view>
+            <view class="material-issue-table__td material-issue-table__td--input">
+              <input
+                wx:if="{{canMaterial}}"
+                class="material-issue-input"
+                type="digit"
+                value="{{item.issueQty}}"
+                data-id="{{item.materialProductId}}"
+                bindinput="onIssueQtyInput"
+                placeholder="0"
+              />
+              <text wx:else class="material-issue-input material-issue-input--readonly">—</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- 发出模式 -->
+        <view wx:else class="material-issue-table {{showBatchCol ? 'material-issue-table--batch' : ''}}">
           <view class="material-issue-table__thead">
             <view class="material-issue-table__th material-issue-table__th--name">物料</view>
             <view class="material-issue-table__th material-issue-table__th--num">理论需量</view>
-            <view class="material-issue-table__th material-issue-table__th--progress">领料进度</view>
+            <view class="material-issue-table__th material-issue-table__th--progress">{{progressColLabel}}</view>
             <view wx:if="{{showBatchCol}}" class="material-issue-table__th material-issue-table__th--batch">批次</view>
-            <view class="material-issue-table__th material-issue-table__th--input">本次领料</view>
+            <view class="material-issue-table__th material-issue-table__th--input">{{inputColLabel}}</view>
           </view>
 
           <view wx:for="{{rows}}" wx:key="materialProductId" class="material-issue-table__tr">
@@ -96,7 +220,7 @@
                 bindchange="onBatchChange"
               >
                 <view class="material-issue-batch-picker">
-                  {{item.batchNo || item.batchPickerRange[item.batchIndex] || '选择批次'}}
+                  {{item.batchDisplayText || item.batchPickerRange[item.batchIndex] || '选择批次'}}
                 </view>
               </picker>
               <text wx:elif="{{item.needsBatch}}" class="material-issue-batch-picker material-issue-batch-picker--readonly">—</text>
@@ -118,13 +242,13 @@
       </scroll-view>
     </block>
 
-    <view wx:else class="plan-list-empty">该工单未配置 BOM 物料，无法进行物料发出</view>
+    <view wx:else class="plan-list-empty">{{emptyText}}</view>
   </view>
 
   <view wx:if="{{hasRows && canMaterial}}" class="material-issue-footer">
     <view
-      class="material-issue-submit {{canSubmit && !submitting ? '' : 'material-issue-submit--disabled'}}"
+      class="material-issue-submit {{isReturnMode ? 'material-issue-submit--return' : ''}} {{canSubmit && !submitting ? '' : 'material-issue-submit--disabled'}}"
       bindtap="onSubmitTap"
-    >确认领料发出</view>
+    >{{submitLabel}}</view>
   </view>
 </view>

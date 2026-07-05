@@ -1,0 +1,115 @@
+---
+description: 小程序表单录入默认组件（合作单位/产品/色码矩阵/键盘）
+globs: miniprogram/pages/**/*, miniprogram/components/**/*
+alwaysApply: false
+---
+
+# 小程序表单录入（默认）
+
+**参考实现**：[`miniprogram/pages/production-plan-create/`](../miniprogram/pages/production-plan-create/)（生产计划新建）。新页面涉及下列场景时**必须**复用同一套组件与交互，禁止各页自建 picker / 自定义键盘。
+
+## 组件与数据
+
+| 场景 | 组件 | API / 工具 |
+|------|------|------------|
+| 合作单位（客户/加工厂） | `searchable-partner-select`（`cell` + `plan-form-card`） | `fetchPartnersAll()`、`fetchPartnerCategoriesAll()` |
+| 产品 | `searchable-product-select`（`cell` + `plan-form-card`） | `fetchProductsAll()`、`fetchCategoriesAll()` |
+| 色码矩阵 | `plan-create-matrix` 类名 + 横向 `scroll-view` | `buildVariantMatrixUiModel()` 或业务 layout builder（如 `outsourceDispatchMatrix.js`） |
+| 矩阵数量键盘 | `matrix-qty-keyboard` | [`matrixQtyKeyboard.js`](../miniprogram/utils/matrixQtyKeyboard.js) |
+
+## 页面 `.json` 注册
+
+```json
+{
+  "usingComponents": {
+    "searchable-product-select": "/components/searchable-product-select/searchable-product-select",
+    "searchable-partner-select": "/components/searchable-partner-select/searchable-partner-select",
+    "matrix-qty-keyboard": "/components/matrix-qty-keyboard/matrix-qty-keyboard"
+  }
+}
+```
+
+按需注册，未用到的组件不必引入。
+
+## 样式
+
+- 表单：`plan-form-card`、`plan-form-cell`（见 [`production-plan-create.wxss`](../miniprogram/pages/production-plan-create/production-plan-create.wxss)）
+- 矩阵：复用 `plan-create-matrix*`；报工/外协等带「最多 N」提示时可加 `report-matrix` 修饰
+- 键盘弹出：滚动区加 `matrix-keyboard-page--open`；`setData` 后调用 `afterMatrixKeyboardOpen(page, scrollViewSelector)` 将当前格滚到键盘上方；底栏提交按钮在键盘弹出时 `wx:if="{{!matrixKeyboardVisible}}"` 隐藏
+
+## 矩阵键盘 JS 模式
+
+`onMatrixKeyboardAction` 对齐 plan-create：
+
+- 页面 `onLoad`：`this._matrixKbInput = createMatrixKeyboardInputSession()`
+- 点格 / ↵ / → 切格：`activateMatrixKeyboardCell(this._matrixKbInput)` + `setData({ matrixInputReplaceAll: true })`
+- 按键：`applyMatrixKeyboardKey(this._matrixKbInput, current, action, digit)`（首键整格替换，等同全选后输入）
+- `confirm` → 关闭键盘
+- `enter` → `getNextMatrixVariantIdInRow`
+- `next` → `getNextMatrixVariantIdInColumn`
+
+WXML 选中态：`plan-create-matrix__input--replace`（有值且待替换时浅蓝底）。
+
+业务上限（如外协可发量）在切换格或 `confirm` 时校验，勿改键盘组件本身。
+
+## 禁止
+
+- `picker mode="selector"` 选择合作单位或产品（枚举筛选 Tab 除外）
+- 页面内复制粘贴自建数字键盘 UI
+- 矩阵格内用 `<input type="digit">` 直接输入（单行非矩阵数量字段除外）
+
+详细说明见 [`docs/10-miniprogram-ui.md`](../docs/10-miniprogram-ui.md) §表单录入标准。
+
+## 保存后导航
+
+单据/批次**保存或提交成功**后，统一回到**所属列表页**（不用 `navigateBack` 逐级退，也不跳详情）：
+
+```javascript
+const { LIST_ROUTES, buildReportHistoryListUrl, afterSaveReturnToList } = require('../../utils/saveNavigation.js');
+
+afterSaveReturnToList({
+  listUrl: LIST_ROUTES.OUTSOURCE_DISPATCH, // 或 buildReportHistoryListUrl({ dateFrom, dateTo, orderId })
+  toastTitle: '发出成功',
+});
+```
+
+| 页面 | 成功后列表 |
+|------|-----------|
+| 外协发出/收回确认 | `OUTSOURCE_DISPATCH` / `OUTSOURCE_RECEIVE` |
+| 入库流水详情（保存/删除） | `STOCK_IN_HISTORY` |
+| 领退料确认 | `STOCK_OUT`；外协物料 `OUTSOURCE_HUB` |
+| 工单领料 | `PRODUCTION_ORDERS` |
+| 报工 / 报工批次编辑 | `PRODUCTION_ORDERS` / `buildReportHistoryListUrl(...)` |
+| 外协流水详情（保存/删除） | `OUTSOURCE_FLOW` |
+| 领退料流水详情（保存/删除） | `STOCK_OUT` |
+| 计划新建 | `PRODUCTION_PLANS` |
+
+## 单据详情底栏（编辑 / 删除）
+
+流水/单据**详情页**与报工批次详情保持一致：有权限时底部固定 `report-batch-footer`（删除 + 编辑；编辑态为取消 + 保存）。键盘弹出时隐藏底栏。
+
+| 详情页 | 编辑权限 | 删除权限 |
+|--------|----------|----------|
+| 报工批次 | `production:orders_report_records:edit` | `production:orders_report_records:delete` |
+| 入库流水 | `production:orders_pending_stock_in:edit` | `production:orders_pending_stock_in:delete` |
+| 外协流水 | `production:outsource_records:edit` | `production:outsource_records:delete` |
+| 领退料流水 | `production:material_records:edit` | `production:material_records:delete` |
+
+保存/删除成功后 `afterSaveReturnToList` 回到所属列表（见上表）。
+
+扫码连续作业（`scan-session`）不在此规则内。
+
+## 列表/流水产品缩略图
+
+业务列表与流水行**默认左侧带产品图**（无图时用模块占位 icon）：
+
+```javascript
+const { listProductThumbFromProduct, DEFAULT_PRODUCT_PLACEHOLDER_ICON } = require('../../utils/listProductThumb.js');
+
+const thumb = listProductThumbFromProduct(product);
+// → productImageUrl / showProductImage / placeholderIconSrc（无图时默认 clipboard-list，与工单中心一致）
+```
+
+**无产品图占位**：统一使用 `DEFAULT_PRODUCT_PLACEHOLDER_ICON`（`/assets/icons/clipboard-list.png`，与工单中心相同）；勿在各模块写死 warehouse/truck/boxes 等图标。领退料流水等非产品缩略图（业务类型 icon）除外。
+
+WXML 模式：`__thumb` + `image`（`binderror` 降级）+ placeholder；参考 `production-outsource-flow`、`production-order-report-history`。

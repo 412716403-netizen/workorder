@@ -1,8 +1,10 @@
 @import '../../pages/production-order-detail/production-order-detail.wxss';
 @import '../production-plan-create/production-plan-create.wxss';
 
+@import '../../styles/matrix-keyboard-page.wxss';
+
 .plan-detail-page--keyboard {
-  padding-bottom: calc(480rpx + env(safe-area-inset-bottom));
+  /* 保留别名，实际占位见 matrix-keyboard-page.wxss */
 }
 
 .report-matrix__cell {

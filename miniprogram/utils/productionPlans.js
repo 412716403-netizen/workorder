@@ -18,6 +18,7 @@ const {
   getProductUnitName,
   normalizePlanFormFieldConfigArray,
 } = require('./planFormCustomField.js');
+const { DEFAULT_PRODUCT_PLACEHOLDER_ICON } = require('./listProductThumb.js');
 
 function pad(n) {
   return String(n).padStart(2, '0');
@@ -266,7 +267,7 @@ function mapPlanListRow(
     showProductCustomTags: (productCustomTags || []).length > 0,
     categoryLabel: categoryLabel || '',
     showCategoryLabel: Boolean(String(categoryLabel || '').trim()),
-    placeholderIconSrc: planListPlaceholderIconSrc(plan),
+    placeholderIconSrc: DEFAULT_PRODUCT_PLACEHOLDER_ICON,
     customer,
     showCustomer: Boolean(customer),
     dueDateText: plan.dueDate ? formatPlanDate(plan.dueDate) : '',
@@ -480,7 +481,7 @@ function mapPlanDetailView(
     showProductSku: productParts.showSku,
     productImageUrl,
     showProductImage: Boolean(productImageUrl),
-    placeholderIconSrc: '/assets/icons/boxes.png',
+    placeholderIconSrc: DEFAULT_PRODUCT_PLACEHOLDER_ICON,
     productCustomTags,
     showProductCustomTags: productCustomTags.length > 0,
   };

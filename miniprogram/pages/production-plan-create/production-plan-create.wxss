@@ -1,5 +1,6 @@
 @import '../../styles/tokens.wxss';
 @import '../../styles/plan-form-cell.wxss';
+@import '../../styles/matrix-keyboard-page.wxss';
 
 page {
   background: var(--color-bg-page);
@@ -255,8 +256,12 @@ page {
   color: var(--color-text-tertiary);
 }
 
+.plan-create-matrix__input--active.plan-create-matrix__input--filled.plan-create-matrix__input--replace {
+  background: var(--color-primary-light);
+}
+
 .plan-create-page--keyboard {
-  padding-bottom: calc(480rpx + env(safe-area-inset-bottom));
+  /* 保留别名，实际占位见 matrix-keyboard-page.wxss */
 }
 
 .plan-create-matrix__dash {

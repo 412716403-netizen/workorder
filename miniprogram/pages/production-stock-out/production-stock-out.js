@@ -179,6 +179,39 @@ Page({
       return;
     }
     const pk = card.partnerKey || INTERNAL_PARTNER_KEY;
+
+    if (this._selectState.mode === 'stock_return') {
+      const app = getApp();
+      if (app.globalData) {
+        app.globalData.materialReturnPrefill = {
+          partnerKey: pk,
+          partnerLabel: pk === INTERNAL_PARTNER_KEY ? '本厂' : pk,
+          orderId: card.orderId || '',
+          sourceProductId: card.sourceProductId || '',
+          orderNumber: card.orderNumber || '',
+          productName: card.productName || '',
+          selectedProductIds: Array.from(this._selectState.selectedIds),
+          materialRows: card.materialRows || [],
+          products: this._products || [],
+          orders: this._orders || [],
+          stockRecords: this._stockRecords || [],
+        };
+      }
+      const q = ['mode=return', 'source=material_center'];
+      if (card.orderId) {
+        q.push(`orderId=${encodeURIComponent(card.orderId)}`);
+      } else if (card.sourceProductId) {
+        q.push(`productId=${encodeURIComponent(card.sourceProductId)}`);
+      }
+      if (pk !== INTERNAL_PARTNER_KEY) {
+        q.push(`partner=${encodeURIComponent(pk)}`);
+      }
+      wx.navigateTo({
+        url: `/pages/production-order-material/production-order-material?${q.join('&')}`,
+      });
+      return;
+    }
+
     const app = getApp();
     if (app.globalData) {
       app.globalData.materialStockConfirm = {

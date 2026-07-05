@@ -31,7 +31,32 @@ function readNavBarMetrics() {
   }
 }
 
+function rpxToPx(rpx) {
+  const win = readWindowMetrics();
+  return Math.ceil((win.windowWidth / 750) * rpx);
+}
+
+/** plan-header 仅标题栏（padding-bottom 28rpx） */
+function computeSimplePlanHeaderHeight(nav) {
+  return nav.statusBarHeight + nav.navBarHeight + rpxToPx(28);
+}
+
+/** plan-create-header（padding-bottom 12rpx） */
+function computePlanCreateHeaderHeight(nav) {
+  return nav.statusBarHeight + nav.navBarHeight + rpxToPx(12);
+}
+
+/** 固定底栏占位（如外协确认「确认发出」） */
+function computeFixedFooterInsetPx(footerRpx = 128) {
+  const win = readWindowMetrics();
+  return rpxToPx(footerRpx) + (win.safeAreaBottom || 0);
+}
+
 module.exports = {
   readWindowMetrics,
   readNavBarMetrics,
+  rpxToPx,
+  computeSimplePlanHeaderHeight,
+  computePlanCreateHeaderHeight,
+  computeFixedFooterInsetPx,
 };

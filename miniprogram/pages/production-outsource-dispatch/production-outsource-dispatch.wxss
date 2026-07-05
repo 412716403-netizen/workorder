@@ -1,0 +1,2 @@
+@import '../../pages/production-plans/production-plans.wxss';
+@import '../../styles/outsource-shared.wxss';

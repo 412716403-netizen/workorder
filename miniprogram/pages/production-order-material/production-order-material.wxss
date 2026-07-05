@@ -11,6 +11,13 @@
   border-radius: 16rpx;
 }
 
+.material-issue-hero__partner {
+  margin-bottom: 12rpx;
+  font-size: 24rpx;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
 .material-issue-hero__line {
   display: flex;
   align-items: baseline;
@@ -115,6 +122,51 @@
   min-width: 960rpx;
 }
 
+.material-issue-table--return-outsource .material-issue-table__thead,
+.material-issue-table--return-outsource .material-issue-table__tr {
+  min-width: 1080rpx;
+}
+
+.material-issue-table--return-outsource.material-issue-table--batch .material-issue-table__thead,
+.material-issue-table--return-outsource.material-issue-table--batch .material-issue-table__tr {
+  min-width: 1280rpx;
+}
+
+.material-issue-table--return-internal .material-issue-table__thead,
+.material-issue-table--return-internal .material-issue-table__tr {
+  min-width: 1120rpx;
+}
+
+.material-issue-table--return-internal.material-issue-table--batch .material-issue-table__thead,
+.material-issue-table--return-internal.material-issue-table--batch .material-issue-table__tr {
+  min-width: 1320rpx;
+}
+
+.material-issue-table__th--stat,
+.material-issue-table__td--stat {
+  width: 100rpx;
+  text-align: right;
+}
+
+.material-issue-table__th--highlight,
+.material-issue-table__td--stat-surplus {
+  color: #059669;
+}
+
+.material-issue-table__td--stat-dispatch {
+  color: #4f46e5;
+}
+
+.material-issue-table__td--stat-consume {
+  color: #d97706;
+}
+
+.material-issue-table__td--stat {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
 .material-issue-table__thead {
   background: rgba(248, 250, 252, 0.95);
   border-bottom: 1rpx solid var(--color-border);
@@ -181,9 +233,7 @@
   color: var(--color-text-primary);
   background: #fff;
   box-sizing: border-box;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  word-break: break-all;
 }
 
 .material-issue-batch-picker--readonly {
@@ -330,6 +380,10 @@
 
 .material-issue-submit--disabled {
   opacity: 0.5;
+}
+
+.material-issue-submit--return {
+  background: #059669;
 }
 
 /* 兼容确认页引用 */

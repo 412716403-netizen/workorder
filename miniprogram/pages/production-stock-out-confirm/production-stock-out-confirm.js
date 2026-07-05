@@ -25,6 +25,7 @@ const {
   applyBatchSelection,
 } = require('../../utils/materialIssueBatch.js');
 const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
+const { LIST_ROUTES, afterSaveReturnToList } = require('../../utils/saveNavigation.js');
 const { INTERNAL_PARTNER_KEY } = require('../../utils/materialStatsLite.js');
 
 function computeHeaderBlockHeight(nav) {
@@ -57,12 +58,20 @@ Page({
     const ctx = readTenantCtx();
     const perms = (ctx && ctx.permissions) || [];
     const mode = options.mode ? decodeURIComponent(options.mode) : 'stock_out';
-    if (mode === 'stock_out' && !hasPermission(perms, 'production:material_issue:allow')) {
+    const source = options.source ? decodeURIComponent(options.source) : '';
+    this._source = source;
+    const isOutsourceMaterial = source === 'outsource';
+    if (isOutsourceMaterial) {
+      if (!hasPermission(perms, 'production:outsource_material:allow')) {
+        wx.showToast({ title: '无外协物料权限', icon: 'none' });
+        setTimeout(() => wx.navigateBack(), 800);
+        return;
+      }
+    } else if (mode === 'stock_out' && !hasPermission(perms, 'production:material_issue:allow')) {
       wx.showToast({ title: '无领料权限', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 800);
       return;
-    }
-    if (mode === 'stock_return' && !hasPermission(perms, 'production:material_return:allow')) {
+    } else if (mode === 'stock_return' && !hasPermission(perms, 'production:material_return:allow')) {
       wx.showToast({ title: '无退料权限', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 800);
       return;
@@ -92,14 +101,16 @@ Page({
       })
       : null;
 
-    const modeLabel = mode === 'stock_return' ? '退料' : '领料';
+    const modeLabel = isOutsourceMaterial
+      ? (mode === 'stock_return' ? '外协物料退回' : '外协物料外发')
+      : (mode === 'stock_return' ? '退料' : '领料');
     this.setData({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
       headerBlockHeight: computeHeaderBlockHeight(nav),
       mode,
       modeLabel,
-      pageTitle: `确认${modeLabel}`,
+      pageTitle: isOutsourceMaterial ? modeLabel : `确认${modeLabel}`,
       orderNumber: detail.orderNumber || '',
       productName: detail.productName || '',
       partnerLabel: (this._partnerKey !== INTERNAL_PARTNER_KEY && detail.partnerLabel)
@@ -235,10 +246,11 @@ Page({
     wx.showLoading({ title: '提交中' });
     try {
       await createProductionRecordBatch(payload);
-      wx.showToast({ title: `${this.data.modeLabel}成功`, icon: 'success' });
-      setTimeout(() => {
-        wx.redirectTo({ url: '/pages/production-stock-out/production-stock-out' });
-      }, 400);
+      wx.hideLoading();
+      afterSaveReturnToList({
+        listUrl: this._source === 'outsource' ? LIST_ROUTES.OUTSOURCE_HUB : LIST_ROUTES.STOCK_OUT,
+        toastTitle: `${this.data.modeLabel}成功`,
+      });
     } catch (err) {
       wx.showToast({ title: parseBatchErrorMessage(err), icon: 'none', duration: 2500 });
       this.setData({ submitting: false });

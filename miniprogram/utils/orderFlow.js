@@ -2,6 +2,7 @@
  * 工单流水筛选与展示（对齐 views/OrderFlowView.tsx）
  */
 const { localTodayYmd } = require('./dateYmd.js');
+const { DEFAULT_PRODUCT_PLACEHOLDER_ICON } = require('./listProductThumb.js');
 
 const YMD_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -115,7 +116,7 @@ function mapFlowRow(order, opts) {
     showProductSku,
     productImageUrl = '',
     showProductImage,
-    placeholderIconSrc = '/assets/icons/clipboard-list.png',
+    placeholderIconSrc = DEFAULT_PRODUCT_PLACEHOLDER_ICON,
   } = opts || {};
   const qty = sumOrderItemsQty(order);
   const sku = productSku != null ? productSku : (order.sku || '');

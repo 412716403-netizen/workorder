@@ -1,5 +1,6 @@
 const { localTodayYmd, addDaysYmd } = require('./dateYmd.js');
 const { productNameSkuParts } = require('./productionPlans.js');
+const { DEFAULT_PRODUCT_PLACEHOLDER_ICON } = require('./listProductThumb.js');
 
 function defaultDateRange() {
   const end = localTodayYmd();
@@ -87,7 +88,7 @@ function mapOrderReportRow(r, idx, ctx) {
     showProductSku: meta.showSku,
     productImageUrl: meta.imageUrl,
     showProductImage: Boolean(meta.imageUrl),
-    placeholderIconSrc: '/assets/icons/clipboard-list.png',
+    placeholderIconSrc: DEFAULT_PRODUCT_PLACEHOLDER_ICON,
     goodQtyText: `${qty} 件`,
     showDefective: defective > 0,
     defectiveText: defective > 0 ? `不良 ${defective}` : '',
@@ -125,7 +126,7 @@ function mapProductReportRow(r, idx, ctx) {
     showProductSku: meta.showSku,
     productImageUrl: meta.imageUrl,
     showProductImage: Boolean(meta.imageUrl),
-    placeholderIconSrc: '/assets/icons/clipboard-list.png',
+    placeholderIconSrc: DEFAULT_PRODUCT_PLACEHOLDER_ICON,
     goodQtyText: `${qty} 件`,
     showDefective: defective > 0,
     defectiveText: defective > 0 ? `不良 ${defective}` : '',

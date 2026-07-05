@@ -18,8 +18,10 @@ const {
 } = require('../../utils/planFormCustomField.js');
 const { buildVariantMatrixUiModel } = require('../../utils/variantQtyMatrix.js');
 const {
-  applyMatrixKeyPress,
+  activateMatrixKeyboardCell,
+  applyMatrixKeyboardKey,
   buildMatrixKeyboardPreview,
+  createMatrixKeyboardInputSession,
   getNextMatrixVariantIdInColumn,
   getNextMatrixVariantIdInRow,
 } = require('../../utils/matrixQtyKeyboard.js');
@@ -32,12 +34,12 @@ const {
   fetchPartnerCategoriesAll,
   fetchDictionaries,
 } = require('../../utils/planApi.js');
-const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
+const { readNavBarMetrics, readWindowMetrics, computePlanCreateHeaderHeight } = require('../../utils/windowMetrics.js');
+const { LIST_ROUTES, afterSaveReturnToList } = require('../../utils/saveNavigation.js');
+const { afterMatrixKeyboardOpen } = require('../../utils/matrixKeyboardLayout.js');
 
 function computeHeaderBlockHeight(nav) {
-  const win = readWindowMetrics();
-  const tailPx = Math.ceil((win.windowWidth / 750) * 16);
-  return nav.statusBarHeight + nav.navBarHeight + tailPx;
+  return computePlanCreateHeaderHeight(nav);
 }
 
 function computeScrollHeight(nav) {
@@ -76,13 +78,16 @@ Page({
     headerBlockHeight: 88,
     scrollHeight: 500,
     matrixKeyboardVisible: false,
+    matrixInputReplaceAll: false,
     activeMatrixVariantId: '',
     matrixKeyboardLabel: '',
     matrixKeyboardValue: '',
+    matrixScrollTop: 0,
   },
 
   onLoad() {
     const nav = readNavBarMetrics();
+    this._matrixKbInput = createMatrixKeyboardInputSession();
     this.setData({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
@@ -200,6 +205,7 @@ Page({
       singleQuantity: '',
       totalQuantity: 0,
       matrixKeyboardVisible: false,
+      matrixInputReplaceAll: false,
       activeMatrixVariantId: '',
     });
     this.refreshCanSubmit();
@@ -251,12 +257,16 @@ Page({
   onMatrixCellTap(e) {
     const { variantId } = e.currentTarget.dataset;
     if (!variantId) return;
+    activateMatrixKeyboardCell(this._matrixKbInput);
     const preview = buildMatrixKeyboardPreview(this.data.matrixLayout, variantId, this._variantQty);
     this.setData({
       matrixKeyboardVisible: true,
+      matrixInputReplaceAll: true,
       activeMatrixVariantId: variantId,
       matrixKeyboardLabel: preview.label,
       matrixKeyboardValue: preview.value,
+    }, () => {
+      afterMatrixKeyboardOpen(this, '.plan-create-scroll');
     });
   },
 
@@ -265,6 +275,7 @@ Page({
     if (action === 'confirm') {
       this.setData({
         matrixKeyboardVisible: false,
+        matrixInputReplaceAll: false,
         activeMatrixVariantId: '',
         matrixKeyboardLabel: '',
         matrixKeyboardValue: '',
@@ -275,15 +286,20 @@ Page({
     if (action === 'enter') {
       const nextId = getNextMatrixVariantIdInRow(matrixLayout, activeMatrixVariantId);
       if (nextId) {
+        activateMatrixKeyboardCell(this._matrixKbInput);
         const preview = buildMatrixKeyboardPreview(matrixLayout, nextId, this._variantQty);
         this.setData({
           activeMatrixVariantId: nextId,
+          matrixInputReplaceAll: true,
           matrixKeyboardLabel: preview.label,
           matrixKeyboardValue: preview.value,
+        }, () => {
+          afterMatrixKeyboardOpen(this, '.plan-create-scroll');
         });
       } else {
         this.setData({
           matrixKeyboardVisible: false,
+          matrixInputReplaceAll: false,
           activeMatrixVariantId: '',
           matrixKeyboardLabel: '',
           matrixKeyboardValue: '',
@@ -294,15 +310,20 @@ Page({
     if (action === 'next') {
       const nextId = getNextMatrixVariantIdInColumn(matrixLayout, activeMatrixVariantId);
       if (nextId) {
+        activateMatrixKeyboardCell(this._matrixKbInput);
         const preview = buildMatrixKeyboardPreview(matrixLayout, nextId, this._variantQty);
         this.setData({
           activeMatrixVariantId: nextId,
+          matrixInputReplaceAll: true,
           matrixKeyboardLabel: preview.label,
           matrixKeyboardValue: preview.value,
+        }, () => {
+          afterMatrixKeyboardOpen(this, '.plan-create-scroll');
         });
       } else {
         this.setData({
           matrixKeyboardVisible: false,
+          matrixInputReplaceAll: false,
           activeMatrixVariantId: '',
           matrixKeyboardLabel: '',
           matrixKeyboardValue: '',
@@ -312,7 +333,11 @@ Page({
     }
     if (!activeMatrixVariantId) return;
     const current = this._variantQty[activeMatrixVariantId] || '';
-    this._variantQty[activeMatrixVariantId] = applyMatrixKeyPress(current, action, digit);
+    const { value, replaceConsumed } = applyMatrixKeyboardKey(this._matrixKbInput, current, action, digit);
+    this._variantQty[activeMatrixVariantId] = value;
+    if (replaceConsumed) {
+      this.setData({ matrixInputReplaceAll: false });
+    }
     this.rebuildMatrixLayout();
   },
 
@@ -432,12 +457,10 @@ Page({
     this.setData({ submitting: true });
     try {
       await createPlan(body);
-      wx.showToast({ title: '创建成功', icon: 'success' });
-      setTimeout(() => {
-        wx.redirectTo({
-          url: '/pages/production-plans/production-plans',
-        });
-      }, 400);
+      afterSaveReturnToList({
+        listUrl: LIST_ROUTES.PRODUCTION_PLANS,
+        toastTitle: '创建成功',
+      });
     } catch (err) {
       wx.showToast({
         title: (err && err.message) || '创建失败',

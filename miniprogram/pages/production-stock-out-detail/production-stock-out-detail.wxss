@@ -52,3 +52,33 @@
 .material-detail-line__qty--return {
   color: #ff4d4f;
 }
+
+.material-detail-edit-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 16rpx 0;
+  border-bottom: 1rpx solid var(--color-border-light);
+}
+
+.material-detail-edit-line:last-child {
+  border-bottom: none;
+}
+
+.material-detail-edit-line__name {
+  flex: 1;
+  min-width: 0;
+  font-size: 26rpx;
+  color: var(--color-text-primary);
+}
+
+.material-detail-edit-line__input {
+  width: 180rpx;
+  height: 64rpx;
+  padding: 0 12rpx;
+  text-align: right;
+  border: 1rpx solid var(--color-border);
+  border-radius: 10rpx;
+  font-size: 28rpx;
+}

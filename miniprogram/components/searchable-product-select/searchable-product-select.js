@@ -5,6 +5,7 @@ const {
   closeBottomSheet,
   clearBottomSheetTimers,
 } = require('../../utils/bottomSheetAnim.js');
+const { DEFAULT_PRODUCT_PLACEHOLDER_ICON } = require('../../utils/listProductThumb.js');
 
 Component({
   options: {
@@ -23,6 +24,7 @@ Component({
     required: { type: Boolean, value: false },
   },
   data: {
+    productPlaceholderIcon: DEFAULT_PRODUCT_PLACEHOLDER_ICON,
     open: false,
     sheetShow: false,
     sheetMotion: false,

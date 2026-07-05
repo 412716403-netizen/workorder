@@ -9,6 +9,27 @@ function normalizeBatchNoFromApi(raw) {
   return s || BATCH_NO_UNTAGGED;
 }
 
+function formatBatchOptionLabel(batchNo, stock) {
+  const no = String(batchNo || '').trim();
+  if (!no) return '';
+  const qty = Math.max(0, Number(stock) || 0);
+  return `${no}（余 ${qty}）`;
+}
+
+function enrichBatchRowFields(row) {
+  const batchNo = row.batchNo || '';
+  const batchStock = Math.max(0, Number(row.batchStock) || 0);
+  const batchDisplayText = batchNo
+    ? (batchStock > 0 ? formatBatchOptionLabel(batchNo, batchStock) : batchNo)
+    : '';
+  return {
+    ...row,
+    batchStock,
+    batchDisplayText,
+    showBatchStock: Boolean(batchNo) && batchStock > 0,
+  };
+}
+
 function categoryUsesBatchManagement(cat) {
   return Boolean(cat && cat.hasBatchManagement) && !Boolean(cat && cat.hasColorSize);
 }
@@ -67,7 +88,7 @@ async function attachBatchOptionsToRows(rows, warehouseId, fetchStockBatches) {
         return {
           batchNo,
           stock,
-          label: `${batchNo}（余 ${stock}）`,
+          label: formatBatchOptionLabel(batchNo, stock),
         };
       });
     } catch {
@@ -80,14 +101,14 @@ async function attachBatchOptionsToRows(rows, warehouseId, fetchStockBatches) {
     let batchIndex = batchOptions.findIndex((o) => o.batchNo === prevBatchNo);
     if (batchIndex < 0) batchIndex = 0;
     const selected = batchOptions[batchIndex];
-    out.push({
+    out.push(enrichBatchRowFields({
       ...row,
       batchOptions,
       batchPickerRange,
       batchIndex,
       batchNo: selected ? selected.batchNo : '',
       batchStock: selected ? selected.stock : 0,
-    });
+    }));
   }
   return out;
 }
@@ -96,15 +117,15 @@ function applyBatchSelection(row, batchIndex) {
   const idx = Number(batchIndex);
   const options = row.batchOptions || [];
   if (!Number.isFinite(idx) || idx < 0 || idx >= options.length) {
-    return { ...row, batchIndex: 0, batchNo: '', batchStock: 0 };
+    return enrichBatchRowFields({ ...row, batchIndex: 0, batchNo: '', batchStock: 0 });
   }
   const selected = options[idx];
-  return {
+  return enrichBatchRowFields({
     ...row,
     batchIndex: idx,
     batchNo: selected.batchNo,
     batchStock: selected.stock,
-  };
+  });
 }
 
 function validateMaterialIssueBatchRows(rows) {
@@ -167,7 +188,7 @@ async function attachBatchOptionsToConfirmRows(rows, warehouseId, fetchStockBatc
         return {
           batchNo,
           stock,
-          label: `${batchNo}（余 ${stock}）`,
+          label: formatBatchOptionLabel(batchNo, stock),
         };
       });
     } catch {
@@ -180,14 +201,14 @@ async function attachBatchOptionsToConfirmRows(rows, warehouseId, fetchStockBatc
     let batchIndex = batchOptions.findIndex((o) => o.batchNo === prevBatchNo);
     if (batchIndex < 0) batchIndex = 0;
     const selected = batchOptions[batchIndex];
-    out.push({
+    out.push(enrichBatchRowFields({
       ...row,
       batchOptions,
       batchPickerRange,
       batchIndex,
       batchNo: selected ? selected.batchNo : '',
       batchStock: selected ? selected.stock : 0,
-    });
+    }));
   }
   return out;
 }
@@ -196,7 +217,7 @@ function attachReturnBatchOptionsToConfirmRows(rows, dispatchedByProduct) {
   const map = dispatchedByProduct || {};
   return (rows || []).map((row) => {
     if (!row.needsBatch) return row;
-    const batches = map[row.productId] || [];
+    const batches = map[row.productId] || map[row.materialProductId] || [];
     const batchOptions = batches.map((batchNo) => ({
       batchNo,
       stock: 0,
@@ -209,15 +230,56 @@ function attachReturnBatchOptionsToConfirmRows(rows, dispatchedByProduct) {
     let batchIndex = batchOptions.findIndex((o) => o.batchNo === prevBatchNo);
     if (batchIndex < 0) batchIndex = 0;
     const selected = batchOptions[batchIndex];
-    return {
+    return enrichBatchRowFields({
       ...row,
       batchOptions,
       batchPickerRange,
       batchIndex,
       batchNo: selected ? selected.batchNo : '',
       batchStock: 0,
-    };
+    });
   });
+}
+
+function attachReturnBatchOptionsToRows(rows, dispatchedByProduct) {
+  const map = dispatchedByProduct || {};
+  return (rows || []).map((row) => {
+    if (!row.needsBatch) return row;
+    const batches = map[row.materialProductId] || map[row.productId] || [];
+    const batchOptions = batches.map((batchNo) => ({
+      batchNo,
+      stock: 0,
+      label: batchNo,
+    }));
+    const batchPickerRange = batchOptions.length
+      ? batchOptions.map((o) => o.label)
+      : ['暂无已发批次'];
+    const prevBatchNo = row.batchNo || '';
+    let batchIndex = batchOptions.findIndex((o) => o.batchNo === prevBatchNo);
+    if (batchIndex < 0) batchIndex = 0;
+    const selected = batchOptions[batchIndex];
+    return enrichBatchRowFields({
+      ...row,
+      batchOptions,
+      batchPickerRange,
+      batchIndex,
+      batchNo: selected ? selected.batchNo : '',
+      batchStock: 0,
+    });
+  });
+}
+
+function validateReturnBatchRows(rows) {
+  const errors = [];
+  (rows || []).forEach((row) => {
+    const qty = Number(row.issueQty);
+    if (!Number.isFinite(qty) || qty <= 0) return;
+    if (!row.needsBatch) return;
+    if (!row.batchNo) {
+      errors.push(`请为物料「${row.name}」选择批次`);
+    }
+  });
+  return errors;
 }
 
 function confirmRowsNeedBatchColumn(rows) {
@@ -248,6 +310,8 @@ module.exports = {
   categoryUsesBatchManagement,
   materialProductNeedsBatch,
   rowsNeedBatchColumn,
+  formatBatchOptionLabel,
+  enrichBatchRowFields,
   decorateRowsWithBatchFlags,
   attachBatchOptionsToRows,
   applyBatchSelection,
@@ -255,6 +319,8 @@ module.exports = {
   decorateConfirmRowsWithBatchFlags,
   attachBatchOptionsToConfirmRows,
   attachReturnBatchOptionsToConfirmRows,
+  attachReturnBatchOptionsToRows,
+  validateReturnBatchRows,
   confirmRowsNeedBatchColumn,
   validateConfirmBatchRows,
 };

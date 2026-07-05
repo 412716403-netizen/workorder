@@ -6,6 +6,7 @@ const { productHasColorSizeMatrix, variantLabel } = require('./productionPlans.j
 const { buildVariantMatrixUiModel } = require('./variantQtyMatrix.js');
 const { getProductUnitName } = require('./planFormCustomField.js');
 const { productMetaFromMap } = require('./orderReportHistory.js');
+const { DEFAULT_PRODUCT_PLACEHOLDER_ICON } = require('./listProductThumb.js');
 
 function resolveWarehouseName(warehouseMap, warehouseId, fallbackName) {
   const fb = String(fallbackName || '').trim();
@@ -98,7 +99,7 @@ function buildStockInFlowListRows(records, opts) {
         showProductSku: meta.showSku,
         productImageUrl: meta.imageUrl,
         showProductImage: Boolean(meta.imageUrl),
-        placeholderIconSrc: '/assets/icons/warehouse.png',
+        placeholderIconSrc: DEFAULT_PRODUCT_PLACEHOLDER_ICON,
         orderNumber: productionLinkMode !== 'product' ? orderNumber : '',
         showOrderNumber: productionLinkMode !== 'product' && Boolean(orderNumber),
         warehouseId,
@@ -209,7 +210,7 @@ function buildStockInFlowDetailView(rows, opts) {
     showProductSku: meta.showSku,
     productImageUrl: meta.imageUrl,
     showProductImage: Boolean(meta.imageUrl),
-    placeholderIconSrc: '/assets/icons/warehouse.png',
+    placeholderIconSrc: DEFAULT_PRODUCT_PLACEHOLDER_ICON,
     orderNumber: first.orderNumber || '',
     showOrderNumber: productionLinkMode !== 'product' && Boolean(first.orderNumber),
     warehouseId,

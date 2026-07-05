@@ -89,9 +89,13 @@
   gap: 12rpx;
 }
 
-.material-row__batch-picker-wrap {
+.material-row__batch-col {
   flex: 1;
   min-width: 0;
+}
+
+.material-row__batch-picker-wrap {
+  width: 100%;
 }
 
 .material-row__batch-picker {
@@ -106,9 +110,7 @@
   color: var(--color-text-primary);
   background: #fff;
   box-sizing: border-box;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  word-break: break-all;
 }
 
 .material-row__qty-wrap {

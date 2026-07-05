@@ -12,6 +12,8 @@
   <scroll-view
     class="plan-detail-scroll"
     scroll-y
+    scroll-top="{{matrixScrollTop}}"
+    scroll-with-animation
     show-scrollbar="{{false}}"
     style="height: {{scrollHeight}}px;"
   >
@@ -19,7 +21,7 @@
 
     <view wx:elif="{{!detail}}" class="plan-detail-muted">未找到报工记录</view>
 
-    <view wx:else class="plan-detail-page {{matrixKeyboardVisible ? 'plan-detail-page--keyboard' : ''}}">
+    <view wx:else class="plan-detail-page {{matrixKeyboardVisible ? 'matrix-keyboard-page--open' : ''}}">
       <view class="report-batch-hero">
         <view class="report-batch-hero__left">
           <image
@@ -184,7 +186,7 @@
                 <view wx:for="{{row.cells}}" wx:for-item="cell" wx:key="index" class="plan-create-matrix__cell report-matrix__cell">
                   <view
                     wx:if="{{cell.variantId}}"
-                    class="plan-create-matrix__input {{activeMatrixVariantId === cell.variantId ? 'plan-create-matrix__input--active' : ''}} {{(qtyInputMode === 'good' ? cell.quantity : cell.defectiveQty) ? 'plan-create-matrix__input--filled' : 'plan-create-matrix__input--empty'}}"
+                    class="plan-create-matrix__input {{activeMatrixVariantId === cell.variantId ? 'plan-create-matrix__input--active' : ''}} {{activeMatrixVariantId === cell.variantId && matrixInputReplaceAll && (qtyInputMode === 'good' ? cell.quantity : cell.defectiveQty) ? 'plan-create-matrix__input--replace' : ''}} {{(qtyInputMode === 'good' ? cell.quantity : cell.defectiveQty) ? 'plan-create-matrix__input--filled' : 'plan-create-matrix__input--empty'}}"
                     data-variant-id="{{cell.variantId}}"
                     bindtap="onMatrixCellTap"
                   >{{qtyInputMode === 'good' ? cell.quantity : cell.defectiveQty}}</view>
@@ -214,7 +216,7 @@
     </view>
   </scroll-view>
 
-  <view wx:if="{{showFooter && !loading && detail && !detail.isOutsourceReceive}}" class="report-batch-footer">
+  <view wx:if="{{showFooter && !loading && detail && !detail.isOutsourceReceive && !matrixKeyboardVisible}}" class="report-batch-footer">
     <view wx:if="{{editing}}" class="report-batch-footer__inner">
       <view class="report-batch-footer__btn report-batch-footer__btn--ghost" bindtap="onCancelEdit">取消</view>
       <view class="report-batch-footer__btn report-batch-footer__btn--primary" bindtap="onSaveEdit">保存</view>

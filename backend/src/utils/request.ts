@@ -83,7 +83,10 @@ export function normalizeDates(data: Record<string, unknown>): Record<string, un
     if (!(k in data)) continue;
     const v = data[k];
     if (v === '' || v === null || v === undefined) { data[k] = null; continue; }
-    if (typeof v === 'string') { data[k] = new Date(v); }
+    if (typeof v === 'string') {
+      const d = new Date(v);
+      data[k] = Number.isNaN(d.getTime()) ? new Date() : d;
+    }
   }
   return data;
 }

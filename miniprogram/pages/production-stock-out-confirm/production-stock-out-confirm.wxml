@@ -38,19 +38,20 @@
         <text wx:if="{{item.sku}}" class="material-row__meta">{{item.sku}}</text>
         <text wx:if="{{item.maxQty !== undefined}}" class="material-row__hint">可退 {{item.maxQty}} {{item.unitName}}</text>
         <view class="material-row__form">
-          <picker
-            wx:if="{{showBatchCol && item.needsBatch}}"
-            class="material-row__batch-picker-wrap"
-            mode="selector"
-            range="{{item.batchPickerRange}}"
-            value="{{item.batchIndex}}"
-            data-id="{{item.productId}}"
-            bindchange="onBatchChange"
-          >
-            <view class="material-row__batch-picker">
-              {{item.batchNo || item.batchPickerRange[item.batchIndex] || '选择批次'}}
-            </view>
-          </picker>
+          <view wx:if="{{showBatchCol && item.needsBatch}}" class="material-row__batch-col">
+            <picker
+              class="material-row__batch-picker-wrap"
+              mode="selector"
+              range="{{item.batchPickerRange}}"
+              value="{{item.batchIndex}}"
+              data-id="{{item.productId}}"
+              bindchange="onBatchChange"
+            >
+              <view class="material-row__batch-picker">
+                {{item.batchDisplayText || item.batchPickerRange[item.batchIndex] || '选择批次'}}
+              </view>
+            </picker>
+          </view>
           <view class="material-row__qty-wrap">
             <input
               class="material-row__qty-input"

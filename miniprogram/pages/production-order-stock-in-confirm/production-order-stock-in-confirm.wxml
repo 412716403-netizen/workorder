@@ -12,12 +12,14 @@
   <scroll-view
     class="plan-create-scroll"
     scroll-y
+    scroll-top="{{matrixScrollTop}}"
+    scroll-with-animation
     show-scrollbar="{{false}}"
     style="height: {{scrollHeight}}px;"
   >
     <view wx:if="{{loading}}" class="plan-create-muted">加载中…</view>
 
-    <view wx:else class="plan-create-page {{matrixKeyboardVisible ? 'plan-create-page--keyboard' : ''}}">
+    <view wx:else class="plan-create-page {{matrixKeyboardVisible ? 'matrix-keyboard-page--open' : ''}}">
       <view class="plan-form-card stock-in-summary-card">
         <text class="stock-in-summary-card__title">{{summaryTitle}}</text>
         <text class="stock-in-summary-card__meta">{{summaryMeta}}</text>
@@ -90,7 +92,7 @@
                   >
                     <view wx:if="{{cell.variantId}}" class="report-matrix__cell-inner">
                       <view
-                        class="plan-create-matrix__input {{activeMatrixVariantId === cell.variantId ? 'plan-create-matrix__input--active' : ''}} {{cell.quantity ? 'plan-create-matrix__input--filled' : 'plan-create-matrix__input--empty'}}"
+                        class="plan-create-matrix__input {{activeMatrixVariantId === cell.variantId ? 'plan-create-matrix__input--active' : ''}} {{activeMatrixVariantId === cell.variantId && matrixInputReplaceAll && cell.quantity ? 'plan-create-matrix__input--replace' : ''}} {{cell.quantity ? 'plan-create-matrix__input--filled' : 'plan-create-matrix__input--empty'}}"
                         data-variant-id="{{cell.variantId}}"
                         bindtap="onMatrixCellTap"
                       >{{cell.quantity}}</view>
@@ -121,7 +123,7 @@
     </view>
   </scroll-view>
 
-  <view class="plan-create-footer">
+  <view class="plan-create-footer" wx:if="{{!matrixKeyboardVisible}}">
     <button
       class="plan-create-submit"
       loading="{{submitting}}"

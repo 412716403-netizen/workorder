@@ -102,7 +102,7 @@
               binderror="onImageError"
             />
             <view wx:else class="sps__row-img sps__row-img--placeholder">
-              <image class="sps__row-placeholder-icon" src="/assets/icons/boxes.png" mode="aspectFit" />
+              <image class="sps__row-placeholder-icon" src="{{productPlaceholderIcon}}" mode="aspectFit" />
             </view>
           </view>
         </view>

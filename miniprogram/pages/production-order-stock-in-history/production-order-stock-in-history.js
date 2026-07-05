@@ -98,6 +98,12 @@ Page({
     this.loadRows();
   },
 
+  onShow() {
+    if (this._loadedOnce && !this._bootstrapping) {
+      this.loadRows();
+    }
+  },
+
   onPullDownRefresh() {
     this.loadRows().finally(() => wx.stopPullDownRefresh());
   },
@@ -243,6 +249,7 @@ Page({
   },
 
   async loadRows() {
+    this._bootstrapping = true;
     this.setData({ loading: true });
     try {
       const [config, orders, productsRaw, warehousesRaw] = await Promise.all([
@@ -296,6 +303,9 @@ Page({
       this._allRows = [];
       this.setData({ loading: false, rows: [], stats: { batchCount: 0, totalQty: 0 } });
       wx.showToast({ title: '加载失败', icon: 'none' });
+    } finally {
+      this._bootstrapping = false;
+      this._loadedOnce = true;
     }
   },
 });

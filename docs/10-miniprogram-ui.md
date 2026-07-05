@@ -37,6 +37,9 @@ SmartTrack Pro 微信小程序采用 **企业蓝 + 卡片化 + 底部 Tab** 的 
 | `todo-item` | 待处理列表行 |
 | `workbench-stat-card` | 首页工作台统计卡片（工序卡片 / KPI 摘要） |
 | `tab-shell` | Tab 页统一壳：蓝色渐变顶栏 + 白色圆角内容区（应用 / 扫码 / 消息 / 我的） |
+| `searchable-partner-select` | 合作单位 / 客户 / 加工厂（搜索 + 分类，底栏弹层） |
+| `searchable-product-select` | 产品选择（搜索 + 分类 + SKU） |
+| `matrix-qty-keyboard` | 色码矩阵数量自定义键盘 |
 
 ## 页面壳类型
 
@@ -95,6 +98,79 @@ SmartTrack Pro 微信小程序采用 **企业蓝 + 卡片化 + 底部 Tab** 的 
 4. 业务入口走 `config/menus.js`，不写死宫格
 5. 登录后进入 Tab 页使用 `wx.switchTab`，勿对 Tab 页使用 `reLaunch`
 6. 验证安全区与 TabBar 遮挡（`st-page--tab` 已预留底部间距）
+7. **表单录入**（合作单位 / 产品 / 色码矩阵 / 数量键盘）遵循下方 §表单录入标准，以 [`production-plan-create`](../miniprogram/pages/production-plan-create/) 为参考实现
+
+## 表单录入标准（默认）
+
+涉及**合作单位选择、产品选择、颜色×尺码矩阵数量录入**的页面，统一复用生产计划新建页同一套组件与交互。Cursor 规则见 [`.cursor/rules/miniprogram-forms.mdc`](../.cursor/rules/miniprogram-forms.mdc)。
+
+### 参考页面
+
+[`pages/production-plan-create/`](../miniprogram/pages/production-plan-create/) — 完整示例：产品 + 客户 + 矩阵 + 键盘 + 表单样式。
+
+已对齐的页面（新功能应与此保持一致）：
+
+| 页面 | 合作单位 | 产品 | 矩阵 | 键盘 |
+|------|:--------:|:----:|:----:|:----:|
+| 新建生产计划 | — | ✓ | ✓ | ✓ |
+| 工单报工 | — | — | ✓ | ✓ |
+| 报工批次编辑 | — | — | ✓ | ✓ |
+| 待入库确认 | — | — | ✓ | ✓ |
+| 外协发出确认 | ✓ | — | ✓ | ✓ |
+| 扫码外协收回 | ✓ | — | — | — |
+
+### 组件
+
+| 组件 | 路径 | 用途 |
+|------|------|------|
+| `searchable-partner-select` | [`components/searchable-partner-select/`](../miniprogram/components/searchable-partner-select/) | 合作单位 / 客户 / 加工厂（搜索 + 分类 Tab 底栏弹层） |
+| `searchable-product-select` | [`components/searchable-product-select/`](../miniprogram/components/searchable-product-select/) | 产品（搜索 + 分类 Tab，展示 SKU） |
+| `matrix-qty-keyboard` | [`components/matrix-qty-keyboard/`](../miniprogram/components/matrix-qty-keyboard/) | 矩阵格数量自定义键盘（↵ 同行下一格、→ 同列下一行、完成关闭） |
+
+### 数据加载（planApi）
+
+```javascript
+const {
+  fetchProductsAll,
+  fetchCategoriesAll,
+  fetchPartnersAll,
+  fetchPartnerCategoriesAll,
+  fetchDictionaries,
+} = require('../../utils/planApi.js');
+```
+
+合作单位：`partners` + `partnerCategories`，`bind:change` 取 `e.detail.name`（及 `e.detail.id`）。  
+产品：`products` + `categories`，`bind:change` 取 `e.detail.product`。
+
+### 色码矩阵
+
+- **布局模型**：[`utils/variantQtyMatrix.js`](../miniprogram/utils/variantQtyMatrix.js) 的 `buildVariantMatrixUiModel(product, dictionaries, qtyMap)`；业务侧有上限/禁用格时用专用 builder（如 [`outsourceDispatchMatrix.js`](../miniprogram/utils/outsourceDispatchMatrix.js)）。
+- **WXML 结构**：`plan-create-matrix-scroll` → `plan-create-matrix` → `__head` / `__row` / `__cell`；格内用 `view.plan-create-matrix__input` + `bindtap="onMatrixCellTap"`，**禁止**矩阵格内 `<input>`。
+- **样式**：`@import` [`production-plan-create.wxss`](../miniprogram/pages/production-plan-create/production-plan-create.wxss)；需展示「最多 N」时叠加 `report-matrix`（见报工 / 外协发出页）。
+
+### 矩阵键盘
+
+- 页面底部挂载 `<matrix-qty-keyboard visible="{{matrixKeyboardVisible}}" bind:action="onMatrixKeyboardAction" />`。
+- 逻辑统一走 [`utils/matrixQtyKeyboard.js`](../miniprogram/utils/matrixQtyKeyboard.js)：`createMatrixKeyboardInputSession`、`activateMatrixKeyboardCell`、`applyMatrixKeyboardKey`（选中格后**首键整格替换**）、`buildMatrixKeyboardPreview`、`getNextMatrixVariantIdInRow`、`getNextMatrixVariantIdInColumn`。
+- 选中待替换时格子上加 `plan-create-matrix__input--replace`（浅蓝底提示）。
+- 键盘弹出时滚动容器加 `plan-create-page--keyboard`（底部留白，避免被键盘遮挡）。
+
+### 禁止项
+
+- 用 `picker mode="selector"` 选合作单位或产品（历史筛选 Tab、仓库等枚举除外）。
+- 在页面 WXML 内复制粘贴自建数字键盘（须用 `matrix-qty-keyboard`）。
+- 各页自行定义矩阵表格样式（须复用 `plan-create-matrix*`）。
+
+## 保存后导航
+
+单据保存/提交成功后**统一回到所属列表页**，工具：[`utils/saveNavigation.js`](../miniprogram/utils/saveNavigation.js) 的 `afterSaveReturnToList` + `LIST_ROUTES`。
+
+- 使用 `wx.redirectTo(listUrl)`，避免确认页留在页面栈
+- 成功后先 `wx.showToast`，约 400ms 后跳转
+- 不跳流水/批次详情；列表即用户继续操作的入口
+- 扫码连续作业（`scan-session`）除外
+
+详见 `.cursor/rules/miniprogram-forms.mdc` §列表/流水产品缩略图。
 
 ## 图标资源
 
@@ -160,7 +236,10 @@ npm run miniprogram:icons
 | [`utils/productionPlans.js`](../miniprogram/utils/productionPlans.js) | 搜索解析、列表/详情 UI 模型 |
 | [`utils/planApi.js`](../miniprogram/utils/planApi.js) | `/plans`、`/psi/plans-purchase-progress` 等 API 封装 |
 | [`components/searchable-product-select/`](../miniprogram/components/searchable-product-select/) | 新建页产品选择 |
+| [`components/searchable-partner-select/`](../miniprogram/components/searchable-partner-select/) | 合作单位 / 客户选择 |
+| [`components/matrix-qty-keyboard/`](../miniprogram/components/matrix-qty-keyboard/) | 色码矩阵数量键盘 |
 
+表单录入完整约定见本文 §表单录入标准（默认）；参考页 [`production-plan-create`](../miniprogram/pages/production-plan-create/)。
 **API**：`GET /plans`（分页 + `search` / `dispatchStatus` / `excludeCompleted`）· `GET /plans/:id` · `POST /plans` · `POST /plans/:id/convert` · `POST /psi/plans-purchase-progress` · `GET /psi/plan-related`
 
 **权限**：`production:plans:view`（列表/详情）· `production:plans:create`（新建，另需 `basic:products:view`）· `production:plans:edit`（下达工单）
@@ -207,6 +286,40 @@ npm run miniprogram:icons
 **留 Web**：工单新建（仅计划下达）、删除、表单配置、打印、报工批次编辑/删除、色码矩阵报工、待入库批量/矩阵/入库流水、外协/返工详情。
 
 入口：[`menus.js`](../miniprogram/config/menus.js) `production-orders` → `/pages/production-orders/production-orders`。
+
+## 外协管理
+
+对齐 Web [`OutsourcePanel`](../views/production-ops/OutsourcePanel.tsx)（P2+ 移动端口径）：
+
+| 页面 | 路径 | 职责 |
+|------|------|------|
+| 外协 Hub | [`pages/production-outsource/`](../miniprogram/pages/production-outsource/) | 主列表（工单/产品 × 加工厂工序标签）、搜索/筛选、待发/待收回/流水快捷入口、物料外发/退回 |
+| 待发清单 | [`pages/production-outsource-dispatch/`](../miniprogram/pages/production-outsource-dispatch/) | 可外协行多选 → 发出录入 |
+| 外协发出 | [`pages/production-outsource-dispatch-confirm/`](../miniprogram/pages/production-outsource-dispatch-confirm/) | 合作单位选择 + 色码矩阵 + 矩阵键盘 → `POST /production/records/batch` |
+| 待收回清单 | [`pages/production-outsource-receive/`](../miniprogram/pages/production-outsource-receive/) | 待收回聚合列表、扫码收货入口、多选收回 |
+| 外协收回 | [`pages/production-outsource-receive-confirm/`](../miniprogram/pages/production-outsource-receive-confirm/) | 收回数量/单价录入 |
+| 外协流水 | [`pages/production-outsource-flow/`](../miniprogram/pages/production-outsource-flow/) | 按日期/类型/工序筛选；列表带产品缩略图，顶栏为「类型 · 工单 · 时间」 |
+| 流水详情 | [`pages/production-outsource-flow-detail/`](../miniprogram/pages/production-outsource-flow-detail/) | 发出/收回明细只读 |
+| 往来明细 | [`pages/production-outsource-partner-detail/`](../miniprogram/pages/production-outsource-partner-detail/) | 加工厂×工序维度 doc 列表 |
+
+| 工具 / 配置 | 作用 |
+|-------------|------|
+| [`config/productionOutsource.js`](../miniprogram/config/productionOutsource.js) | 快捷入口、`DESKTOP_HINT` |
+| [`utils/outsourcePanelLite.js`](../miniprogram/utils/outsourcePanelLite.js) | 主列表聚合与搜索 |
+| [`utils/outsourceDispatchLite.js`](../miniprogram/utils/outsourceDispatchLite.js) | 待发清单可外协量 |
+| [`utils/outsourceReceiveAggregates.js`](../miniprogram/utils/outsourceReceiveAggregates.js) | 待收回聚合（跨模式方案 A） |
+| [`utils/outsourceFlow.js`](../miniprogram/utils/outsourceFlow.js) | 流水 doc 分组与筛选 |
+| [`utils/outsourcePartnerFlowDetail.js`](../miniprogram/utils/outsourcePartnerFlowDetail.js) | 加工厂往来明细 |
+| [`utils/outsourceConfirm.js`](../miniprogram/utils/outsourceConfirm.js) | 发出/收回 payload 与单号 |
+| [`utils/outsourceMaterialLite.js`](../miniprogram/utils/outsourceMaterialLite.js) | Hub 卡片物料外发/退回 → 复用 `production-stock-out-confirm?source=outsource` |
+
+**API**：`GET /production/records`（`types=OUTSOURCE` / 物料 `STOCK_OUT,STOCK_RETURN`）· `POST /production/records/batch` · `GET /settings/config`（`productionLinkMode` / `outsourceFormSettings`）
+
+**权限**：`production:outsource:view`（入口）· `production:outsource_list:allow` · `production:outsource_send:allow` · `production:outsource_receive:allow` · `production:outsource_records:view` · `production:outsource_material:allow` · `production:outsource_amount:allow`
+
+**留 Web**：外协表单配置、流水编辑/删除/打印、协作链同步、外协收回派生报工编辑/删除。
+
+入口：[`menus.js`](../miniprogram/config/menus.js) `production-outsource` → `/pages/production-outsource/production-outsource`。
 
 ## 扫码页业务链路
 

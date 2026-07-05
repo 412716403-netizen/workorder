@@ -8,6 +8,7 @@ const {
 } = require('../config/productionOrders.js');
 const { buildOrderProcessChips, sumOrderQty } = require('./orderProcessChips.js');
 const { mapProductCustomTags } = require('./reportCustomDocField.js');
+const { DEFAULT_PRODUCT_PLACEHOLDER_ICON } = require('./listProductThumb.js');
 const { buildVariantMatrixUiModel } = require('./variantQtyMatrix.js');
 const { normalizeListBody } = require('./listResponse.js');
 const { productHasColorSizeMatrix, variantLabel } = require('./productionPlans.js');
@@ -291,7 +292,7 @@ function mapOrderListRow(order, ctx = {}) {
     showProductImage: Boolean(String(productImageUrl || '').trim()),
     productCustomTags: productCustomTags || [],
     showProductCustomTags: (productCustomTags || []).length > 0,
-    placeholderIconSrc: '/assets/icons/clipboard-list.png',
+    placeholderIconSrc: DEFAULT_PRODUCT_PLACEHOLDER_ICON,
     customer,
     showCustomer: productionLinkMode !== 'product' && Boolean(customer),
     dueDateLabel,
@@ -453,7 +454,7 @@ function mapOrderDetailView(order, ctx = {}) {
     showProductImage: Boolean(product && product.imageUrl),
     productCustomTags: customTags,
     showProductCustomTags: customTags.length > 0,
-    placeholderIconSrc: '/assets/icons/clipboard-list.png',
+    placeholderIconSrc: DEFAULT_PRODUCT_PLACEHOLDER_ICON,
     dispatchLabel: dispatchStatusLabel(dispatchStatus),
     dispatchPillClass: dispatchStatusPillClass(dispatchStatus),
     showDispatchPill: productionLinkMode === 'order',

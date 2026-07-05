@@ -78,8 +78,10 @@ function fetchProductionRecords(params) {
   return request({
     path: `/production/records${buildQs(params)}`,
     method: 'GET',
-    timeout: 60000,
-  }).catch(() => []);
+    timeout: 90000,
+  })
+    .then((body) => normalizeListBody(body))
+    .catch(() => []);
 }
 
 function createProductionRecord(body) {
@@ -115,7 +117,7 @@ function fetchWarehousesAll() {
 }
 
 function fetchTenantConfig() {
-  return request({ path: '/settings/config', method: 'GET', timeout: 30000 }).catch((err) => {
+  return request({ path: '/settings/config', method: 'GET', timeout: 60000 }).catch((err) => {
     if (err && err.statusCode === 401) throw err;
     return {};
   });

@@ -33,16 +33,18 @@ const {
   expandPendingByVariantForMatrix,
 } = require('../../utils/stockInForm.js');
 const {
-  applyMatrixKeyPress,
+  activateMatrixKeyboardCell,
+  applyMatrixKeyboardKey,
   buildMatrixKeyboardPreview,
+  createMatrixKeyboardInputSession,
   getNextMatrixVariantIdInRow,
 } = require('../../utils/matrixQtyKeyboard.js');
-const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
+const { readNavBarMetrics, readWindowMetrics, computePlanCreateHeaderHeight } = require('../../utils/windowMetrics.js');
+const { LIST_ROUTES, afterSaveReturnToList } = require('../../utils/saveNavigation.js');
+const { afterMatrixKeyboardOpen } = require('../../utils/matrixKeyboardLayout.js');
 
 function computeHeaderBlockHeight(nav) {
-  const win = readWindowMetrics();
-  const tailPx = Math.ceil((win.windowWidth / 750) * 16);
-  return nav.statusBarHeight + nav.navBarHeight + tailPx;
+  return computePlanCreateHeaderHeight(nav);
 }
 
 function computeScrollHeight(nav) {
@@ -77,9 +79,11 @@ Page({
     summaryTitle: '',
     summaryMeta: '',
     matrixKeyboardVisible: false,
+    matrixInputReplaceAll: false,
     activeMatrixVariantId: '',
     matrixKeyboardLabel: '',
     matrixKeyboardValue: '',
+    matrixScrollTop: 0,
     statusBarHeight: 20,
     navBarHeight: 44,
     headerBlockHeight: 88,
@@ -101,6 +105,8 @@ Page({
       setTimeout(() => wx.navigateBack(), 800);
       return;
     }
+
+    this._matrixKbInput = createMatrixKeyboardInputSession();
 
     this.setData({
       mode,
@@ -327,12 +333,16 @@ Page({
   onMatrixCellTap(e) {
     const { variantId } = e.currentTarget.dataset;
     if (!variantId) return;
+    activateMatrixKeyboardCell(this._matrixKbInput);
     const preview = buildMatrixKeyboardPreview(this.data.matrixLayout, variantId, this._quantities);
     this.setData({
       matrixKeyboardVisible: true,
+      matrixInputReplaceAll: true,
       activeMatrixVariantId: variantId,
       matrixKeyboardLabel: preview.label,
       matrixKeyboardValue: preview.value,
+    }, () => {
+      afterMatrixKeyboardOpen(this, '.plan-create-scroll');
     });
   },
 
@@ -341,6 +351,7 @@ Page({
     if (action === 'confirm') {
       this.setData({
         matrixKeyboardVisible: false,
+        matrixInputReplaceAll: false,
         activeMatrixVariantId: '',
         matrixKeyboardLabel: '',
         matrixKeyboardValue: '',
@@ -351,15 +362,20 @@ Page({
     if (action === 'enter') {
       const nextId = getNextMatrixVariantIdInRow(matrixLayout, activeMatrixVariantId);
       if (nextId) {
+        activateMatrixKeyboardCell(this._matrixKbInput);
         const preview = buildMatrixKeyboardPreview(matrixLayout, nextId, this._quantities);
         this.setData({
           activeMatrixVariantId: nextId,
+          matrixInputReplaceAll: true,
           matrixKeyboardLabel: preview.label,
           matrixKeyboardValue: preview.value,
+        }, () => {
+          afterMatrixKeyboardOpen(this, '.plan-create-scroll');
         });
       } else {
         this.setData({
           matrixKeyboardVisible: false,
+          matrixInputReplaceAll: false,
           activeMatrixVariantId: '',
           matrixKeyboardLabel: '',
           matrixKeyboardValue: '',
@@ -369,7 +385,11 @@ Page({
     }
     if (!activeMatrixVariantId) return;
     const current = this._quantities[activeMatrixVariantId] || '';
-    this._quantities[activeMatrixVariantId] = applyMatrixKeyPress(current, action, digit);
+    const { value, replaceConsumed } = applyMatrixKeyboardKey(this._matrixKbInput, current, action, digit);
+    this._quantities[activeMatrixVariantId] = value;
+    if (replaceConsumed) {
+      this.setData({ matrixInputReplaceAll: false });
+    }
     this.rebuildMatrixLayout();
   },
 
@@ -467,10 +487,11 @@ Page({
     wx.showLoading({ title: '提交中' });
     try {
       await createProductionRecordBatch(allRecords);
-      wx.showToast({ title: '入库成功', icon: 'success' });
-      setTimeout(() => {
-        wx.navigateBack();
-      }, 400);
+      wx.hideLoading();
+      afterSaveReturnToList({
+        listUrl: LIST_ROUTES.PENDING_STOCK,
+        toastTitle: '入库成功',
+      });
     } catch (err) {
       wx.showToast({ title: (err && err.message) || '入库失败', icon: 'none' });
     } finally {
