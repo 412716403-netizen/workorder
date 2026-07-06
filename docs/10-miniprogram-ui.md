@@ -249,6 +249,10 @@ const {
 | 调拨单详情（删除） | `PSI_WAREHOUSE_TRANSFER` |
 | 登记/编辑盘点单 | `PSI_WAREHOUSE_STOCKTAKE` |
 | 盘点单详情（删除） | `PSI_WAREHOUSE_STOCKTAKE` |
+| 登记/编辑收款单 | `FINANCE_RECEIPTS` |
+| 收款单详情（删除） | `FINANCE_RECEIPTS` |
+| 登记/编辑付款单 | `FINANCE_PAYMENTS` |
+| 付款单详情（删除） | `FINANCE_PAYMENTS` |
 
 新功能登记：在 `LIST_ROUTES` 增加路径常量，上表与 `.cursor/rules/miniprogram-forms.mdc` 同步补充一行。
 
@@ -458,6 +462,86 @@ npm run miniprogram:icons
 **留 Web**：表单配置、列表/详情打印、租户自定义字段。
 
 入口：[`menus.js`](../miniprogram/config/menus.js) `psi-sales-bill` → `/pages/psi-sales-bills/psi-sales-bills`（应用中心）。
+
+## 收款单
+
+对齐 Web [`FinanceOpsView`](../views/FinanceOpsView.tsx) 收款单 Tab（P2+ 移动端口径）：
+
+| 页面 | 路径 | 职责 |
+|------|------|------|
+| 收款单 Hub | [`pages/finance-receipts/`](../miniprogram/pages/finance-receipts/) | 分页列表、搜索、流水快捷入口、新建 |
+| 收款单详情 | [`pages/finance-receipt-detail/`](../miniprogram/pages/finance-receipt-detail/) | 分类/客户/账户/工人/产品/金额；编辑/删除 |
+| 登记/编辑 | [`pages/finance-receipt-edit/`](../miniprogram/pages/finance-receipt-edit/) | 分类联动字段、缴款客户、收支账户、金额、备注 |
+| 收款流水 | [`pages/finance-receipt-flow/`](../miniprogram/pages/finance-receipt-flow/) | 日期/搜索筛选流水 |
+
+| 工具 / 配置 | 作用 |
+|-------------|------|
+| [`config/financeReceipts.js`](../miniprogram/config/financeReceipts.js) | `RECEIPT` 类型常量 |
+| [`utils/financeApi.js`](../miniprogram/utils/financeApi.js) | `/finance/records` CRUD、分类/账户/插件读取 |
+| [`utils/financeReceipts.js`](../miniprogram/utils/financeReceipts.js) | 列表/详情/表单 view-model、校验、payload |
+
+**API**：`GET/POST /finance/records` · `GET/PUT/DELETE /finance/records/:id` · `GET /settings/finance-categories` · `GET /settings/finance-account-types` · `GET /dashboard/feature-plugins`（资金账户插件）
+
+**权限**：`finance:receipt:view` · `finance:receipt:create` · `finance:receipt:edit` · `finance:receipt:delete`
+
+**深链**：`/pages/finance-receipts/finance-receipts?id=<id>` 重定向至详情。
+
+**留 Web**：表单配置、列表/详情打印。
+
+入口：[`menus.js`](../miniprogram/config/menus.js) `finance-receipt` → `/pages/finance-receipts/finance-receipts`（首页快捷 / 应用中心）。
+
+## 付款单
+
+对齐 Web [`FinanceOpsView`](../views/FinanceOpsView.tsx) 付款单 Tab，结构复用收款单：
+
+| 页面 | 路径 | 职责 |
+|------|------|------|
+| 付款单 Hub | [`pages/finance-payments/`](../miniprogram/pages/finance-payments/) | 分页列表、搜索、流水快捷入口、新建 |
+| 付款单详情 | [`pages/finance-payment-detail/`](../miniprogram/pages/finance-payment-detail/) | 分类/收款单位/账户/工人/产品/金额；编辑/删除 |
+| 登记/编辑 | [`pages/finance-payment-edit/`](../miniprogram/pages/finance-payment-edit/) | 分类联动字段、收款单位/个人、收支账户、金额、备注 |
+| 付款流水 | [`pages/finance-payment-flow/`](../miniprogram/pages/finance-payment-flow/) | 日期/搜索筛选流水，底部合计栏 |
+
+| 工具 / 配置 | 作用 |
+|-------------|------|
+| [`config/financePayments.js`](../miniprogram/config/financePayments.js) | `PAYMENT` 类型常量 |
+| [`utils/financeRecords.js`](../miniprogram/utils/financeRecords.js) | 收/付款共用 view-model |
+| [`utils/financePayments.js`](../miniprogram/utils/financePayments.js) | 付款单适配层 |
+| [`utils/financeApi.js`](../miniprogram/utils/financeApi.js) | `/finance/records` CRUD |
+
+**API / 权限**：与收款单相同接口，`type=PAYMENT`；`finance:payment:view|create|edit|delete`
+
+**深链**：`/pages/finance-payments/finance-payments?id=<id>` 重定向至详情。
+
+**留 Web**：表单配置、列表/详情打印。
+
+入口：[`menus.js`](../miniprogram/config/menus.js) `finance-payment` → `/pages/finance-payments/finance-payments`（应用中心）。
+
+## 财务对账
+
+对齐 Web [`FinanceOpsView`](../views/FinanceOpsView.tsx) 对账 Tab（只读查询，P2+ 移动端口径）：
+
+| 页面 | 路径 | 职责 |
+|------|------|------|
+| 财务对账 | [`pages/finance-reconciliation/`](../miniprogram/pages/finance-reconciliation/) | 合作单位 / 报工结算双 Tab；日期 + 对方筛选；查询后展示汇总与应收增减流水 |
+| 报工单详情 | [`pages/finance-recon-work-detail/`](../miniprogram/pages/finance-recon-work-detail/) | 报工结算行的汇总与明细行（只读） |
+
+| 工具 | 作用 |
+|------|------|
+| [`utils/financeReconciliation.js`](../miniprogram/utils/financeReconciliation.js) | 合作单位 / 结算对账行归并、余额滚算、卡片映射 |
+| [`utils/financeApi.js`](../miniprogram/utils/financeApi.js) | `fetchAllFinanceRecords`、`partnerOpeningBalance` |
+
+**能力**：
+
+- 合作单位：PSI 采购入库/销售单 + 外协/返工收回 + 收/付款单，上期余额走 `GET /finance/reconciliation/partner-opening-balance`
+- 报工结算：报工流水（`/orders/report-history`）+ 返工报工 + 收/付款单（工人维度）
+- **按单据 / 按产品**两种展示：按产品时采购/销售/外协/报工按产品行展开，收付款保持单据级一行；余额按行顺序滚算
+- 单据行可跳转既有详情（收款/付款/采购入库/销售单/外协流水/返工报工；报工单走本模块详情）
+
+**权限**：`finance:reconciliation:allow`（只读，无新建/编辑/删除）。报工流水依赖 `production:orders_report_records:view`；无权限时报工行可能为空，其余来源仍可查询。
+
+**留 Web**：导出 Excel、打印。
+
+入口：[`menus.js`](../miniprogram/config/menus.js) `finance-reconciliation` → `/pages/finance-reconciliation/finance-reconciliation`。
 
 ## 采购入库
 

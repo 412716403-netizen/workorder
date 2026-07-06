@@ -1,0 +1,103 @@
+@import '../../pages/psi-purchase-orders/psi-purchase-orders.wxss';
+@import '../../pages/production-order-report-history/production-order-report-history.wxss';
+
+.fin-receipts-page {
+  padding: 0 var(--spacing-page) calc(120rpx + env(safe-area-inset-bottom));
+}
+
+.fin-receipt-card {
+  margin-bottom: 20rpx;
+  padding: 24rpx;
+  background: var(--color-bg-card);
+  border-radius: 16rpx;
+  box-shadow: 0 4rpx 24rpx rgba(15, 23, 42, 0.04);
+}
+
+.fin-receipt-card__title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 8rpx;
+}
+
+.fin-receipt-card__partner {
+  flex: 1;
+  min-width: 0;
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fin-receipt-card__amount {
+  flex-shrink: 0;
+  font-size: 30rpx;
+  font-weight: 800;
+  color: #059669;
+}
+
+.fin-receipt-card__amount--payment {
+  color: var(--color-text-primary);
+}
+
+.fin-receipt-card__doc {
+  display: block;
+  font-size: 24rpx;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin-bottom: 10rpx;
+}
+
+.fin-receipt-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8rpx 20rpx;
+}
+
+.fin-receipt-card__meta-item {
+  font-size: 24rpx;
+  color: var(--color-text-secondary);
+}
+
+.fin-receipt-card__meta-item--operator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6rpx;
+}
+
+.fin-receipt-card__meta-icon {
+  width: 24rpx;
+  height: 24rpx;
+  opacity: 0.55;
+}
+
+.fin-receipt-card__product {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-top: 12rpx;
+  padding-top: 12rpx;
+  border-top: 1rpx solid var(--color-border);
+}
+
+.fin-receipt-card__product-name {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.fin-receipt-card__product-sku {
+  margin-left: 8rpx;
+  font-size: 22rpx;
+  color: var(--color-text-tertiary);
+}
+
+.fin-receipt-card__note {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 22rpx;
+  color: var(--color-text-tertiary);
+}

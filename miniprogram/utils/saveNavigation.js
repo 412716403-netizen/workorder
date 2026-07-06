@@ -40,6 +40,10 @@ const LIST_ROUTES = {
   PSI_WAREHOUSE_PRODUCT_FLOW: '/pages/psi-warehouse-product-flow/psi-warehouse-product-flow',
   PSI_WAREHOUSE_TRANSFER: '/pages/psi-warehouse-transfer/psi-warehouse-transfer',
   PSI_WAREHOUSE_STOCKTAKE: '/pages/psi-warehouse-stocktake/psi-warehouse-stocktake',
+  FINANCE_RECEIPTS: '/pages/finance-receipts/finance-receipts',
+  FINANCE_RECEIPT_FLOW: '/pages/finance-receipt-flow/finance-receipt-flow',
+  FINANCE_PAYMENTS: '/pages/finance-payments/finance-payments',
+  FINANCE_PAYMENT_FLOW: '/pages/finance-payment-flow/finance-payment-flow',
 };
 
 /** 各业务模块 Hub 主列表（处置/报工/领料等默认回到此处） */
@@ -54,6 +58,8 @@ const MODULE_HUB_ROUTES = {
   psiSalesOrder: LIST_ROUTES.PSI_SALES_ORDERS,
   psiSalesBill: LIST_ROUTES.PSI_SALES_BILLS,
   psiWarehouse: LIST_ROUTES.PSI_WAREHOUSES,
+  financeReceipt: LIST_ROUTES.FINANCE_RECEIPTS,
+  financePayment: LIST_ROUTES.FINANCE_PAYMENTS,
 };
 
 function buildReportHistoryListUrl(params) {

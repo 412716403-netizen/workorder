@@ -33,13 +33,19 @@ function listPsiRecordsPaginated(params) {
 const MAX_FETCH_PAGES = 40;
 const FETCH_PAGE_SIZE = 200;
 
-async function fetchAllPsiRecords(type) {
+async function fetchAllPsiRecords(typeOrParams) {
+  const base =
+    typeof typeOrParams === 'string'
+      ? { type: typeOrParams }
+      : typeOrParams && typeof typeOrParams === 'object'
+        ? typeOrParams
+        : {};
   const all = [];
   let page = 1;
   let total = Infinity;
   while (all.length < total && page <= MAX_FETCH_PAGES) {
     const result = await listPsiRecordsPaginated({
-      type,
+      ...base,
       page,
       pageSize: FETCH_PAGE_SIZE,
     });

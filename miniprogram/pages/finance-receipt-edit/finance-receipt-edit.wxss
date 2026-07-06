@@ -1,0 +1,45 @@
+@import '../../pages/production-plan-create/production-plan-create.wxss';
+@import '../../pages/psi-warehouse-transfer-edit/psi-warehouse-transfer-edit.wxss';
+
+.plan-form-cell--column {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12rpx;
+  padding-top: 20rpx;
+  padding-bottom: 20rpx;
+}
+
+.plan-form-cell--column .plan-form-cell__label {
+  min-width: 0;
+}
+
+.fin-edit-amount {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+
+.fin-edit-amount__symbol {
+  font-size: 36rpx;
+  font-weight: 800;
+  color: var(--color-text-tertiary);
+}
+
+.fin-edit-amount__input {
+  flex: 1;
+  min-width: 0;
+  height: 72rpx;
+  font-size: 40rpx;
+  font-weight: 800;
+  color: var(--color-text-primary);
+}
+
+.fin-edit-note {
+  min-height: 120rpx;
+  padding: 0;
+  font-size: 28rpx;
+  color: var(--color-text-primary);
+  width: 100%;
+  box-sizing: border-box;
+}

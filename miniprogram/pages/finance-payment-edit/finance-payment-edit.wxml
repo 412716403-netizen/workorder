@@ -1,0 +1,133 @@
+<view class="plan-create-shell">
+  <view class="plan-create-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-create-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-create-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-create-header__title">{{title}}</text>
+      <view class="plan-create-header__back plan-create-header__back--placeholder"></view>
+    </view>
+  </view>
+
+  <view class="plan-create-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view
+    class="plan-create-scroll"
+    scroll-y
+    show-scrollbar="{{false}}"
+    style="height: {{scrollHeight}}px;"
+  >
+    <view wx:if="{{loading}}" class="plan-create-muted">加载中…</view>
+
+    <view wx:else class="plan-create-page">
+      <view class="plan-form-card">
+        <picker
+          wx:if="{{hasCategories}}"
+          mode="selector"
+          range="{{categoryNames}}"
+          value="{{categoryIndex}}"
+          bindchange="onCategoryChange"
+        >
+          <view class="wh-edit-picker">
+            <text class="wh-edit-picker__label wh-edit-picker__label--req">单据分类</text>
+            <text class="wh-edit-picker__value">{{categoryNames[categoryIndex] || '请选择'}}</text>
+            <text class="wh-edit-picker__chevron">›</text>
+          </view>
+        </picker>
+
+        <searchable-partner-select
+          wx:if="{{showPartner}}"
+          cell="{{true}}"
+          required="{{needPartner}}"
+          label="收款单位/个人"
+          partners="{{partners}}"
+          categories="{{partnerCategories}}"
+          value="{{form.partner}}"
+          placeholder="请选择"
+          bind:change="onPartnerChange"
+        />
+
+        <picker
+          wx:if="{{showWorker}}"
+          mode="selector"
+          range="{{workerNames}}"
+          value="{{workerIndex}}"
+          bindchange="onWorkerChange"
+        >
+          <view class="wh-edit-picker">
+            <text class="wh-edit-picker__label">关联工人</text>
+            <text class="wh-edit-picker__value">{{workerNames[workerIndex] || '请选择'}}</text>
+            <text class="wh-edit-picker__chevron">›</text>
+          </view>
+        </picker>
+
+        <searchable-product-select
+          wx:if="{{showProduct}}"
+          cell="{{true}}"
+          label="关联产品"
+          products="{{products}}"
+          categories="{{productCategories}}"
+          value="{{form.productId}}"
+          placeholder="请选择"
+          bind:change="onProductChange"
+        />
+
+        <picker
+          wx:if="{{showPaymentAccount}}"
+          mode="selector"
+          range="{{accountNames}}"
+          value="{{accountIndex}}"
+          bindchange="onAccountChange"
+        >
+          <view class="wh-edit-picker">
+            <text class="wh-edit-picker__label wh-edit-picker__label--req">收支账户</text>
+            <text class="wh-edit-picker__value">{{accountNames[accountIndex] || '请选择'}}</text>
+            <text class="wh-edit-picker__chevron">›</text>
+          </view>
+        </picker>
+      </view>
+
+      <view wx:if="{{customFields.length}}" class="plan-form-card">
+        <plan-form-custom-field
+          fields="{{customFields}}"
+          values="{{form.customData}}"
+          bind:change="onCustomDataChange"
+        />
+      </view>
+
+      <view class="plan-form-card">
+        <view class="plan-form-cell plan-form-cell--column">
+          <text class="plan-form-cell__label">结算金额 (CNY) *</text>
+          <view class="fin-edit-amount">
+            <text class="fin-edit-amount__symbol">¥</text>
+            <input
+              class="fin-edit-amount__input"
+              type="digit"
+              value="{{form.amount}}"
+              placeholder="0.00"
+              bindinput="onAmountInput"
+            />
+          </view>
+        </view>
+        <view class="plan-form-cell plan-form-cell--column">
+          <text class="plan-form-cell__label">备注说明</text>
+          <textarea
+            class="fin-edit-note"
+            value="{{form.note}}"
+            placeholder="输入备注…"
+            maxlength="500"
+            auto-height
+            bindinput="onNoteInput"
+          />
+        </view>
+      </view>
+    </view>
+  </scroll-view>
+
+  <view class="plan-create-footer">
+    <button
+      class="plan-create-submit"
+      loading="{{submitting}}"
+      disabled="{{submitting || !canSubmit}}"
+      bindtap="onSubmit"
+    >{{submitting ? '保存中…' : '保存单据'}}</button>
+  </view>
+</view>

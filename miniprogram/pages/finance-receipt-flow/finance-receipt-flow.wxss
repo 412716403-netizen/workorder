@@ -1,0 +1,2 @@
+@import '../../pages/finance-receipts/finance-receipts.wxss';
+@import '../../pages/production-order-report-history/production-order-report-history.wxss';

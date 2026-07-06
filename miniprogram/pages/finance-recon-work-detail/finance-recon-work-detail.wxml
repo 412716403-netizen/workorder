@@ -1,0 +1,47 @@
+<view class="plan-shell">
+  <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-header__title">报工单详情</text>
+      <view class="plan-header__back plan-header__back--placeholder"></view>
+    </view>
+  </view>
+
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <view class="fin-recon-work-page">
+    <empty-state wx:if="{{!detail}}" text="暂无报工明细" />
+
+    <block wx:else>
+      <view class="fin-recon-work-card">
+        <view class="fin-recon-work-card__title">单据信息</view>
+        <view class="fin-recon-work-row">
+          <text class="fin-recon-work-row__label">报工单号</text>
+          <text class="fin-recon-work-row__value">{{detail.reportNo}}</text>
+        </view>
+        <view class="fin-recon-work-row">
+          <text class="fin-recon-work-row__label">工人</text>
+          <text class="fin-recon-work-row__value">{{detail.workerName}}</text>
+        </view>
+        <view class="fin-recon-work-row">
+          <text class="fin-recon-work-row__label">业务时间</text>
+          <text class="fin-recon-work-row__value">{{detail.timestampText}}</text>
+        </view>
+        <view class="fin-recon-work-row">
+          <text class="fin-recon-work-row__label">应收减少</text>
+          <text class="fin-recon-work-row__value">{{detail.amountText}}</text>
+        </view>
+      </view>
+
+      <view class="fin-recon-work-card">
+        <view class="fin-recon-work-card__title">明细行</view>
+        <view wx:for="{{detail.items}}" wx:key="index" class="fin-recon-work-item">
+          <view class="fin-recon-work-item__name">{{item.productName || '—'}}</view>
+          <view class="fin-recon-work-item__meta">工单 {{item.orderNumber || '—'}} · {{item.milestoneName || '—'}}</view>
+          <view class="fin-recon-work-item__meta">数量 {{item.quantityText}} · 工价 {{item.rateText}}</view>
+          <view class="fin-recon-work-item__amount">{{item.amountText}}</view>
+        </view>
+      </view>
+    </block>
+  </view>
+</view>

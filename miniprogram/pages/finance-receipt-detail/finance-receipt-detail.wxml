@@ -1,0 +1,55 @@
+<view class="plan-detail-shell">
+  <view class="plan-detail-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-detail-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-detail-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-detail-header__title">收款单</text>
+      <view class="plan-detail-header__back plan-detail-header__back--placeholder"></view>
+    </view>
+  </view>
+
+  <view class="plan-detail-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view
+    class="plan-detail-scroll"
+    scroll-y
+    show-scrollbar="{{false}}"
+    style="height: {{scrollHeight}}px;"
+  >
+    <view wx:if="{{loading}}" class="plan-detail-muted">加载中…</view>
+
+    <view wx:elif="{{found}}" class="plan-detail-page">
+      <block wx:for="{{sections}}" wx:key="id">
+        <view class="plan-detail-section">
+          <view class="plan-detail-section__head">
+            <text class="plan-detail-section__title">{{item.title}}</text>
+          </view>
+          <view class="plan-form-card">
+            <view wx:for="{{item.rows}}" wx:for-item="row" wx:key="label" class="plan-form-cell">
+              <text class="plan-form-cell__label">{{row.label}}</text>
+              <text class="plan-form-cell__value {{row.amount && row.amountTone !== 'payment' ? 'plan-form-cell__value--amount' : ''}}">{{row.value}}</text>
+            </view>
+          </view>
+        </view>
+      </block>
+    </view>
+
+    <view wx:else class="plan-detail-muted">未找到该收款单</view>
+  </scroll-view>
+
+  <view wx:if="{{showFooter && !loading && found}}" class="report-batch-footer">
+    <view class="report-batch-footer__inner">
+      <view
+        wx:if="{{canDelete}}"
+        class="report-batch-footer__btn report-batch-footer__btn--danger"
+        hover-class="report-batch-footer__btn--pressed"
+        bindtap="onDeleteTap"
+      >删除</view>
+      <view
+        wx:if="{{canEdit}}"
+        class="report-batch-footer__btn report-batch-footer__btn--primary"
+        hover-class="report-batch-footer__btn--pressed"
+        bindtap="onEditTap"
+      >编辑</view>
+    </view>
+  </view>
+</view>

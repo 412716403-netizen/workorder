@@ -47,9 +47,9 @@ const WORKBENCH_SHORTCUT_CATALOG = [
   { id: 'psi-sales-bill', label: '销售单', group: '进销存', icon: 'CreditCard', module: 'psi', perm: 'psi:sales_bill:view', path: '/pages/psi-sales-bills/psi-sales-bills' },
   { id: 'psi-warehouse', label: '仓库管理', group: '进销存', icon: 'Warehouse', module: 'psi', perm: 'psi:warehouse_list:view', path: '/pages/psi-warehouses/psi-warehouses' },
 
-  { id: 'finance-receipt', label: '收款单', group: '财务结算', icon: 'ArrowDownCircle', module: 'finance', perm: 'finance:receipt:view' },
-  { id: 'finance-payment', label: '付款单', group: '财务结算', icon: 'ArrowUpCircle', module: 'finance', perm: 'finance:payment:view' },
-  { id: 'finance-reconciliation', label: '财务对账', group: '财务结算', icon: 'Scale', module: 'finance', perm: 'finance:reconciliation:allow' },
+  { id: 'finance-receipt', label: '收款单', group: '财务结算', icon: 'ArrowDownCircle', module: 'finance', perm: 'finance:receipt:view', path: '/pages/finance-receipts/finance-receipts' },
+  { id: 'finance-payment', label: '付款单', group: '财务结算', icon: 'ArrowUpCircle', module: 'finance', perm: 'finance:payment:view', path: '/pages/finance-payments/finance-payments' },
+  { id: 'finance-reconciliation', label: '财务对账', group: '财务结算', icon: 'Scale', module: 'finance', perm: 'finance:reconciliation:allow', path: '/pages/finance-reconciliation/finance-reconciliation' },
 
   { id: 'basic-products', label: '产品与 BOM', group: '基础信息', icon: 'Boxes', module: 'basic', perm: 'basic:products:view' },
   { id: 'basic-partners', label: '合作单位', group: '基础信息', icon: 'Building2', module: 'basic', perm: 'basic:partners:view' },

@@ -142,6 +142,10 @@ onShow() {
 | 调拨单详情（删除） | `PSI_WAREHOUSE_TRANSFER` |
 | 登记/编辑盘点单 | `PSI_WAREHOUSE_STOCKTAKE` |
 | 盘点单详情（删除） | `PSI_WAREHOUSE_STOCKTAKE` |
+| 登记/编辑收款单 | `FINANCE_RECEIPTS` |
+| 收款单详情（删除） | `FINANCE_RECEIPTS` |
+| 登记/编辑付款单 | `FINANCE_PAYMENTS` |
+| 付款单详情（删除） | `FINANCE_PAYMENTS` |
 
 **新功能必做**：选用上表目标；若无合适常量则在 `saveNavigation.js` 的 `LIST_ROUTES` 登记，并同步更新本表与 `docs/10-miniprogram-ui.md`。
 
@@ -161,6 +165,8 @@ onShow() {
 | 销售单详情 | `psi:sales_bill:edit` | `psi:sales_bill:delete` |
 | 调拨单详情 | `psi:warehouse_transfer:edit` | `psi:warehouse_transfer:delete` |
 | 盘点单详情 | `psi:warehouse_stocktake:edit` | `psi:warehouse_stocktake:delete` |
+| 收款单详情 | `finance:receipt:edit` | `finance:receipt:delete` |
+| 付款单详情 | `finance:payment:edit` | `finance:payment:delete` |
 
 保存/删除成功后 `afterSaveReturnToList` 回到所属列表（见上表）。
 
