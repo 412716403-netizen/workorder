@@ -41,11 +41,11 @@ const WORKBENCH_SHORTCUT_CATALOG = [
   { id: 'production-outsource', label: '外协管理', group: '生产管理', icon: 'Truck', module: 'production', perm: 'production:outsource:view', path: '/pages/production-outsource/production-outsource' },
   { id: 'production-rework', label: '返工管理', group: '生产管理', icon: 'RotateCcw', module: 'production', perm: 'production:rework:view', path: '/pages/production-rework/production-rework' },
 
-  { id: 'psi-purchase-order', label: '采购订单', group: '进销存', icon: 'ClipboardList', module: 'psi', perm: 'psi:purchase_order:view' },
-  { id: 'psi-purchase-bill', label: '采购入库', group: '进销存', icon: 'Receipt', module: 'psi', perm: 'psi:purchase_bill:view' },
-  { id: 'psi-sales-order', label: '销售订单', group: '进销存', icon: 'ShoppingBag', module: 'psi', perm: 'psi:sales_order:view' },
-  { id: 'psi-sales-bill', label: '销售单', group: '进销存', icon: 'CreditCard', module: 'psi', perm: 'psi:sales_bill:view' },
-  { id: 'psi-warehouse', label: '仓库管理', group: '进销存', icon: 'Warehouse', module: 'psi', perm: 'psi:warehouse_list:view' },
+  { id: 'psi-purchase-order', label: '采购订单', group: '进销存', icon: 'ClipboardList', module: 'psi', perm: 'psi:purchase_order:view', path: '/pages/psi-purchase-orders/psi-purchase-orders' },
+  { id: 'psi-purchase-bill', label: '采购入库', group: '进销存', icon: 'Receipt', module: 'psi', perm: 'psi:purchase_bill:view', path: '/pages/psi-purchase-bills/psi-purchase-bills' },
+  { id: 'psi-sales-order', label: '销售订单', group: '进销存', icon: 'ShoppingBag', module: 'psi', perm: 'psi:sales_order:view', path: '/pages/psi-sales-orders/psi-sales-orders' },
+  { id: 'psi-sales-bill', label: '销售单', group: '进销存', icon: 'CreditCard', module: 'psi', perm: 'psi:sales_bill:view', path: '/pages/psi-sales-bills/psi-sales-bills' },
+  { id: 'psi-warehouse', label: '仓库管理', group: '进销存', icon: 'Warehouse', module: 'psi', perm: 'psi:warehouse_list:view', path: '/pages/psi-warehouses/psi-warehouses' },
 
   { id: 'finance-receipt', label: '收款单', group: '财务结算', icon: 'ArrowDownCircle', module: 'finance', perm: 'finance:receipt:view' },
   { id: 'finance-payment', label: '付款单', group: '财务结算', icon: 'ArrowUpCircle', module: 'finance', perm: 'finance:payment:view' },

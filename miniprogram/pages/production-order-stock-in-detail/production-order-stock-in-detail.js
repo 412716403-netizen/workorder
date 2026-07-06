@@ -5,13 +5,14 @@ const {
   fetchProductsAll,
   fetchCategoriesAll,
   fetchTenantConfig,
+  fetchProductionRecords,
   createProductionRecord,
   updateProductionRecord,
   deleteProductionRecord,
 } = require('../../utils/orderApi.js');
 const { fetchDictionaries } = require('../../utils/planApi.js');
 const { normalizeMasterList } = require('../../utils/productionPlans.js');
-const { buildStockInFlowDetailView } = require('../../utils/stockInFlow.js');
+const { buildStockInFlowDetailView, normalizeStockInRecord } = require('../../utils/stockInFlow.js');
 const {
   initStockInEditMatrixState,
   buildStockInEditMatrixLayout,
@@ -86,8 +87,15 @@ Page({
     const ctx = readTenantCtx();
     const perms = (ctx && ctx.permissions) || [];
     this._docNo = options.docNo ? decodeURIComponent(options.docNo) : '';
-    const detail = (getApp().globalData && getApp().globalData.stockInFlowDetail) || null;
-    this._rows = (detail && detail.rows) || [];
+    this._productId = options.productId ? decodeURIComponent(options.productId) : '';
+    const app = getApp();
+    const cached = (app.globalData && app.globalData.stockInFlowDetail) || null;
+    if (cached && cached.docNo === this._docNo && Array.isArray(cached.rows) && cached.rows.length) {
+      this._rows = cached.rows;
+    } else {
+      this._rows = [];
+    }
+    if (app.globalData) app.globalData.stockInFlowDetail = null;
     this._canEdit = hasPermission(perms, 'production:orders_pending_stock_in:edit');
     this._canDelete = hasPermission(perms, 'production:orders_pending_stock_in:delete');
     this._matrixKbInput = createMatrixKeyboardInputSession();
@@ -103,7 +111,7 @@ Page({
       scrollHeight: computeScrollHeight(nav, this._canEdit || this._canDelete),
     });
 
-    if (!this._rows.length) {
+    if (!this._docNo && !this._rows.length) {
       wx.showToast({ title: '记录不存在', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 800);
       return;
@@ -124,20 +132,35 @@ Page({
   },
 
   async bootstrap() {
+    this.setData({ loading: true });
     try {
+      const needsFetch = !this._rows.length;
       const [
         config,
         productsRaw,
         categoriesRaw,
         dictionariesRaw,
         warehousesRaw,
+        recordsRaw,
       ] = await Promise.all([
         fetchTenantConfig().catch(() => ({})),
         fetchProductsAll().catch(() => []),
         fetchCategoriesAll().catch(() => []),
         fetchDictionaries().catch(() => ({})),
         fetchWarehousesAll(),
+        needsFetch
+          ? fetchProductionRecords({
+            docNo: this._docNo,
+            type: 'STOCK_IN',
+            ...(this._productId ? { productId: this._productId } : {}),
+          }).catch(() => [])
+          : Promise.resolve(null),
       ]);
+
+      if (needsFetch) {
+        const rows = Array.isArray(recordsRaw) ? recordsRaw : (recordsRaw && recordsRaw.data) || [];
+        this._rows = rows.map(normalizeStockInRecord);
+      }
 
       const productionLinkMode = (config && config.productionLinkMode) || 'order';
       const products = normalizeMasterList(productsRaw);

@@ -113,6 +113,30 @@ async function attachBatchOptionsToRows(rows, warehouseId, fetchStockBatches) {
   return out;
 }
 
+/** 合并 API 批次与本地快照（对齐 Web useWarehouseBatchOptions mergeFromLocal） */
+function mergeWarehouseBatchOptions(apiRows, mergeRows) {
+  const map = new Map();
+  (Array.isArray(apiRows) ? apiRows : []).forEach((o) => {
+    const batchNo = normalizeBatchNoFromApi(o.batchNo);
+    if (!batchNo) return;
+    map.set(batchNo, Number(o.stock) || 0);
+  });
+  (Array.isArray(mergeRows) ? mergeRows : []).forEach((m) => {
+    const batchNo = normalizeBatchNoFromApi(m.batchNo);
+    if (!batchNo) return;
+    const prev = map.get(batchNo);
+    map.set(batchNo, Math.max(prev != null ? prev : 0, Number(m.stock) || 0));
+  });
+  return [...map.entries()]
+    .map(([batchNo, stock]) => ({
+      batchNo,
+      stock,
+      label: formatBatchOptionLabel(batchNo, stock) || batchNo,
+    }))
+    .filter((o) => o.batchNo && o.stock > 0)
+    .sort((a, b) => a.batchNo.localeCompare(b.batchNo, 'zh-CN'));
+}
+
 function applyBatchSelection(row, batchIndex) {
   const idx = Number(batchIndex);
   const options = row.batchOptions || [];
@@ -315,6 +339,8 @@ module.exports = {
   decorateRowsWithBatchFlags,
   attachBatchOptionsToRows,
   applyBatchSelection,
+  mergeWarehouseBatchOptions,
+  normalizeBatchNoFromApi,
   validateMaterialIssueBatchRows,
   decorateConfirmRowsWithBatchFlags,
   attachBatchOptionsToConfirmRows,

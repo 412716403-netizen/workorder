@@ -20,6 +20,7 @@ SmartTrack Pro 微信小程序采用 **企业蓝 + 卡片化 + 底部 Tab** 的 
 | `styles/button.wxss` | 按钮 |
 | `styles/list.wxss` | 列表行、状态胶囊 |
 | `styles/form.wxss` | 表单输入 |
+| `styles/qty-price-amount-summary.wxss` | 数量 / 单价 / 金额三列一行（参考外协收回） |
 
 类名前缀使用 `st-*`（SmartTrack）。迁移期 `apple-*` 为别名，新代码禁止新增 `apple-*`。
 
@@ -40,6 +41,7 @@ SmartTrack Pro 微信小程序采用 **企业蓝 + 卡片化 + 底部 Tab** 的 
 | `searchable-partner-select` | 合作单位 / 客户 / 加工厂（搜索 + 分类，底栏弹层） |
 | `searchable-product-select` | 产品选择（搜索 + 分类 + SKU） |
 | `matrix-qty-keyboard` | 色码矩阵数量自定义键盘 |
+| `batch-return-input` | 采购入库批次（点击选择；弹窗内可选已有批次或输入新批号） |
 
 ## 页面壳类型
 
@@ -143,6 +145,18 @@ SmartTrack Pro 微信小程序采用 **企业蓝 + 卡片化 + 底部 Tab** 的 
 | 待入库确认 | — | — | ✓ | ✓ |
 | 外协发出确认 | ✓ | — | ✓ | ✓ |
 | 扫码外协收回 | ✓ | — | — | — |
+| 登记/编辑采购订单 | — | ✓ | ✓ | ✓ |
+| 登记/编辑采购入库 | ✓ | ✓ | ✓ | ✓ |
+
+### 数量 / 单价 / 金额（三列一行）
+
+同时展示**数量、单价、金额**时，统一使用 [`styles/qty-price-amount-summary.wxss`](../miniprogram/styles/qty-price-amount-summary.wxss)（参考外协收回确认页）：
+
+- **表单录入**：`order-detail-summary` + `order-detail-summary__item`；可编辑列用 `order-detail-summary__input`
+- **列表 / 详情只读行**：同上，加 `order-detail-summary--compact`
+- 无金额权限时只显示数量列
+
+已对齐：采购订单新建/编辑、采购入库新建/编辑、列表产品行、详情产品行。
 
 ### 组件
 
@@ -197,7 +211,8 @@ const {
 2. **流水 / 批次详情**编辑或删除 → 回到对应**流水列表**（不跳详情、不停留在编辑页）
 3. 栈内已有目标列表时 `navigateBack` + `_refreshOnNextShow`；否则 `redirectTo`
 4. 成功后先 `wx.showToast`，约 400ms 后跳转
-5. **除外**：`scan-session` 扫码连续作业；详情页内联保存（不离开当前页）
+5. **Hub 列表刷新**：目标列表页 `onShow` 用 `consumeListRefreshOnShow(page, route)` 判断；为真时须 `bootstrap` / 重新请求 API，不能只重筛本地缓存；下拉刷新 `reloadList` 亦须重新拉数
+6. **除外**：`scan-session` 扫码连续作业；详情页内联保存（不离开当前页）
 
 ### 页面 → 成功后列表
 
@@ -220,6 +235,20 @@ const {
 | 领退料确认 | `STOCK_OUT`（外协来源 → `OUTSOURCE_HUB`） |
 | 领退料流水详情 | `STOCK_OUT` |
 | 新建计划 | `PRODUCTION_PLANS` |
+| 登记/编辑采购订单 | `PSI_PURCHASE_ORDERS` |
+| 采购订单详情（删除） | `PSI_PURCHASE_ORDERS` |
+| 登记/编辑采购入库 | `PSI_PURCHASE_BILLS` |
+| 采购入库详情（删除） | `PSI_PURCHASE_BILLS` |
+| 登记/编辑销售订单 | `PSI_SALES_ORDERS` |
+| 销售订单详情（删除） | `PSI_SALES_ORDERS` |
+| 销售订单配货 | 返回详情（`navigateBack`） |
+| 待发货生成销售单 | `PSI_SALES_ORDERS` |
+| 登记/编辑销售单 | `PSI_SALES_BILLS` |
+| 销售单详情（删除） | `PSI_SALES_BILLS` |
+| 登记/编辑调拨单 | `PSI_WAREHOUSE_TRANSFER` |
+| 调拨单详情（删除） | `PSI_WAREHOUSE_TRANSFER` |
+| 登记/编辑盘点单 | `PSI_WAREHOUSE_STOCKTAKE` |
+| 盘点单详情（删除） | `PSI_WAREHOUSE_STOCKTAKE` |
 
 新功能登记：在 `LIST_ROUTES` 增加路径常量，上表与 `.cursor/rules/miniprogram-forms.mdc` 同步补充一行。
 
@@ -339,6 +368,155 @@ npm run miniprogram:icons
 **留 Web**：工单新建（仅计划下达）、删除、表单配置、打印、色码矩阵报工、待入库批量/矩阵/入库流水。
 
 入口：[`menus.js`](../miniprogram/config/menus.js) `production-orders` → `/pages/production-orders/production-orders`。
+
+## 采购订单
+
+对齐 Web [`PSIOpsView`](../views/PSIOpsView.tsx) 采购订单 Tab（P2+ 移动端口径）：
+
+| 页面 | 路径 | 职责 |
+|------|------|------|
+| 采购订单 Hub | [`pages/psi-purchase-orders/`](../miniprogram/pages/psi-purchase-orders/) | 按单号分组卡片列表、搜索/仅未交清筛选、行级入库进度预览、新建入口 |
+| 采购订单详情 | [`pages/psi-purchase-order-detail/`](../miniprogram/pages/psi-purchase-order-detail/) | 供应商/单号/明细/行级入库进度；编辑/删除 |
+| 登记/编辑 | [`pages/psi-purchase-order-edit/`](../miniprogram/pages/psi-purchase-order-edit/) | 供应商、多行明细、色码矩阵、保存/删除 |
+| 订单流水 | [`pages/psi-purchase-order-flow/`](../miniprogram/pages/psi-purchase-order-flow/) | 行级履约流水（未入库/部分/已入库筛选） |
+
+| 工具 / 配置 | 作用 |
+|-------------|------|
+| [`config/purchaseOrders.js`](../miniprogram/config/purchaseOrders.js) | PSI 类型常量、流水状态筛选、`PURCHASE_ORDER_SHORTCUTS` |
+| [`utils/psiApi.js`](../miniprogram/utils/psiApi.js) | `/psi/records*`、`next-doc-number`、`last-purchase-prices` |
+| [`utils/psiOpsAggregators.js`](../miniprogram/utils/psiOpsAggregators.js) | 按单号分组、入库汇总、未交清判断 |
+| [`utils/purchaseOrders.js`](../miniprogram/utils/purchaseOrders.js) | 列表/详情/流水 view-model |
+| [`utils/purchaseOrderForm.js`](../miniprogram/utils/purchaseOrderForm.js) | 表单状态、校验、保存 payload |
+
+**API**：`GET /psi/records?type=PURCHASE_ORDER`（客户端拉全量分组）· 并行拉 `PURCHASE_BILL` 计算 `receivedByOrderLine` · `POST /psi/records/batch` · `PUT /psi/records/replace` · `DELETE /psi/records` · `GET /psi/next-doc-number` · `POST /psi/last-purchase-prices`
+
+**权限**：`psi:purchase_order:view` · `psi:purchase_order:create` · `psi:purchase_order:edit` · `psi:purchase_order:delete` · `psi:purchase_order:amount`
+
+**深链**：`/pages/psi-purchase-orders/psi-purchase-orders?docNumber=<单号>` 重定向至详情。
+
+**留 Web**：表单配置、列表/详情打印、租户自定义字段、关联产品、从计划生成采购订单。
+
+入口：[`menus.js`](../miniprogram/config/menus.js) `psi-purchase-order` → `/pages/psi-purchase-orders/psi-purchase-orders`（首页快捷 / 应用中心）。
+
+## 销售订单
+
+对齐 Web [`PSIOpsView`](../views/PSIOpsView.tsx) 销售订单 Tab（P2+ 移动端口径）：
+
+| 页面 | 路径 | 职责 |
+|------|------|------|
+| 销售订单 Hub | [`pages/psi-sales-orders/`](../miniprogram/pages/psi-sales-orders/) | 按单号分组卡片列表、搜索/仅未发齐筛选、行级配货/发货进度预览、新建入口 |
+| 销售订单详情 | [`pages/psi-sales-order-detail/`](../miniprogram/pages/psi-sales-order-detail/) | 客户/单号/明细/行级进度；配货入口；编辑/删除 |
+| 登记/编辑 | [`pages/psi-sales-order-edit/`](../miniprogram/pages/psi-sales-order-edit/) | 客户、多行明细、色码矩阵、销售价、保存/删除 |
+| 订单流水 | [`pages/psi-sales-order-flow/`](../miniprogram/pages/psi-sales-order-flow/) | 行级配货/发货流水（未配货/已配货/已发齐筛选） |
+| 配货 | [`pages/psi-sales-order-allocate/`](../miniprogram/pages/psi-sales-order-allocate/) | 按行组配货、出库仓库、色码矩阵 |
+| 待发货清单 | [`pages/psi-sales-order-pending-ship/`](../miniprogram/pages/psi-sales-order-pending-ship/) | 已配未发汇总、多选生成销售单 |
+
+| 工具 / 配置 | 作用 |
+|-------------|------|
+| [`config/salesOrders.js`](../miniprogram/config/salesOrders.js) | PSI 类型常量、流水状态筛选、`SALES_ORDER_SHORTCUTS` |
+| [`utils/salesOrders.js`](../miniprogram/utils/salesOrders.js) | 列表/详情/流水/待发货 view-model |
+| [`utils/salesOrderForm.js`](../miniprogram/utils/salesOrderForm.js) | 表单状态、校验、保存 payload（保留已配/已发） |
+| [`utils/salesOrderAllocation.js`](../miniprogram/utils/salesOrderAllocation.js) | 配货数量初始化与保存 |
+| [`utils/salesOrderPendingShip.js`](../miniprogram/utils/salesOrderPendingShip.js) | 待发货生成销售单 |
+| [`utils/psiPartnerProductLastPrice.js`](../miniprogram/utils/psiPartnerProductLastPrice.js) | 客户+商品默认销售价 |
+
+**API**：`GET /psi/records?type=SALES_ORDER` · `POST /psi/records/batch` · `PUT /psi/records/replace` · `DELETE /psi/records` · `GET /psi/next-doc-number`（SO / XS）
+
+**权限**：`psi:sales_order:view` · `psi:sales_order:create` · `psi:sales_order:edit` · `psi:sales_order:delete` · `psi:sales_order:amount` · `psi:sales_order_allocation:allow` · `psi:sales_order_pending_shipment:allow`
+
+**深链**：`/pages/psi-sales-orders/psi-sales-orders?docNumber=<单号>` 重定向至详情。
+
+**留 Web**：表单配置、列表/详情打印、租户自定义字段。
+
+入口：[`menus.js`](../miniprogram/config/menus.js) `psi-sales-order` → `/pages/psi-sales-orders/psi-sales-orders`（首页快捷 / 应用中心）。
+
+## 销售单
+
+对齐 Web [`PSIOpsView`](../views/PSIOpsView.tsx) 销售单 Tab（P2+ 移动端口径）：
+
+| 页面 | 路径 | 职责 |
+|------|------|------|
+| 销售单 Hub | [`pages/psi-sales-bills/`](../miniprogram/pages/psi-sales-bills/) | 按单号分组卡片列表、搜索、仓库展示、流水快捷入口、新建 |
+| 销售单详情 | [`pages/psi-sales-bill-detail/`](../miniprogram/pages/psi-sales-bill-detail/) | 客户/单号/出库仓库/明细/批次；编辑/删除 |
+| 登记/编辑 | [`pages/psi-sales-bill-edit/`](../miniprogram/pages/psi-sales-bill-edit/) | 客户、出库仓库、多行明细、色码矩阵、销售价、出库批次、保存/删除 |
+| 销售流水 | [`pages/psi-sales-bill-flow/`](../miniprogram/pages/psi-sales-bill-flow/) | 行级出库流水（日期/搜索筛选） |
+
+| 工具 / 配置 | 作用 |
+|-------------|------|
+| [`config/salesBills.js`](../miniprogram/config/salesBills.js) | PSI 类型常量、`SALES_BILL_SHORTCUTS` |
+| [`utils/salesBills.js`](../miniprogram/utils/salesBills.js) | 列表/详情/流水 view-model |
+| [`utils/salesBillForm.js`](../miniprogram/utils/salesBillForm.js) | 表单状态、校验、保存 payload |
+| [`utils/purchaseBillBatch.js`](../miniprogram/utils/purchaseBillBatch.js) | 出库批次本地库存合并（复用） |
+| [`utils/psiPartnerProductLastPrice.js`](../miniprogram/utils/psiPartnerProductLastPrice.js) | 客户+商品默认销售价 |
+
+**API**：`GET /psi/records?type=SALES_BILL` · `POST /psi/records/batch` · `PUT /psi/records/replace` · `DELETE /psi/records` · `GET /psi/next-doc-number`（XS / SB）
+
+**权限**：`psi:sales_bill:view` · `psi:sales_bill:create` · `psi:sales_bill:edit` · `psi:sales_bill:delete` · `psi:sales_bill:amount`
+
+**深链**：`/pages/psi-sales-bills/psi-sales-bills?docNumber=<单号>` 重定向至详情。
+
+**留 Web**：表单配置、列表/详情打印、租户自定义字段。
+
+入口：[`menus.js`](../miniprogram/config/menus.js) `psi-sales-bill` → `/pages/psi-sales-bills/psi-sales-bills`（应用中心）。
+
+## 采购入库
+
+对齐 Web [`PSIOpsView`](../views/PSIOpsView.tsx) 采购入库 Tab（P2+ 移动端口径）：
+
+| 页面 | 路径 | 职责 |
+|------|------|------|
+| 采购入库 Hub | [`pages/psi-purchase-bills/`](../miniprogram/pages/psi-purchase-bills/) | 按单号分组卡片列表、搜索、仓库/来源订单展示、新建入口 |
+| 采购入库详情 | [`pages/psi-purchase-bill-detail/`](../miniprogram/pages/psi-purchase-bill-detail/) | 供应商/单号/仓库/明细；来源订单跳转；编辑/删除 |
+| 登记/编辑 | [`pages/psi-purchase-bill-edit/`](../miniprogram/pages/psi-purchase-bill-edit/) | 手动创建或引用采购订单、仓库选择、色码矩阵、批次、保存/删除 |
+| 入库流水 | [`pages/psi-purchase-bill-flow/`](../miniprogram/pages/psi-purchase-bill-flow/) | 行级入库流水（日期/搜索筛选） |
+
+| 工具 / 配置 | 作用 |
+|-------------|------|
+| [`config/purchaseBills.js`](../miniprogram/config/purchaseBills.js) | PSI 类型常量、`PURCHASE_BILL_SHORTCUTS` |
+| [`utils/purchaseBills.js`](../miniprogram/utils/purchaseBills.js) | 列表/详情/流水 view-model |
+| [`utils/purchaseBillForm.js`](../miniprogram/utils/purchaseBillForm.js) | 表单状态、引用订单转化、校验、保存 payload |
+
+**API**：`GET /psi/records?type=PURCHASE_BILL` · 引用订单时并行拉 `PURCHASE_ORDER` 计算待入量 · `POST /psi/records/batch` · `PUT /psi/records/replace` · `DELETE /psi/records` · `GET /psi/next-doc-number` · `GET /settings/warehouses?all=true`
+
+**权限**：`psi:purchase_bill:view` · `psi:purchase_bill:create` · `psi:purchase_bill:edit` · `psi:purchase_bill:delete` · `psi:purchase_bill:amount`
+
+**深链**：`/pages/psi-purchase-bills/psi-purchase-bills?docNumber=<单号>` 重定向至详情。
+
+**留 Web**：表单配置、列表/详情打印、租户自定义字段、关联产品。
+
+入口：[`menus.js`](../miniprogram/config/menus.js) `psi-purchase-bill` → `/pages/psi-purchase-bills/psi-purchase-bills`（应用中心）。
+
+## 仓库管理
+
+对齐 Web [`WarehousePanel`](../views/psi-ops/WarehousePanel.tsx)（P2+ 移动端口径）：
+
+| 页面 | 路径 | 职责 |
+|------|------|------|
+| 库存 Hub | [`pages/psi-warehouses/`](../miniprogram/pages/psi-warehouses/) | 按仓库/按物料库存列表、搜索、批次展开、快捷入口（流水/盘点/调拨） |
+| 库存详情 | [`pages/psi-warehouse-product-flow/`](../miniprogram/pages/psi-warehouse-product-flow/) | 单产品（可选单仓）流水只读列表；支持日期/类型/仓库筛选 |
+| 调拨单 Hub | [`pages/psi-warehouse-transfer/`](../miniprogram/pages/psi-warehouse-transfer/) | 调拨单列表、搜索、新建 |
+| 调拨详情 | [`pages/psi-warehouse-transfer-detail/`](../miniprogram/pages/psi-warehouse-transfer-detail/) | 调出/调入仓、明细；编辑/删除 |
+| 登记/编辑调拨 | [`pages/psi-warehouse-transfer-edit/`](../miniprogram/pages/psi-warehouse-transfer-edit/) | 双仓库、产品、矩阵、批次 |
+| 盘点单 Hub | [`pages/psi-warehouse-stocktake/`](../miniprogram/pages/psi-warehouse-stocktake/) | 盘点单列表、搜索、新建 |
+| 盘点详情 | [`pages/psi-warehouse-stocktake-detail/`](../miniprogram/pages/psi-warehouse-stocktake-detail/) | 盘点仓、实盘/系统/差异；编辑/删除 |
+| 登记/编辑盘点 | [`pages/psi-warehouse-stocktake-edit/`](../miniprogram/pages/psi-warehouse-stocktake-edit/) | 单仓库、实盘录入、系统库存展示 |
+| 仓库流水 | [`pages/psi-warehouse-flow/`](../miniprogram/pages/psi-warehouse-flow/) | 全局流水（日期/类型/仓库/搜索）；行点击跳转各单据详情 |
+| 生产退料详情 | [`pages/psi-warehouse-flow-prod-detail/`](../miniprogram/pages/psi-warehouse-flow-prod-detail/) | 流水中的 STOCK_RETURN 轻量只读详情 |
+
+| 工具 / 配置 | 作用 |
+|-------------|------|
+| [`config/warehouses.js`](../miniprogram/config/warehouses.js) | PSI 类型、`WAREHOUSE_SHORTCUTS`、流水类型筛选 |
+| [`utils/warehouseStock.js`](../miniprogram/utils/warehouseStock.js) | `stock-snapshot` 客户端索引 |
+| [`utils/warehouseInventory.js`](../miniprogram/utils/warehouseInventory.js) | 库存主列表 view-model |
+| [`utils/warehouseTransfer.js`](../miniprogram/utils/warehouseTransfer.js) / [`warehouseTransferForm.js`](../miniprogram/utils/warehouseTransferForm.js) | 调拨列表/表单 |
+| [`utils/warehouseStocktake.js`](../miniprogram/utils/warehouseStocktake.js) / [`warehouseStocktakeForm.js`](../miniprogram/utils/warehouseStocktakeForm.js) | 盘点列表/表单 |
+| [`utils/warehouseFlow.js`](../miniprogram/utils/warehouseFlow.js) | 流水聚合/筛选/详情路由 |
+
+**API**：`GET /psi/stock-snapshot` · `GET /psi/stock/batches` · `GET /psi/records?type=TRANSFER|STOCKTAKE` · `POST /psi/records/batch` · `PUT /psi/records/replace` · `GET /psi/next-doc-number` · `GET /production/records?types=STOCK_*` · `GET /settings/warehouses?all=true`
+
+**权限**：`psi:warehouse_list:view` · `psi:warehouse_transfer:view/create/edit/delete` · `psi:warehouse_stocktake:view/create/edit/delete` · `psi:warehouse_flow:allow`
+
+入口：[`menus.js`](../miniprogram/config/menus.js) `psi-warehouse` → `/pages/psi-warehouses/psi-warehouses`（应用中心）。
 
 ## 返工管理
 

@@ -136,6 +136,16 @@ function fetchStockBatches(params) {
     .catch(() => []);
 }
 
+function fetchStockSnapshot(params) {
+  return request({ path: `/psi/stock-snapshot${buildQs(params || {})}`, method: 'GET', timeout: 90000 })
+    .then((body) => ({
+      byWarehouse: Array.isArray(body && body.byWarehouse) ? body.byWarehouse : [],
+      byVariant: Array.isArray(body && body.byVariant) ? body.byVariant : [],
+      byBatch: Array.isArray(body && body.byBatch) ? body.byBatch : [],
+    }))
+    .catch(() => ({ byWarehouse: [], byVariant: [], byBatch: [] }));
+}
+
 function fetchNodesAll() {
   return request({ path: '/settings/nodes?all=true', method: 'GET' }).catch(() => []);
 }
@@ -231,6 +241,7 @@ module.exports = {
   fetchProductsAll,
   fetchCategoriesAll,
   fetchStockBatches,
+  fetchStockSnapshot,
   fetchNodesAll,
   fetchWorkersAll,
   fetchWorkersForReport,

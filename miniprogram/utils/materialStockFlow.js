@@ -243,7 +243,7 @@ function buildMaterialFlowDetailView(rows, opts) {
   const unitNames = [...new Set(list.map((r) => resolveUnitName(productMap, r.productId, dictionaries)))];
   const totalUnitName = unitNames.length === 1 ? unitNames[0] : '件';
 
-  const lineItems = list.map((r) => {
+  const lineItems = list.map((r, index) => {
     const meta = productMetaFromMap(productMap, r.productId, r.productName, '');
     const qty = Number(r.quantity) || 0;
     const unitName = resolveUnitName(productMap, r.productId, dictionaries);
@@ -251,7 +251,7 @@ function buildMaterialFlowDetailView(rows, opts) {
     const qtyText = buildQtyText(prefix, qty, unitName);
     const docHasBatch = list.some((x) => normalizeBatchNo(x.batchNo));
     return {
-      id: r.id,
+      id: r.id || `line-${r.productId || 'p'}-${r.variantId || '-'}-${index}`,
       productId: r.productId,
       name: meta.name || r.productName || '—',
       sku: meta.sku,

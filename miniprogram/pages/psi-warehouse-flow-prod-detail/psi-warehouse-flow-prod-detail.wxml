@@ -1,0 +1,43 @@
+<view class="plan-detail-shell">
+  <view class="plan-detail-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-detail-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-detail-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-detail-header__title">退料详情</text>
+      <view class="plan-detail-header__back plan-detail-header__back--placeholder"></view>
+    </view>
+  </view>
+
+  <view class="plan-detail-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <view class="wh-prod-detail-page">
+    <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
+
+    <view wx:elif="{{!detail}}" class="plan-detail-muted">未找到记录</view>
+
+    <view wx:else>
+      <view class="wh-prod-detail-hero">
+        <text class="wh-prod-detail-hero__badge">{{detail.typeLabel}}</text>
+        <text class="wh-prod-detail-hero__doc">{{detail.docNo}}</text>
+        <view class="wh-prod-detail-hero__product">
+          <text class="report-history-row__product-name">{{detail.productName}}</text>
+          <text wx:if="{{detail.showProductSku}}" class="report-history-row__sku">{{detail.productSku}}</text>
+        </view>
+      </view>
+
+      <view class="order-detail-summary order-detail-summary--compact">
+        <view class="order-detail-summary__item">
+          <text class="order-detail-summary__label">数量</text>
+          <text class="order-detail-summary__value">{{detail.qtyText}}</text>
+        </view>
+        <view class="order-detail-summary__item">
+          <text class="order-detail-summary__label">仓库</text>
+          <text class="order-detail-summary__value">{{detail.warehouseName}}</text>
+        </view>
+        <view class="order-detail-summary__item">
+          <text class="order-detail-summary__label">时间</text>
+          <text class="order-detail-summary__value">{{detail.timeLabel}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

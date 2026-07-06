@@ -1,0 +1,139 @@
+<view class="plan-detail-shell">
+  <view class="plan-detail-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-detail-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-detail-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-detail-header__title">{{title}}</text>
+      <view class="plan-detail-header__back plan-detail-header__back--placeholder"></view>
+    </view>
+  </view>
+
+  <view class="plan-detail-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view
+    class="plan-detail-scroll"
+    scroll-y
+    show-scrollbar="{{false}}"
+    style="height: {{scrollHeight}}px;"
+  >
+    <view wx:if="{{loading}}" class="plan-detail-muted">加载中…</view>
+
+    <view wx:elif="{{hero}}" class="plan-detail-page">
+      <view class="plan-detail-hero wh-detail-hero">
+        <view class="plan-detail-hero__text plan-detail-hero__text--full">
+          <text class="wh-detail-hero__route">{{hero.warehouseName}}</text>
+          <text class="wh-detail-hero__doc">{{hero.docNumber}}</text>
+          <text wx:if="{{hero.createdAtText}}" class="wh-detail-hero__date">{{hero.createdAtText}}</text>
+        </view>
+      </view>
+
+      <view wx:if="{{summaryStats}}" class="order-detail-summary">
+        <view class="order-detail-summary__item">
+          <text class="order-detail-summary__label">产品项数</text>
+          <text class="order-detail-summary__value">{{summaryStats.skuCount}}</text>
+        </view>
+        <view class="order-detail-summary__item">
+          <text class="order-detail-summary__label">合计差异</text>
+          <text class="order-detail-summary__value {{summaryStats.diffPositive ? 'wh-diff--pos' : 'wh-diff--neg'}}">{{summaryStats.totalDiffText}}</text>
+        </view>
+      </view>
+
+      <text wx:if="{{hero.note}}" class="wh-detail-note">备注 {{hero.note}}</text>
+
+      <block wx:for="{{sections}}" wx:key="id">
+        <view class="plan-detail-section">
+          <view class="plan-detail-section__head">
+            <text class="plan-detail-section__title">{{item.title}}</text>
+          </view>
+
+          <view class="plan-form-card">
+            <view wx:for="{{item.lines}}" wx:for-item="line" wx:key="lineGroupId" class="po-detail-line">
+              <view class="po-detail-line__head">
+                <view class="po-detail-line__thumb">
+                  <image
+                    wx:if="{{line.showProductImage}}"
+                    class="po-detail-line__img"
+                    src="{{line.productImageUrl}}"
+                    mode="aspectFill"
+                    data-line-group-id="{{line.lineGroupId}}"
+                    binderror="onProductImageError"
+                  />
+                  <view wx:else class="po-detail-line__img po-detail-line__img--placeholder">
+                    <image class="po-detail-line__placeholder-icon" src="{{line.placeholderIconSrc}}" mode="aspectFit" />
+                  </view>
+                </view>
+                <view class="po-detail-line__info">
+                  <view class="report-history-row__product">
+                    <view class="report-history-row__product-left">
+                      <text class="report-history-row__product-name">{{line.productName}}</text>
+                      <text wx:if="{{line.showProductSku}}" class="report-history-row__sku">{{line.productSku}}</text>
+                    </view>
+                  </view>
+
+                  <view class="order-detail-summary order-detail-summary--compact">
+                    <view class="order-detail-summary__item">
+                      <text class="order-detail-summary__label">系统库存</text>
+                      <text class="order-detail-summary__value">{{line.systemQtyText}}</text>
+                    </view>
+                    <view class="order-detail-summary__item">
+                      <text class="order-detail-summary__label">实盘</text>
+                      <text class="order-detail-summary__value">{{line.qtyText}} {{line.unitName}}</text>
+                    </view>
+                    <view class="order-detail-summary__item">
+                      <text class="order-detail-summary__label">差异</text>
+                      <text class="order-detail-summary__value {{line.diffPositive ? 'wh-diff--pos' : 'wh-diff--neg'}}">{{line.diffQtyText}}</text>
+                    </view>
+                    <view wx:if="{{line.showBatch}}" class="order-detail-summary__item">
+                      <text class="order-detail-summary__label">批次</text>
+                      <text class="order-detail-summary__value">{{line.batchNo}}</text>
+                    </view>
+                  </view>
+                </view>
+              </view>
+
+              <view wx:if="{{line.hasMatrix && line.matrixLayout}}" class="plan-detail-matrix-wrap">
+                <scroll-view class="plan-detail-matrix-scroll" scroll-x enhanced show-scrollbar="{{false}}">
+                  <view class="plan-detail-matrix">
+                    <view class="plan-detail-matrix__head">
+                      <view class="plan-detail-matrix__corner">颜色</view>
+                      <view wx:for="{{line.matrixLayout.sizeColumns}}" wx:for-item="col" wx:key="id" class="plan-detail-matrix__size">{{col.header}}</view>
+                    </view>
+                    <view wx:for="{{line.matrixLayout.colorRows}}" wx:for-item="colorRow" wx:key="key" class="plan-detail-matrix__row">
+                      <view class="plan-detail-matrix__color">
+                        <view wx:if="{{colorRow.colorSwatch}}" class="plan-detail-matrix__swatch" style="background-color: {{colorRow.colorSwatch}};" />
+                        <text class="plan-detail-matrix__color-text">{{colorRow.colorLabel}}</text>
+                      </view>
+                      <view wx:for="{{colorRow.cells}}" wx:for-item="cell" wx:key="index" class="plan-detail-matrix__cell">
+                        <text wx:if="{{cell.variantId && cell.quantity}}" class="plan-detail-matrix__qty">{{cell.quantity}}</text>
+                        <text wx:elif="{{cell.variantId}}" class="plan-detail-matrix__dash">0</text>
+                        <text wx:else class="plan-detail-matrix__dash">—</text>
+                      </view>
+                    </view>
+                  </view>
+                </scroll-view>
+              </view>
+            </view>
+          </view>
+        </view>
+      </block>
+    </view>
+
+    <view wx:else class="plan-detail-muted">未找到该盘点单</view>
+  </scroll-view>
+
+  <view wx:if="{{showFooter && !loading && hero}}" class="report-batch-footer">
+    <view class="report-batch-footer__inner">
+      <view
+        wx:if="{{canDelete}}"
+        class="report-batch-footer__btn report-batch-footer__btn--danger"
+        hover-class="report-batch-footer__btn--pressed"
+        bindtap="onDeleteTap"
+      >删除</view>
+      <view
+        wx:if="{{canEdit}}"
+        class="report-batch-footer__btn report-batch-footer__btn--primary"
+        hover-class="report-batch-footer__btn--pressed"
+        bindtap="onEditTap"
+      >编辑</view>
+    </view>
+  </view>
+</view>

@@ -16,6 +16,7 @@ alwaysApply: false
 | 产品 | `searchable-product-select`（`cell` + `plan-form-card`） | `fetchProductsAll()`、`fetchCategoriesAll()` |
 | 色码矩阵 | `plan-create-matrix` 类名 + 横向 `scroll-view` | `buildVariantMatrixUiModel()` 或业务 layout builder（如 `outsourceDispatchMatrix.js`） |
 | 矩阵数量键盘 | `matrix-qty-keyboard` | [`matrixQtyKeyboard.js`](../miniprogram/utils/matrixQtyKeyboard.js) |
+| 采购入库批次 | `batch-return-input` | 点击选择；弹窗内可选已有批次或输入新批号；未填保存时默认「无批号」 |
 
 ## 页面 `.json` 注册
 
@@ -34,6 +35,7 @@ alwaysApply: false
 ## 样式
 
 - 表单：`plan-form-card`、`plan-form-cell`（见 [`production-plan-create.wxss`](../miniprogram/pages/production-plan-create/production-plan-create.wxss)）
+- **数量 / 单价 / 金额**：`order-detail-summary`（见 [`qty-price-amount-summary.wxss`](../miniprogram/styles/qty-price-amount-summary.wxss)）；列表/详情只读加 `--compact`；录入可编辑字段用 `order-detail-summary__input`
 - 矩阵：复用 `plan-create-matrix*`；报工/外协等带「最多 N」提示时可加 `report-matrix` 修饰
 - 键盘弹出：滚动区加 `matrix-keyboard-page--open`；`setData` 后调用 `afterMatrixKeyboardOpen(page, scrollViewSelector)` 将当前格滚到键盘上方；底栏提交按钮在键盘弹出时 `wx:if="{{!matrixKeyboardVisible}}"` 隐藏
 
@@ -65,14 +67,38 @@ WXML 选中态：`plan-create-matrix__input--replace`（有值且待替换时浅
 单据/批次**保存或提交成功**后，统一回到**所属列表页**（不用裸 `navigateBack` 逐级退，也不跳详情）：
 
 ```javascript
-const { LIST_ROUTES, MODULE_HUB_ROUTES, buildReportHistoryListUrl, afterSaveReturnToList } =
-  require('../../utils/saveNavigation.js');
+const {
+  LIST_ROUTES,
+  MODULE_HUB_ROUTES,
+  buildReportHistoryListUrl,
+  afterSaveReturnToList,
+  consumeListRefreshOnShow,
+} = require('../../utils/saveNavigation.js');
 
 afterSaveReturnToList({
   listUrl: MODULE_HUB_ROUTES.rework, // 或 LIST_ROUTES.OUTSOURCE_DISPATCH 等
   toastTitle: '报损成功',
 });
 ```
+
+### Hub 列表保存后刷新（必做）
+
+保存/删除经 `afterSaveReturnToList` 回到 Hub 列表时，列表页 `onShow` **必须重新拉 API**，不能只 `reloadList` 重筛本地缓存：
+
+```javascript
+const HUB_LIST_ROUTE = LIST_ROUTES.PSI_PURCHASE_BILLS.replace(/^\//, '');
+
+onShow() {
+  // …鉴权…
+  if (!this._initialized) {
+    this.bootstrap();
+  } else if (consumeListRefreshOnShow(this, HUB_LIST_ROUTE)) {
+    this.bootstrap();
+  }
+}
+```
+
+下拉刷新 `reloadList` 亦须重新请求接口（本地缓存列表同理）。`redirectTo` 进列表会走 `onLoad` → `bootstrap`，无需额外处理。
 
 ### 两类目标
 
@@ -102,6 +128,20 @@ afterSaveReturnToList({
 | 领退料确认 | `STOCK_OUT`（`source=outsource` → `OUTSOURCE_HUB`） |
 | 领退料流水详情（保存/删除） | `STOCK_OUT` |
 | 计划新建 | `PRODUCTION_PLANS` |
+| 登记/编辑采购订单 | `PSI_PURCHASE_ORDERS` |
+| 采购订单详情（删除） | `PSI_PURCHASE_ORDERS` |
+| 登记/编辑采购入库 | `PSI_PURCHASE_BILLS` |
+| 采购入库详情（删除） | `PSI_PURCHASE_BILLS` |
+| 登记/编辑销售订单 | `PSI_SALES_ORDERS` |
+| 销售订单详情（删除） | `PSI_SALES_ORDERS` |
+| 销售订单配货 | `PSI_SALES_ORDERS` |
+| 待发货生成销售单 | `PSI_SALES_ORDERS` |
+| 登记/编辑销售单 | `PSI_SALES_BILLS` |
+| 销售单详情（删除） | `PSI_SALES_BILLS` |
+| 登记/编辑调拨单 | `PSI_WAREHOUSE_TRANSFER` |
+| 调拨单详情（删除） | `PSI_WAREHOUSE_TRANSFER` |
+| 登记/编辑盘点单 | `PSI_WAREHOUSE_STOCKTAKE` |
+| 盘点单详情（删除） | `PSI_WAREHOUSE_STOCKTAKE` |
 
 **新功能必做**：选用上表目标；若无合适常量则在 `saveNavigation.js` 的 `LIST_ROUTES` 登记，并同步更新本表与 `docs/10-miniprogram-ui.md`。
 
@@ -115,6 +155,12 @@ afterSaveReturnToList({
 | 入库流水 | `production:orders_pending_stock_in:edit` | `production:orders_pending_stock_in:delete` |
 | 外协流水 | `production:outsource_records:edit` | `production:outsource_records:delete` |
 | 领退料流水 | `production:material_records:edit` | `production:material_records:delete` |
+| 采购订单详情 | `psi:purchase_order:edit` | `psi:purchase_order:delete` |
+| 采购入库详情 | `psi:purchase_bill:edit` | `psi:purchase_bill:delete` |
+| 销售订单详情 | `psi:sales_order:edit` | `psi:sales_order:delete` |
+| 销售单详情 | `psi:sales_bill:edit` | `psi:sales_bill:delete` |
+| 调拨单详情 | `psi:warehouse_transfer:edit` | `psi:warehouse_transfer:delete` |
+| 盘点单详情 | `psi:warehouse_stocktake:edit` | `psi:warehouse_stocktake:delete` |
 
 保存/删除成功后 `afterSaveReturnToList` 回到所属列表（见上表）。
 

@@ -103,22 +103,32 @@ function buildVariantQtyMatrixLayout(product, dict) {
 
 /**
  * 转为小程序矩阵 UI 模型（含 quantity 字段）
+ * @param {object} product
+ * @param {{ colors?: object[]; sizes?: object[] }} dict
+ * @param {Record<string, string|number>} [quantities]
+ * @param {{ systemQtyByVariantId?: Record<string, number|null|undefined> }} [options]
  */
-function buildVariantMatrixUiModel(product, dict, quantities) {
+function buildVariantMatrixUiModel(product, dict, quantities, options) {
   const layout = buildVariantQtyMatrixLayout(product, dict);
   if (!layout) return null;
 
   const qtyMap = quantities || {};
+  const sysMap = options && options.systemQtyByVariantId;
   const colorRows = layout.colorRows.map((row) => ({
     key: row.key,
     colorLabel: row.colorLabel,
     colorSwatch: row.colorSwatch,
     cells: row.variantAtSize.map((v) => {
-      if (!v) return { variantId: '', quantity: '', disabled: true };
+      if (!v) {
+        return { variantId: '', quantity: '', disabled: true, hasSystemQty: false, systemQty: '' };
+      }
+      const hasSystemQty = Boolean(sysMap && sysMap[v.id] != null);
       return {
         variantId: v.id,
         quantity: qtyMap[v.id] != null ? String(qtyMap[v.id]) : '',
         disabled: false,
+        hasSystemQty,
+        systemQty: hasSystemQty ? String(sysMap[v.id]) : '',
       };
     }),
   }));

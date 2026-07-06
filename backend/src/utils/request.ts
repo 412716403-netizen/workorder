@@ -74,18 +74,29 @@ const DATE_KEYS = new Set([
   'plannedDate', 'actualDate', 'accountExpiresAt', 'openingDate',
 ]);
 
+/** PsiRecord 等模型上不可为 null 的 DateTime（空串/非法串应回落 now，勿写 null） */
+const REQUIRED_DATE_KEYS = new Set(['timestamp', 'createdAt']);
+
 /**
  * Convert date-like string values to Date objects (or null for empty strings).
  * Prisma requires Date objects for DateTime fields, not plain date strings.
+ * 必填字段（timestamp / createdAt）空值或非法串回退为 now，避免 createMany 因 null 校验失败。
  */
 export function normalizeDates(data: Record<string, unknown>): Record<string, unknown> {
   for (const k of DATE_KEYS) {
     if (!(k in data)) continue;
     const v = data[k];
-    if (v === '' || v === null || v === undefined) { data[k] = null; continue; }
+    if (v === '' || v === null || v === undefined) {
+      data[k] = REQUIRED_DATE_KEYS.has(k) ? new Date() : null;
+      continue;
+    }
     if (typeof v === 'string') {
       const d = new Date(v);
-      data[k] = Number.isNaN(d.getTime()) ? new Date() : d;
+      if (Number.isNaN(d.getTime())) {
+        data[k] = REQUIRED_DATE_KEYS.has(k) ? new Date() : null;
+      } else {
+        data[k] = d;
+      }
     }
   }
   return data;

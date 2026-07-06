@@ -24,15 +24,10 @@ function purchaseOrderRecordMatchesPlanPanel(r, planNumbersForPO, viewPlan) {
   return planNumbersForPO.some((planNum) => String(r.note || '').includes(`计划单[${planNum}]`));
 }
 
+const { sumReceivedByOrderLine } = require('./psiOpsAggregators.js');
+
 function buildReceivedByOrderLine(purchaseBills) {
-  const map = {};
-  (purchaseBills || [])
-    .filter((r) => r.type === 'PURCHASE_BILL' && r.sourceOrderNumber && r.sourceLineId)
-    .forEach((r) => {
-      const key = `${r.sourceOrderNumber}::${r.sourceLineId}`;
-      map[key] = (map[key] || 0) + (Number(r.quantity) || 0);
-    });
-  return map;
+  return sumReceivedByOrderLine(purchaseBills);
 }
 
 function buildRelatedPOsByMaterial(purchaseOrders, planNumbersForPO, viewPlan) {

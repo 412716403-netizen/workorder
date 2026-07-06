@@ -13,7 +13,15 @@ function addDaysYmd(ymd, days) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+/** 本地日历日 0 点 → ISO（与采购单等 PSI 落库口径一致） */
+function localCalendarYmdStartToIso(ymd) {
+  const s = String(ymd || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date().toISOString();
+  return `${s}T00:00:00.000Z`;
+}
+
 module.exports = {
   localTodayYmd,
   addDaysYmd,
+  localCalendarYmdStartToIso,
 };

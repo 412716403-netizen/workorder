@@ -6,6 +6,7 @@
  *    例外：从明确子清单进入的确认页（待发/待收回/待入库）→ 回到该子清单
  * 2. 流水 / 批次详情编辑或删除 → 回到对应流水列表（非 Hub、非详情）
  * 3. 优先 navigateBack 到栈内已有列表并标记 _refreshOnNextShow；否则 redirectTo
+ * 4. 目标 Hub 列表 onShow 须 consumeListRefreshOnShow → bootstrap 重新拉 API（不能只重筛缓存）
  * 4. 扫码连续作业 scan-session 除外；详情页内联编辑（不离开页）除外
  */
 
@@ -25,6 +26,20 @@ const LIST_ROUTES = {
   REWORK_REPORT_FLOW: '/pages/production-rework-report-flow/production-rework-report-flow',
   REWORK_HUB: '/pages/production-rework/production-rework',
   REWORK_PENDING: '/pages/production-rework-pending/production-rework-pending',
+  PSI_PURCHASE_ORDERS: '/pages/psi-purchase-orders/psi-purchase-orders',
+  PSI_PURCHASE_ORDER_FLOW: '/pages/psi-purchase-order-flow/psi-purchase-order-flow',
+  PSI_PURCHASE_BILLS: '/pages/psi-purchase-bills/psi-purchase-bills',
+  PSI_PURCHASE_BILL_FLOW: '/pages/psi-purchase-bill-flow/psi-purchase-bill-flow',
+  PSI_SALES_ORDERS: '/pages/psi-sales-orders/psi-sales-orders',
+  PSI_SALES_ORDER_FLOW: '/pages/psi-sales-order-flow/psi-sales-order-flow',
+  PSI_SALES_ORDER_PENDING_SHIP: '/pages/psi-sales-order-pending-ship/psi-sales-order-pending-ship',
+  PSI_SALES_BILLS: '/pages/psi-sales-bills/psi-sales-bills',
+  PSI_SALES_BILL_FLOW: '/pages/psi-sales-bill-flow/psi-sales-bill-flow',
+  PSI_WAREHOUSES: '/pages/psi-warehouses/psi-warehouses',
+  PSI_WAREHOUSE_FLOW: '/pages/psi-warehouse-flow/psi-warehouse-flow',
+  PSI_WAREHOUSE_PRODUCT_FLOW: '/pages/psi-warehouse-product-flow/psi-warehouse-product-flow',
+  PSI_WAREHOUSE_TRANSFER: '/pages/psi-warehouse-transfer/psi-warehouse-transfer',
+  PSI_WAREHOUSE_STOCKTAKE: '/pages/psi-warehouse-stocktake/psi-warehouse-stocktake',
 };
 
 /** 各业务模块 Hub 主列表（处置/报工/领料等默认回到此处） */
@@ -34,6 +49,11 @@ const MODULE_HUB_ROUTES = {
   orders: LIST_ROUTES.PRODUCTION_ORDERS,
   plans: LIST_ROUTES.PRODUCTION_PLANS,
   stockOut: LIST_ROUTES.STOCK_OUT,
+  psiPurchaseOrder: LIST_ROUTES.PSI_PURCHASE_ORDERS,
+  psiPurchaseBill: LIST_ROUTES.PSI_PURCHASE_BILLS,
+  psiSalesOrder: LIST_ROUTES.PSI_SALES_ORDERS,
+  psiSalesBill: LIST_ROUTES.PSI_SALES_BILLS,
+  psiWarehouse: LIST_ROUTES.PSI_WAREHOUSES,
 };
 
 function buildReportHistoryListUrl(params) {
@@ -64,13 +84,88 @@ function findNavigateBackDelta(listUrl) {
   return 0;
 }
 
-function markListPageRefreshOnShow(delta) {
+function ensurePendingRefreshRoutes(app) {
+  if (!app.globalData) app.globalData = {};
+  if (!app.globalData.pendingHubListRefreshRoutes) {
+    app.globalData.pendingHubListRefreshRoutes = {};
+  }
+  return app.globalData.pendingHubListRefreshRoutes;
+}
+
+function markRouteRefreshPending(route) {
+  const normalized = normalizePageRoute(route);
+  if (!normalized) return;
+  try {
+    const pages = getCurrentPages();
+    pages.forEach((page) => {
+      if ((page.route || '') === normalized) {
+        page._refreshOnNextShow = true;
+      }
+    });
+  } catch (_) {
+    // getCurrentPages 在部分测试环境不可用
+  }
+  try {
+    const app = getApp();
+    if (app) {
+      const routes = ensurePendingRefreshRoutes(app);
+      routes[normalized] = true;
+      app.globalData.pendingHubListRefresh = normalized;
+    }
+  } catch (_) {
+    // getApp 在部分测试环境不可用
+  }
+}
+
+function markListRoutesRefreshOnShow(listUrls) {
+  (listUrls || []).forEach((url) => markRouteRefreshPending(url));
+}
+
+function markListPageRefreshOnShow(delta, listUrl) {
   const pages = getCurrentPages();
   const targetIndex = pages.length - 1 - delta;
   const targetPage = pages[targetIndex];
+  const route = normalizePageRoute(listUrl || (targetPage && targetPage.route) || '');
   if (targetPage) {
     targetPage._refreshOnNextShow = true;
   }
+  if (route) {
+    markRouteRefreshPending(route);
+  }
+}
+
+function consumeHubListRefresh(pageRoute) {
+  const route = normalizePageRoute(pageRoute);
+  if (!route) return false;
+  try {
+    const app = getApp();
+    const gd = app && app.globalData;
+    if (gd && gd.pendingHubListRefreshRoutes && gd.pendingHubListRefreshRoutes[route]) {
+      delete gd.pendingHubListRefreshRoutes[route];
+      return true;
+    }
+    const pending = gd && gd.pendingHubListRefresh;
+    if (pending && pending === route) {
+      gd.pendingHubListRefresh = '';
+      return true;
+    }
+  } catch (_) {
+    // ignore
+  }
+  return false;
+}
+
+/**
+ * Hub 列表页 onShow 调用：保存/删除回退后是否需重新拉 API。
+ * 返回 true 时须 bootstrap / refetch，不能只 reloadList 重筛本地缓存。
+ */
+function consumeListRefreshOnShow(page, listRoute) {
+  const flagged = !!(page && page._refreshOnNextShow);
+  const pending = consumeHubListRefresh(listRoute);
+  if (page && page._refreshOnNextShow) {
+    page._refreshOnNextShow = false;
+  }
+  return flagged || pending;
 }
 
 /**
@@ -78,7 +173,16 @@ function markListPageRefreshOnShow(delta) {
  */
 function afterSaveReturnToList(opts) {
   const options = opts || {};
-  const { listUrl, toastTitle, delay = DEFAULT_DELAY_MS, navigateBackDelta } = options;
+  const {
+    listUrl,
+    toastTitle,
+    delay = DEFAULT_DELAY_MS,
+    navigateBackDelta,
+    alsoRefreshListUrls,
+  } = options;
+  if (alsoRefreshListUrls && alsoRefreshListUrls.length) {
+    markListRoutesRefreshOnShow(alsoRefreshListUrls);
+  }
   if (toastTitle) {
     wx.showToast({ title: toastTitle, icon: 'success' });
   }
@@ -88,7 +192,7 @@ function afterSaveReturnToList(opts) {
         ? navigateBackDelta
         : findNavigateBackDelta(listUrl);
       if (delta > 0) {
-        markListPageRefreshOnShow(delta);
+        markListPageRefreshOnShow(delta, listUrl);
         wx.navigateBack({ delta });
         return;
       }
@@ -105,5 +209,8 @@ module.exports = {
   buildReportHistoryListUrl,
   normalizePageRoute,
   findNavigateBackDelta,
+  markListRoutesRefreshOnShow,
+  consumeHubListRefresh,
+  consumeListRefreshOnShow,
   afterSaveReturnToList,
 };

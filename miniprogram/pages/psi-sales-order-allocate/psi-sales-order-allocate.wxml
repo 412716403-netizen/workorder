@@ -1,0 +1,116 @@
+<view class="plan-create-shell">
+  <view class="plan-create-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-create-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-create-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-create-header__title">{{title}}</text>
+      <view class="plan-create-header__back plan-create-header__back--placeholder"></view>
+    </view>
+  </view>
+
+  <view class="plan-create-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view
+    class="plan-create-scroll"
+    scroll-y
+    show-scrollbar="{{false}}"
+    style="height: {{scrollHeight}}px;"
+  >
+    <view wx:if="{{loading}}" class="plan-create-muted">加载中…</view>
+
+    <view wx:else class="plan-create-page {{matrixKeyboardVisible ? 'matrix-keyboard-page--open' : ''}}">
+      <view class="plan-form-card">
+        <view class="plan-form-cell">
+          <text class="plan-form-cell__label">产品</text>
+          <text class="plan-form-cell__value">{{productName}}</text>
+        </view>
+        <view class="plan-form-cell">
+          <text class="plan-form-cell__label">单号</text>
+          <text class="plan-form-cell__value">{{docNumber}}</text>
+        </view>
+        <picker
+          wx:if="{{warehouseNames.length}}"
+          mode="selector"
+          range="{{warehouseNames}}"
+          value="{{warehouseIndex}}"
+          bindchange="onWarehouseChange"
+        >
+          <view class="plan-form-cell">
+            <text class="plan-form-cell__label">配货仓库</text>
+            <text class="plan-form-cell__value {{warehouseNames[warehouseIndex] ? '' : 'plan-form-cell__value--ph'}}">{{warehouseNames[warehouseIndex] || '请选择'}}</text>
+            <text class="plan-form-cell__chevron">›</text>
+          </view>
+        </picker>
+        <view class="so-alloc-stats">
+          <text>订单 {{orderQtyText}}</text>
+          <text>已配 {{allocatedText}}</text>
+          <text class="so-alloc-stats__gap">待配 {{gapText}}</text>
+        </view>
+      </view>
+
+      <view class="plan-form-card">
+        <view wx:if="{{!useMatrix}}" class="order-detail-summary order-detail-summary--form">
+          <view class="order-detail-summary__item">
+            <text class="order-detail-summary__label">本次配货</text>
+            <input
+              class="order-detail-summary__input order-detail-summary__input--box"
+              type="digit"
+              value="{{singleQty}}"
+              bindinput="onSingleQtyInput"
+              placeholder="0"
+            />
+          </view>
+        </view>
+
+        <block wx:if="{{useMatrix && matrixLayout}}">
+          <view class="plan-create-matrix-wrap po-edit-matrix-wrap">
+            <view class="po-edit-matrix-head">
+              <text class="po-edit-matrix-head__title">本次配货数量</text>
+            </view>
+            <scroll-view class="plan-create-matrix-scroll" scroll-x enhanced show-scrollbar="{{false}}">
+              <view class="plan-create-matrix">
+                <view class="plan-create-matrix__head">
+                  <view class="plan-create-matrix__corner">颜色</view>
+                  <view wx:for="{{matrixLayout.sizeColumns}}" wx:key="id" class="plan-create-matrix__size">{{item.header}}</view>
+                </view>
+                <view wx:for="{{matrixLayout.colorRows}}" wx:for-item="row" wx:key="key" class="plan-create-matrix__row">
+                  <view class="plan-create-matrix__color">
+                    <view wx:if="{{row.colorSwatch}}" class="plan-create-matrix__swatch" style="background-color: {{row.colorSwatch}};" />
+                    <text class="plan-create-matrix__color-text">{{row.colorLabel}}</text>
+                  </view>
+                  <view wx:for="{{row.cells}}" wx:for-item="cell" wx:key="index" class="plan-create-matrix__cell">
+                    <view
+                      wx:if="{{cell.variantId}}"
+                      class="plan-create-matrix__input {{activeMatrixVariantId === cell.variantId ? 'plan-create-matrix__input--active' : ''}} {{activeMatrixVariantId === cell.variantId && matrixInputReplaceAll && cell.quantity ? 'plan-create-matrix__input--replace' : ''}} {{cell.quantity ? 'plan-create-matrix__input--filled' : 'plan-create-matrix__input--empty'}}"
+                      data-variant-id="{{cell.variantId}}"
+                      bindtap="onMatrixCellTap"
+                    >{{cell.quantity}}</view>
+                    <text wx:else class="plan-create-matrix__dash">—</text>
+                  </view>
+                </view>
+              </view>
+            </scroll-view>
+          </view>
+        </block>
+      </view>
+    </view>
+  </scroll-view>
+
+  <view wx:if="{{!matrixKeyboardVisible}}" class="plan-create-footer po-edit-footer">
+    <view class="po-edit-footer__actions po-edit-footer__actions--single">
+      <button
+        class="po-edit-footer__btn po-edit-footer__btn--primary"
+        hover-class="po-edit-footer__btn--hover"
+        loading="{{submitting}}"
+        disabled="{{submitting}}"
+        bindtap="onSubmit"
+      >{{submitting ? '保存中…' : '确定配货'}}</button>
+    </view>
+  </view>
+
+  <matrix-qty-keyboard
+    visible="{{matrixKeyboardVisible}}"
+    label="{{matrixKeyboardLabel}}"
+    value="{{matrixKeyboardValue}}"
+    bind:action="onMatrixKeyboardAction"
+  />
+</view>

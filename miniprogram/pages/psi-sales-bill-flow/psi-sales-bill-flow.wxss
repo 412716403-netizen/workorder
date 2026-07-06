@@ -1,0 +1,26 @@
+@import '../../pages/psi-purchase-bill-flow/psi-purchase-bill-flow.wxss';
+
+.sb-flow-row__head-partner {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  flex-shrink: 0;
+  max-width: 46%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sb-flow-head-aside {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4rpx;
+}
+
+.sb-flow-wh {
+  font-size: 22rpx;
+  color: var(--color-text-tertiary);
+  text-align: right;
+}

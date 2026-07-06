@@ -1,0 +1,10 @@
+@import '../../pages/psi-warehouse-transfer-detail/psi-warehouse-transfer-detail.wxss';
+@import '../../styles/qty-price-amount-summary.wxss';
+
+.wh-diff--pos {
+  color: #16a34a !important;
+}
+
+.wh-diff--neg {
+  color: #ef4444 !important;
+}

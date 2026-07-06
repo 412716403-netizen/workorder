@@ -1,0 +1,105 @@
+<view class="plan-create-shell">
+  <view class="plan-create-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-create-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-create-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-create-header__title">配货详情</text>
+      <view class="plan-create-header__back plan-create-header__back--placeholder"></view>
+    </view>
+  </view>
+
+  <view class="plan-create-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view
+    class="plan-create-scroll"
+    scroll-y
+    show-scrollbar="{{false}}"
+    style="height: {{scrollHeight}}px;"
+  >
+    <view wx:if="{{loading}}" class="plan-create-muted">加载中…</view>
+
+    <view wx:elif="{{detail}}" class="plan-create-page">
+      <view class="plan-form-card">
+        <view class="plan-form-cell plan-form-cell--last">
+          <text class="plan-form-cell__label">产品</text>
+          <text class="plan-form-cell__value">{{detail.productName}}</text>
+        </view>
+        <view wx:if="{{detail.showProductSku}}" class="plan-form-cell plan-form-cell--last">
+          <text class="plan-form-cell__label">货号</text>
+          <text class="plan-form-cell__value">{{detail.productSku}}</text>
+        </view>
+        <view class="plan-form-cell plan-form-cell--last">
+          <text class="plan-form-cell__label">客户</text>
+          <text class="plan-form-cell__value">{{detail.partner}}</text>
+        </view>
+        <view class="plan-form-cell plan-form-cell--last">
+          <text class="plan-form-cell__label">单号</text>
+          <text class="plan-form-cell__value">{{detail.docNumber}}</text>
+        </view>
+        <picker
+          wx:if="{{editing && warehouseNames.length}}"
+          mode="selector"
+          range="{{warehouseNames}}"
+          value="{{warehouseIndex}}"
+          bindchange="onWarehouseChange"
+        >
+          <view class="plan-form-cell plan-form-cell--last">
+            <text class="plan-form-cell__label">配货仓库</text>
+            <text class="plan-form-cell__value">{{warehouseNames[warehouseIndex] || '请选择'}}</text>
+            <text class="plan-form-cell__chevron">›</text>
+          </view>
+        </picker>
+        <view wx:elif="{{!editing}}" class="plan-form-cell plan-form-cell--last">
+          <text class="plan-form-cell__label">配货仓库</text>
+          <text class="plan-form-cell__value">{{detail.warehouseName}}</text>
+        </view>
+      </view>
+
+      <view class="so-pending-detail-section-title">数量明细</view>
+      <view class="so-pending-detail-table">
+        <view class="so-pending-detail-table__head">
+          <text class="so-pending-detail-table__spec">规格</text>
+          <text class="so-pending-detail-table__qty">待发数量</text>
+        </view>
+        <view wx:for="{{lineItems}}" wx:key="id" class="so-pending-detail-table__row">
+          <text class="so-pending-detail-table__spec">{{item.specLabel}}</text>
+          <view class="so-pending-detail-table__qty">
+            <input
+              wx:if="{{editing}}"
+              class="so-pending-detail-input"
+              type="digit"
+              value="{{item.editQty}}"
+              data-id="{{item.id}}"
+              bindinput="onLineQtyInput"
+              placeholder="0"
+            />
+            <block wx:else>
+              <text class="so-pending-detail-qty">{{item.pendingText}} PCS</text>
+              <text class="so-pending-detail-sub">已配 {{item.allocatedText}} · 已发 {{item.shippedText}}</text>
+            </block>
+          </view>
+        </view>
+        <view class="so-pending-detail-table__foot">
+          <text class="so-pending-detail-table__spec">合计</text>
+          <view class="so-pending-detail-table__qty">
+            <text class="so-pending-detail-qty">{{totalPendingText}} PCS</text>
+            <text class="so-pending-detail-sub">（待发合计）</text>
+          </view>
+        </view>
+      </view>
+      <view class="so-pending-detail-hint">
+        {{editing ? '保存后：已发 + 待发 = 新已配' : '待发 = 已配 − 已发'}}
+      </view>
+    </view>
+  </scroll-view>
+
+  <view wx:if="{{showFooter && !loading && detail}}" class="report-batch-footer">
+    <view wx:if="{{editing}}" class="report-batch-footer__inner">
+      <view class="report-batch-footer__btn report-batch-footer__btn--ghost" bindtap="onCancelEdit">取消</view>
+      <view class="report-batch-footer__btn report-batch-footer__btn--primary" bindtap="onSaveEdit">{{saving ? '保存中…' : '保存'}}</view>
+    </view>
+    <view wx:else class="report-batch-footer__inner">
+      <view wx:if="{{canDelete}}" class="report-batch-footer__btn report-batch-footer__btn--danger" bindtap="onDeleteTap">删除</view>
+      <view wx:if="{{canEdit}}" class="report-batch-footer__btn report-batch-footer__btn--primary" bindtap="onEnterEdit">编辑</view>
+    </view>
+  </view>
+</view>

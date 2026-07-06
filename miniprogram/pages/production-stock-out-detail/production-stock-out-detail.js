@@ -96,7 +96,7 @@ Page({
     wx.navigateBack();
   },
 
-  refreshViewModel() {
+  refreshViewModel(extra) {
     const detail = buildMaterialFlowDetailView(this._rows, {
       productMap: this._productMap,
       warehouseMap: this._warehouseMap,
@@ -106,6 +106,8 @@ Page({
     });
     const showFooter = (this._canEdit || this._canDelete) && !this.data.editing;
     this.setData({
+      ...(extra || {}),
+      loading: false,
       detail,
       docNo: detail ? detail.docNo : this._docNo,
       showFooter,
@@ -139,12 +141,12 @@ Page({
       this._rows = Array.isArray(recordsRaw) ? recordsRaw : (recordsRaw && recordsRaw.data) || [];
 
       if (!this._rows.length) {
+        this.setData({ loading: false, detail: null });
         wx.showToast({ title: '记录不存在', icon: 'none' });
         setTimeout(() => wx.navigateBack(), 800);
         return;
       }
 
-      this.setData({ loading: false });
       this.refreshViewModel();
     } catch {
       this.setData({ loading: false, detail: null });

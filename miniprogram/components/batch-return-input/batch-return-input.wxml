@@ -1,0 +1,57 @@
+<view
+  class="batch-return-input__trigger order-detail-summary__input order-detail-summary__input--box"
+  hover-class="batch-return-input__trigger--hover"
+  bindtap="onOpenSheet"
+>
+  <text class="batch-return-input__value {{hasValue ? '' : 'batch-return-input__value--ph'}}">{{hasValue ? displayText : placeholder}}</text>
+  <text class="batch-return-input__chevron">›</text>
+</view>
+
+<view wx:if="{{open}}" class="sps__overlay" catchtouchmove="noop">
+  <view
+    class="sps__mask {{sheetShow ? 'sps__mask--show' : ''}}"
+    bindtap="onCloseSheet"
+    catchtouchmove="noop"
+  />
+  <view
+    class="sps__sheet sps__sheet--picker {{sheetMotion ? 'sps__sheet--motion' : ''}} {{sheetShow ? 'sps__sheet--show' : ''}}"
+    style="height: {{sheetHeightPx}}px; max-height: {{sheetHeightPx}}px;"
+  >
+    <view class="sps__sheet-head">
+      <text class="sps__sheet-title">选择批次</text>
+      <text class="sps__sheet-close" bindtap="onCloseSheet">关闭</text>
+    </view>
+
+    <view class="batch-return-input__draft">
+      <input
+        class="batch-return-input__draft-input"
+        type="text"
+        value="{{draftInput}}"
+        placeholder="输入新批号"
+        placeholder-class="batch-return-input__draft-ph"
+        confirm-type="done"
+        bindinput="onDraftInput"
+        bindconfirm="onConfirmDraft"
+      />
+      <view class="batch-return-input__draft-confirm" bindtap="onConfirmDraft">确定</view>
+    </view>
+
+    <view wx:if="{{loading}}" class="batch-return-input__hint">加载已有批次…</view>
+
+    <scroll-view scroll-y class="batch-return-input__list" show-scrollbar="{{false}}">
+      <view wx:if="{{!loading && !filteredOptions.length}}" class="batch-return-input__empty">
+        暂无匹配批次，可在上方输入新批号后点确定
+      </view>
+      <view
+        wx:for="{{filteredOptions}}"
+        wx:key="batchNo"
+        class="batch-return-input__option {{value === item.batchNo ? 'batch-return-input__option--active' : ''}}"
+        data-batch-no="{{item.batchNo}}"
+        bindtap="onSelectOption"
+      >
+        <text class="batch-return-input__option-no">{{item.batchNo}}</text>
+        <text class="batch-return-input__option-stock">余 {{item.stock}}</text>
+      </view>
+    </scroll-view>
+  </view>
+</view>
