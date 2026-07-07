@@ -14,7 +14,7 @@ function loadStore() {
     if (typeof raw === 'object') return raw;
     const parsed = JSON.parse(raw);
     return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
+  } catch (_) {
     return {};
   }
 }
@@ -22,7 +22,7 @@ function loadStore() {
 function saveStore(store) {
   try {
     wx.setStorageSync(STORAGE_KEY, store);
-  } catch {
+  } catch (_) {
     /* ignore quota */
   }
 }
@@ -44,7 +44,7 @@ function markRead(tenantId, userId, messageId) {
   const store = loadStore();
   const prev = new Set(store[key] || []);
   prev.add(messageId);
-  store[key] = [...prev];
+  store[key] = Array.from(prev);
   saveStore(store);
 }
 
@@ -56,7 +56,7 @@ function markAllRead(tenantId, userId, messageIds) {
   messageIds.forEach((id) => {
     if (id) prev.add(id);
   });
-  store[key] = [...prev];
+  store[key] = Array.from(prev);
   saveStore(store);
 }
 

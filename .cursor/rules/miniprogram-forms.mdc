@@ -6,7 +6,7 @@ alwaysApply: false
 
 # 小程序表单录入（默认）
 
-**参考实现**：[`miniprogram/pages/production-plan-create/`](../miniprogram/pages/production-plan-create/)（生产计划新建）。新页面涉及下列场景时**必须**复用同一套组件与交互，禁止各页自建 picker / 自定义键盘。
+**参考实现**：[`miniprogram/packageBusiness/production-plan-create/`](../miniprogram/packageBusiness/production-plan-create/)（生产计划新建）。新页面涉及下列场景时**必须**复用同一套组件与交互，禁止各页自建 picker / 自定义键盘。
 
 ## 组件与数据
 
@@ -15,7 +15,7 @@ alwaysApply: false
 | 合作单位（客户/加工厂） | `searchable-partner-select`（`cell` + `plan-form-card`） | `fetchPartnersAll()`、`fetchPartnerCategoriesAll()` |
 | 产品 | `searchable-product-select`（`cell` + `plan-form-card`） | `fetchProductsAll()`、`fetchCategoriesAll()` |
 | 色码矩阵 | `plan-create-matrix` 类名 + 横向 `scroll-view` | `buildVariantMatrixUiModel()` 或业务 layout builder（如 `outsourceDispatchMatrix.js`） |
-| 矩阵数量键盘 | `matrix-qty-keyboard` | [`matrixQtyKeyboard.js`](../miniprogram/utils/matrixQtyKeyboard.js) |
+| 矩阵数量键盘 | `matrix-qty-keyboard` | [`matrixQtyKeyboard.js`](../miniprogram/packageBusiness/utils/matrixQtyKeyboard.js) |
 | 采购入库批次 | `batch-return-input` | 点击选择；弹窗内可选已有批次或输入新批号；未填保存时默认「无批号」 |
 
 ## 页面 `.json` 注册
@@ -34,7 +34,7 @@ alwaysApply: false
 
 ## 样式
 
-- 表单：`plan-form-card`、`plan-form-cell`（见 [`production-plan-create.wxss`](../miniprogram/pages/production-plan-create/production-plan-create.wxss)）
+- 表单：`plan-form-card`、`plan-form-cell`（见 [`production-plan-create.wxss`](../miniprogram/packageBusiness/production-plan-create/production-plan-create.wxss)）
 - **数量 / 单价 / 金额**：`order-detail-summary`（见 [`qty-price-amount-summary.wxss`](../miniprogram/styles/qty-price-amount-summary.wxss)）；列表/详情只读加 `--compact`；录入可编辑字段用 `order-detail-summary__input`
 - 矩阵：复用 `plan-create-matrix*`；报工/外协等带「最多 N」提示时可加 `report-matrix` 修饰
 - 键盘弹出：滚动区加 `matrix-keyboard-page--open`；`setData` 后调用 `afterMatrixKeyboardOpen(page, scrollViewSelector)` 将当前格滚到键盘上方；底栏提交按钮在键盘弹出时 `wx:if="{{!matrixKeyboardVisible}}"` 隐藏
@@ -73,7 +73,7 @@ const {
   buildReportHistoryListUrl,
   afterSaveReturnToList,
   consumeListRefreshOnShow,
-} = require('../../utils/saveNavigation.js');
+} = require('../utils/saveNavigation.js');
 
 afterSaveReturnToList({
   listUrl: MODULE_HUB_ROUTES.rework, // 或 LIST_ROUTES.OUTSOURCE_DISPATCH 等
@@ -86,16 +86,21 @@ afterSaveReturnToList({
 保存/删除经 `afterSaveReturnToList` 回到 Hub 列表时，列表页 `onShow` **必须重新拉 API**，不能只 `reloadList` 重筛本地缓存：
 
 ```javascript
+const { shouldHubListRefetch, trackHubListHidden, LIST_ROUTES } = require('../utils/saveNavigation.js');
 const HUB_LIST_ROUTE = LIST_ROUTES.PSI_PURCHASE_BILLS.replace(/^\//, '');
 
 onShow() {
   // …鉴权…
   if (!this._initialized) {
     this.bootstrap();
-  } else if (consumeListRefreshOnShow(this, HUB_LIST_ROUTE)) {
+  } else if (shouldHubListRefetch(this, HUB_LIST_ROUTE)) {
     this.bootstrap();
   }
-}
+},
+
+onHide() {
+  trackHubListHidden(this);
+},
 ```
 
 下拉刷新 `reloadList` 亦须重新请求接口（本地缓存列表同理）。`redirectTo` 进列表会走 `onLoad` → `bootstrap`，无需额外处理。
@@ -146,6 +151,10 @@ onShow() {
 | 收款单详情（删除） | `FINANCE_RECEIPTS` |
 | 登记/编辑付款单 | `FINANCE_PAYMENTS` |
 | 付款单详情（删除） | `FINANCE_PAYMENTS` |
+| 新建/编辑产品 | `BASIC_PRODUCTS` |
+| 新建/编辑合作单位 | `BASIC_PARTNERS` |
+| 新建/编辑字典项 | `BASIC_DICTIONARIES` |
+| 新建/编辑系统设置档案 | `SETTINGS_*`（见 `saveNavigation.js`） |
 
 **新功能必做**：选用上表目标；若无合适常量则在 `saveNavigation.js` 的 `LIST_ROUTES` 登记，并同步更新本表与 `docs/10-miniprogram-ui.md`。
 

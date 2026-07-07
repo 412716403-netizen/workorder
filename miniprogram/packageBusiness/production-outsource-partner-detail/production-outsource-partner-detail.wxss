@@ -1,0 +1,220 @@
+@import '../production-plans/production-plans.wxss';
+@import '../../styles/outsource-shared.wxss';
+
+.partner-detail-page {
+  padding-bottom: calc(32rpx + env(safe-area-inset-bottom));
+}
+
+.partner-detail-count {
+  margin-top: 12rpx;
+  font-size: 22rpx;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.outsource-detail-stat__val--dispatch {
+  color: #4f46e5;
+}
+
+.outsource-detail-stat__val--receive {
+  color: #d97706;
+}
+
+.outsource-detail-stat__val--warn {
+  color: #e11d48;
+}
+
+.partner-flow-table-wrap {
+  margin-top: 8rpx;
+  background: var(--color-bg-card);
+  border-top: 1rpx solid var(--color-border);
+}
+
+.partner-flow-table-scroll {
+  width: 100%;
+  white-space: nowrap;
+}
+
+.partner-flow-table {
+  display: inline-block;
+  min-width: 100%;
+}
+
+/* 列宽合计：220 + 160 + 120 = 500；含交货日期 +160 */
+.partner-flow-table__thead,
+.partner-flow-table__tr {
+  display: flex;
+  align-items: center;
+  min-width: 500rpx;
+  box-sizing: border-box;
+}
+
+.partner-flow-table--delivery .partner-flow-table__thead,
+.partner-flow-table--delivery .partner-flow-table__tr {
+  min-width: 660rpx;
+}
+
+.partner-flow-table__thead {
+  background: rgba(248, 250, 252, 0.95);
+  border-bottom: 1rpx solid var(--color-border);
+  align-items: stretch;
+}
+
+.partner-flow-table__tr {
+  border-bottom: 1rpx solid rgba(241, 245, 249, 0.95);
+}
+
+.partner-flow-table__tr--summary {
+  background: rgba(248, 250, 252, 0.75);
+}
+
+.partner-flow-table__th,
+.partner-flow-table__td {
+  flex-shrink: 0;
+  box-sizing: border-box;
+  padding: 20rpx 16rpx;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.partner-flow-table__th {
+  font-size: 20rpx;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  line-height: 1.3;
+}
+
+.partner-flow-table__td {
+  font-size: 24rpx;
+  color: var(--color-text-primary);
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+}
+
+.partner-flow-table__th--date,
+.partner-flow-table__td--date {
+  width: 220rpx;
+  text-align: left;
+}
+
+.partner-flow-table__th--type,
+.partner-flow-table__td--type {
+  width: 160rpx;
+  text-align: left;
+}
+
+.partner-flow-table__th--delivery,
+.partner-flow-table__td--delivery {
+  width: 160rpx;
+  text-align: left;
+}
+
+.partner-flow-table__th--qty,
+.partner-flow-table__td--qty {
+  width: 120rpx;
+  text-align: right;
+}
+
+.partner-flow-table__td--qty {
+  font-weight: 700;
+  color: #4f46e5;
+}
+
+.partner-flow-table__th--qty {
+  text-align: right;
+}
+
+.partner-flow-table__th--variant,
+.partner-flow-table__td--variant {
+  flex: 0 0 auto;
+  min-width: 136rpx;
+  padding: 20rpx 16rpx;
+  text-align: right;
+}
+
+.partner-flow-table__th--variant {
+  text-align: right;
+  white-space: normal;
+  overflow: hidden;
+  text-overflow: clip;
+  word-break: keep-all;
+  line-height: 1.35;
+}
+
+.partner-flow-table__td--variant {
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: clip;
+}
+
+.partner-flow-table__td--empty {
+  color: var(--color-text-tertiary);
+  font-weight: 500;
+}
+
+.partner-flow-table__td--warn {
+  color: #e11d48;
+}
+
+.partner-flow-table__td--summary-label {
+  font-size: 24rpx;
+  font-weight: 700;
+}
+
+.partner-flow-table__td--summary-gap {
+  padding-top: 20rpx;
+  padding-bottom: 20rpx;
+}
+
+.partner-flow-table__td--summary-qty {
+  font-size: 28rpx;
+  font-weight: 800;
+  color: var(--color-text-primary);
+}
+
+.partner-flow-table__summary--dispatch {
+  color: #4f46e5;
+}
+
+.partner-flow-table__summary--receive {
+  color: #d97706;
+}
+
+.partner-flow-table__summary--remain {
+  color: var(--color-text-primary);
+}
+
+.partner-flow-type-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8rpx;
+  width: 100%;
+}
+
+.partner-flow-type-badge {
+  display: inline-block;
+  padding: 4rpx 12rpx;
+  border-radius: 8rpx;
+  font-size: 20rpx;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.partner-flow-type-badge--dispatch {
+  background: #eef2ff;
+  color: #4338ca;
+}
+
+.partner-flow-type-badge--receive {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.partner-flow-table__empty {
+  padding: 48rpx 32rpx;
+  text-align: center;
+  font-size: 26rpx;
+  color: var(--color-text-secondary);
+}

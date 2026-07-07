@@ -55,8 +55,7 @@ const WORKBENCH_SHORTCUT_CATALOG = [
   { id: 'basic-products', label: '产品档案', group: '基础信息', icon: 'Boxes', module: 'basic', perm: 'basic:products:view', path: '/packageBusiness/basic-products/basic-products' },
   { id: 'basic-partners', label: '合作单位', group: '基础信息', icon: 'Building2', module: 'basic', perm: 'basic:partners:view', path: '/packageBusiness/basic-partners/basic-partners' },
   { id: 'basic-members', label: '成员管理', group: '基础信息', icon: 'ShieldCheck', module: 'basic', perm: 'basic:members:view', path: '/packageBusiness/basic-members/basic-members' },
-  { id: 'basic-equipment', label: '设备管理', group: '基础信息', icon: 'Cpu', module: 'basic', perm: 'basic:equipment:view' },
-  { id: 'basic-dictionaries', label: '公共数据字典', group: '基础信息', icon: 'Library', module: 'basic', perm: 'basic:dictionaries:view' },
+  { id: 'basic-dictionaries', label: '公共数据字典', group: '基础信息', icon: 'Library', module: 'basic', perm: 'basic:dictionaries:view', path: '/packageBusiness/basic-dictionaries/basic-dictionaries' },
   { id: 'settings', label: '系统设置', group: '基础信息', icon: 'Settings', module: 'settings', perm: 'settings:categories:view', path: '/pages/settings/settings' },
 
   { id: 'collaboration-inbox', label: '协作管理', group: '插件中心', icon: 'Inbox', module: 'collaboration', pluginId: 'collaboration', path: '/pages/messages/messages' },

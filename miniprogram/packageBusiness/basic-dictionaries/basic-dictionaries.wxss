@@ -1,0 +1,49 @@
+@import '../basic-products/basic-products.wxss';
+
+.basic-dictionaries-row__icon-wrap {
+  width: 96rpx;
+  height: 96rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg-page);
+  border-radius: 16rpx;
+  overflow: hidden;
+}
+
+.basic-dictionaries-row__icon {
+  width: 48rpx;
+  height: 48rpx;
+  opacity: 0.55;
+}
+
+.basic-dictionaries-row__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12rpx;
+  margin-bottom: 8rpx;
+}
+
+.basic-dictionaries-row__title-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.basic-dictionaries-row__name {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  word-break: break-all;
+}
+
+.basic-dictionaries-row__kind-pill {
+  flex-shrink: 0;
+  display: inline-block;
+  padding: 4rpx 12rpx;
+  font-size: 20rpx;
+  font-weight: 700;
+  color: var(--color-primary);
+  background: rgba(47, 107, 255, 0.1);
+  border-radius: 8rpx;
+}

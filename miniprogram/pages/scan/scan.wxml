@@ -8,7 +8,7 @@
       <view
         wx:for="{{typeEntries}}"
         wx:key="key"
-        class="scan-hub__card scan-hub__card--tone-{{index % 4}} {{item.allowed ? '' : 'scan-hub__card--disabled'}}"
+        class="scan-hub__card {{item.allowed ? '' : 'scan-hub__card--disabled'}}"
         data-key="{{item.key}}"
         data-allowed="{{item.allowed}}"
         bindtap="onTypeTap"

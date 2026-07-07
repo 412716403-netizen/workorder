@@ -1,13 +1,13 @@
 const { readTenantCtx, readCurrentUserId } = require('../../utils/session.js');
 const { hasPermission } = require('../../utils/permissions.js');
-const { TAB_MEMBERS, REVIEW_APPROVE_DEFAULTS } = require('../../config/members.js');
+const { TAB_MEMBERS, REVIEW_APPROVE_DEFAULTS } = require('../config/members.js');
 const {
   filterMembers,
   buildMemberListRows,
   buildApplicationRows,
   buildSegmentTabs,
   buildMemberEmptyText,
-} = require('../../utils/members.js');
+} = require('../utils/members.js');
 const {
   fetchMembers,
   fetchTenant,
@@ -17,10 +17,10 @@ const {
   updateMemberMilestones,
   removeMember,
   fetchRolesAll,
-} = require('../../utils/memberApi.js');
-const { fetchNodesAll } = require('../../utils/planApi.js');
+} = require('../utils/memberApi.js');
+const { fetchNodesAll } = require('../utils/planApi.js');
 const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
-const { shouldHubListRefetch, trackHubListHidden, LIST_ROUTES } = require('../../utils/saveNavigation.js');
+const { shouldHubListRefetch, trackHubListHidden, LIST_ROUTES } = require('../utils/saveNavigation.js');
 
 const HUB_LIST_ROUTE = LIST_ROUTES.BASIC_MEMBERS.replace(/^\//, '');
 

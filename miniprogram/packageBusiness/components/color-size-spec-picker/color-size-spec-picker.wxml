@@ -1,0 +1,94 @@
+<view class="cssp">
+  <view class="sps sps--cell">
+    <view class="plan-form-cell" bindtap="onOpenColorPicker">
+      <text class="plan-form-cell__label">颜色</text>
+      <text class="plan-form-cell__value {{colorSummary ? '' : 'plan-form-cell__value--ph'}}">{{colorSummary || '请选择'}}</text>
+      <text wx:if="{{!readOnly}}" class="plan-form-cell__chevron">›</text>
+    </view>
+  </view>
+
+  <view class="sps sps--cell">
+    <view class="plan-form-cell plan-form-cell--last" bindtap="onOpenSizePicker">
+      <text class="plan-form-cell__label">尺码</text>
+      <text class="plan-form-cell__value {{sizeSummary ? '' : 'plan-form-cell__value--ph'}}">{{sizeSummary || '请选择'}}</text>
+      <text wx:if="{{!readOnly}}" class="plan-form-cell__chevron">›</text>
+    </view>
+  </view>
+
+  <view wx:if="{{open}}" class="sps__overlay" catchtouchmove="noop">
+    <view
+      class="sps__mask {{sheetShow ? 'sps__mask--show' : ''}}"
+      bindtap="onClose"
+      catchtouchmove="noop"
+    />
+    <view
+      class="sps__sheet sps__sheet--picker {{sheetMotion ? 'sps__sheet--motion' : ''}} {{sheetShow ? 'sps__sheet--show' : ''}}"
+      style="height: {{sheetHeightPx}}px; max-height: {{sheetHeightPx}}px;"
+      catchtouchmove="noop"
+    >
+      <view class="sps__picker-bar">
+        <text class="sps__picker-cancel" bindtap="onClose">取消</text>
+        <text class="sps__picker-title">{{pickerTitle}}</text>
+        <text class="sps__picker-action cssp__confirm-link" bindtap="onPickerConfirm">确定</text>
+      </view>
+
+      <view class="cssp__selected-wrap">
+        <text class="cssp__selected-title">已选{{pickerKind === 'color' ? '颜色' : '尺码'}}</text>
+        <view wx:if="{{pickerSelectedLabels.length}}" class="cssp__selected-chips">
+          <view
+            wx:for="{{pickerSelectedLabels}}"
+            wx:key="id"
+            class="cssp__chip"
+            data-id="{{item.id}}"
+            bindtap="onSelectedChipTap"
+          >
+            <view wx:if="{{pickerKind === 'color'}}" class="cssp__dot" style="background-color: {{item.value}};"></view>
+            <text>{{item.name}}</text>
+            <text class="cssp__chip-remove">×</text>
+          </view>
+        </view>
+        <text wx:else class="cssp__selected-empty">暂未选择</text>
+      </view>
+
+      <view class="sps__search-wrap">
+        <image class="sps__search-icon" src="/assets/icons/search.png" mode="aspectFit" />
+        <input
+          class="sps__search-input"
+          value="{{search}}"
+          bindinput="onSearchInput"
+          placeholder="{{searchPlaceholder}}"
+          confirm-type="search"
+        />
+      </view>
+
+      <scroll-view class="sps__list" scroll-y enhanced show-scrollbar="{{true}}">
+        <view wx:if="{{!filteredItems.length}}" class="sps__empty">{{emptyHint}}</view>
+        <view
+          wx:for="{{filteredItems}}"
+          wx:key="id"
+          class="sps__row {{item.selected ? 'sps__row--active' : ''}}"
+          data-id="{{item.id}}"
+          bindtap="onItemTap"
+        >
+          <view class="sps__row-main cssp__row-main">
+            <view wx:if="{{pickerKind === 'color'}}" class="cssp__dot" style="background-color: {{item.value}};"></view>
+            <text class="sps__row-name">{{item.name}}</text>
+          </view>
+          <text wx:if="{{item.selected}}" class="sps__row-contact">✓</text>
+        </view>
+      </scroll-view>
+
+      <view wx:if="{{canQuickAdd && !readOnly && !showQuickAdd}}" class="cssp__add-row" bindtap="onToggleQuickAdd">{{quickAddLabel}}</view>
+      <view wx:if="{{canQuickAdd && !readOnly && showQuickAdd}}" class="cssp__quick">
+        <input
+          class="cssp__quick-input"
+          value="{{quickAddName}}"
+          bindinput="onQuickAddInput"
+          placeholder="输入新名称"
+          focus="{{showQuickAdd}}"
+        />
+        <view class="cssp__quick-btn" bindtap="onQuickAddSubmit">添加</view>
+      </view>
+    </view>
+  </view>
+</view>

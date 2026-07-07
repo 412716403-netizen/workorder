@@ -88,6 +88,7 @@ const MATERIAL_COST_MODE_LABEL = {
 
 function canViewTab(permissions, tenantRole, tab) {
   if (tenantRole === 'owner') return true;
+  if (hasPermission(permissions, 'settings')) return true;
   return hasPermission(permissions, tab.permission);
 }
 

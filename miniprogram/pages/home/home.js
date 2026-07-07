@@ -1,6 +1,7 @@
 const { request } = require('../../utils/request.js');
 const { readTenantCtx, readCurrentUserId, readCurrentUser } = require('../../utils/session.js');
 const { readTabShellInsets } = require('../../utils/tabShell.js');
+const { navigateMenuPath } = require('../../utils/navigateMenuPath.js');
 
 function buildUserProfile(ctx) {
   const user = readCurrentUser();
@@ -25,6 +26,9 @@ function loadHomeDeps() {
     createDefaultPeriodState: period.createDefaultPeriodState,
     derivePeriodState: period.derivePeriodState,
     buildHomeShortcuts: shortcuts.buildHomeShortcuts,
+    buildWorkbenchPageTabs: workbench.buildWorkbenchPageTabs,
+    resolveActiveWorkbenchPageId: workbench.resolveActiveWorkbenchPageId,
+    loadPageStatCards: workbench.loadPageStatCards,
     loadHomeStatCards: workbench.loadHomeStatCards,
     countUnread: notifications.countUnread,
     buildCollabPendingSections: collab.buildCollabPendingSections,
@@ -68,9 +72,16 @@ Page({
     customRangeInvalid: defaultPeriod.customRangeInvalid,
     queryEnabled: defaultPeriod.queryEnabled,
     statsLoading: false,
+    workbenchPages: [],
+    activePageId: '',
+    dashboardTitle: '数据看板',
+    showWorkbenchTabs: false,
+    activePageIsHome: true,
+    emptyStatsText: '暂无统计组件，请在电脑端工作台首页添加',
   },
 
   _workbenchEffective: null,
+  _activePageId: '',
   _deps: null,
 
   onLoad() {
@@ -154,10 +165,29 @@ Page({
     return this._deps.buildPeriodFilter(periodTab, customStart, customEnd);
   },
 
+  buildDashboardViewState(workbenchEffective, preferredPageId) {
+    const deps = this._deps;
+    const workbenchPages = deps.buildWorkbenchPageTabs(workbenchEffective);
+    const activePageId = deps.resolveActiveWorkbenchPageId(workbenchEffective, preferredPageId);
+    const activePage = workbenchPages.find((page) => page.id === activePageId) || workbenchPages[0];
+    const activePageIsHome = !!(activePage && activePage.isHome);
+    return {
+      workbenchPages,
+      activePageId,
+      showWorkbenchTabs: workbenchPages.length > 1,
+      dashboardTitle: (activePage && activePage.title) || '数据看板',
+      activePageIsHome,
+      emptyStatsText: activePageIsHome
+        ? '暂无统计组件，请在电脑端工作台首页添加'
+        : '该页面暂无统计组件，请在电脑端工作台编辑',
+    };
+  },
+
   loadStatCards(showCardLoading) {
     if (!this.data.queryEnabled || !this._deps) return Promise.resolve();
 
     const filter = this.getPeriodFilter();
+    const pageId = this.data.activePageId || this._activePageId;
     if (showCardLoading && this.data.statCards.length) {
       const loadingCards = this.data.statCards.map((c) => {
         const next = {};
@@ -172,7 +202,7 @@ Page({
       this.setData({ statsLoading: true });
     }
 
-    return this._deps.loadHomeStatCards(request, this._workbenchEffective, filter)
+    return this._deps.loadPageStatCards(request, this._workbenchEffective, pageId, filter)
       .then((statCards) => {
         this.setData({
           statCards,
@@ -202,6 +232,11 @@ Page({
     ])
       .then(([workbench, shortcutsResp]) => {
         this._workbenchEffective = (workbench && workbench.effective) || null;
+        const dashboardView = this.buildDashboardViewState(
+          this._workbenchEffective,
+          this._activePageId,
+        );
+        this._activePageId = dashboardView.activePageId;
 
         const shortcuts = deps.buildHomeShortcuts(
           shortcutsResp && shortcutsResp.selected,
@@ -210,26 +245,32 @@ Page({
 
         if (this.data.queryEnabled) {
           const filter = this.getPeriodFilter();
-          return deps.loadHomeStatCards(request, this._workbenchEffective, filter)
+          return deps
+            .loadPageStatCards(
+              request,
+              this._workbenchEffective,
+              dashboardView.activePageId,
+              filter,
+            )
             .then((statCards) => {
-              this.setData({
+              this.setData(Object.assign({}, dashboardView, {
                 loading: false,
                 shortcuts,
                 shortcutsLoading: false,
                 statCards,
                 loadError: false,
                 statsLoading: false,
-              });
+              }));
             });
         }
 
-        this.setData({
+        this.setData(Object.assign({}, dashboardView, {
           loading: false,
           shortcuts,
           shortcutsLoading: false,
           statCards: [],
           statsLoading: false,
-        });
+        }));
         return null;
       })
       .then(() => this.refreshMessagesBadge(ctx))
@@ -280,28 +321,34 @@ Page({
     });
   },
 
+  switchWorkbenchPage(pageId) {
+    if (!pageId || pageId === this.data.activePageId) return;
+
+    const dashboardView = this.buildDashboardViewState(this._workbenchEffective, pageId);
+    this._activePageId = dashboardView.activePageId;
+    this.setData(Object.assign({}, dashboardView, { statCards: [], loadError: false }), () => {
+      if (this.data.queryEnabled) {
+        this.loadStatCards(true);
+      }
+    });
+  },
+
+  onWorkbenchPageSwitchTap() {
+    const pages = this.data.workbenchPages;
+    if (!pages || pages.length <= 1) return;
+
+    wx.showActionSheet({
+      itemList: pages.map((page) => page.title),
+      success: (res) => {
+        const page = pages[res.tapIndex];
+        if (page) this.switchWorkbenchPage(page.id);
+      },
+    });
+  },
+
   onShortcutTap(e) {
     const { path } = e.currentTarget.dataset;
-    if (!path) {
-      wx.showToast({ title: '功能开发中', icon: 'none' });
-      return;
-    }
-    if (path.startsWith('/pages/')) {
-      if (
-        path.includes('apps')
-        || path.includes('home')
-        || path.includes('mine')
-        || path.includes('scan')
-        || path.includes('messages')
-      ) {
-        wx.switchTab({ url: path, fail: () => wx.navigateTo({ url: path }) });
-      } else {
-        wx.navigateTo({
-          url: path,
-          fail: () => wx.showToast({ title: '页面打开失败', icon: 'none' }),
-        });
-      }
-    }
+    navigateMenuPath(path);
   },
 
   refreshMessagesBadge(ctx) {

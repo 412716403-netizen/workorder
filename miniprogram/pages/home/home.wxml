@@ -61,20 +61,30 @@
       <empty-state wx:elif="{{loading}}" loading="{{true}}" />
 
       <view wx:else>
-        <view wx:if="{{statCards.length || statsLoading}}" class="home-dashboard-head">
-          <view class="home-section-head">
-            <text class="home-section-head__title">数据看板</text>
+        <view wx:if="{{statCards.length || statsLoading || showWorkbenchTabs}}" class="home-dashboard-head">
+          <view wx:if="{{!showWorkbenchTabs}}" class="home-section-head">
+            <text class="home-section-head__title">{{dashboardTitle}}</text>
           </view>
           <view class="home-period">
-            <view class="home-period__tabs">
+            <view class="home-period__row">
+              <view class="home-period__tabs">
+                <view
+                  wx:for="{{periodTabs}}"
+                  wx:key="key"
+                  class="home-period__tab {{periodTab === item.key ? 'home-period__tab--active' : ''}}"
+                  data-key="{{item.key}}"
+                  bindtap="onPeriodTabTap"
+                >
+                  {{item.label}}
+                </view>
+              </view>
               <view
-                wx:for="{{periodTabs}}"
-                wx:key="key"
-                class="home-period__tab {{periodTab === item.key ? 'home-period__tab--active' : ''}}"
-                data-key="{{item.key}}"
-                bindtap="onPeriodTabTap"
+                wx:if="{{showWorkbenchTabs}}"
+                class="home-period__page-btn"
+                bindtap="onWorkbenchPageSwitchTap"
               >
-                {{item.label}}
+                <text class="home-period__page-btn-text">{{dashboardTitle}}</text>
+                <view class="home-period__page-btn-arrow"></view>
               </view>
             </view>
             <view wx:if="{{periodTab === 'custom'}}" class="home-period__range">
@@ -94,7 +104,7 @@
 
         <empty-state
           wx:if="{{!statCards.length}}"
-          text="{{loadError ? '工作台加载失败，请下拉刷新' : '暂无统计组件，请在电脑端工作台首页添加'}}"
+          text="{{loadError ? '工作台加载失败，请下拉刷新' : emptyStatsText}}"
         />
       </view>
     </view>

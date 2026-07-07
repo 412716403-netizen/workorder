@@ -1,0 +1,149 @@
+@import '../production-plans/production-plans.wxss';
+@import '../production-order-detail/production-order-detail.wxss';
+@import '../production-order-report-batch-detail/production-order-report-batch-detail.wxss';
+
+.stock-in-detail-page {
+  padding: 0 var(--spacing-page) 24rpx;
+}
+
+.stock-in-detail-sku {
+  font-size: 24rpx;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.stock-in-detail-card {
+  padding: 24rpx;
+  margin-bottom: 16rpx;
+  background: var(--color-bg-card);
+  border-radius: 16rpx;
+}
+
+.stock-in-detail-card__doc {
+  display: block;
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.stock-in-detail-card__meta {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: var(--color-text-secondary);
+}
+
+.stock-in-detail-card__hero {
+  display: flex;
+  align-items: baseline;
+  gap: 8rpx;
+  margin-top: 16rpx;
+}
+
+.stock-in-detail-card__qty {
+  font-size: 48rpx;
+  font-weight: 700;
+  color: var(--color-primary-dark);
+}
+
+.stock-in-detail-card__unit {
+  font-size: 24rpx;
+  color: var(--color-text-secondary);
+}
+
+.stock-in-detail-card__wh {
+  display: block;
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  color: var(--color-text-secondary);
+}
+
+.stock-in-detail-card__section {
+  display: block;
+  margin-bottom: 12rpx;
+  font-size: 26rpx;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.stock-in-detail-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12rpx 0;
+  border-bottom: 1rpx solid var(--color-border);
+}
+
+.stock-in-detail-line:last-child {
+  border-bottom: none;
+}
+
+.stock-in-detail-line__label {
+  font-size: 26rpx;
+  color: var(--color-text-primary);
+}
+
+.stock-in-detail-line__qty {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.stock-in-detail-edit-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16rpx 0;
+  border-bottom: 1rpx solid var(--color-border);
+  font-size: 26rpx;
+}
+
+.stock-in-detail-edit-input {
+  width: 200rpx;
+  height: 64rpx;
+  padding: 0 12rpx;
+  text-align: right;
+  border: 1rpx solid var(--color-border);
+  border-radius: 10rpx;
+}
+
+.stock-in-detail-matrix-card {
+  margin-top: 16rpx;
+  padding: 0;
+  background: transparent;
+}
+
+.stock-in-detail-save {
+  margin-top: 20rpx;
+  height: 80rpx;
+  line-height: 80rpx;
+  text-align: center;
+  background: var(--color-primary);
+  color: #fff;
+  border-radius: 12rpx;
+  font-weight: 600;
+}
+
+.stock-in-detail-actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 8rpx;
+}
+
+.stock-in-detail-btn {
+  flex: 1;
+  height: 80rpx;
+  line-height: 80rpx;
+  text-align: center;
+  background: var(--color-bg-card);
+  border: 1rpx solid var(--color-border);
+  border-radius: 12rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.stock-in-detail-btn--danger {
+  color: #e11d48;
+  border-color: rgba(225, 29, 72, 0.25);
+}

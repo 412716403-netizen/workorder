@@ -1,0 +1,123 @@
+@import '../searchable-partner-select/searchable-partner-select.wxss';
+
+.rps__subtitle {
+  padding: 0 var(--spacing-page) 16rpx;
+  font-size: var(--font-caption);
+  color: var(--color-text-secondary);
+}
+
+.rps__list {
+  flex: 1;
+  min-height: 0;
+  height: 0;
+  padding: 0 var(--spacing-page) calc(16rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+}
+
+.rps__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 24rpx 8rpx;
+  border-bottom: 1rpx solid var(--color-border);
+}
+
+.rps__row--active {
+  background: var(--color-primary-light);
+  border-radius: var(--radius-card);
+  border-bottom-color: transparent;
+}
+
+.rps__row-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.rps__row-text {
+  display: block;
+  font-size: var(--font-body);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.rps__row-desc {
+  display: block;
+  margin-top: 4rpx;
+  font-size: var(--font-small);
+  color: var(--color-text-secondary);
+}
+
+.rps__row-check {
+  flex-shrink: 0;
+  font-size: var(--font-body);
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.rps__mask,
+.rps__sheet {
+  /* 复用 sps 动画类名 */
+}
+
+.rps__mask {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 900;
+  background: rgba(0, 0, 0, 0);
+  transition: background 0.3s ease;
+}
+
+.rps__mask--show {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.rps__sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 901;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg-card);
+  border-radius: 24rpx 24rpx 0 0;
+  transform: translateY(100%);
+  transition: transform 0.3s ease;
+  box-shadow: 0 -8rpx 32rpx rgba(31, 35, 41, 0.12);
+}
+
+.rps__sheet--motion {
+  transition: transform 0.3s ease;
+}
+
+.rps__sheet--show {
+  transform: translateY(0);
+}
+
+.rps__picker-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20rpx var(--spacing-page);
+  flex-shrink: 0;
+}
+
+.rps__picker-cancel {
+  font-size: var(--font-caption);
+  color: var(--color-text-secondary);
+  min-width: 80rpx;
+}
+
+.rps__picker-title {
+  font-size: var(--font-section);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.rps__picker-action {
+  min-width: 80rpx;
+}

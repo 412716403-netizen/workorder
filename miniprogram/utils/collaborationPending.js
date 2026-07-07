@@ -26,7 +26,7 @@ function bumpPeer(map, peerName, delta, extra) {
 }
 
 function mapToSortedItems(map) {
-  return [...map.values()].sort((a, b) => {
+  return Array.from(map.values()).sort((a, b) => {
     if (b.count !== a.count) return b.count - a.count;
     return a.peerName.localeCompare(b.peerName, 'zh-CN');
   });
@@ -66,7 +66,7 @@ function buildCollabPendingSections(transfers) {
         bumpPeer(returnPeers, opponentName(t, false), returns.length);
       }
 
-      if (t.originTenantId && (t.chainStep ?? 0) > 0 && !t.originConfirmedAt) {
+      if (t.originTenantId && (t.chainStep != null ? t.chainStep : 0) > 0 && !t.originConfirmedAt) {
         forwardCount += 1;
         bumpPeer(forwardPeers, opponentName(t, false), 1);
       }

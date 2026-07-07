@@ -1,0 +1,14 @@
+@import '../psi-warehouse-transfer/psi-warehouse-transfer.wxss';
+
+.wh-doc-card__diff {
+  font-size: 24rpx;
+  font-weight: 600;
+}
+
+.wh-doc-card__diff--pos {
+  color: #16a34a;
+}
+
+.wh-doc-card__diff--neg {
+  color: #ef4444;
+}

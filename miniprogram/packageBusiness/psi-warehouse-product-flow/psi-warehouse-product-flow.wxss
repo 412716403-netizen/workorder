@@ -1,0 +1,46 @@
+@import '../psi-warehouse-flow/psi-warehouse-flow.wxss';
+
+.wh-prod-intro {
+  margin: 0 var(--spacing-page) 16rpx;
+  padding: 24rpx;
+  border-radius: var(--radius-card);
+  background: var(--color-bg-card);
+  box-shadow: 0 2rpx 12rpx rgba(15, 23, 42, 0.04);
+}
+
+.wh-prod-intro__main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8rpx;
+  align-items: baseline;
+}
+
+.wh-prod-intro__wh {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  color: var(--color-text-secondary);
+}
+
+.wh-flow-row__wh-hint {
+  font-size: 24rpx;
+  color: var(--color-text-tertiary);
+}
+
+.wh-flow-row__head-right {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6rpx;
+}
+
+.wh-flow-row__head-right .wh-flow-row__doc {
+  text-align: right;
+}
+
+.wh-flow-row__head-right .wh-flow-row__qty {
+  font-size: 32rpx;
+  font-weight: 700;
+}

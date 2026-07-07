@@ -69,6 +69,8 @@ Page({
             tenantRole: d.tenantRole,
             permissions: d.permissions || [],
             expiresAt: d.expiresAt ?? null,
+            industryKind: d.industryKind || 'generic',
+            equipmentFeaturesEnabled: d.equipmentFeaturesEnabled !== false,
           }),
         );
         wx.switchTab({ url: '/pages/home/home' });

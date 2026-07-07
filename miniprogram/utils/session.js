@@ -1,5 +1,8 @@
 /** 清除登录态（与网页端 localStorage 项对应） */
+const { clearUnsavedFormDrafts } = require('./unsavedFormDrafts.js');
+
 function clearSession() {
+  clearUnsavedFormDrafts();
   wx.removeStorageSync('accessToken');
   wx.removeStorageSync('refreshToken');
   wx.removeStorageSync('tenantCtx');
@@ -14,7 +17,7 @@ function readTenants() {
   try {
     const a = JSON.parse(raw);
     return Array.isArray(a) ? a : [];
-  } catch {
+  } catch (_) {
     return [];
   }
 }
@@ -25,7 +28,7 @@ function readTenantCtx() {
   if (typeof raw === 'object') return raw;
   try {
     return JSON.parse(raw);
-  } catch {
+  } catch (_) {
     return null;
   }
 }
@@ -36,7 +39,7 @@ function readCurrentUser() {
   if (typeof raw === 'object') return raw;
   try {
     return JSON.parse(raw);
-  } catch {
+  } catch (_) {
     return null;
   }
 }

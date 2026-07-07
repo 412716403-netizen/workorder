@@ -1,6 +1,0 @@
-@import '../../pages/psi-purchase-order-flow/psi-purchase-order-flow.wxss';
-
-.pb-flow-wh {
-  font-size: 22rpx;
-  color: var(--color-text-tertiary);
-}

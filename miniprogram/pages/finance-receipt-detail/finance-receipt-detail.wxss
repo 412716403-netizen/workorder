@@ -1,6 +1,0 @@
-@import '../../pages/psi-purchase-order-detail/psi-purchase-order-detail.wxss';
-
-.plan-form-cell__value--amount {
-  color: #059669;
-  font-weight: 800;
-}

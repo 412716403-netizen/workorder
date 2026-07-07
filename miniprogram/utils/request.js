@@ -61,15 +61,13 @@ function request(opts) {
   const once = () =>
     new Promise((resolve, reject) => {
       const access = wx.getStorageSync('accessToken');
-      wx.request({
+      const header = { 'Content-Type': 'application/json' };
+      if (access) header.Authorization = `Bearer ${access}`;
+      const reqOpts = {
         url,
         method: m,
         timeout,
-        ...(payload !== undefined ? { data: payload } : {}),
-        header: {
-          'Content-Type': 'application/json',
-          ...(access ? { Authorization: `Bearer ${access}` } : {}),
-        },
+        header,
         success(res) {
           if (res.statusCode === 401) {
             reject(Object.assign(new Error('UNAUTHORIZED'), { statusCode: 401 }));
@@ -97,7 +95,9 @@ function request(opts) {
           }
           reject(err);
         },
-      });
+      };
+      if (payload !== undefined) reqOpts.data = payload;
+      wx.request(reqOpts);
     });
 
   return once().catch((err) => {

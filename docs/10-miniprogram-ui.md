@@ -22,6 +22,7 @@ SmartTrack Pro 微信小程序采用 **企业蓝 + 卡片化 + 底部 Tab** 的 
 | `styles/form.wxss` | 表单输入 |
 | `styles/qty-price-amount-summary.wxss` | 数量 / 单价 / 金额三列一行（参考外协收回） |
 | `styles/plan-list-shell.wxss` | 列表页壳（顶栏 / 搜索 / 筛选 / 列表行），主包 `styles/` 与分包页面共用 |
+| `styles/order-process-scroll.wxss` | 工序 chip 横向滚动（`order-process-scroll` 组件与 `outsource-shared.wxss` 共用，勿从 `components/` 引用） |
 
 类名前缀使用 `st-*`（SmartTrack）。迁移期 `apple-*` 为别名，新代码禁止新增 `apple-*`。
 
@@ -203,7 +204,7 @@ const {
 
 ## 保存后导航
 
-单据保存/提交成功后**统一回到所属列表页**，工具：[`utils/saveNavigation.js`](../miniprogram/utils/saveNavigation.js) 的 `afterSaveReturnToList` + `LIST_ROUTES` / `MODULE_HUB_ROUTES`。
+单据保存/提交成功后**统一回到所属列表页**，工具：[`utils/saveNavigation.js`](../miniprogram/packageBusiness/utils/saveNavigation.js) 的 `afterSaveReturnToList` + `LIST_ROUTES` / `MODULE_HUB_ROUTES`。
 
 ### 规则
 
@@ -703,16 +704,16 @@ npm run miniprogram:icons
 
 ## 首页工作台统计
 
-对齐 Web [`WorkbenchView`](../views/workbench/WorkbenchView.tsx) 首页（`page-overview`）：
+对齐 Web [`WorkbenchView`](../views/workbench/WorkbenchView.tsx) 工作台：
 
 | 工具 | 作用 |
 |------|------|
-| [`utils/workbenchHome.js`](../miniprogram/utils/workbenchHome.js) | 解析 `/dashboard/workbench` 首页布局，拉取各统计 API |
+| [`utils/workbenchHome.js`](../miniprogram/utils/workbenchHome.js) | 解析 `/dashboard/workbench` 可见页面与布局，按当前页拉取各统计 API |
 | [`utils/workbenchPeriodFilter.js`](../miniprogram/utils/workbenchPeriodFilter.js) | 统计周期筛选（今日 / 昨日 / 本月 / 自定义），对齐 Web [`useWorkbenchPeriodFilter`](../hooks/useWorkbenchPeriodFilter.ts) |
 | [`config/workbenchWidgets.js`](../miniprogram/config/workbenchWidgets.js) | 统计组件类型与默认布局 |
 | [`components/workbench-stat-card/`](../miniprogram/components/workbench-stat-card/) | 移动端统计卡片 UI（工序类横向滑动芯片；KPI 类紧凑主指标 + 横向指标芯片） |
 
-支持的统计组件：`order_stats` / `outsource_stats` / `rework_stats` / `sales_stats` / `sales_order_stats` / `finance_stats` / `product_economics*`。快捷入口、插件中心、消息中心仍仅在 Web 首页固定区展示；小程序首页仅渲染统计类组件。数据看板顶部提供**全局周期切换**（今日 / 昨日 / 本月 / 自定义日期区间），API 参数与 Web 一致（`period` 或 `startDate`+`endDate`）；布局与增减组件请在电脑端工作台编辑。
+支持的统计组件：`order_stats` / `outsource_stats` / `rework_stats` / `sales_stats` / `sales_order_stats` / `finance_stats` / `product_economics*`。除首页（`page-overview`）外，**网页端创建的自定义工作台页**在 API 返回且当前用户有查看权限时，数据看板日期筛选右侧显示**当前页面名称 + 下拉箭头**按钮，点击后从底部弹出页面列表进行选择；权限与 widget 过滤与 Web 一致（`GET /dashboard/workbench` 的 `effective`）。快捷入口、插件中心、消息中心仍仅在 Web 首页固定区展示；小程序首页仅渲染统计类组件。数据看板顶部提供**全局周期切换**（今日 / 昨日 / 本月 / 自定义日期区间），API 参数与 Web 一致（`period` 或 `startDate`+`endDate`）；布局与增减组件请在电脑端工作台编辑。
 
 ## 系统设置
 
@@ -728,7 +729,19 @@ npm run miniprogram:icons
 | 页面 | 路径 | 职责 |
 |------|------|------|
 | 设置首页 | [`pages/settings/`](../miniprogram/pages/settings/) | 分组列表，权限过滤 |
-| 设置详情 | [`pages/settings-tab/`](../miniprogram/pages/settings-tab/) | 档案类只读列表；生产配置只读展示 |
+| 档案列表 | [`packageBusiness/settings-archive-list/`](../miniprogram/packageBusiness/settings-archive-list/) | 5 个档案 Tab 搜索、新建、列表（工序节点支持上移/下移排序） |
+| 档案编辑 | [`packageBusiness/settings-archive-edit/`](../miniprogram/packageBusiness/settings-archive-edit/) | 档案 CRUD、特性开关、扩展字段定义 |
+| 生产业务配置 | [`pages/settings-tab/`](../miniprogram/pages/settings-tab/) | 数量上限开关、扫码称重容差、物料成本口径（逐项即时保存） |
+
+| 工具 / API | 作用 |
+|-------------|------|
+| [`utils/settingsApi.js`](../miniprogram/utils/settingsApi.js) | `/settings/*` CRUD + config PUT |
+| [`utils/settingsForm.js`](../miniprogram/utils/settingsForm.js) | 保存校验、特性开关规则 |
+| [`components/settings-custom-fields-editor/`](../miniprogram/components/settings-custom-fields-editor/) | 扩展字段 / 报工展示模板定义 |
+
+**权限**：`settings:categories:*` · `settings:partner_categories:*` · `settings:nodes:*` · `settings:warehouses:*` · `settings:finance_categories:*` · `settings:config:view/edit`
+
+**留 Web**：`productionLinkMode`（平台级）；各业务表单配置（`planFormSettings` 等）；收支账户类型（财务模块）；扩展字段 **file/knowledge** 上传；工序 `reportTemplate`（工单表单配置）。
 
 配置单一事实源：[`config/settingsTabs.js`](../miniprogram/config/settingsTabs.js)。应用 Tab「系统设置」入口路径 `/pages/settings/settings`。
 
@@ -773,7 +786,7 @@ npm run miniprogram:icons
 
 **权限**：`basic:partners:view` · `basic:partners:create` · `basic:partners:edit` · `basic:partners:delete`
 
-**留 Web**：批量导入单位；合作单位分类 CRUD（系统设置只读）；协作租户关联；**file/knowledge** 类型扩展字段上传。
+**留 Web**：批量导入单位；协作租户关联；**file/knowledge** 类型扩展字段上传（分类定义可在小程序维护）。
 
 入口：[`menus.js`](../miniprogram/config/menus.js) `basic-partners` → `/packageBusiness/basic-partners/basic-partners`。
 
@@ -799,6 +812,28 @@ npm run miniprogram:icons
 
 入口：[`menus.js`](../miniprogram/config/menus.js) `basic-members` → `/packageBusiness/basic-members/basic-members`。
 
+## 公共数据字典
+
+对齐 Web [`DictionariesTab`](../views/basic-info/tabs/DictionariesTab.tsx)（颜色 / 尺码 / 产品单位三组；名称同类型租户内唯一；被产品引用时禁止删除）：
+
+| 页面 | 路径 | 职责 |
+|------|------|------|
+| 字典列表 | [`packageBusiness/basic-dictionaries/`](../miniprogram/packageBusiness/basic-dictionaries/) | 类型 Tab（全部/颜色/尺码/产品单位）、搜索、客户端分页、创建入口 |
+| 字典编辑 | [`packageBusiness/basic-dictionary-edit/`](../miniprogram/packageBusiness/basic-dictionary-edit/) | 类型（新建可选/编辑只读）、名称 |
+
+| 工具 | 作用 |
+|------|------|
+| [`utils/dictionaryApi.js`](../miniprogram/utils/dictionaryApi.js) | `/master/dictionaries` 增删改 |
+| [`utils/dictionaries.js`](../miniprogram/utils/dictionaries.js) | 列表筛选、分页 UI 模型（对齐 Web `basicInfoFilters`） |
+| [`utils/dictionaryForm.js`](../miniprogram/utils/dictionaryForm.js) | 保存校验、名称去重 |
+| [`config/dictionaries.js`](../miniprogram/config/dictionaries.js) | 类型 Tab 常量 |
+
+**权限**：`basic:dictionaries:view` · `basic:dictionaries:create` · `basic:dictionaries:edit` · `basic:dictionaries:delete`
+
+**菜单说明**：设备管理仅 Web 端维护，小程序应用中心**不含** `basic-equipment` 入口；报工/返工流程内设备选择仍受企业 `equipmentModuleEnabled` 控制。
+
+入口：[`menus.js`](../miniprogram/config/menus.js) `basic-dictionaries` → `/packageBusiness/basic-dictionaries/basic-dictionaries`。
+
 ## 分包与上传体积
 
 微信代码质量要求**主包（不含插件）< 1.5 MB**。业务页全部放在 [`app.json`](../miniprogram/app.json) 的 `business` 分包（`root: packageBusiness`），主包仅保留 Tab 壳、登录/租户、消息聊天、系统设置等入口页（仍在 `pages/` 目录）。
@@ -806,14 +841,29 @@ npm run miniprogram:icons
 | 包 | 目录 / 页面范围 |
 |----|----------------|
 | **主包** | `pages/`：`home` / `apps` / `scan` / `messages` / `mine`、登录与租户、`messages-chat`、`settings*` |
-| **business 分包** | `packageBusiness/`：生产 / 进销存 / 财务 / 产品档案 / 合作单位 / 扫码连续作业（`scan-setup`、`scan-session`） |
+| **business 分包** | `packageBusiness/`：生产 / 进销存 / 财务 / 产品档案 / 合作单位 / 成员管理 / 公共数据字典 / 扫码连续作业（`scan-setup`、`scan-session`） |
 
-新增业务页时：**不要**写入主包 `pages` 数组；在 `packageBusiness/` 下新建页面目录，并追加到 `subPackages[0].pages`（路径相对 `packageBusiness/`，如 `finance-foo/finance-foo`）。跳转 URL 使用 `/packageBusiness/...`（见 [`saveNavigation.js`](../miniprogram/utils/saveNavigation.js) `LIST_ROUTES`）。
+新增业务页时：**不要**写入主包 `pages` 数组；在 `packageBusiness/` 下新建页面目录，并追加到 `subPackages[0].pages`（路径相对 `packageBusiness/`，如 `finance-foo/finance-foo`）。跳转 URL 使用 `/packageBusiness/...`（见 [`saveNavigation.js`](../miniprogram/packageBusiness/utils/saveNavigation.js) `LIST_ROUTES`）。
 
 `preloadRule`：进入「应用」「扫码」Tab 时预下载 `business` 分包，减少首次打开业务页的等待。
 
 上传优化（[`project.config.json`](../miniprogram/project.config.json)）：`uploadWithSourceMap: false`、`ignoreDevUnusedFiles: true`。
 
 若主包仍超限：检查主包页是否 `require` 了仅分包使用的 `utils/`；或将图标等资源进一步压缩。
+
+### 主包 / 分包代码目录（2026-03 起）
+
+| 目录 | 用途 |
+|------|------|
+| `miniprogram/utils/` | **仅主包**可达的工具（`session`、`request`、`permissions`、工作台、消息 Tab 等） |
+| `miniprogram/config/` | **仅主包**菜单/设置/扫码类型等 |
+| `miniprogram/components/` | **仅主包**页注册的组件（`tab-shell`、`icon-grid`、`page-header` 等） |
+| `packageBusiness/utils/` | 生产 / 进销存 / 财务 / 档案等业务工具 |
+| `packageBusiness/config/` | 各业务模块列表配置 |
+| `packageBusiness/components/` | 仅分包页引用的表单组件（产品/合作单位选择、矩阵键盘等） |
+
+分包页引用：`require('../utils/...')` / `require('../config/...')`；需用主包能力时用 `require('../../utils/...')`（如 `session.js`）。**禁止**主包 `require` 分包内 JS。
+
+分析脚本：`miniprogram/scripts/analyze-main-package-deps.cjs`（输出主包未使用的 utils/config）。
 
 **WXSS 跨包**：主包 `styles/` **不得** `@import` 分包内 `.wxss`（微信编译报错）。共用样式须放在主包 `styles/`（如 `plan-list-shell.wxss`），分包页面再 `@import '../../styles/...'`。

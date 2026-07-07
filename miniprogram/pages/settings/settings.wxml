@@ -1,14 +1,19 @@
-<page-header title="系统设置" show-back="{{true}}" center="{{true}}" bind:back="onHeaderBack" />
+<view class="plan-shell">
+  <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-header__title">系统设置</text>
+      <view class="plan-header__back plan-header__back--placeholder"></view>
+    </view>
+  </view>
 
-<scroll-view class="settings-scroll" scroll-y show-scrollbar="{{false}}">
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view class="settings-scroll" scroll-y show-scrollbar="{{false}}">
   <view class="settings-page">
     <view wx:if="{{loading}}" class="settings-muted">加载中…</view>
 
     <block wx:else>
-      <view wx:if="{{categories.length}}" class="settings-intro">
-        与电脑端系统设置一致，按分类查看与维护基础档案、生产仓储、财务及业务规则。
-      </view>
-
       <view wx:for="{{categories}}" wx:key="key" class="settings-group">
         <view class="settings-group__title">{{item.title}}</view>
         <view class="settings-card">
@@ -36,3 +41,4 @@
     </block>
   </view>
 </scroll-view>
+</view>

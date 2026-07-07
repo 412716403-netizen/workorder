@@ -1,8 +1,4 @@
-@import '../../styles/tokens.wxss';
-
-page {
-  background: var(--color-bg-page);
-}
+@import '../../styles/plan-list-shell.wxss';
 
 .settings-scroll {
   height: 100vh;
@@ -12,13 +8,6 @@ page {
 .settings-page {
   padding: 24rpx var(--spacing-page) calc(48rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
-}
-
-.settings-intro {
-  margin-bottom: 24rpx;
-  font-size: var(--font-caption);
-  color: var(--color-text-secondary);
-  line-height: 1.5;
 }
 
 .settings-muted {

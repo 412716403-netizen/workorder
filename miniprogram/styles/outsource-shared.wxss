@@ -1,5 +1,5 @@
 @import './tokens.wxss';
-@import '../components/order-process-scroll/order-process-scroll.wxss';
+@import './order-process-scroll.wxss';
 
 /* 外协模块共享样式 — 对齐工单中心 order-list-row / order-process-chip */
 

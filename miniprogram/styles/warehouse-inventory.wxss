@@ -1,5 +1,5 @@
-@import '../pages/production-plans/production-plans.wxss';
-@import '../pages/production-order-report-history/production-order-report-history.wxss';
+@import './plan-list-shell.wxss';
+@import './report-history-product.wxss';
 
 .wh-page {
   padding: 20rpx var(--spacing-page) calc(120rpx + env(safe-area-inset-bottom));

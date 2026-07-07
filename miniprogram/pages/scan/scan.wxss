@@ -18,16 +18,10 @@
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
   border: 1rpx solid var(--color-border);
-  border-top-width: 6rpx;
   display: flex;
   flex-direction: column;
   gap: 8rpx;
 }
-
-.scan-hub__card--tone-0 { border-top-color: #0ea5e9; }
-.scan-hub__card--tone-1 { border-top-color: #6366f1; }
-.scan-hub__card--tone-2 { border-top-color: #34c759; }
-.scan-hub__card--tone-3 { border-top-color: #ff9500; }
 
 .scan-hub__card--disabled {
   opacity: 0.55;

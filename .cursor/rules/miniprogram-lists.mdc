@@ -10,10 +10,10 @@ alwaysApply: false
 
 ## 数据层（必做）
 
-- 使用 [`listProductThumb.js`](../miniprogram/utils/listProductThumb.js)：
+- 使用 [`listProductThumb.js`](../miniprogram/packageBusiness/utils/listProductThumb.js)：
   - `listProductNameSkuFields(product, fallback?)` → `{ productName, productSku, showProductSku }`
   - 有 `productsById` / `productMap` 时用 `listProductNameSkuFromMap` 或 `listProductDisplayFieldsFromMap`
-  - 已有 `productMetaFromMap`（[`orderReportHistory.js`](../miniprogram/utils/orderReportHistory.js)）可继续用于带缩略图场景
+  - 已有 `productMetaFromMap`（[`orderReportHistory.js`](../miniprogram/packageBusiness/utils/orderReportHistory.js)）可继续用于带缩略图场景
 - `showProductSku` 规则：有 `product.name` 且 `product.sku` 非空且二者不同才为 `true`（见 `productionPlans.productNameSkuParts`）
 - 列表搜索/筛选须把 `productSku` 纳入关键词字段
 
@@ -45,7 +45,7 @@ alwaysApply: false
 
 ## 参考实现
 
-- 报工流水：[`orderReportHistory.js`](../miniprogram/utils/orderReportHistory.js) + [`production-order-report-history.wxml`](../miniprogram/pages/production-order-report-history/production-order-report-history.wxml)
-- 工单中心列表：[`productionOrders.js`](../miniprogram/utils/productionOrders.js) + [`production-orders.wxml`](../miniprogram/pages/production-orders/production-orders.wxml)
+- 报工流水：[`orderReportHistory.js`](../miniprogram/packageBusiness/utils/orderReportHistory.js) + [`production-order-report-history.wxml`](../miniprogram/packageBusiness/production-order-report-history/production-order-report-history.wxml)
+- 工单中心列表：[`productionOrders.js`](../miniprogram/packageBusiness/utils/productionOrders.js) + [`production-orders.wxml`](../miniprogram/packageBusiness/production-orders/production-orders.wxml)
 
 完整说明见 [`docs/10-miniprogram-ui.md`](../docs/10-miniprogram-ui.md) §产品名称与编号。

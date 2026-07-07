@@ -1,0 +1,8 @@
+{
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "searchable-partner-select": "/packageBusiness/components/searchable-partner-select/searchable-partner-select",
+    "searchable-product-select": "/packageBusiness/components/searchable-product-select/searchable-product-select",
+    "plan-form-custom-field": "/packageBusiness/components/plan-form-custom-field/plan-form-custom-field"
+  }
+}

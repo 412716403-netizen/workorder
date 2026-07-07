@@ -1,0 +1,317 @@
+<view class="plan-shell">
+  <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-header__title">工单中心</text>
+      <view class="plan-header__back plan-header__back--placeholder"></view>
+    </view>
+
+    <view class="plan-header__tools">
+      <view class="plan-search">
+        <input
+          class="plan-search__input"
+          value="{{searchKeyword}}"
+          bindinput="onSearchInput"
+          placeholder="工单号 / 产品 / 客户"
+          confirm-type="search"
+          placeholder-class="plan-search__ph"
+        />
+        <view wx:if="{{searchKeyword}}" class="plan-search__clear" bindtap="onSearchClear">×</view>
+      </view>
+      <view
+        class="plan-tool-btn {{filterActive ? 'plan-tool-btn--active' : ''}}"
+        bindtap="onFilterTap"
+      >
+        <image class="plan-tool-btn__icon" src="/assets/icons/list-filter.png" mode="aspectFit" />
+      </view>
+    </view>
+  </view>
+
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <view wx:if="{{showFilterPanel}}" class="plan-filter-panel">
+    <!-- 返回按钮：当处于某个内嵌功能时显示 -->
+    <view wx:if="{{activeShortcut}}" class="plan-filter-back" bindtap="onBackToShortcuts">
+      <text class="plan-filter-back__arrow">‹</text>
+      <text class="plan-filter-back__text">返回</text>
+    </view>
+
+    <!-- 三个入口按钮：仅当 activeShortcut 为空时显示 -->
+    <view wx:if="{{!activeShortcut && filterShortcuts.length}}" class="plan-filter-actions">
+      <view
+        wx:for="{{filterShortcuts}}"
+        wx:key="id"
+        class="plan-filter-action-btn"
+        bindtap="onShortcutTap"
+        data-id="{{item.id}}"
+      >
+        <image class="plan-filter-action-btn__icon" src="{{item.icon}}" mode="aspectFit" />
+        <text class="plan-filter-action-btn__label">{{item.label}}</text>
+        <text wx:if="{{item.badgeText}}" class="plan-filter-action-btn__badge">{{item.badgeText}}</text>
+      </view>
+    </view>
+
+    <!-- 仅显示未完成开关：仅当 activeShortcut 为空时显示 -->
+    <view wx:if="{{!activeShortcut}}" class="plan-filter-panel__row">
+      <text class="plan-filter-panel__label">仅显示未完成</text>
+      <view
+        class="plan-filter-switch {{excludeCompleted ? 'plan-filter-switch--on' : ''}}"
+        bindtap="onExcludeToggle"
+      >
+        <view class="plan-filter-switch__knob"></view>
+      </view>
+    </view>
+
+    <!-- ==================== 工单流水内嵌内容 ==================== -->
+    <view wx:if="{{activeShortcut === 'order-flow'}}" class="plan-filter-embed">
+      <view class="plan-filter-embed__head">
+        <image class="plan-filter-embed__icon" src="/assets/icons/scroll-text.png" mode="aspectFit" />
+        <text class="plan-filter-embed__title">工单流水</text>
+      </view>
+      <view class="order-flow-filters order-flow-filters--embed">
+        <view class="order-flow-filters__row">
+          <picker mode="date" value="{{orderFlowDateFrom}}" bindchange="onOrderFlowDateFromChange">
+            <view class="order-flow-filter">开始 {{orderFlowDateFrom}}</view>
+          </picker>
+          <picker mode="date" value="{{orderFlowDateTo}}" bindchange="onOrderFlowDateToChange">
+            <view class="order-flow-filter">结束 {{orderFlowDateTo}}</view>
+          </picker>
+        </view>
+        <view class="order-flow-filters__row">
+          <input
+            class="order-flow-input"
+            value="{{orderFlowOrderNumberKeyword}}"
+            bindinput="onOrderFlowOrderNumberInput"
+            placeholder="工单号"
+            placeholder-class="order-flow-input__ph"
+          />
+          <input
+            class="order-flow-input"
+            value="{{orderFlowProductNameKeyword}}"
+            bindinput="onOrderFlowProductNameInput"
+            placeholder="产品名称"
+            placeholder-class="order-flow-input__ph"
+          />
+        </view>
+      </view>
+      <empty-state wx:if="{{orderFlowLoading}}" loading="{{true}}" text="加载中…" />
+      <view wx:elif="{{orderFlowRows.length}}" class="plan-filter-embed__list">
+        <view
+          wx:for="{{orderFlowRows}}"
+          wx:key="id"
+          class="order-flow-row order-flow-row--embed"
+          bindtap="onOrderFlowRowTap"
+          data-id="{{item.id}}"
+        >
+          <view class="order-flow-row__head">
+            <text class="order-flow-row__time">{{item.placedLabel}}</text>
+            <text wx:if="{{item.showDueDate}}" class="order-flow-row__due">交期 {{item.dueDateLabel}}</text>
+          </view>
+          <view class="order-flow-row__main">
+            <text class="order-flow-row__number">{{item.orderNumber}}</text>
+            <view wx:if="{{item.showDispatch}}" class="st-pill {{item.dispatchPillClass}}">{{item.dispatchLabel}}</view>
+            <text class="order-flow-row__qty">{{item.quantityText}}</text>
+          </view>
+          <view class="order-flow-row__product">
+            <text class="order-flow-row__product-name">{{item.productName}}</text>
+            <text wx:if="{{item.showProductSku}}" class="order-flow-row__sku">{{item.productSku}}</text>
+          </view>
+        </view>
+      </view>
+      <view wx:else class="plan-list-empty">{{orderFlowRows.length === 0 && !orderFlowLoading ? '所选条件下暂无工单' : ''}}</view>
+      <view wx:if="{{!orderFlowLoading && orderFlowRows.length}}" class="order-flow-footer order-flow-footer--embed">
+        <text class="order-flow-footer__text">共 {{orderFlowStats.count}} 条 · 合计 {{orderFlowStats.totalQty}} 件</text>
+      </view>
+    </view>
+
+    <!-- ==================== 报工流水内嵌内容 ==================== -->
+    <view wx:if="{{activeShortcut === 'report-history'}}" class="plan-filter-embed">
+      <view class="plan-filter-embed__head">
+        <image class="plan-filter-embed__icon" src="/assets/icons/history.png" mode="aspectFit" />
+        <text class="plan-filter-embed__title">报工流水</text>
+      </view>
+      <view class="report-history-filters report-history-filters--embed">
+        <view class="report-history-filters__row">
+          <picker mode="date" value="{{reportHistoryDateFrom}}" bindchange="onReportHistoryDateFromChange">
+            <view class="report-history-filter">从 {{reportHistoryDateFrom}}</view>
+          </picker>
+          <picker mode="date" value="{{reportHistoryDateTo}}" bindchange="onReportHistoryDateToChange">
+            <view class="report-history-filter">至 {{reportHistoryDateTo}}</view>
+          </picker>
+        </view>
+        <view class="report-history-filters__row">
+          <input
+            class="report-history-input"
+            value="{{reportHistoryOrderNumberKeyword}}"
+            bindinput="onReportHistoryOrderNumberInput"
+            placeholder="工单号"
+            placeholder-class="report-history-input__ph"
+          />
+          <input
+            class="report-history-input"
+            value="{{reportHistoryProductKeyword}}"
+            bindinput="onReportHistoryProductInput"
+            placeholder="产品"
+            placeholder-class="report-history-input__ph"
+          />
+        </view>
+      </view>
+      <empty-state wx:if="{{reportHistoryLoading}}" loading="{{true}}" text="加载中…" />
+      <view wx:elif="{{reportHistoryRows.length}}" class="plan-filter-embed__list">
+        <view wx:for="{{reportHistoryRows}}" wx:key="id" class="report-history-row report-history-row--embed">
+          <view class="report-history-row__head">
+            <text class="report-history-row__title">{{item.titleLine}}</text>
+            <text class="report-history-row__time">{{item.timeLabel}}</text>
+          </view>
+          <text wx:if="{{item.metaLine}}" class="report-history-row__meta">{{item.metaLine}}</text>
+          <text wx:if="{{item.operatorLine}}" class="report-history-row__meta">{{item.operatorLine}}</text>
+        </view>
+      </view>
+      <view wx:else class="plan-list-empty">{{reportHistoryRows.length === 0 && !reportHistoryLoading ? '所选日期内暂无报工' : ''}}</view>
+      <view wx:if="{{!reportHistoryLoading && reportHistoryRows.length}}" class="report-history-footer report-history-footer--embed">
+        <text class="report-history-footer__text">共 {{reportHistoryStats.batchCount}} 批 · 良品 {{reportHistoryStats.goodTotal}} · 不良 {{reportHistoryStats.defectiveTotal}}</text>
+      </view>
+    </view>
+
+    <!-- ==================== 待入库清单内嵌内容 ==================== -->
+    <view wx:if="{{activeShortcut === 'pending-stock'}}" class="plan-filter-embed">
+      <view class="plan-filter-embed__head">
+        <image class="plan-filter-embed__icon" src="/assets/icons/arrow-down-to-line.png" mode="aspectFit" />
+        <text class="plan-filter-embed__title">待入库清单</text>
+      </view>
+      <empty-state wx:if="{{pendingStockListLoading}}" loading="{{true}}" text="加载中…" />
+      <view wx:elif="{{pendingStockListRows.length}}" class="plan-filter-embed__list">
+        <view
+          wx:for="{{pendingStockListRows}}"
+          wx:key="rowKey"
+          class="pending-stock-list-row pending-stock-list-row--embed"
+          bindtap="onPendingStockListRowTap"
+          data-order-id="{{item.orderId}}"
+        >
+          <view class="pending-stock-list-row__head">
+            <text class="pending-stock-list-row__title">{{item.titleLine}}</text>
+            <text class="pending-stock-list-row__pending">待入库 {{item.pendingTotal}}</text>
+          </view>
+          <text class="pending-stock-list-row__meta">总量 {{item.orderTotal}} · 已入库 {{item.alreadyIn}}</text>
+          <text wx:if="{{item.subtitleLine}}" class="pending-stock-list-row__sub">{{item.subtitleLine}}</text>
+        </view>
+      </view>
+      <view wx:else class="plan-list-empty">{{pendingStockListRows.length === 0 && !pendingStockListLoading ? '暂无待入库工单' : ''}}</view>
+    </view>
+  </view>
+
+  <view class="order-list-body">
+    <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
+
+    <view wx:elif="{{rows.length}}" class="plan-list-wrap order-list-wrap">
+      <view
+        wx:for="{{rows}}"
+        wx:key="rowKey"
+        class="order-list-row {{item.depth > 0 ? 'order-list-row--child' : ''}}"
+        style="{{item.depth > 0 ? 'padding-left: ' + (32 + item.depth * 20) + 'rpx;' : ''}}"
+      >
+        <view class="order-list-row__top">
+          <view
+            wx:if="{{item.hasChildren}}"
+            class="order-list-row__expand"
+            catchtap="onToggleExpand"
+            data-key="{{item.blockKey}}"
+          >{{item.expanded ? '▼' : '▶'}}</view>
+
+          <view class="order-list-row__left">
+            <view class="order-list-row__thumb">
+              <image
+                wx:if="{{item.showProductImage}}"
+                class="order-list-row__img"
+                src="{{item.productImageUrl}}"
+                mode="aspectFill"
+                data-id="{{item.id}}"
+                binderror="onProductImageError"
+              />
+              <view wx:else class="order-list-row__img order-list-row__img--placeholder">
+                <image class="order-list-row__placeholder-icon" src="{{item.placeholderIconSrc}}" mode="aspectFit" />
+              </view>
+            </view>
+          </view>
+
+          <view class="order-list-row__content">
+            <text wx:if="{{item.showProductGroupLabel}}" class="order-list-row__group-label">{{item.productGroupLabel}}</text>
+            <view class="order-list-row__head">
+              <text class="order-list-row__number">{{item.orderNumber}}</text>
+              <view class="st-pill {{item.dispatchPillClass}}">{{item.dispatchLabel}}</view>
+              <text wx:if="{{item.showQuantity}}" class="order-list-row__qty">{{item.quantityText}}</text>
+              <text wx:if="{{item.showDueDate}}" class="order-list-row__due">{{item.dueDateLabel}}</text>
+            </view>
+            <view class="order-list-row__product-line">
+              <text class="order-list-row__product">{{item.productName}}</text>
+              <text wx:if="{{item.showProductSku}}" class="order-list-row__sku">{{item.productSku}}</text>
+              <text
+                wx:for="{{item.productCustomTags}}"
+                wx:for-item="tag"
+                wx:key="id"
+                class="order-list-row__custom-tag"
+              >{{tag.label}}: {{tag.display}}</text>
+            </view>
+            <view wx:if="{{item.showCustomer}}" class="order-list-row__customer">
+              <image
+                class="order-list-row__customer-icon"
+                src="/assets/icons/user.png"
+                mode="aspectFit"
+              />
+              <text class="order-list-row__customer-text">{{item.customer}}</text>
+            </view>
+          </view>
+        </view>
+
+        <view
+          wx:if="{{item.showProcessChips || canViewDetail || canMaterial || canRework}}"
+          class="order-list-row__process"
+        >
+          <view class="order-list-row__process-scroll">
+            <order-process-scroll
+              wx:if="{{item.showProcessChips}}"
+              compact
+              chips="{{item.processChips}}"
+              canReport="{{canReport}}"
+              bind:chiptap="onProcessChipTap"
+            />
+          </view>
+          <view wx:if="{{canViewDetail || canMaterial || canRework}}" class="order-list-row__actions">
+            <view
+              wx:if="{{canViewDetail}}"
+              class="order-list-row__action order-list-row__action--detail"
+              catchtap="onDetailTap"
+              data-id="{{item.navigateId}}"
+            >详情</view>
+            <view
+              wx:if="{{canMaterial}}"
+              class="order-list-row__action order-list-row__action--detail"
+              catchtap="onMaterialTap"
+              data-id="{{item.id}}"
+              data-product-id="{{item.productId}}"
+              data-block-type="{{item.blockType}}"
+            >物料</view>
+            <view
+              wx:if="{{canRework}}"
+              class="order-list-row__action order-list-row__action--detail"
+              catchtap="onReworkTap"
+              data-id="{{item.reworkOrderId}}"
+            >返工</view>
+          </view>
+        </view>
+      </view>
+
+      <view wx:if="{{loadingMore}}" class="plan-list-footer">加载更多…</view>
+      <view wx:elif="{{!hasMore && rows.length}}" class="plan-list-footer">已加载全部</view>
+    </view>
+
+    <view wx:else class="plan-list-empty">{{emptyText}}</view>
+  </view>
+
+  <!-- 隐藏的 navigator，强制代码依赖分析器打包这三个独立页面（解决跳转白屏问题） -->
+  <navigator url="/packageBusiness/production-order-flow/production-order-flow" style="display:none"></navigator>
+  <navigator url="/packageBusiness/production-order-report-history/production-order-report-history" style="display:none"></navigator>
+  <navigator url="/packageBusiness/production-order-report-batch-detail/production-order-report-batch-detail" style="display:none"></navigator>
+  <navigator url="/packageBusiness/production-order-pending-stock/production-order-pending-stock" style="display:none"></navigator>
+  <navigator url="/packageBusiness/production-rework-detail/production-rework-detail" style="display:none"></navigator>
+</view>

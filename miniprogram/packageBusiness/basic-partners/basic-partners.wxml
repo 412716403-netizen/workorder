@@ -1,0 +1,106 @@
+<view class="plan-shell">
+  <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-header__title">合作单位</text>
+      <view class="plan-header__back plan-header__back--placeholder"></view>
+    </view>
+
+    <view class="plan-header__tools">
+      <view class="plan-search">
+        <input
+          class="plan-search__input"
+          value="{{searchKeyword}}"
+          bindinput="onSearchInput"
+          placeholder="检索单位名称…"
+          confirm-type="search"
+          placeholder-class="plan-search__ph"
+        />
+        <view wx:if="{{searchKeyword}}" class="plan-search__clear" bindtap="onSearchClear">×</view>
+      </view>
+      <view
+        wx:if="{{canCreate}}"
+        class="plan-tool-btn"
+        bindtap="onCreateTap"
+      >
+        <image class="plan-tool-btn__icon" src="/assets/icons/file-plus.png" mode="aspectFit" />
+      </view>
+    </view>
+  </view>
+
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view
+    wx:if="{{categoryTabs.length}}"
+    class="basic-products-cats"
+    scroll-x
+    enhanced
+    show-scrollbar="{{false}}"
+  >
+    <view
+      wx:for="{{categoryTabs}}"
+      wx:key="id"
+      class="basic-products-cat {{item.active ? 'basic-products-cat--active' : ''}}"
+      data-id="{{item.id}}"
+      bindtap="onCategoryTap"
+    >{{item.label}} ({{item.count}})</view>
+  </scroll-view>
+
+  <view wx:if="{{searchHint}}" class="basic-products-hint">{{searchHint}}</view>
+
+  <view class="basic-products-page">
+    <empty-state wx:if="{{loading && !rows.length}}" loading="{{true}}" text="加载中…" />
+
+    <view wx:elif="{{rows.length}}">
+      <view
+        wx:for="{{rows}}"
+        wx:key="id"
+        class="basic-products-row"
+        data-id="{{item.id}}"
+        bindtap="onRowTap"
+      >
+        <view class="basic-products-row__body">
+          <view class="basic-products-row__left">
+            <view class="basic-partners-row__icon-wrap">
+              <image class="basic-partners-row__icon" src="/assets/icons/building-2.png" mode="aspectFit" />
+            </view>
+          </view>
+
+          <view class="basic-products-row__content">
+            <view class="basic-partners-row__head">
+              <view class="basic-partners-row__title-wrap">
+                <text class="basic-partners-row__name">{{item.name}}</text>
+              </view>
+              <text class="basic-partners-row__list-no">{{item.listNoText}}</text>
+            </view>
+
+            <view class="basic-partners-row__meta">
+              <text class="basic-partners-row__meta-item">联系人 {{item.contact}}</text>
+              <text wx:if="{{item.showPhone}}" class="basic-partners-row__meta-item">电话 {{item.phoneDisplay}}</text>
+            </view>
+
+            <view class="basic-products-row__cat">
+              <text wx:if="{{item.showCategory}}" class="basic-partners-row__cat-pill">{{item.categoryName}}</text>
+              <text wx:if="{{item.hasCollab}}" class="basic-partners-row__collab">{{item.collabText}}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view wx:if="{{totalPages > 1}}" class="basic-products-pager">
+        <view
+          class="basic-products-pager__btn {{page <= 1 ? 'basic-products-pager__btn--disabled' : ''}}"
+          bindtap="onPrevPage"
+        >上一页</view>
+        <text class="basic-products-pager__info">{{page}} / {{totalPages}} · 共 {{filteredTotal}} 条</text>
+        <view
+          class="basic-products-pager__btn {{page >= totalPages ? 'basic-products-pager__btn--disabled' : ''}}"
+          bindtap="onNextPage"
+        >下一页</view>
+      </view>
+      <view wx:else class="plan-list-footer">共 {{filteredTotal}} 条单位</view>
+    </view>
+
+    <empty-state wx:else text="{{emptyText}}" />
+  </view>
+</view>

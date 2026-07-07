@@ -11,32 +11,6 @@
         "type": "suffix",
         "value": ".example"
       }
-    ],
-    "include": [
-      {
-        "type": "glob",
-        "value": "pages/production-order-flow/**"
-      },
-      {
-        "type": "glob",
-        "value": "pages/production-order-report-history/**"
-      },
-      {
-        "type": "glob",
-        "value": "pages/production-order-pending-stock/**"
-      },
-      {
-        "type": "glob",
-        "value": "pages/production-order-stock-in-confirm/**"
-      },
-      {
-        "type": "glob",
-        "value": "pages/production-order-stock-in-history/**"
-      },
-      {
-        "type": "glob",
-        "value": "pages/production-order-stock-in-detail/**"
-      }
     ]
   },
   "setting": {
@@ -44,7 +18,7 @@
     "es6": true,
     "postcss": true,
     "minified": true,
-    "enhance": true,
+    "enhance": false,
     "showShadowRootInWxmlPanel": true,
     "packNpmManually": false,
     "babelSetting": {
@@ -54,7 +28,7 @@
     },
     "compileWorklet": false,
     "uglifyFileName": false,
-    "uploadWithSourceMap": true,
+    "uploadWithSourceMap": false,
     "minifyWXSS": true,
     "minifyWXML": true,
     "localPlugins": false,
@@ -64,7 +38,7 @@
     "swc": false,
     "disableSWC": true,
     "packNpmRelationList": [],
-    "ignoreDevUnusedFiles": false
+    "ignoreDevUnusedFiles": true
   },
   "condition": {},
   "editorSetting": {

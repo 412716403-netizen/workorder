@@ -1,0 +1,33 @@
+@import '../production-plans/production-plans.wxss';
+@import '../../styles/outsource-shared.wxss';
+@import '../production-plan-create/production-plan-create.wxss';
+@import '../production-order-report/production-order-report.wxss';
+
+@import '../../styles/matrix-keyboard-page.wxss';
+
+.outsource-confirm-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.outsource-confirm-scroll {
+  flex: 1;
+  width: 100%;
+}
+
+.outsource-confirm-form {
+  padding: 16rpx 0 calc(160rpx + env(safe-area-inset-bottom));
+}
+
+.outsource-confirm-partner-card {
+  margin: 0 var(--spacing-page);
+}
+
+.outsource-confirm-partner-card .plan-form-cell--last {
+  border-bottom: none;
+}
+
+.outsource-confirm-card .plan-create-matrix-scroll {
+  padding: 12rpx 0 0;
+}

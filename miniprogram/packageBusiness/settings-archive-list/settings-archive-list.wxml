@@ -1,0 +1,72 @@
+<view class="plan-shell">
+  <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-header__title">{{title}}</text>
+      <view class="plan-header__back plan-header__back--placeholder"></view>
+    </view>
+
+    <view class="plan-header__tools">
+      <view class="plan-search">
+        <input
+          class="plan-search__input"
+          value="{{searchKeyword}}"
+          bindinput="onSearchInput"
+          placeholder="搜索名称…"
+          confirm-type="search"
+          placeholder-class="plan-search__ph"
+        />
+        <view wx:if="{{searchKeyword}}" class="plan-search__clear" bindtap="onSearchClear">×</view>
+      </view>
+      <view wx:if="{{canCreate}}" class="plan-tool-btn" bindtap="onCreateTap">
+        <image class="plan-tool-btn__icon" src="/assets/icons/file-plus.png" mode="aspectFit" />
+      </view>
+    </view>
+  </view>
+
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <view class="settings-archive-page">
+    <empty-state wx:if="{{loading && !rows.length}}" loading="{{true}}" text="加载中…" />
+
+    <view wx:elif="{{rows.length}}" class="settings-archive-list">
+      <view
+        wx:for="{{rows}}"
+        wx:key="id"
+        class="settings-archive-card"
+        data-id="{{item.id}}"
+        bindtap="onRowTap"
+      >
+        <view class="settings-archive-card__main">
+          <view class="settings-archive-card__text">
+            <view class="settings-archive-card__head">
+              <text class="settings-archive-card__name">{{item.name}}</text>
+              <text wx:if="{{item.inUse}}" class="settings-archive-card__tag">使用中</text>
+            </view>
+            <text wx:if="{{item.subtitle}}" class="settings-archive-card__sub">{{item.subtitle}}</text>
+          </view>
+
+          <view wx:if="{{canReorder}}" class="settings-archive-card__actions">
+            <view
+              class="settings-archive-card__move"
+              data-id="{{item.id}}"
+              data-dir="up"
+              catchtap="onMoveNode"
+            >↑</view>
+            <view
+              class="settings-archive-card__move"
+              data-id="{{item.id}}"
+              data-dir="down"
+              catchtap="onMoveNode"
+            >↓</view>
+          </view>
+          <text wx:else class="settings-archive-card__chev">›</text>
+        </view>
+      </view>
+
+      <view class="plan-list-footer">共 {{rows.length}} 条</view>
+    </view>
+
+    <empty-state wx:else text="{{emptyText}}" />
+  </view>
+</view>

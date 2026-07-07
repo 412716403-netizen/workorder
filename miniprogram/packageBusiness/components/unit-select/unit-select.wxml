@@ -1,0 +1,68 @@
+<view class="sps sps--cell">
+  <view class="plan-form-cell" bindtap="onOpen">
+    <text class="plan-form-cell__label">
+      <text wx:if="{{required}}" class="plan-form-cell__req">*</text>{{label}}
+    </text>
+    <text class="plan-form-cell__value {{valueName ? '' : 'plan-form-cell__value--ph'}}">{{valueName || placeholder}}</text>
+    <text class="plan-form-cell__chevron">›</text>
+  </view>
+
+  <view wx:if="{{open}}" class="sps__overlay" catchtouchmove="noop">
+    <view
+      class="sps__mask {{sheetShow ? 'sps__mask--show' : ''}}"
+      bindtap="onClose"
+      catchtouchmove="noop"
+    />
+    <view
+      class="sps__sheet sps__sheet--picker {{sheetMotion ? 'sps__sheet--motion' : ''}} {{sheetShow ? 'sps__sheet--show' : ''}}"
+      style="height: {{sheetHeightPx}}px; max-height: {{sheetHeightPx}}px;"
+      catchtouchmove="noop"
+    >
+      <view class="sps__picker-bar">
+        <text class="sps__picker-cancel" bindtap="onClose">取消</text>
+        <text class="sps__picker-title">选择{{label}}</text>
+        <text class="sps__picker-action"></text>
+      </view>
+
+      <view class="sps__search-wrap">
+        <image class="sps__search-icon" src="/assets/icons/search.png" mode="aspectFit" />
+        <input
+          class="sps__search-input"
+          value="{{search}}"
+          bindinput="onSearchInput"
+          placeholder="搜索单位名称"
+          confirm-type="search"
+        />
+      </view>
+
+      <scroll-view class="sps__list" scroll-y enhanced show-scrollbar="{{true}}">
+        <view wx:if="{{!filteredUnits.length}}" class="sps__empty">暂无单位，可点击下方新增</view>
+        <view
+          wx:for="{{filteredUnits}}"
+          wx:key="id"
+          class="sps__row {{item.selected ? 'sps__row--active' : ''}}"
+          data-id="{{item.id}}"
+          data-name="{{item.name}}"
+          bindtap="onSelect"
+        >
+          <view class="sps__row-main">
+            <text class="sps__row-name">{{item.name}}</text>
+          </view>
+          <text wx:if="{{item.selected}}" class="sps__row-contact">✓</text>
+        </view>
+      </scroll-view>
+
+      <view wx:if="{{canQuickAdd && !showQuickAdd}}" class="unit-select__add-row" bindtap="onToggleQuickAdd">+ 新增单位</view>
+      <view wx:if="{{canQuickAdd && showQuickAdd}}" class="unit-select__quick">
+        <input
+          class="unit-select__quick-input"
+          value="{{quickAddName}}"
+          bindinput="onQuickAddInput"
+          placeholder="输入新单位名称"
+          focus="{{showQuickAdd}}"
+        />
+        <view class="unit-select__quick-btn" bindtap="onQuickAddSubmit">添加</view>
+      </view>
+    </view>
+  </view>
+</view>

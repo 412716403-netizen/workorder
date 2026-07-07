@@ -1,32 +1,82 @@
-<page-header title="{{title}}" show-back="{{true}}" center="{{true}}" bind:back="onHeaderBack" />
+<view class="plan-shell">
+  <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-header__title">{{title}}</text>
+      <view class="plan-header__back plan-header__back--placeholder"></view>
+    </view>
+  </view>
 
-<scroll-view class="settings-tab-scroll" scroll-y show-scrollbar="{{false}}">
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view class="settings-tab-scroll" scroll-y show-scrollbar="{{false}}">
   <view class="settings-tab-page">
     <view wx:if="{{sub}}" class="settings-tab-intro">{{sub}}</view>
 
     <view wx:if="{{loading}}" class="settings-tab-muted">加载中…</view>
 
-    <view wx:elif="{{mode === 'list' && rows.length}}">
-      <view class="settings-tab-card">
-        <view wx:for="{{rows}}" wx:key="id" class="settings-tab-row">
-          <view class="settings-tab-row__title">{{item.name}}</view>
-          <view wx:if="{{item.subtitle}}" class="settings-tab-row__sub">{{item.subtitle}}</view>
+    <view wx:else>
+      <view class="settings-tab-card settings-tab-section">
+        <view class="settings-tab-section__title">数量上限</view>
+        <view
+          wx:for="{{exceedToggles}}"
+          wx:key="key"
+          class="settings-tab-toggle"
+        >
+          <view class="settings-tab-toggle__body">
+            <view class="settings-tab-toggle__label">{{item.label}}</view>
+            <view class="settings-tab-toggle__desc">{{item.desc}}</view>
+          </view>
+          <switch
+            checked="{{item.value}}"
+            disabled="{{!canEdit || savingKey === item.key}}"
+            color="#2F6BFF"
+            data-key="{{item.key}}"
+            bindchange="onExceedToggle"
+          />
+        </view>
+
+        <view wx:if="{{weightEnabled}}" class="settings-tab-toggle settings-tab-toggle--weight">
+          <view class="settings-tab-toggle__body">
+            <view class="settings-tab-toggle__label">扫码称重容差（%）</view>
+            <view class="settings-tab-toggle__desc">报工/外协扫码时，实测重量偏差超过此百分比将提示告警。</view>
+          </view>
+          <view class="settings-tab-weight-input">
+            <input
+              class="settings-tab-weight-input__field"
+              type="digit"
+              value="{{weightTolerancePercent}}"
+              disabled="{{!canEdit || savingKey === 'weightTolerancePercent'}}"
+              bindinput="onWeightInput"
+              bindblur="onWeightBlur"
+            />
+            <text class="settings-tab-weight-input__unit">%</text>
+          </view>
         </view>
       </view>
-    </view>
 
-    <view wx:elif="{{mode === 'config' && sections.length}}">
-      <view wx:for="{{sections}}" wx:key="title" class="settings-tab-card settings-tab-section">
-        <view class="settings-tab-section__title">{{item.title}}</view>
-        <view wx:for="{{item.rows}}" wx:for-item="row" wx:key="label" class="settings-tab-config">
-          <view class="settings-tab-config__label">{{row.label}}</view>
-          <view class="settings-tab-config__value">{{row.value}}</view>
+      <view class="settings-tab-card settings-tab-section">
+        <view class="settings-tab-section__title">产品经营 · 物料成本口径</view>
+        <view class="settings-tab-intro settings-tab-intro--inner">
+          工作台「产品经营情况」按所选口径计算物料/采购相关成本。
+        </view>
+        <view
+          wx:for="{{costModes}}"
+          wx:key="mode"
+          class="settings-tab-radio {{item.active ? 'settings-tab-radio--active' : ''}} {{!canEdit ? 'settings-tab-radio--disabled' : ''}}"
+          data-mode="{{item.mode}}"
+          bindtap="onCostModeTap"
+        >
+          <view class="settings-tab-radio__dot">{{item.active ? '●' : '○'}}</view>
+          <view class="settings-tab-radio__body">
+            <view class="settings-tab-radio__label">{{item.label}}</view>
+            <view class="settings-tab-radio__desc">{{item.desc}}</view>
+          </view>
         </view>
       </view>
+
+      <view wx:if="{{!canEdit}}" class="settings-tab-hint">当前账号无编辑权限，仅可查看</view>
     </view>
-
-    <view wx:elif="{{!loading}}" class="settings-tab-muted">{{emptyText}}</view>
-
-    <view wx:if="{{!loading}}" class="settings-tab-hint">{{hint}}</view>
   </view>
 </scroll-view>
+</view>

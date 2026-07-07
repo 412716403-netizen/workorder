@@ -1,7 +1,0 @@
-{
-  "navigationStyle": "custom",
-  "usingComponents": {
-    "searchable-worker-select": "/components/searchable-worker-select/searchable-worker-select",
-    "matrix-qty-keyboard": "/components/matrix-qty-keyboard/matrix-qty-keyboard"
-  }
-}

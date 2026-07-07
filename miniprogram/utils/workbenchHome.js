@@ -15,6 +15,66 @@ const { buildStatsQueryString, workbenchPeriodFilterLabel } = require('./workben
 const PINNED_SET = new Set(HOME_PINNED_WIDGET_TYPES);
 const STAT_SET = new Set(STAT_WIDGET_TYPES);
 
+function cloneDefaultStatWidgets() {
+  return DEFAULT_HOME_STAT_WIDGETS.map((it) => {
+    const copy = {};
+    Object.keys(it).forEach((key) => {
+      copy[key] = it[key];
+    });
+    return copy;
+  });
+}
+
+function extractPageStatWidgets(workbenchEffective, pageId) {
+  const targetPageId = pageId || WORKBENCH_HOME_PAGE_ID;
+  const isHome = targetPageId === WORKBENCH_HOME_PAGE_ID;
+  const pages = workbenchEffective && workbenchEffective.pages;
+
+  if (!Array.isArray(pages) || pages.length === 0) {
+    return isHome ? cloneDefaultStatWidgets() : [];
+  }
+
+  const page = pages.find((p) => p.id === targetPageId);
+  if (!page) {
+    return isHome ? cloneDefaultStatWidgets() : [];
+  }
+
+  const items = page.layout && page.layout.items;
+  if (!Array.isArray(items) || items.length === 0) {
+    return isHome ? cloneDefaultStatWidgets() : [];
+  }
+
+  return items
+    .filter((it) => it && STAT_SET.has(it.widgetType) && !PINNED_SET.has(it.widgetType))
+    .sort((a, b) => (a.y - b.y) || (a.x - b.x));
+}
+
+function extractHomeStatWidgets(workbenchEffective) {
+  return extractPageStatWidgets(workbenchEffective, WORKBENCH_HOME_PAGE_ID);
+}
+
+function buildWorkbenchPageTabs(workbenchEffective) {
+  const pages = workbenchEffective && workbenchEffective.pages;
+  if (!Array.isArray(pages) || pages.length === 0) {
+    return [{ id: WORKBENCH_HOME_PAGE_ID, title: '首页', isHome: true }];
+  }
+  return pages.slice().sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+    .map((page) => ({
+      id: page.id,
+      title: page.title || '页面',
+      isHome: page.id === WORKBENCH_HOME_PAGE_ID,
+    }));
+}
+
+function resolveActiveWorkbenchPageId(workbenchEffective, preferredId) {
+  const tabs = buildWorkbenchPageTabs(workbenchEffective);
+  if (!tabs.length) return WORKBENCH_HOME_PAGE_ID;
+  if (preferredId && tabs.some((tab) => tab.id === preferredId)) return preferredId;
+  const activePageId = workbenchEffective && workbenchEffective.activePageId;
+  if (activePageId && tabs.some((tab) => tab.id === activePageId)) return activePageId;
+  return tabs[0].id;
+}
+
 function formatQty(n) {
   const v = Number(n);
   if (!Number.isFinite(v)) return '0';
@@ -26,34 +86,6 @@ function formatAmount(n) {
   if (!Number.isFinite(v)) return '0';
   if (Math.abs(v) >= 10000) return `${(v / 10000).toFixed(2)}万`;
   return Number.isInteger(v) ? String(v) : v.toFixed(2);
-}
-
-function extractHomeStatWidgets(workbenchEffective) {
-  const pages = workbenchEffective && workbenchEffective.pages;
-  if (!Array.isArray(pages) || pages.length === 0) {
-    return DEFAULT_HOME_STAT_WIDGETS.map((it) => {
-      const copy = {};
-      Object.keys(it).forEach((key) => {
-        copy[key] = it[key];
-      });
-      return copy;
-    });
-  }
-  const home =
-    pages.find((p) => p.id === WORKBENCH_HOME_PAGE_ID) || pages[0];
-  const items = home && home.layout && home.layout.items;
-  if (!Array.isArray(items) || items.length === 0) {
-    return DEFAULT_HOME_STAT_WIDGETS.map((it) => {
-      const copy = {};
-      Object.keys(it).forEach((key) => {
-        copy[key] = it[key];
-      });
-      return copy;
-    });
-  }
-  return items
-    .filter((it) => it && STAT_SET.has(it.widgetType) && !PINNED_SET.has(it.widgetType))
-    .sort((a, b) => (a.y - b.y) || (a.x - b.x));
 }
 
 function toneClassName(tone) {
@@ -191,7 +223,7 @@ async function fetchNodeCard(request, widgetType, layoutItem, periodLabel, stats
     }
     card.rows = mapNodeRows(widgetType, data && data.rows);
     card.empty = card.rows.length === 0;
-  } catch {
+  } catch (_) {
     card.empty = true;
   }
   card.loading = false;
@@ -291,8 +323,8 @@ function buildProductEconomicsKpiCard(card, data, periodLabel) {
   return card;
 }
 
-async function loadHomeStatCards(request, workbenchEffective, filter) {
-  const widgets = extractHomeStatWidgets(workbenchEffective);
+async function loadPageStatCards(request, workbenchEffective, pageId, filter) {
+  const widgets = extractPageStatWidgets(workbenchEffective, pageId);
   if (widgets.length === 0) {
     return [];
   }
@@ -355,7 +387,15 @@ async function loadHomeStatCards(request, workbenchEffective, filter) {
   return cards;
 }
 
+async function loadHomeStatCards(request, workbenchEffective, filter) {
+  return loadPageStatCards(request, workbenchEffective, WORKBENCH_HOME_PAGE_ID, filter);
+}
+
 module.exports = {
   extractHomeStatWidgets,
+  extractPageStatWidgets,
+  buildWorkbenchPageTabs,
+  resolveActiveWorkbenchPageId,
   loadHomeStatCards,
+  loadPageStatCards,
 };

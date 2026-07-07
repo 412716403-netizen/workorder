@@ -27,7 +27,7 @@ function buildScanSessionQuery(params) {
 }
 
 function buildScanSessionUrl(params) {
-  return `/pages/scan-session/scan-session?${buildScanSessionQuery(params)}`;
+  return `/packageBusiness/scan-session/scan-session?${buildScanSessionQuery(params)}`;
 }
 
 module.exports = {

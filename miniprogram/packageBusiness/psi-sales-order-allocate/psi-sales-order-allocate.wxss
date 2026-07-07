@@ -1,0 +1,26 @@
+@import '../production-plan-create/production-plan-create.wxss';
+@import '../psi-purchase-order-edit/psi-purchase-order-edit.wxss';
+@import '../../styles/qty-price-amount-summary.wxss';
+
+.so-alloc-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8rpx 24rpx;
+  padding: 16rpx 24rpx 8rpx;
+  font-size: 24rpx;
+  color: var(--color-text-secondary);
+}
+
+.so-alloc-stats__gap {
+  color: #2f6bff;
+  font-weight: 600;
+}
+
+.po-edit-footer__actions--single {
+  flex: 1;
+  justify-content: flex-end;
+}
+
+.po-edit-footer__actions--single .po-edit-footer__btn {
+  flex: none;
+}

@@ -1,0 +1,6 @@
+{
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "settings-custom-fields-editor": "/packageBusiness/components/settings-custom-fields-editor/settings-custom-fields-editor"
+  }
+}

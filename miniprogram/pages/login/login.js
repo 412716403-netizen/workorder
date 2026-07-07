@@ -1,5 +1,6 @@
 const { API_BASE } = require('../../config.js');
 const { BRAND_NAME, BRAND_LOGO_PATH, BRAND_TAGLINE } = require('../../config/branding.js');
+const { clearUnsavedFormDrafts } = require('../../utils/unsavedFormDrafts.js');
 
 /**
  * 与网页端 AuthContext.handleLogin 一致：
@@ -52,6 +53,7 @@ Page({
         }
 
         const d = res.data;
+        clearUnsavedFormDrafts();
         wx.setStorageSync('accessToken', d.accessToken);
         if (d.refreshToken) wx.setStorageSync('refreshToken', d.refreshToken);
         wx.setStorageSync('currentUser', JSON.stringify(d.user || {}));
@@ -73,6 +75,8 @@ Page({
                 permissions: matched.permissions || [],
                 status: matched.status,
                 expiresAt: matched.expiresAt ?? null,
+                industryKind: matched.industryKind || 'generic',
+                equipmentFeaturesEnabled: matched.equipmentFeaturesEnabled !== false,
               }),
             );
             wx.switchTab({ url: '/pages/home/home' });

@@ -147,7 +147,11 @@
         "basic-product-edit/basic-product-edit",
         "basic-partners/basic-partners",
         "basic-partner-edit/basic-partner-edit",
-        "basic-members/basic-members"
+        "basic-dictionaries/basic-dictionaries",
+        "basic-dictionary-edit/basic-dictionary-edit",
+        "basic-members/basic-members",
+        "settings-archive-list/settings-archive-list",
+        "settings-archive-edit/settings-archive-edit"
       ]
     }
   ],
