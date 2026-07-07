@@ -6,44 +6,47 @@
  *    例外：从明确子清单进入的确认页（待发/待收回/待入库）→ 回到该子清单
  * 2. 流水 / 批次详情编辑或删除 → 回到对应流水列表（非 Hub、非详情）
  * 3. 优先 navigateBack 到栈内已有列表并标记 _refreshOnNextShow；否则 redirectTo
- * 4. 目标 Hub 列表 onShow 须 consumeListRefreshOnShow → bootstrap 重新拉 API（不能只重筛缓存）
+ * 4. 目标 Hub 列表 onShow 须 shouldHubListRefetch → bootstrap 重新拉 API（不能只重筛缓存）
  * 4. 扫码连续作业 scan-session 除外；详情页内联编辑（不离开页）除外
  */
 
 const DEFAULT_DELAY_MS = 400;
 
 const LIST_ROUTES = {
-  OUTSOURCE_DISPATCH: '/pages/production-outsource-dispatch/production-outsource-dispatch',
-  OUTSOURCE_RECEIVE: '/pages/production-outsource-receive/production-outsource-receive',
-  OUTSOURCE_HUB: '/pages/production-outsource/production-outsource',
-  OUTSOURCE_FLOW: '/pages/production-outsource-flow/production-outsource-flow',
-  PENDING_STOCK: '/pages/production-order-pending-stock/production-order-pending-stock',
-  STOCK_OUT: '/pages/production-stock-out/production-stock-out',
-  STOCK_IN_HISTORY: '/pages/production-order-stock-in-history/production-order-stock-in-history',
-  PRODUCTION_ORDERS: '/pages/production-orders/production-orders',
-  PRODUCTION_PLANS: '/pages/production-plans/production-plans',
-  REWORK_DEFECT_FLOW: '/pages/production-rework-defect-flow/production-rework-defect-flow',
-  REWORK_REPORT_FLOW: '/pages/production-rework-report-flow/production-rework-report-flow',
-  REWORK_HUB: '/pages/production-rework/production-rework',
-  REWORK_PENDING: '/pages/production-rework-pending/production-rework-pending',
-  PSI_PURCHASE_ORDERS: '/pages/psi-purchase-orders/psi-purchase-orders',
-  PSI_PURCHASE_ORDER_FLOW: '/pages/psi-purchase-order-flow/psi-purchase-order-flow',
-  PSI_PURCHASE_BILLS: '/pages/psi-purchase-bills/psi-purchase-bills',
-  PSI_PURCHASE_BILL_FLOW: '/pages/psi-purchase-bill-flow/psi-purchase-bill-flow',
-  PSI_SALES_ORDERS: '/pages/psi-sales-orders/psi-sales-orders',
-  PSI_SALES_ORDER_FLOW: '/pages/psi-sales-order-flow/psi-sales-order-flow',
-  PSI_SALES_ORDER_PENDING_SHIP: '/pages/psi-sales-order-pending-ship/psi-sales-order-pending-ship',
-  PSI_SALES_BILLS: '/pages/psi-sales-bills/psi-sales-bills',
-  PSI_SALES_BILL_FLOW: '/pages/psi-sales-bill-flow/psi-sales-bill-flow',
-  PSI_WAREHOUSES: '/pages/psi-warehouses/psi-warehouses',
-  PSI_WAREHOUSE_FLOW: '/pages/psi-warehouse-flow/psi-warehouse-flow',
-  PSI_WAREHOUSE_PRODUCT_FLOW: '/pages/psi-warehouse-product-flow/psi-warehouse-product-flow',
-  PSI_WAREHOUSE_TRANSFER: '/pages/psi-warehouse-transfer/psi-warehouse-transfer',
-  PSI_WAREHOUSE_STOCKTAKE: '/pages/psi-warehouse-stocktake/psi-warehouse-stocktake',
-  FINANCE_RECEIPTS: '/pages/finance-receipts/finance-receipts',
-  FINANCE_RECEIPT_FLOW: '/pages/finance-receipt-flow/finance-receipt-flow',
-  FINANCE_PAYMENTS: '/pages/finance-payments/finance-payments',
-  FINANCE_PAYMENT_FLOW: '/pages/finance-payment-flow/finance-payment-flow',
+  OUTSOURCE_DISPATCH: '/packageBusiness/production-outsource-dispatch/production-outsource-dispatch',
+  OUTSOURCE_RECEIVE: '/packageBusiness/production-outsource-receive/production-outsource-receive',
+  OUTSOURCE_HUB: '/packageBusiness/production-outsource/production-outsource',
+  OUTSOURCE_FLOW: '/packageBusiness/production-outsource-flow/production-outsource-flow',
+  PENDING_STOCK: '/packageBusiness/production-order-pending-stock/production-order-pending-stock',
+  STOCK_OUT: '/packageBusiness/production-stock-out/production-stock-out',
+  STOCK_IN_HISTORY: '/packageBusiness/production-order-stock-in-history/production-order-stock-in-history',
+  PRODUCTION_ORDERS: '/packageBusiness/production-orders/production-orders',
+  PRODUCTION_PLANS: '/packageBusiness/production-plans/production-plans',
+  REWORK_DEFECT_FLOW: '/packageBusiness/production-rework-defect-flow/production-rework-defect-flow',
+  REWORK_REPORT_FLOW: '/packageBusiness/production-rework-report-flow/production-rework-report-flow',
+  REWORK_HUB: '/packageBusiness/production-rework/production-rework',
+  REWORK_PENDING: '/packageBusiness/production-rework-pending/production-rework-pending',
+  PSI_PURCHASE_ORDERS: '/packageBusiness/psi-purchase-orders/psi-purchase-orders',
+  PSI_PURCHASE_ORDER_FLOW: '/packageBusiness/psi-purchase-order-flow/psi-purchase-order-flow',
+  PSI_PURCHASE_BILLS: '/packageBusiness/psi-purchase-bills/psi-purchase-bills',
+  PSI_PURCHASE_BILL_FLOW: '/packageBusiness/psi-purchase-bill-flow/psi-purchase-bill-flow',
+  PSI_SALES_ORDERS: '/packageBusiness/psi-sales-orders/psi-sales-orders',
+  PSI_SALES_ORDER_FLOW: '/packageBusiness/psi-sales-order-flow/psi-sales-order-flow',
+  PSI_SALES_ORDER_PENDING_SHIP: '/packageBusiness/psi-sales-order-pending-ship/psi-sales-order-pending-ship',
+  PSI_SALES_BILLS: '/packageBusiness/psi-sales-bills/psi-sales-bills',
+  PSI_SALES_BILL_FLOW: '/packageBusiness/psi-sales-bill-flow/psi-sales-bill-flow',
+  PSI_WAREHOUSES: '/packageBusiness/psi-warehouses/psi-warehouses',
+  PSI_WAREHOUSE_FLOW: '/packageBusiness/psi-warehouse-flow/psi-warehouse-flow',
+  PSI_WAREHOUSE_PRODUCT_FLOW: '/packageBusiness/psi-warehouse-product-flow/psi-warehouse-product-flow',
+  PSI_WAREHOUSE_TRANSFER: '/packageBusiness/psi-warehouse-transfer/psi-warehouse-transfer',
+  PSI_WAREHOUSE_STOCKTAKE: '/packageBusiness/psi-warehouse-stocktake/psi-warehouse-stocktake',
+  FINANCE_RECEIPTS: '/packageBusiness/finance-receipts/finance-receipts',
+  FINANCE_RECEIPT_FLOW: '/packageBusiness/finance-receipt-flow/finance-receipt-flow',
+  FINANCE_PAYMENTS: '/packageBusiness/finance-payments/finance-payments',
+  FINANCE_PAYMENT_FLOW: '/packageBusiness/finance-payment-flow/finance-payment-flow',
+  BASIC_PRODUCTS: '/packageBusiness/basic-products/basic-products',
+  BASIC_PARTNERS: '/packageBusiness/basic-partners/basic-partners',
+  BASIC_MEMBERS: '/packageBusiness/basic-members/basic-members',
 };
 
 /** 各业务模块 Hub 主列表（处置/报工/领料等默认回到此处） */
@@ -60,6 +63,9 @@ const MODULE_HUB_ROUTES = {
   psiWarehouse: LIST_ROUTES.PSI_WAREHOUSES,
   financeReceipt: LIST_ROUTES.FINANCE_RECEIPTS,
   financePayment: LIST_ROUTES.FINANCE_PAYMENTS,
+  basicProducts: LIST_ROUTES.BASIC_PRODUCTS,
+  basicPartners: LIST_ROUTES.BASIC_PARTNERS,
+  basicMembers: LIST_ROUTES.BASIC_MEMBERS,
 };
 
 function buildReportHistoryListUrl(params) {
@@ -68,12 +74,20 @@ function buildReportHistoryListUrl(params) {
   if (params && params.dateTo) q.push(`dateTo=${encodeURIComponent(params.dateTo)}`);
   if (params && params.orderId) q.push(`orderId=${encodeURIComponent(params.orderId)}`);
   const qs = q.length ? `?${q.join('&')}` : '';
-  return `/pages/production-order-report-history/production-order-report-history${qs}`;
+  return `/packageBusiness/production-order-report-history/production-order-report-history${qs}`;
 }
 
 function normalizePageRoute(url) {
   const raw = String(url || '').split('?')[0];
   return raw.replace(/^\//, '');
+}
+
+function routesMatch(pageRoute, targetRoute) {
+  const a = normalizePageRoute(pageRoute);
+  const b = normalizePageRoute(targetRoute);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  return a.endsWith(`/${b}`) || b.endsWith(`/${a}`);
 }
 
 function findNavigateBackDelta(listUrl) {
@@ -83,7 +97,7 @@ function findNavigateBackDelta(listUrl) {
   if (pages.length <= 1) return 0;
   for (let i = pages.length - 2; i >= 0; i -= 1) {
     const pageRoute = pages[i].route || '';
-    if (pageRoute === targetRoute) {
+    if (routesMatch(pageRoute, targetRoute)) {
       return pages.length - 1 - i;
     }
   }
@@ -98,14 +112,32 @@ function ensurePendingRefreshRoutes(app) {
   return app.globalData.pendingHubListRefreshRoutes;
 }
 
+function findHubListPage(listUrl) {
+  const targetRoute = normalizePageRoute(listUrl);
+  if (!targetRoute) return null;
+  try {
+    const pages = getCurrentPages();
+    for (let i = pages.length - 1; i >= 0; i -= 1) {
+      const page = pages[i];
+      if (routesMatch(page.route || '', targetRoute)) {
+        return page;
+      }
+    }
+  } catch (_) {
+    // getCurrentPages 在部分测试环境不可用
+  }
+  return null;
+}
+
 function markRouteRefreshPending(route) {
   const normalized = normalizePageRoute(route);
   if (!normalized) return;
   try {
     const pages = getCurrentPages();
     pages.forEach((page) => {
-      if ((page.route || '') === normalized) {
+      if (routesMatch(page.route || '', normalized)) {
         page._refreshOnNextShow = true;
+        page._hubListNeedsRefresh = true;
       }
     });
   } catch (_) {
@@ -121,6 +153,37 @@ function markRouteRefreshPending(route) {
   } catch (_) {
     // getApp 在部分测试环境不可用
   }
+}
+
+/**
+ * 保存成功后通知 navigateTo 时注册的 opener 事件（events.hubListChanged）。
+ */
+function notifyOpenerHubListChanged(eventName = 'hubListChanged') {
+  try {
+    const pages = getCurrentPages();
+    const current = pages[pages.length - 1];
+    if (!current || typeof current.getOpenerEventChannel !== 'function') return;
+    const channel = current.getOpenerEventChannel();
+    if (channel && typeof channel.emit === 'function') {
+      channel.emit(eventName, {});
+    }
+  } catch (_) {
+    // 非 navigateTo 打开或无 eventChannel
+  }
+}
+
+/**
+ * 在 navigateBack 之前直接触发栈内 Hub 列表 bootstrap，避免 onShow 时序导致不刷新。
+ */
+function triggerHubListBootstrap(listUrl, opts) {
+  if (!listUrl) return false;
+  markRouteRefreshPending(listUrl);
+  const page = findHubListPage(listUrl);
+  if (page && typeof page.bootstrap === 'function') {
+    page.bootstrap(opts || { resetView: true });
+    return true;
+  }
+  return false;
 }
 
 function markListRoutesRefreshOnShow(listUrls) {
@@ -162,8 +225,32 @@ function consumeHubListRefresh(pageRoute) {
 }
 
 /**
+ * Hub 列表页 onHide 调用：子页（编辑/详情）返回时触发重新拉 API。
+ */
+function trackHubListHidden(page) {
+  if (page) {
+    page._hubWasHidden = true;
+  }
+}
+
+/**
  * Hub 列表页 onShow 调用：保存/删除回退后是否需重新拉 API。
  * 返回 true 时须 bootstrap / refetch，不能只 reloadList 重筛本地缓存。
+ */
+function shouldHubListRefetch(page, listRoute) {
+  const needsRefresh = !!(page && page._hubListNeedsRefresh);
+  if (page && page._hubListNeedsRefresh) {
+    page._hubListNeedsRefresh = false;
+  }
+  const wasHidden = !!(page && page._hubWasHidden);
+  if (page) {
+    page._hubWasHidden = false;
+  }
+  return needsRefresh || wasHidden || consumeListRefreshOnShow(page, listRoute);
+}
+
+/**
+ * Hub 列表页 onShow 调用（兼容旧名）。
  */
 function consumeListRefreshOnShow(page, listRoute) {
   const flagged = !!(page && page._refreshOnNextShow);
@@ -185,15 +272,25 @@ function afterSaveReturnToList(opts) {
     delay = DEFAULT_DELAY_MS,
     navigateBackDelta,
     alsoRefreshListUrls,
+    hubListBootstrapOpts,
   } = options;
+  const bootstrapOpts = hubListBootstrapOpts != null
+    ? hubListBootstrapOpts
+    : { resetView: true };
+
   if (alsoRefreshListUrls && alsoRefreshListUrls.length) {
-    markListRoutesRefreshOnShow(alsoRefreshListUrls);
+    alsoRefreshListUrls.forEach((url) => triggerHubListBootstrap(url, bootstrapOpts));
+  }
+  if (listUrl) {
+    notifyOpenerHubListChanged();
+    triggerHubListBootstrap(listUrl, bootstrapOpts);
   }
   if (toastTitle) {
     wx.showToast({ title: toastTitle, icon: 'success' });
   }
   setTimeout(() => {
     if (listUrl) {
+      triggerHubListBootstrap(listUrl, bootstrapOpts);
       const delta = navigateBackDelta != null && navigateBackDelta > 0
         ? navigateBackDelta
         : findNavigateBackDelta(listUrl);
@@ -202,7 +299,16 @@ function afterSaveReturnToList(opts) {
         wx.navigateBack({ delta });
         return;
       }
-      wx.redirectTo({ url: listUrl });
+      const stackDepth = getCurrentPages().length;
+      if (stackDepth > 1) {
+        markListPageRefreshOnShow(1, listUrl);
+        wx.navigateBack({ delta: 1 });
+        return;
+      }
+      wx.redirectTo({
+        url: listUrl,
+        fail: () => wx.navigateBack(),
+      });
       return;
     }
     wx.navigateBack();
@@ -215,8 +321,13 @@ module.exports = {
   buildReportHistoryListUrl,
   normalizePageRoute,
   findNavigateBackDelta,
+  findHubListPage,
   markListRoutesRefreshOnShow,
   consumeHubListRefresh,
+  notifyOpenerHubListChanged,
+  triggerHubListBootstrap,
+  trackHubListHidden,
+  shouldHubListRefetch,
   consumeListRefreshOnShow,
   afterSaveReturnToList,
 };

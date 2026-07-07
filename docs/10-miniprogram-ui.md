@@ -21,6 +21,7 @@ SmartTrack Pro 微信小程序采用 **企业蓝 + 卡片化 + 底部 Tab** 的 
 | `styles/list.wxss` | 列表行、状态胶囊 |
 | `styles/form.wxss` | 表单输入 |
 | `styles/qty-price-amount-summary.wxss` | 数量 / 单价 / 金额三列一行（参考外协收回） |
+| `styles/plan-list-shell.wxss` | 列表页壳（顶栏 / 搜索 / 筛选 / 列表行），主包 `styles/` 与分包页面共用 |
 
 类名前缀使用 `st-*`（SmartTrack）。迁移期 `apple-*` 为别名，新代码禁止新增 `apple-*`。
 
@@ -100,8 +101,8 @@ SmartTrack Pro 微信小程序采用 **企业蓝 + 卡片化 + 底部 Tab** 的 
 4. 业务入口走 `config/menus.js`，不写死宫格
 5. 登录后进入 Tab 页使用 `wx.switchTab`，勿对 Tab 页使用 `reLaunch`
 6. 验证安全区与 TabBar 遮挡（`st-page--tab` 已预留底部间距）
-7. **表单录入**（合作单位 / 产品 / 色码矩阵 / 数量键盘）遵循下方 §表单录入标准，以 [`production-plan-create`](../miniprogram/pages/production-plan-create/) 为参考实现
-8. **列表/流水/清单**展示产品名称时遵循下方 §产品名称与编号，以 [`production-order-report-history`](../miniprogram/pages/production-order-report-history/) 为参考实现
+7. **表单录入**（合作单位 / 产品 / 色码矩阵 / 数量键盘）遵循下方 §表单录入标准，以 [`production-plan-create`](../miniprogram/packageBusiness/production-plan-create/) 为参考实现
+8. **列表/流水/清单**展示产品名称时遵循下方 §产品名称与编号，以 [`production-order-report-history`](../miniprogram/packageBusiness/production-order-report-history/) 为参考实现
 
 ## 产品名称与编号（列表 / 流水 / 清单 · 默认）
 
@@ -133,7 +134,7 @@ SmartTrack Pro 微信小程序采用 **企业蓝 + 卡片化 + 底部 Tab** 的 
 
 ### 参考页面
 
-[`pages/production-plan-create/`](../miniprogram/pages/production-plan-create/) — 完整示例：产品 + 客户 + 矩阵 + 键盘 + 表单样式。
+[`packageBusiness/production-plan-create/`](../miniprogram/packageBusiness/production-plan-create/) — 完整示例：产品 + 客户 + 矩阵 + 键盘 + 表单样式。
 
 已对齐的页面（新功能应与此保持一致）：
 
@@ -185,7 +186,7 @@ const {
 
 - **布局模型**：[`utils/variantQtyMatrix.js`](../miniprogram/utils/variantQtyMatrix.js) 的 `buildVariantMatrixUiModel(product, dictionaries, qtyMap)`；业务侧有上限/禁用格时用专用 builder（如 [`outsourceDispatchMatrix.js`](../miniprogram/utils/outsourceDispatchMatrix.js)）。
 - **WXML 结构**：`plan-create-matrix-scroll` → `plan-create-matrix` → `__head` / `__row` / `__cell`；格内用 `view.plan-create-matrix__input` + `bindtap="onMatrixCellTap"`，**禁止**矩阵格内 `<input>`。
-- **样式**：`@import` [`production-plan-create.wxss`](../miniprogram/pages/production-plan-create/production-plan-create.wxss)；需展示「最多 N」时叠加 `report-matrix`（见报工 / 外协发出页）。
+- **样式**：`@import` [`production-plan-create.wxss`](../miniprogram/packageBusiness/production-plan-create/production-plan-create.wxss)；需展示「最多 N」时叠加 `report-matrix`（见报工 / 外协发出页）。
 
 ### 矩阵键盘
 
@@ -211,7 +212,7 @@ const {
 2. **流水 / 批次详情**编辑或删除 → 回到对应**流水列表**（不跳详情、不停留在编辑页）
 3. 栈内已有目标列表时 `navigateBack` + `_refreshOnNextShow`；否则 `redirectTo`
 4. 成功后先 `wx.showToast`，约 400ms 后跳转
-5. **Hub 列表刷新**：目标列表页 `onShow` 用 `consumeListRefreshOnShow(page, route)` 判断；为真时须 `bootstrap` / 重新请求 API，不能只重筛本地缓存；下拉刷新 `reloadList` 亦须重新拉数
+5. **Hub 列表刷新**：目标列表页 `onHide` 调 `trackHubListHidden(this)`；`onShow` 用 `shouldHubListRefetch(page, route)` 判断；为真时须 `bootstrap` / 重新请求 API，不能只重筛本地缓存；下拉刷新 `reloadList` 亦须重新拉数
 6. **除外**：`scan-session` 扫码连续作业；详情页内联保存（不离开当前页）
 
 ### 页面 → 成功后列表
@@ -253,6 +254,8 @@ const {
 | 收款单详情（删除） | `FINANCE_RECEIPTS` |
 | 登记/编辑付款单 | `FINANCE_PAYMENTS` |
 | 付款单详情（删除） | `FINANCE_PAYMENTS` |
+| 新建/编辑产品 | `BASIC_PRODUCTS` |
+| 新建/编辑合作单位 | `BASIC_PARTNERS` |
 
 新功能登记：在 `LIST_ROUTES` 增加路径常量，上表与 `.cursor/rules/miniprogram-forms.mdc` 同步补充一行。
 
@@ -312,9 +315,9 @@ npm run miniprogram:icons
 
 | 页面 | 路径 | 职责 |
 |------|------|------|
-| 计划列表 | [`pages/production-plans/`](../miniprogram/pages/production-plans/) | 分页列表、搜索/派发状态筛选、采购到货进度条、下拉刷新 |
-| 计划详情 | [`pages/production-plan-detail/`](../miniprogram/pages/production-plan-detail/) | 对齐 Web：基础信息/数量/工序/BOM 横向表格（可左右滑动）；下达工单 |
-| 新建计划 | [`pages/production-plan-create/`](../miniprogram/pages/production-plan-create/) | 简化新建（产品+数量+客户+交期） |
+| 计划列表 | [`packageBusiness/production-plans/`](../miniprogram/packageBusiness/production-plans/) | 分页列表、搜索/派发状态筛选、采购到货进度条、下拉刷新 |
+| 计划详情 | [`packageBusiness/production-plan-detail/`](../miniprogram/packageBusiness/production-plan-detail/) | 对齐 Web：基础信息/数量/工序/BOM 横向表格（可左右滑动）；下达工单 |
+| 新建计划 | [`packageBusiness/production-plan-create/`](../miniprogram/packageBusiness/production-plan-create/) | 简化新建（产品+数量+客户+交期） |
 
 | 工具 / 配置 | 作用 |
 |-------------|------|
@@ -325,16 +328,16 @@ npm run miniprogram:icons
 | [`components/searchable-partner-select/`](../miniprogram/components/searchable-partner-select/) | 合作单位 / 客户选择 |
 | [`components/matrix-qty-keyboard/`](../miniprogram/components/matrix-qty-keyboard/) | 色码矩阵数量键盘 |
 
-表单录入完整约定见本文 §表单录入标准（默认）；参考页 [`production-plan-create`](../miniprogram/pages/production-plan-create/)。
+表单录入完整约定见本文 §表单录入标准（默认）；参考页 [`production-plan-create`](../miniprogram/packageBusiness/production-plan-create/)。
 **API**：`GET /plans`（分页 + `search` / `dispatchStatus` / `excludeCompleted`）· `GET /plans/:id` · `POST /plans` · `POST /plans/:id/convert` · `POST /psi/plans-purchase-progress` · `GET /psi/plan-related`
 
 **权限**：`production:plans:view`（列表/详情）· `production:plans:create`（新建，另需 `basic:products:view`）· `production:plans:edit`（下达工单）
 
-**深链**：`/pages/production-plans/production-plans?planId=<id>` 重定向至详情页。
+**深链**：`/packageBusiness/production-plans/production-plans?planId=<id>` 重定向至详情页。
 
 **留 Web**：BOM 用料编辑、生成采购订单、追溯码、打印、表单配置、删除/子计划。
 
-入口：[`menus.js`](../miniprogram/config/menus.js) `production-plans` → `/pages/production-plans/production-plans`（首页快捷入口 / 应用中心）。
+入口：[`menus.js`](../miniprogram/config/menus.js) `production-plans` → `/packageBusiness/production-plans/production-plans`（首页快捷入口 / 应用中心）。
 
 ## 工单中心
 
@@ -342,13 +345,13 @@ npm run miniprogram:icons
 
 | 页面 | 路径 | 职责 |
 |------|------|------|
-| 工单列表 | [`pages/production-orders/`](../miniprogram/pages/production-orders/) | 分页列表、搜索/仅未完成、父子/产品分组、工序横向卡、点按报工；**筛选面板**内含工单流水 / 报工流水 / 待入库清单入口 |
-| 工单流水 | [`pages/production-order-flow/`](../miniprogram/pages/production-order-flow/) | 按日期/工单号/产品筛选的只读工单流水列表 + 底部汇总 |
-| 工单详情 | [`pages/production-order-detail/`](../miniprogram/pages/production-order-detail/) | 基础信息/数量/工序进度；编辑客户/交期/开始日期；派发状态切换 |
-| 报工流水 | [`pages/production-order-report-history/`](../miniprogram/pages/production-order-report-history/) | 全局或单工单报工流水；按批次聚合；顶栏单搜索框 + 日期筛选；点击进入批次详情 |
-| 报工批次详情 | [`pages/production-order-report-batch-detail/`](../miniprogram/pages/production-order-report-batch-detail/) | 对齐 Web `ReportBatchDetailModal`：汇总、颜色尺码矩阵、明细行；支持编辑/删除（外协收回仅电脑端） |
-| 待入库 | [`pages/production-order-pending-stock/`](../miniprogram/pages/production-order-pending-stock/) | **清单模式**：多工单待入库列表；**单工单模式**：摘要 + 简入库 + 跳转扫码 |
-| 领料 | [`pages/production-order-material/`](../miniprogram/pages/production-order-material/) | BOM 待发清单 + 简 STOCK_OUT |
+| 工单列表 | [`packageBusiness/production-orders/`](../miniprogram/packageBusiness/production-orders/) | 分页列表、搜索/仅未完成、父子/产品分组、工序横向卡、点按报工；**筛选面板**内含工单流水 / 报工流水 / 待入库清单入口 |
+| 工单流水 | [`packageBusiness/production-order-flow/`](../miniprogram/packageBusiness/production-order-flow/) | 按日期/工单号/产品筛选的只读工单流水列表 + 底部汇总 |
+| 工单详情 | [`packageBusiness/production-order-detail/`](../miniprogram/packageBusiness/production-order-detail/) | 基础信息/数量/工序进度；编辑客户/交期/开始日期；派发状态切换 |
+| 报工流水 | [`packageBusiness/production-order-report-history/`](../miniprogram/packageBusiness/production-order-report-history/) | 全局或单工单报工流水；按批次聚合；顶栏单搜索框 + 日期筛选；点击进入批次详情 |
+| 报工批次详情 | [`packageBusiness/production-order-report-batch-detail/`](../miniprogram/packageBusiness/production-order-report-batch-detail/) | 对齐 Web `ReportBatchDetailModal`：汇总、颜色尺码矩阵、明细行；支持编辑/删除（外协收回仅电脑端） |
+| 待入库 | [`packageBusiness/production-order-pending-stock/`](../miniprogram/packageBusiness/production-order-pending-stock/) | **清单模式**：多工单待入库列表；**单工单模式**：摘要 + 简入库 + 跳转扫码 |
+| 领料 | [`packageBusiness/production-order-material/`](../miniprogram/packageBusiness/production-order-material/) | BOM 待发清单 + 简 STOCK_OUT |
 
 | 工具 / 配置 | 作用 |
 |-------------|------|
@@ -367,11 +370,11 @@ npm run miniprogram:icons
 
 **权限**：`production:orders_list:allow`（列表）· `production:orders_detail:view|edit` · `production:orders_report_records:create|view` · `production:orders_pending_stock_in`（任意子权限）· `production:orders_material:allow`
 
-**深链**：`/pages/production-orders/production-orders?orderId=<id>` 重定向至详情。计划下达成功可跳转首个新工单详情。
+**深链**：`/packageBusiness/production-orders/production-orders?orderId=<id>` 重定向至详情。计划下达成功可跳转首个新工单详情。
 
 **留 Web**：工单新建（仅计划下达）、删除、表单配置、打印、色码矩阵报工、待入库批量/矩阵/入库流水。
 
-入口：[`menus.js`](../miniprogram/config/menus.js) `production-orders` → `/pages/production-orders/production-orders`。
+入口：[`menus.js`](../miniprogram/config/menus.js) `production-orders` → `/packageBusiness/production-orders/production-orders`。
 
 ## 采购订单
 
@@ -379,10 +382,10 @@ npm run miniprogram:icons
 
 | 页面 | 路径 | 职责 |
 |------|------|------|
-| 采购订单 Hub | [`pages/psi-purchase-orders/`](../miniprogram/pages/psi-purchase-orders/) | 按单号分组卡片列表、搜索/仅未交清筛选、行级入库进度预览、新建入口 |
-| 采购订单详情 | [`pages/psi-purchase-order-detail/`](../miniprogram/pages/psi-purchase-order-detail/) | 供应商/单号/明细/行级入库进度；编辑/删除 |
-| 登记/编辑 | [`pages/psi-purchase-order-edit/`](../miniprogram/pages/psi-purchase-order-edit/) | 供应商、多行明细、色码矩阵、保存/删除 |
-| 订单流水 | [`pages/psi-purchase-order-flow/`](../miniprogram/pages/psi-purchase-order-flow/) | 行级履约流水（未入库/部分/已入库筛选） |
+| 采购订单 Hub | [`packageBusiness/psi-purchase-orders/`](../miniprogram/packageBusiness/psi-purchase-orders/) | 按单号分组卡片列表、搜索/仅未交清筛选、行级入库进度预览、新建入口 |
+| 采购订单详情 | [`packageBusiness/psi-purchase-order-detail/`](../miniprogram/packageBusiness/psi-purchase-order-detail/) | 供应商/单号/明细/行级入库进度；编辑/删除 |
+| 登记/编辑 | [`packageBusiness/psi-purchase-order-edit/`](../miniprogram/packageBusiness/psi-purchase-order-edit/) | 供应商、多行明细、色码矩阵、保存/删除 |
+| 订单流水 | [`packageBusiness/psi-purchase-order-flow/`](../miniprogram/packageBusiness/psi-purchase-order-flow/) | 行级履约流水（未入库/部分/已入库筛选） |
 
 | 工具 / 配置 | 作用 |
 |-------------|------|
@@ -396,11 +399,11 @@ npm run miniprogram:icons
 
 **权限**：`psi:purchase_order:view` · `psi:purchase_order:create` · `psi:purchase_order:edit` · `psi:purchase_order:delete` · `psi:purchase_order:amount`
 
-**深链**：`/pages/psi-purchase-orders/psi-purchase-orders?docNumber=<单号>` 重定向至详情。
+**深链**：`/packageBusiness/psi-purchase-orders/psi-purchase-orders?docNumber=<单号>` 重定向至详情。
 
 **留 Web**：表单配置、列表/详情打印、租户自定义字段、关联产品、从计划生成采购订单。
 
-入口：[`menus.js`](../miniprogram/config/menus.js) `psi-purchase-order` → `/pages/psi-purchase-orders/psi-purchase-orders`（首页快捷 / 应用中心）。
+入口：[`menus.js`](../miniprogram/config/menus.js) `psi-purchase-order` → `/packageBusiness/psi-purchase-orders/psi-purchase-orders`（首页快捷 / 应用中心）。
 
 ## 销售订单
 
@@ -408,12 +411,12 @@ npm run miniprogram:icons
 
 | 页面 | 路径 | 职责 |
 |------|------|------|
-| 销售订单 Hub | [`pages/psi-sales-orders/`](../miniprogram/pages/psi-sales-orders/) | 按单号分组卡片列表、搜索/仅未发齐筛选、行级配货/发货进度预览、新建入口 |
-| 销售订单详情 | [`pages/psi-sales-order-detail/`](../miniprogram/pages/psi-sales-order-detail/) | 客户/单号/明细/行级进度；配货入口；编辑/删除 |
-| 登记/编辑 | [`pages/psi-sales-order-edit/`](../miniprogram/pages/psi-sales-order-edit/) | 客户、多行明细、色码矩阵、销售价、保存/删除 |
-| 订单流水 | [`pages/psi-sales-order-flow/`](../miniprogram/pages/psi-sales-order-flow/) | 行级配货/发货流水（未配货/已配货/已发齐筛选） |
-| 配货 | [`pages/psi-sales-order-allocate/`](../miniprogram/pages/psi-sales-order-allocate/) | 按行组配货、出库仓库、色码矩阵 |
-| 待发货清单 | [`pages/psi-sales-order-pending-ship/`](../miniprogram/pages/psi-sales-order-pending-ship/) | 已配未发汇总、多选生成销售单 |
+| 销售订单 Hub | [`packageBusiness/psi-sales-orders/`](../miniprogram/packageBusiness/psi-sales-orders/) | 按单号分组卡片列表、搜索/仅未发齐筛选、行级配货/发货进度预览、新建入口 |
+| 销售订单详情 | [`packageBusiness/psi-sales-order-detail/`](../miniprogram/packageBusiness/psi-sales-order-detail/) | 客户/单号/明细/行级进度；配货入口；编辑/删除 |
+| 登记/编辑 | [`packageBusiness/psi-sales-order-edit/`](../miniprogram/packageBusiness/psi-sales-order-edit/) | 客户、多行明细、色码矩阵、销售价、保存/删除 |
+| 订单流水 | [`packageBusiness/psi-sales-order-flow/`](../miniprogram/packageBusiness/psi-sales-order-flow/) | 行级配货/发货流水（未配货/已配货/已发齐筛选） |
+| 配货 | [`packageBusiness/psi-sales-order-allocate/`](../miniprogram/packageBusiness/psi-sales-order-allocate/) | 按行组配货、出库仓库、色码矩阵 |
+| 待发货清单 | [`packageBusiness/psi-sales-order-pending-ship/`](../miniprogram/packageBusiness/psi-sales-order-pending-ship/) | 已配未发汇总、多选生成销售单 |
 
 | 工具 / 配置 | 作用 |
 |-------------|------|
@@ -428,11 +431,11 @@ npm run miniprogram:icons
 
 **权限**：`psi:sales_order:view` · `psi:sales_order:create` · `psi:sales_order:edit` · `psi:sales_order:delete` · `psi:sales_order:amount` · `psi:sales_order_allocation:allow` · `psi:sales_order_pending_shipment:allow`
 
-**深链**：`/pages/psi-sales-orders/psi-sales-orders?docNumber=<单号>` 重定向至详情。
+**深链**：`/packageBusiness/psi-sales-orders/psi-sales-orders?docNumber=<单号>` 重定向至详情。
 
 **留 Web**：表单配置、列表/详情打印、租户自定义字段。
 
-入口：[`menus.js`](../miniprogram/config/menus.js) `psi-sales-order` → `/pages/psi-sales-orders/psi-sales-orders`（首页快捷 / 应用中心）。
+入口：[`menus.js`](../miniprogram/config/menus.js) `psi-sales-order` → `/packageBusiness/psi-sales-orders/psi-sales-orders`（首页快捷 / 应用中心）。
 
 ## 销售单
 
@@ -440,10 +443,10 @@ npm run miniprogram:icons
 
 | 页面 | 路径 | 职责 |
 |------|------|------|
-| 销售单 Hub | [`pages/psi-sales-bills/`](../miniprogram/pages/psi-sales-bills/) | 按单号分组卡片列表、搜索、仓库展示、流水快捷入口、新建 |
-| 销售单详情 | [`pages/psi-sales-bill-detail/`](../miniprogram/pages/psi-sales-bill-detail/) | 客户/单号/出库仓库/明细/批次；编辑/删除 |
-| 登记/编辑 | [`pages/psi-sales-bill-edit/`](../miniprogram/pages/psi-sales-bill-edit/) | 客户、出库仓库、多行明细、色码矩阵、销售价、出库批次、保存/删除 |
-| 销售流水 | [`pages/psi-sales-bill-flow/`](../miniprogram/pages/psi-sales-bill-flow/) | 行级出库流水（日期/搜索筛选） |
+| 销售单 Hub | [`packageBusiness/psi-sales-bills/`](../miniprogram/packageBusiness/psi-sales-bills/) | 按单号分组卡片列表、搜索、仓库展示、流水快捷入口、新建 |
+| 销售单详情 | [`packageBusiness/psi-sales-bill-detail/`](../miniprogram/packageBusiness/psi-sales-bill-detail/) | 客户/单号/出库仓库/明细/批次；编辑/删除 |
+| 登记/编辑 | [`packageBusiness/psi-sales-bill-edit/`](../miniprogram/packageBusiness/psi-sales-bill-edit/) | 客户、出库仓库、多行明细、色码矩阵、销售价、出库批次、保存/删除 |
+| 销售流水 | [`packageBusiness/psi-sales-bill-flow/`](../miniprogram/packageBusiness/psi-sales-bill-flow/) | 行级出库流水（日期/搜索筛选） |
 
 | 工具 / 配置 | 作用 |
 |-------------|------|
@@ -457,11 +460,11 @@ npm run miniprogram:icons
 
 **权限**：`psi:sales_bill:view` · `psi:sales_bill:create` · `psi:sales_bill:edit` · `psi:sales_bill:delete` · `psi:sales_bill:amount`
 
-**深链**：`/pages/psi-sales-bills/psi-sales-bills?docNumber=<单号>` 重定向至详情。
+**深链**：`/packageBusiness/psi-sales-bills/psi-sales-bills?docNumber=<单号>` 重定向至详情。
 
 **留 Web**：表单配置、列表/详情打印、租户自定义字段。
 
-入口：[`menus.js`](../miniprogram/config/menus.js) `psi-sales-bill` → `/pages/psi-sales-bills/psi-sales-bills`（应用中心）。
+入口：[`menus.js`](../miniprogram/config/menus.js) `psi-sales-bill` → `/packageBusiness/psi-sales-bills/psi-sales-bills`（应用中心）。
 
 ## 收款单
 
@@ -469,10 +472,10 @@ npm run miniprogram:icons
 
 | 页面 | 路径 | 职责 |
 |------|------|------|
-| 收款单 Hub | [`pages/finance-receipts/`](../miniprogram/pages/finance-receipts/) | 分页列表、搜索、流水快捷入口、新建 |
-| 收款单详情 | [`pages/finance-receipt-detail/`](../miniprogram/pages/finance-receipt-detail/) | 分类/客户/账户/工人/产品/金额；编辑/删除 |
-| 登记/编辑 | [`pages/finance-receipt-edit/`](../miniprogram/pages/finance-receipt-edit/) | 分类联动字段、缴款客户、收支账户、金额、备注 |
-| 收款流水 | [`pages/finance-receipt-flow/`](../miniprogram/pages/finance-receipt-flow/) | 日期/搜索筛选流水 |
+| 收款单 Hub | [`packageBusiness/finance-receipts/`](../miniprogram/packageBusiness/finance-receipts/) | 分页列表、搜索、流水快捷入口、新建 |
+| 收款单详情 | [`packageBusiness/finance-receipt-detail/`](../miniprogram/packageBusiness/finance-receipt-detail/) | 分类/客户/账户/工人/产品/金额；编辑/删除 |
+| 登记/编辑 | [`packageBusiness/finance-receipt-edit/`](../miniprogram/packageBusiness/finance-receipt-edit/) | 分类联动字段、缴款客户、收支账户、金额、备注 |
+| 收款流水 | [`packageBusiness/finance-receipt-flow/`](../miniprogram/packageBusiness/finance-receipt-flow/) | 日期/搜索筛选流水 |
 
 | 工具 / 配置 | 作用 |
 |-------------|------|
@@ -484,11 +487,11 @@ npm run miniprogram:icons
 
 **权限**：`finance:receipt:view` · `finance:receipt:create` · `finance:receipt:edit` · `finance:receipt:delete`
 
-**深链**：`/pages/finance-receipts/finance-receipts?id=<id>` 重定向至详情。
+**深链**：`/packageBusiness/finance-receipts/finance-receipts?id=<id>` 重定向至详情。
 
 **留 Web**：表单配置、列表/详情打印。
 
-入口：[`menus.js`](../miniprogram/config/menus.js) `finance-receipt` → `/pages/finance-receipts/finance-receipts`（首页快捷 / 应用中心）。
+入口：[`menus.js`](../miniprogram/config/menus.js) `finance-receipt` → `/packageBusiness/finance-receipts/finance-receipts`（首页快捷 / 应用中心）。
 
 ## 付款单
 
@@ -496,10 +499,10 @@ npm run miniprogram:icons
 
 | 页面 | 路径 | 职责 |
 |------|------|------|
-| 付款单 Hub | [`pages/finance-payments/`](../miniprogram/pages/finance-payments/) | 分页列表、搜索、流水快捷入口、新建 |
-| 付款单详情 | [`pages/finance-payment-detail/`](../miniprogram/pages/finance-payment-detail/) | 分类/收款单位/账户/工人/产品/金额；编辑/删除 |
-| 登记/编辑 | [`pages/finance-payment-edit/`](../miniprogram/pages/finance-payment-edit/) | 分类联动字段、收款单位/个人、收支账户、金额、备注 |
-| 付款流水 | [`pages/finance-payment-flow/`](../miniprogram/pages/finance-payment-flow/) | 日期/搜索筛选流水，底部合计栏 |
+| 付款单 Hub | [`packageBusiness/finance-payments/`](../miniprogram/packageBusiness/finance-payments/) | 分页列表、搜索、流水快捷入口、新建 |
+| 付款单详情 | [`packageBusiness/finance-payment-detail/`](../miniprogram/packageBusiness/finance-payment-detail/) | 分类/收款单位/账户/工人/产品/金额；编辑/删除 |
+| 登记/编辑 | [`packageBusiness/finance-payment-edit/`](../miniprogram/packageBusiness/finance-payment-edit/) | 分类联动字段、收款单位/个人、收支账户、金额、备注 |
+| 付款流水 | [`packageBusiness/finance-payment-flow/`](../miniprogram/packageBusiness/finance-payment-flow/) | 日期/搜索筛选流水，底部合计栏 |
 
 | 工具 / 配置 | 作用 |
 |-------------|------|
@@ -510,11 +513,11 @@ npm run miniprogram:icons
 
 **API / 权限**：与收款单相同接口，`type=PAYMENT`；`finance:payment:view|create|edit|delete`
 
-**深链**：`/pages/finance-payments/finance-payments?id=<id>` 重定向至详情。
+**深链**：`/packageBusiness/finance-payments/finance-payments?id=<id>` 重定向至详情。
 
 **留 Web**：表单配置、列表/详情打印。
 
-入口：[`menus.js`](../miniprogram/config/menus.js) `finance-payment` → `/pages/finance-payments/finance-payments`（应用中心）。
+入口：[`menus.js`](../miniprogram/config/menus.js) `finance-payment` → `/packageBusiness/finance-payments/finance-payments`（应用中心）。
 
 ## 财务对账
 
@@ -522,8 +525,8 @@ npm run miniprogram:icons
 
 | 页面 | 路径 | 职责 |
 |------|------|------|
-| 财务对账 | [`pages/finance-reconciliation/`](../miniprogram/pages/finance-reconciliation/) | 合作单位 / 报工结算双 Tab；日期 + 对方筛选；查询后展示汇总与应收增减流水 |
-| 报工单详情 | [`pages/finance-recon-work-detail/`](../miniprogram/pages/finance-recon-work-detail/) | 报工结算行的汇总与明细行（只读） |
+| 财务对账 | [`packageBusiness/finance-reconciliation/`](../miniprogram/packageBusiness/finance-reconciliation/) | 合作单位 / 报工结算双 Tab；日期 + 对方筛选；查询后展示汇总与应收增减流水 |
+| 报工单详情 | [`packageBusiness/finance-recon-work-detail/`](../miniprogram/packageBusiness/finance-recon-work-detail/) | 报工结算行的汇总与明细行（只读） |
 
 | 工具 | 作用 |
 |------|------|
@@ -541,7 +544,7 @@ npm run miniprogram:icons
 
 **留 Web**：导出 Excel、打印。
 
-入口：[`menus.js`](../miniprogram/config/menus.js) `finance-reconciliation` → `/pages/finance-reconciliation/finance-reconciliation`。
+入口：[`menus.js`](../miniprogram/config/menus.js) `finance-reconciliation` → `/packageBusiness/finance-reconciliation/finance-reconciliation`。
 
 ## 采购入库
 
@@ -549,10 +552,10 @@ npm run miniprogram:icons
 
 | 页面 | 路径 | 职责 |
 |------|------|------|
-| 采购入库 Hub | [`pages/psi-purchase-bills/`](../miniprogram/pages/psi-purchase-bills/) | 按单号分组卡片列表、搜索、仓库/来源订单展示、新建入口 |
-| 采购入库详情 | [`pages/psi-purchase-bill-detail/`](../miniprogram/pages/psi-purchase-bill-detail/) | 供应商/单号/仓库/明细；来源订单跳转；编辑/删除 |
-| 登记/编辑 | [`pages/psi-purchase-bill-edit/`](../miniprogram/pages/psi-purchase-bill-edit/) | 手动创建或引用采购订单、仓库选择、色码矩阵、批次、保存/删除 |
-| 入库流水 | [`pages/psi-purchase-bill-flow/`](../miniprogram/pages/psi-purchase-bill-flow/) | 行级入库流水（日期/搜索筛选） |
+| 采购入库 Hub | [`packageBusiness/psi-purchase-bills/`](../miniprogram/packageBusiness/psi-purchase-bills/) | 按单号分组卡片列表、搜索、仓库/来源订单展示、新建入口 |
+| 采购入库详情 | [`packageBusiness/psi-purchase-bill-detail/`](../miniprogram/packageBusiness/psi-purchase-bill-detail/) | 供应商/单号/仓库/明细；来源订单跳转；编辑/删除 |
+| 登记/编辑 | [`packageBusiness/psi-purchase-bill-edit/`](../miniprogram/packageBusiness/psi-purchase-bill-edit/) | 手动创建或引用采购订单、仓库选择、色码矩阵、批次、保存/删除 |
+| 入库流水 | [`packageBusiness/psi-purchase-bill-flow/`](../miniprogram/packageBusiness/psi-purchase-bill-flow/) | 行级入库流水（日期/搜索筛选） |
 
 | 工具 / 配置 | 作用 |
 |-------------|------|
@@ -564,11 +567,11 @@ npm run miniprogram:icons
 
 **权限**：`psi:purchase_bill:view` · `psi:purchase_bill:create` · `psi:purchase_bill:edit` · `psi:purchase_bill:delete` · `psi:purchase_bill:amount`
 
-**深链**：`/pages/psi-purchase-bills/psi-purchase-bills?docNumber=<单号>` 重定向至详情。
+**深链**：`/packageBusiness/psi-purchase-bills/psi-purchase-bills?docNumber=<单号>` 重定向至详情。
 
 **留 Web**：表单配置、列表/详情打印、租户自定义字段、关联产品。
 
-入口：[`menus.js`](../miniprogram/config/menus.js) `psi-purchase-bill` → `/pages/psi-purchase-bills/psi-purchase-bills`（应用中心）。
+入口：[`menus.js`](../miniprogram/config/menus.js) `psi-purchase-bill` → `/packageBusiness/psi-purchase-bills/psi-purchase-bills`（应用中心）。
 
 ## 仓库管理
 
@@ -576,16 +579,16 @@ npm run miniprogram:icons
 
 | 页面 | 路径 | 职责 |
 |------|------|------|
-| 库存 Hub | [`pages/psi-warehouses/`](../miniprogram/pages/psi-warehouses/) | 按仓库/按物料库存列表、搜索、批次展开、快捷入口（流水/盘点/调拨） |
-| 库存详情 | [`pages/psi-warehouse-product-flow/`](../miniprogram/pages/psi-warehouse-product-flow/) | 单产品（可选单仓）流水只读列表；支持日期/类型/仓库筛选 |
-| 调拨单 Hub | [`pages/psi-warehouse-transfer/`](../miniprogram/pages/psi-warehouse-transfer/) | 调拨单列表、搜索、新建 |
-| 调拨详情 | [`pages/psi-warehouse-transfer-detail/`](../miniprogram/pages/psi-warehouse-transfer-detail/) | 调出/调入仓、明细；编辑/删除 |
-| 登记/编辑调拨 | [`pages/psi-warehouse-transfer-edit/`](../miniprogram/pages/psi-warehouse-transfer-edit/) | 双仓库、产品、矩阵、批次 |
-| 盘点单 Hub | [`pages/psi-warehouse-stocktake/`](../miniprogram/pages/psi-warehouse-stocktake/) | 盘点单列表、搜索、新建 |
-| 盘点详情 | [`pages/psi-warehouse-stocktake-detail/`](../miniprogram/pages/psi-warehouse-stocktake-detail/) | 盘点仓、实盘/系统/差异；编辑/删除 |
-| 登记/编辑盘点 | [`pages/psi-warehouse-stocktake-edit/`](../miniprogram/pages/psi-warehouse-stocktake-edit/) | 单仓库、实盘录入、系统库存展示 |
-| 仓库流水 | [`pages/psi-warehouse-flow/`](../miniprogram/pages/psi-warehouse-flow/) | 全局流水（日期/类型/仓库/搜索）；行点击跳转各单据详情 |
-| 生产退料详情 | [`pages/psi-warehouse-flow-prod-detail/`](../miniprogram/pages/psi-warehouse-flow-prod-detail/) | 流水中的 STOCK_RETURN 轻量只读详情 |
+| 库存 Hub | [`packageBusiness/psi-warehouses/`](../miniprogram/packageBusiness/psi-warehouses/) | 按仓库/按物料库存列表、搜索、批次展开、快捷入口（流水/盘点/调拨） |
+| 库存详情 | [`packageBusiness/psi-warehouse-product-flow/`](../miniprogram/packageBusiness/psi-warehouse-product-flow/) | 单产品（可选单仓）流水只读列表；支持日期/类型/仓库筛选 |
+| 调拨单 Hub | [`packageBusiness/psi-warehouse-transfer/`](../miniprogram/packageBusiness/psi-warehouse-transfer/) | 调拨单列表、搜索、新建 |
+| 调拨详情 | [`packageBusiness/psi-warehouse-transfer-detail/`](../miniprogram/packageBusiness/psi-warehouse-transfer-detail/) | 调出/调入仓、明细；编辑/删除 |
+| 登记/编辑调拨 | [`packageBusiness/psi-warehouse-transfer-edit/`](../miniprogram/packageBusiness/psi-warehouse-transfer-edit/) | 双仓库、产品、矩阵、批次 |
+| 盘点单 Hub | [`packageBusiness/psi-warehouse-stocktake/`](../miniprogram/packageBusiness/psi-warehouse-stocktake/) | 盘点单列表、搜索、新建 |
+| 盘点详情 | [`packageBusiness/psi-warehouse-stocktake-detail/`](../miniprogram/packageBusiness/psi-warehouse-stocktake-detail/) | 盘点仓、实盘/系统/差异；编辑/删除 |
+| 登记/编辑盘点 | [`packageBusiness/psi-warehouse-stocktake-edit/`](../miniprogram/packageBusiness/psi-warehouse-stocktake-edit/) | 单仓库、实盘录入、系统库存展示 |
+| 仓库流水 | [`packageBusiness/psi-warehouse-flow/`](../miniprogram/packageBusiness/psi-warehouse-flow/) | 全局流水（日期/类型/仓库/搜索）；行点击跳转各单据详情 |
+| 生产退料详情 | [`packageBusiness/psi-warehouse-flow-prod-detail/`](../miniprogram/packageBusiness/psi-warehouse-flow-prod-detail/) | 流水中的 STOCK_RETURN 轻量只读详情 |
 
 | 工具 / 配置 | 作用 |
 |-------------|------|
@@ -600,7 +603,7 @@ npm run miniprogram:icons
 
 **权限**：`psi:warehouse_list:view` · `psi:warehouse_transfer:view/create/edit/delete` · `psi:warehouse_stocktake:view/create/edit/delete` · `psi:warehouse_flow:allow`
 
-入口：[`menus.js`](../miniprogram/config/menus.js) `psi-warehouse` → `/pages/psi-warehouses/psi-warehouses`（应用中心）。
+入口：[`menus.js`](../miniprogram/config/menus.js) `psi-warehouse` → `/packageBusiness/psi-warehouses/psi-warehouses`（应用中心）。
 
 ## 返工管理
 
@@ -608,15 +611,15 @@ npm run miniprogram:icons
 
 | 页面 | 路径 | 职责 |
 |------|------|------|
-| 返工 Hub | [`pages/production-rework/`](../miniprogram/pages/production-rework/) | 主列表（工单/产品 × 返工工序标签）、搜索/筛选、待处理不良/流水快捷入口、详情/物料/扫码报工 |
-| 待处理不良 | [`pages/production-rework-pending/`](../miniprogram/pages/production-rework-pending/) | 不良待处理列表 + 搜索/工序筛选 |
-| 处理不良 | [`pages/production-rework-defect-action/`](../miniprogram/pages/production-rework-defect-action/) | 报损/厂内返工/委外返工；返工目标工序与 Web 一致（产品工艺全工序 + 其他工序，可多选） |
-| 返工报工 | [`pages/production-rework-report/`](../miniprogram/pages/production-rework-report/) | 手输返工报工（路径分组、矩阵、人员/设备/加工费、跳转扫码）；单产品时价格区为「数量 + 单价 + 金额」一行（简单路径可编辑数量，矩阵为已填合计只读） |
-| 返工详情 | [`pages/production-rework-detail/`](../miniprogram/pages/production-rework-detail/) | 工序不良汇总、返工进度、处理/报工记录只读 |
-| 处理不良流水 | [`pages/production-rework-defect-flow/`](../miniprogram/pages/production-rework-defect-flow/) | REWORK+SCRAP 按 docNo 聚合列表 |
-| 处理不良详情 | [`pages/production-rework-defect-flow-detail/`](../miniprogram/pages/production-rework-defect-flow-detail/) | 查看/编辑/删除 |
-| 返工报工流水 | [`pages/production-rework-report-flow/`](../miniprogram/pages/production-rework-report-flow/) | REWORK_REPORT 流水列表 |
-| 报工流水详情 | [`pages/production-rework-report-flow-detail/`](../miniprogram/pages/production-rework-report-flow-detail/) | 查看/编辑/删除 |
+| 返工 Hub | [`packageBusiness/production-rework/`](../miniprogram/packageBusiness/production-rework/) | 主列表（工单/产品 × 返工工序标签）、搜索/筛选、待处理不良/流水快捷入口、详情/物料/扫码报工 |
+| 待处理不良 | [`packageBusiness/production-rework-pending/`](../miniprogram/packageBusiness/production-rework-pending/) | 不良待处理列表 + 搜索/工序筛选 |
+| 处理不良 | [`packageBusiness/production-rework-defect-action/`](../miniprogram/packageBusiness/production-rework-defect-action/) | 报损/厂内返工/委外返工；返工目标工序与 Web 一致（产品工艺全工序 + 其他工序，可多选） |
+| 返工报工 | [`packageBusiness/production-rework-report/`](../miniprogram/packageBusiness/production-rework-report/) | 手输返工报工（路径分组、矩阵、人员/设备/加工费、跳转扫码）；单产品时价格区为「数量 + 单价 + 金额」一行（简单路径可编辑数量，矩阵为已填合计只读） |
+| 返工详情 | [`packageBusiness/production-rework-detail/`](../miniprogram/packageBusiness/production-rework-detail/) | 工序不良汇总、返工进度、处理/报工记录只读 |
+| 处理不良流水 | [`packageBusiness/production-rework-defect-flow/`](../miniprogram/packageBusiness/production-rework-defect-flow/) | REWORK+SCRAP 按 docNo 聚合列表 |
+| 处理不良详情 | [`packageBusiness/production-rework-defect-flow-detail/`](../miniprogram/packageBusiness/production-rework-defect-flow-detail/) | 查看/编辑/删除 |
+| 返工报工流水 | [`packageBusiness/production-rework-report-flow/`](../miniprogram/packageBusiness/production-rework-report-flow/) | REWORK_REPORT 流水列表 |
+| 报工流水详情 | [`packageBusiness/production-rework-report-flow-detail/`](../miniprogram/packageBusiness/production-rework-report-flow-detail/) | 查看/编辑/删除 |
 
 | 工具 / 配置 | 作用 |
 |-------------|------|
@@ -628,17 +631,17 @@ npm run miniprogram:icons
 | [`utils/reworkReportSubmit.js`](../miniprogram/utils/reworkReportSubmit.js) | 手输返工报工提交 |
 | [`utils/reworkDefectFlow.js`](../miniprogram/utils/reworkDefectFlow.js) / [`reworkReportFlow.js`](../miniprogram/utils/reworkReportFlow.js) | 流水列表 |
 | [`utils/reworkDetailLite.js`](../miniprogram/utils/reworkDetailLite.js) | 详情视图 |
-| 返工领料 | 复用 [`production-order-material`](../miniprogram/pages/production-order-material/) `?source=rework`，`reason: 来自于返工` |
+| 返工领料 | 复用 [`production-order-material`](../miniprogram/packageBusiness/production-order-material/) `?source=rework`，`reason: 来自于返工` |
 
 **API**：`GET /production/records`（`types=REWORK,REWORK_REPORT,SCRAP,OUTSOURCE`）· `POST /production/records` · `POST /production/records/batch` · `PUT/DELETE /production/records/:id` · `POST /item-codes/scan/validate-usage`（`purpose: REWORK_REPORT`）· `GET /settings/config`（`productionLinkMode` / `reworkFormSettings` 只读）
 
 **权限**：`production:rework:view`（入口）· `production:rework_list:allow` · `production:rework_defective:allow` · `production:rework_records:view/edit/delete` · `production:rework_report_records:view/edit/delete` · `production:rework_outsource:allow` · `production:rework_detail:allow` · `production:rework_material:allow`
 
-**深链**：`/pages/production-rework/production-rework?reworkOrderId=<id>` 重定向至详情。
+**深链**：`/packageBusiness/production-rework/production-rework?reworkOrderId=<id>` 重定向至详情。
 
 **留 Web**：表单配置、打印。
 
-入口：[`menus.js`](../miniprogram/config/menus.js) `production-rework` → `/pages/production-rework/production-rework`。
+入口：[`menus.js`](../miniprogram/config/menus.js) `production-rework` → `/packageBusiness/production-rework/production-rework`。
 
 ## 外协管理
 
@@ -646,14 +649,14 @@ npm run miniprogram:icons
 
 | 页面 | 路径 | 职责 |
 |------|------|------|
-| 外协 Hub | [`pages/production-outsource/`](../miniprogram/pages/production-outsource/) | 主列表（工单/产品 × 加工厂工序标签）、搜索/筛选、待发/待收回/流水快捷入口、物料外发/退回 |
-| 待发清单 | [`pages/production-outsource-dispatch/`](../miniprogram/pages/production-outsource-dispatch/) | 可外协行多选 → 发出录入 |
-| 外协发出 | [`pages/production-outsource-dispatch-confirm/`](../miniprogram/pages/production-outsource-dispatch-confirm/) | 合作单位选择 + 色码矩阵 + 矩阵键盘 → `POST /production/records/batch` |
-| 待收回清单 | [`pages/production-outsource-receive/`](../miniprogram/pages/production-outsource-receive/) | 待收回聚合列表、扫码收货入口、多选收回 |
-| 外协收回 | [`pages/production-outsource-receive-confirm/`](../miniprogram/pages/production-outsource-receive-confirm/) | 收回数量/单价录入 |
-| 外协流水 | [`pages/production-outsource-flow/`](../miniprogram/pages/production-outsource-flow/) | 按日期/类型/工序筛选；列表带产品缩略图，顶栏为「类型 · 工单 · 时间」 |
-| 流水详情 | [`pages/production-outsource-flow-detail/`](../miniprogram/pages/production-outsource-flow-detail/) | 发出/收回明细只读 |
-| 往来明细 | [`pages/production-outsource-partner-detail/`](../miniprogram/pages/production-outsource-partner-detail/) | 加工厂×工序维度 doc 列表 |
+| 外协 Hub | [`packageBusiness/production-outsource/`](../miniprogram/packageBusiness/production-outsource/) | 主列表（工单/产品 × 加工厂工序标签）、搜索/筛选、待发/待收回/流水快捷入口、物料外发/退回 |
+| 待发清单 | [`packageBusiness/production-outsource-dispatch/`](../miniprogram/packageBusiness/production-outsource-dispatch/) | 可外协行多选 → 发出录入 |
+| 外协发出 | [`packageBusiness/production-outsource-dispatch-confirm/`](../miniprogram/packageBusiness/production-outsource-dispatch-confirm/) | 合作单位选择 + 色码矩阵 + 矩阵键盘 → `POST /production/records/batch` |
+| 待收回清单 | [`packageBusiness/production-outsource-receive/`](../miniprogram/packageBusiness/production-outsource-receive/) | 待收回聚合列表、扫码收货入口、多选收回 |
+| 外协收回 | [`packageBusiness/production-outsource-receive-confirm/`](../miniprogram/packageBusiness/production-outsource-receive-confirm/) | 收回数量/单价录入 |
+| 外协流水 | [`packageBusiness/production-outsource-flow/`](../miniprogram/packageBusiness/production-outsource-flow/) | 按日期/类型/工序筛选；列表带产品缩略图，顶栏为「类型 · 工单 · 时间」 |
+| 流水详情 | [`packageBusiness/production-outsource-flow-detail/`](../miniprogram/packageBusiness/production-outsource-flow-detail/) | 发出/收回明细只读 |
+| 往来明细 | [`packageBusiness/production-outsource-partner-detail/`](../miniprogram/packageBusiness/production-outsource-partner-detail/) | 加工厂×工序维度 doc 列表 |
 
 | 工具 / 配置 | 作用 |
 |-------------|------|
@@ -672,15 +675,15 @@ npm run miniprogram:icons
 
 **留 Web**：外协表单配置、流水编辑/删除/打印、协作链同步、外协收回派生报工编辑/删除。
 
-入口：[`menus.js`](../miniprogram/config/menus.js) `production-outsource` → `/pages/production-outsource/production-outsource`。
+入口：[`menus.js`](../miniprogram/config/menus.js) `production-outsource` → `/packageBusiness/production-outsource/production-outsource`。
 
 ## 扫码页业务链路
 
 | 页面 | 路径 | 职责 |
 |------|------|------|
 | 枢纽 | [`pages/scan/`](../miniprogram/pages/scan/) | 类型入口、最近记录 |
-| 预备 | [`pages/scan-setup/`](../miniprogram/pages/scan-setup/) | 已废弃，自动跳转会话页 |
-| 会话 | [`pages/scan-session/`](../miniprogram/pages/scan-session/) | 条件选择 + 取景扫码 + 下方本次扫码记录 |
+| 预备 | [`packageBusiness/scan-setup/`](../miniprogram/packageBusiness/scan-setup/) | 已废弃，自动跳转会话页 |
+| 会话 | [`packageBusiness/scan-session/`](../miniprogram/packageBusiness/scan-session/) | 条件选择 + 取景扫码 + 下方本次扫码记录 |
 
 类型目录：[`config/scanTypes.js`](../miniprogram/config/scanTypes.js)
 
@@ -728,3 +731,89 @@ npm run miniprogram:icons
 | 设置详情 | [`pages/settings-tab/`](../miniprogram/pages/settings-tab/) | 档案类只读列表；生产配置只读展示 |
 
 配置单一事实源：[`config/settingsTabs.js`](../miniprogram/config/settingsTabs.js)。应用 Tab「系统设置」入口路径 `/pages/settings/settings`。
+
+## 产品档案
+
+对齐 Web [`ProductManagementView`](../views/ProductManagementView.tsx) / [`ProductEditForm`](../views/product-management/ProductEditForm.tsx)（**不含** [`ProductImportModal`](../views/ProductImportModal.tsx) 批量导入；**不含**工序路线、工价、BOM 配置）：
+
+| 页面 | 路径 | 职责 |
+|------|------|------|
+| 档案列表 | [`packageBusiness/basic-products/`](../miniprogram/packageBusiness/basic-products/) | 分类 Tab、搜索、客户端分页、启用/禁用、创建入口 |
+| 产品编辑 | [`packageBusiness/basic-product-edit/`](../miniprogram/packageBusiness/basic-product-edit/) | 基本信息、颜色尺码、分类自定义字段 |
+
+| 工具 / 组件 | 作用 |
+|-------------|------|
+| [`utils/productApi.js`](../miniprogram/utils/productApi.js) | `/products` CRUD + variant-usage |
+| [`utils/products.js`](../miniprogram/utils/products.js) | 列表筛选、分页 UI 模型 |
+| [`utils/productForm.js`](../miniprogram/utils/productForm.js) | 保存校验、变体生成、自定义字段 |
+| [`components/color-size-spec-picker/`](../miniprogram/components/color-size-spec-picker/) | 颜色/尺码勾选 + 快捷新增字典 |
+
+**权限**：`basic:products:view`（列表/读）· `basic:products:create`（新建）· `basic:products:edit`（编辑/启用）· `basic:products:delete`（删除）
+
+**留 Web**：批量导入产品；工序路线、工价、BOM 矩阵；产品分类/报工展示 **file/knowledge** 类型附件上传（小程序只读 + 提示电脑端）。
+
+入口：[`menus.js`](../miniprogram/config/menus.js) `basic-products` → `/packageBusiness/basic-products/basic-products`。
+
+## 合作单位
+
+对齐 Web [`PartnersTab`](../views/basic-info/tabs/PartnersTab.tsx)（**不含** [`PartnerImportModal`](../views/PartnerImportModal.tsx) 批量导入；**不含**协作租户绑定编辑）：
+
+| 页面 | 路径 | 职责 |
+|------|------|------|
+| 档案列表 | [`packageBusiness/basic-partners/`](../miniprogram/packageBusiness/basic-partners/) | 分类 Tab、搜索、客户端分页、创建入口 |
+| 单位编辑 | [`packageBusiness/basic-partner-edit/`](../miniprogram/packageBusiness/basic-partner-edit/) | 名称、分类、只读编号、分类自定义扩展字段 |
+
+| 工具 | 作用 |
+|------|------|
+| [`utils/partnerApi.js`](../miniprogram/utils/partnerApi.js) | `/master/partners` CRUD |
+| [`utils/partners.js`](../miniprogram/utils/partners.js) | 列表筛选、分页 UI 模型 |
+| [`utils/partnerForm.js`](../miniprogram/utils/partnerForm.js) | 保存校验、自定义字段 |
+| [`utils/partnerNormalize.js`](../miniprogram/utils/partnerNormalize.js) | 名称去重 |
+| [`components/plan-form-custom-field/`](../miniprogram/components/plan-form-custom-field/) | 扩展属性录入 |
+
+**权限**：`basic:partners:view` · `basic:partners:create` · `basic:partners:edit` · `basic:partners:delete`
+
+**留 Web**：批量导入单位；合作单位分类 CRUD（系统设置只读）；协作租户关联；**file/knowledge** 类型扩展字段上传。
+
+入口：[`menus.js`](../miniprogram/config/menus.js) `basic-partners` → `/packageBusiness/basic-partners/basic-partners`。
+
+## 成员管理
+
+对齐 Web [`MemberManagementView`](../views/MemberManagementView.tsx)（**不含** [`RolesTab`](../views/member-management/RolesTab.tsx) / [`RoleEditModal`](../views/member-management/RoleEditModal.tsx) 角色 CRUD 与权限树）：
+
+| 页面 | 路径 | 职责 |
+|------|------|------|
+| 成员 Hub | [`packageBusiness/basic-members/`](../miniprogram/packageBusiness/basic-members/) | 三 Tab：成员列表（搜索/分配角色/工序/移除）、待审核（通过/拒绝）、邀请码（复制） |
+
+| 工具 / 组件 | 作用 |
+|-------------|------|
+| [`utils/memberApi.js`](../miniprogram/utils/memberApi.js) | `/tenants/:id/members`、applications、invite、`/roles?all=true`（只读） |
+| [`utils/members.js`](../miniprogram/utils/members.js) | 列表筛选、行 UI 模型、`memberHasReportPerm` |
+| [`config/members.js`](../miniprogram/config/members.js) | Tab 常量、审核通过默认权限 |
+| [`components/role-picker-sheet/`](../miniprogram/components/role-picker-sheet/) | 底栏单选分配已有角色 |
+| [`components/milestone-multi-select/`](../miniprogram/components/milestone-multi-select/) | 底栏多选工序节点（`planApi.fetchNodesAll`） |
+
+**权限**：`basic:members:view`（入口）· 审核需 owner/admin 或 `basic:members:create` · 分配角色/工序需 owner/admin · 移除仅 owner
+
+**留 Web**：角色 CRUD、细粒度权限树、直接编辑成员 `permissions`
+
+入口：[`menus.js`](../miniprogram/config/menus.js) `basic-members` → `/packageBusiness/basic-members/basic-members`。
+
+## 分包与上传体积
+
+微信代码质量要求**主包（不含插件）< 1.5 MB**。业务页全部放在 [`app.json`](../miniprogram/app.json) 的 `business` 分包（`root: packageBusiness`），主包仅保留 Tab 壳、登录/租户、消息聊天、系统设置等入口页（仍在 `pages/` 目录）。
+
+| 包 | 目录 / 页面范围 |
+|----|----------------|
+| **主包** | `pages/`：`home` / `apps` / `scan` / `messages` / `mine`、登录与租户、`messages-chat`、`settings*` |
+| **business 分包** | `packageBusiness/`：生产 / 进销存 / 财务 / 产品档案 / 合作单位 / 扫码连续作业（`scan-setup`、`scan-session`） |
+
+新增业务页时：**不要**写入主包 `pages` 数组；在 `packageBusiness/` 下新建页面目录，并追加到 `subPackages[0].pages`（路径相对 `packageBusiness/`，如 `finance-foo/finance-foo`）。跳转 URL 使用 `/packageBusiness/...`（见 [`saveNavigation.js`](../miniprogram/utils/saveNavigation.js) `LIST_ROUTES`）。
+
+`preloadRule`：进入「应用」「扫码」Tab 时预下载 `business` 分包，减少首次打开业务页的等待。
+
+上传优化（[`project.config.json`](../miniprogram/project.config.json)）：`uploadWithSourceMap: false`、`ignoreDevUnusedFiles: true`。
+
+若主包仍超限：检查主包页是否 `require` 了仅分包使用的 `utils/`；或将图标等资源进一步压缩。
+
+**WXSS 跨包**：主包 `styles/` **不得** `@import` 分包内 `.wxss`（微信编译报错）。共用样式须放在主包 `styles/`（如 `plan-list-shell.wxss`），分包页面再 `@import '../../styles/...'`。

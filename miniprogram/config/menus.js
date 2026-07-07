@@ -1,6 +1,7 @@
 /**
  * 小程序入口菜单配置
- * 应用中心与 Web shared/workbenchShortcuts.ts WORKBENCH_SHORTCUT_CATALOG 保持同步
+ * 与 Web shared/workbenchShortcuts.ts WORKBENCH_SHORTCUT_CATALOG 大体同步；
+ * 设备管理仅 Web 端维护（小程序不提供档案入口，故不含 basic-equipment）。
  */
 
 const { filterByPermission } = require('../utils/permissions.js');
@@ -35,25 +36,25 @@ const LUCIDE_ICON_FILES = {
 
 /** 与 shared/workbenchShortcuts.ts WORKBENCH_SHORTCUT_CATALOG 一致 */
 const WORKBENCH_SHORTCUT_CATALOG = [
-  { id: 'production-plans', label: '生产计划', group: '生产管理', icon: 'CalendarRange', module: 'production', perm: 'production:plans:view', path: '/pages/production-plans/production-plans' },
-  { id: 'production-orders', label: '工单中心', group: '生产管理', icon: 'ClipboardList', module: 'production', perm: 'production:orders_list:allow', path: '/pages/production-orders/production-orders' },
-  { id: 'production-stock-out', label: '生产物料', group: '生产管理', icon: 'ArrowUpFromLine', module: 'production', perm: 'production:material_list', path: '/pages/production-stock-out/production-stock-out' },
-  { id: 'production-outsource', label: '外协管理', group: '生产管理', icon: 'Truck', module: 'production', perm: 'production:outsource:view', path: '/pages/production-outsource/production-outsource' },
-  { id: 'production-rework', label: '返工管理', group: '生产管理', icon: 'RotateCcw', module: 'production', perm: 'production:rework:view', path: '/pages/production-rework/production-rework' },
+  { id: 'production-plans', label: '生产计划', group: '生产管理', icon: 'CalendarRange', module: 'production', perm: 'production:plans:view', path: '/packageBusiness/production-plans/production-plans' },
+  { id: 'production-orders', label: '工单中心', group: '生产管理', icon: 'ClipboardList', module: 'production', perm: 'production:orders_list:allow', path: '/packageBusiness/production-orders/production-orders' },
+  { id: 'production-stock-out', label: '生产物料', group: '生产管理', icon: 'ArrowUpFromLine', module: 'production', perm: 'production:material_list', path: '/packageBusiness/production-stock-out/production-stock-out' },
+  { id: 'production-outsource', label: '外协管理', group: '生产管理', icon: 'Truck', module: 'production', perm: 'production:outsource:view', path: '/packageBusiness/production-outsource/production-outsource' },
+  { id: 'production-rework', label: '返工管理', group: '生产管理', icon: 'RotateCcw', module: 'production', perm: 'production:rework:view', path: '/packageBusiness/production-rework/production-rework' },
 
-  { id: 'psi-purchase-order', label: '采购订单', group: '进销存', icon: 'ClipboardList', module: 'psi', perm: 'psi:purchase_order:view', path: '/pages/psi-purchase-orders/psi-purchase-orders' },
-  { id: 'psi-purchase-bill', label: '采购入库', group: '进销存', icon: 'Receipt', module: 'psi', perm: 'psi:purchase_bill:view', path: '/pages/psi-purchase-bills/psi-purchase-bills' },
-  { id: 'psi-sales-order', label: '销售订单', group: '进销存', icon: 'ShoppingBag', module: 'psi', perm: 'psi:sales_order:view', path: '/pages/psi-sales-orders/psi-sales-orders' },
-  { id: 'psi-sales-bill', label: '销售单', group: '进销存', icon: 'CreditCard', module: 'psi', perm: 'psi:sales_bill:view', path: '/pages/psi-sales-bills/psi-sales-bills' },
-  { id: 'psi-warehouse', label: '仓库管理', group: '进销存', icon: 'Warehouse', module: 'psi', perm: 'psi:warehouse_list:view', path: '/pages/psi-warehouses/psi-warehouses' },
+  { id: 'psi-purchase-order', label: '采购订单', group: '进销存', icon: 'ClipboardList', module: 'psi', perm: 'psi:purchase_order:view', path: '/packageBusiness/psi-purchase-orders/psi-purchase-orders' },
+  { id: 'psi-purchase-bill', label: '采购入库', group: '进销存', icon: 'Receipt', module: 'psi', perm: 'psi:purchase_bill:view', path: '/packageBusiness/psi-purchase-bills/psi-purchase-bills' },
+  { id: 'psi-sales-order', label: '销售订单', group: '进销存', icon: 'ShoppingBag', module: 'psi', perm: 'psi:sales_order:view', path: '/packageBusiness/psi-sales-orders/psi-sales-orders' },
+  { id: 'psi-sales-bill', label: '销售单', group: '进销存', icon: 'CreditCard', module: 'psi', perm: 'psi:sales_bill:view', path: '/packageBusiness/psi-sales-bills/psi-sales-bills' },
+  { id: 'psi-warehouse', label: '仓库管理', group: '进销存', icon: 'Warehouse', module: 'psi', perm: 'psi:warehouse_list:view', path: '/packageBusiness/psi-warehouses/psi-warehouses' },
 
-  { id: 'finance-receipt', label: '收款单', group: '财务结算', icon: 'ArrowDownCircle', module: 'finance', perm: 'finance:receipt:view', path: '/pages/finance-receipts/finance-receipts' },
-  { id: 'finance-payment', label: '付款单', group: '财务结算', icon: 'ArrowUpCircle', module: 'finance', perm: 'finance:payment:view', path: '/pages/finance-payments/finance-payments' },
-  { id: 'finance-reconciliation', label: '财务对账', group: '财务结算', icon: 'Scale', module: 'finance', perm: 'finance:reconciliation:allow', path: '/pages/finance-reconciliation/finance-reconciliation' },
+  { id: 'finance-receipt', label: '收款单', group: '财务结算', icon: 'ArrowDownCircle', module: 'finance', perm: 'finance:receipt:view', path: '/packageBusiness/finance-receipts/finance-receipts' },
+  { id: 'finance-payment', label: '付款单', group: '财务结算', icon: 'ArrowUpCircle', module: 'finance', perm: 'finance:payment:view', path: '/packageBusiness/finance-payments/finance-payments' },
+  { id: 'finance-reconciliation', label: '财务对账', group: '财务结算', icon: 'Scale', module: 'finance', perm: 'finance:reconciliation:allow', path: '/packageBusiness/finance-reconciliation/finance-reconciliation' },
 
-  { id: 'basic-products', label: '产品与 BOM', group: '基础信息', icon: 'Boxes', module: 'basic', perm: 'basic:products:view' },
-  { id: 'basic-partners', label: '合作单位', group: '基础信息', icon: 'Building2', module: 'basic', perm: 'basic:partners:view' },
-  { id: 'basic-members', label: '成员管理', group: '基础信息', icon: 'ShieldCheck', module: 'basic', perm: 'basic:members:view' },
+  { id: 'basic-products', label: '产品档案', group: '基础信息', icon: 'Boxes', module: 'basic', perm: 'basic:products:view', path: '/packageBusiness/basic-products/basic-products' },
+  { id: 'basic-partners', label: '合作单位', group: '基础信息', icon: 'Building2', module: 'basic', perm: 'basic:partners:view', path: '/packageBusiness/basic-partners/basic-partners' },
+  { id: 'basic-members', label: '成员管理', group: '基础信息', icon: 'ShieldCheck', module: 'basic', perm: 'basic:members:view', path: '/packageBusiness/basic-members/basic-members' },
   { id: 'basic-equipment', label: '设备管理', group: '基础信息', icon: 'Cpu', module: 'basic', perm: 'basic:equipment:view' },
   { id: 'basic-dictionaries', label: '公共数据字典', group: '基础信息', icon: 'Library', module: 'basic', perm: 'basic:dictionaries:view' },
   { id: 'settings', label: '系统设置', group: '基础信息', icon: 'Settings', module: 'settings', perm: 'settings:categories:view', path: '/pages/settings/settings' },
