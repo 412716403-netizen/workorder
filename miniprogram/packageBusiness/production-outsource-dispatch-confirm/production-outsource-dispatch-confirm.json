@@ -1,0 +1,8 @@
+{
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "empty-state": "/components/empty-state/empty-state",
+    "searchable-partner-select": "/packageBusiness/components/searchable-partner-select/searchable-partner-select",
+    "matrix-qty-keyboard": "/packageBusiness/components/matrix-qty-keyboard/matrix-qty-keyboard"
+  }
+}

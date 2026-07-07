@@ -1,0 +1,120 @@
+<view class="plan-create-shell">
+  <view class="plan-create-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-create-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-create-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-create-header__title">{{pageTitle}}</text>
+      <view class="plan-create-header__back plan-create-header__back--placeholder"></view>
+    </view>
+  </view>
+
+  <view class="plan-create-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view class="plan-create-scroll" scroll-y style="height: {{scrollHeight}}px;" show-scrollbar="{{false}}">
+    <view wx:if="{{loading}}" class="plan-create-muted">加载中…</view>
+
+    <view wx:else class="plan-create-page basic-product-edit-page">
+      <view class="plan-form-card">
+        <view class="plan-form-cell plan-form-cell--section">
+          <text class="plan-form-cell__label">1. 核心业务档案</text>
+        </view>
+
+        <view class="plan-form-cell plan-form-cell--input">
+          <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>产品分类</text>
+          <picker mode="selector" range="{{categoryNames}}" value="{{categoryPickerIndex}}" bindchange="onCategoryChange">
+            <view class="plan-form-cell__value">{{categoryName || '请选择'}}</view>
+          </picker>
+        </view>
+
+        <view class="plan-form-cell plan-form-cell--input">
+          <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>产品全称</text>
+          <input class="plan-form-cell__input" value="{{form.name}}" bindinput="onNameInput" placeholder="请填写" placeholder-class="plan-form-cell__ph" />
+        </view>
+
+        <view class="plan-form-cell plan-form-cell--input">
+          <text class="plan-form-cell__label">产品编号</text>
+          <input class="plan-form-cell__input" value="{{form.sku}}" bindinput="onSkuInput" placeholder="留空则保存时自动生成" placeholder-class="plan-form-cell__ph" />
+        </view>
+
+        <unit-select
+          units="{{dictionaries.units}}"
+          value-id="{{form.unitId}}"
+          value-name="{{unitName}}"
+          can-quick-add="{{canQuickAddUnit}}"
+          placeholder="请选择单位"
+          bind:change="onUnitChange"
+          bind:unitsupdated="onUnitsUpdated"
+        />
+
+        <view class="plan-form-cell">
+          <text class="plan-form-cell__label">产品主图</text>
+          <view class="basic-product-edit__image" bindtap="onPickImage">
+            <image wx:if="{{form.imageUrl}}" class="basic-product-edit__image-img" src="{{form.imageUrl}}" mode="aspectFill" />
+            <view wx:else class="basic-product-edit__image-placeholder">点击上传</view>
+          </view>
+        </view>
+
+        <view wx:if="{{showSalesPrice}}" class="plan-form-cell plan-form-cell--input">
+          <text class="plan-form-cell__label">销售价</text>
+          <input class="plan-form-cell__input" type="digit" value="{{form.salesPriceText}}" bindinput="onSalesPriceInput" placeholder="0" />
+        </view>
+
+        <view wx:if="{{showPurchasePrice}}" class="plan-form-cell plan-form-cell--input">
+          <text class="plan-form-cell__label">采购价</text>
+          <input class="plan-form-cell__input" type="digit" value="{{form.purchasePriceText}}" bindinput="onPurchasePriceInput" placeholder="0" />
+        </view>
+
+        <searchable-partner-select
+          wx:if="{{showSupplier}}"
+          cell="{{true}}"
+          label="供应商"
+          partners="{{partners}}"
+          categories="{{partnerCategories}}"
+          value="{{supplierName}}"
+          placeholder="请选择"
+          bind:change="onSupplierChange"
+        />
+
+        <block wx:for="{{customFields}}" wx:key="id">
+          <view wx:if="{{item.desktopOnly}}" class="plan-form-cell plan-form-cell--input">
+            <text class="plan-form-cell__label">{{item.label}}</text>
+            <text class="basic-product-edit__desktop-hint">{{item.displayValue || '请在电脑端上传'}}</text>
+          </view>
+          <view wx:elif="{{item.type === 'select'}}" class="plan-form-cell plan-form-cell--input">
+            <text class="plan-form-cell__label">{{item.label}}</text>
+            <picker mode="selector" range="{{item.options}}" value="{{item.pickerIndex}}" data-id="{{item.id}}" bindchange="onCustomSelectChange">
+              <view class="plan-form-cell__value">{{item.value || '请选择'}}</view>
+            </picker>
+          </view>
+          <view wx:else class="plan-form-cell plan-form-cell--input">
+            <text class="plan-form-cell__label">{{item.label}}</text>
+            <input class="plan-form-cell__input" value="{{item.value}}" data-id="{{item.id}}" bindinput="onCustomFieldInput" placeholder="请填写" />
+          </view>
+        </block>
+
+        <block wx:if="{{showColorSize}}">
+          <color-size-spec-picker
+            color-ids="{{form.colorIds}}"
+            size-ids="{{form.sizeIds}}"
+            colors="{{dictionaries.colors}}"
+            sizes="{{dictionaries.sizes}}"
+            can-quick-add="{{canQuickAddDict}}"
+            bind:change="onColorSizeChange"
+            bind:quickadd="onColorSizeQuickAdd"
+          />
+        </block>
+      </view>
+    </view>
+  </scroll-view>
+
+  <view wx:if="{{!loading}}" class="report-batch-footer">
+    <view
+      wx:if="{{canDelete && isPersisted}}"
+      class="report-batch-footer__btn report-batch-footer__btn--ghost {{submitting ? 'report-batch-footer__btn--disabled' : ''}}"
+      bindtap="onDeleteTap"
+    >删除</view>
+    <view
+      class="report-batch-footer__btn report-batch-footer__btn--primary {{submitting ? 'report-batch-footer__btn--disabled' : ''}}"
+      bindtap="onSaveTap"
+    >{{submitting ? '保存中…' : '保存产品资料'}}</view>
+  </view>
+</view>

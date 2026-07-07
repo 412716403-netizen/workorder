@@ -1,0 +1,21 @@
+@import '../production-plans/production-plans.wxss';
+@import '../production-order-report-history/production-order-report-history.wxss';
+@import '../psi-purchase-order-flow/psi-purchase-order-flow.wxss';
+
+.so-flow-row__head-partner {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  flex-shrink: 0;
+  max-width: 46%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.so-flow-row__status {
+  font-size: 22rpx;
+  font-weight: 400;
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
+}

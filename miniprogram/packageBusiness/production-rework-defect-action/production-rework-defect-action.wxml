@@ -1,0 +1,153 @@
+<view class="plan-shell defect-action-shell">
+  <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-header__title">处理不良</text>
+      <view class="plan-header__back plan-header__back--placeholder"></view>
+    </view>
+  </view>
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view
+    scroll-y
+    class="defect-action-scroll"
+    style="height: {{scrollHeight}}px;"
+    scroll-top="{{matrixScrollTop}}"
+    scroll-with-animation
+    show-scrollbar="{{false}}"
+  >
+    <view wx:if="{{loading}}" class="defect-action-loading">加载中…</view>
+    <view wx:else class="defect-action-form {{matrixKeyboardVisible ? 'matrix-keyboard-page--open' : ''}}">
+      <view class="defect-action-mode-bar">
+        <view
+          wx:for="{{modeOptions}}"
+          wx:key="id"
+          class="defect-action-mode {{mode === item.id ? 'defect-action-mode--active' : ''}} {{item.id === 'scrap' && mode === item.id ? 'defect-action-mode--scrap' : ''}}"
+          data-mode="{{item.id}}"
+          bindtap="onModeTap"
+        >{{item.label}}</view>
+      </view>
+
+      <view class="plan-form-card defect-action-info-card">
+        <view class="defect-action-info">
+          <text class="defect-action-info__title">{{titleLine}}</text>
+          <text class="defect-action-info__meta">{{milestoneLine}}</text>
+        </view>
+      </view>
+
+      <view wx:if="{{mode === 'outsource_rework'}}" class="plan-form-card">
+        <searchable-partner-select
+          cell="{{true}}"
+          required="{{true}}"
+          label="外协加工厂"
+          partners="{{partners}}"
+          categories="{{partnerCategories}}"
+          value="{{partnerName}}"
+          placeholder="{{partners.length ? '请选择合作单位' : '暂无合作单位'}}"
+          disabled="{{!partners.length}}"
+          bind:change="onPartnerChange"
+        />
+      </view>
+
+      <view wx:if="{{mode === 'rework' || mode === 'outsource_rework'}}" class="plan-form-card defect-action-nodes-card">
+        <view class="defect-action-section-head">
+          <text class="defect-action-section-head__title">返工目标工序</text>
+          <text class="defect-action-section-head__hint">{{reworkNodeHint}}</text>
+        </view>
+        <view wx:if="{{reworkProductNodes.length}}" class="defect-action-node-grid">
+          <view
+            wx:for="{{reworkProductNodes}}"
+            wx:key="id"
+            class="defect-action-node-chip {{item.checked ? 'defect-action-node-chip--on' : ''}}"
+            data-id="{{item.id}}"
+            bindtap="onNodeToggle"
+          >
+            <text class="defect-action-node-chip__step">{{item.stepLabel}}</text>
+            <text class="defect-action-node-chip__name">{{item.name}}</text>
+          </view>
+        </view>
+        <view wx:if="{{reworkOtherNodes.length}}" class="defect-action-node-other">
+          <text class="defect-action-node-other__label">其他工序</text>
+          <view class="defect-action-node-list">
+            <view
+              wx:for="{{reworkOtherNodes}}"
+              wx:key="id"
+              class="defect-action-node"
+              data-id="{{item.id}}"
+              bindtap="onNodeToggle"
+            >
+              <view class="defect-action-node__check {{item.checked ? 'defect-action-node__check--on' : ''}}">
+                <text wx:if="{{item.checked}}">✓</text>
+              </view>
+              <view class="defect-action-node__body">
+                <text class="defect-action-node__name">{{item.name}}</text>
+              </view>
+            </view>
+          </view>
+        </view>
+        <view wx:if="{{!reworkProductNodes.length && !reworkOtherNodes.length}}" class="defect-action-node-empty">暂无可用工序</view>
+      </view>
+
+      <view class="plan-form-card defect-action-qty-card">
+        <view class="defect-action-section-head">
+          <text class="defect-action-section-head__title">处理数量</text>
+          <text wx:if="{{useVariantQtyGrid}}" class="defect-action-section-head__total">合计 {{variantTotal}} 件</text>
+        </view>
+
+        <block wx:if="{{useVariantQtyGrid && matrixLayout}}">
+          <scroll-view class="plan-create-matrix-scroll" scroll-x enhanced show-scrollbar="{{false}}">
+            <view class="plan-create-matrix report-matrix">
+              <view class="plan-create-matrix__head">
+                <view class="plan-create-matrix__corner">颜色</view>
+                <view wx:for="{{matrixLayout.sizeColumns}}" wx:key="id" class="plan-create-matrix__size">{{item.header}}</view>
+              </view>
+              <view wx:for="{{matrixLayout.colorRows}}" wx:for-item="row" wx:key="key" class="plan-create-matrix__row">
+                <view class="plan-create-matrix__color">
+                  <view wx:if="{{row.colorSwatch}}" class="plan-create-matrix__swatch" style="background-color: {{row.colorSwatch}};" />
+                  <text class="plan-create-matrix__color-text">{{row.colorLabel}}</text>
+                </view>
+                <view wx:for="{{row.cells}}" wx:for-item="cell" wx:key="index" class="plan-create-matrix__cell report-matrix__cell">
+                  <view wx:if="{{cell.variantId && !cell.disabled}}" class="report-matrix__cell-inner">
+                    <view
+                      class="plan-create-matrix__input {{activeMatrixVariantId === cell.variantId ? 'plan-create-matrix__input--active' : ''}} {{activeMatrixVariantId === cell.variantId && matrixInputReplaceAll && cell.quantity ? 'plan-create-matrix__input--replace' : ''}} {{cell.quantity ? 'plan-create-matrix__input--filled' : 'plan-create-matrix__input--empty'}}"
+                      data-variant-id="{{cell.variantId}}"
+                      bindtap="onMatrixCellTap"
+                    >{{cell.quantity}}</view>
+                    <text class="report-matrix__max">{{cell.maxQtyLabel}}</text>
+                  </view>
+                  <view wx:else class="report-matrix__cell-inner report-matrix__cell-inner--empty">
+                    <text class="plan-create-matrix__dash">—</text>
+                  </view>
+                </view>
+              </view>
+            </view>
+          </scroll-view>
+        </block>
+
+        <view wx:else class="defect-action-single-qty">
+          <text class="defect-action-single-qty__label">数量</text>
+          <input
+            class="defect-action-single-qty__input"
+            type="digit"
+            value="{{qty}}"
+            bindinput="onQtyInput"
+            placeholder="最多 {{pendingQty}}"
+          />
+          <text class="defect-action-single-qty__hint">最多 {{pendingQtyText}}</text>
+        </view>
+      </view>
+    </view>
+  </scroll-view>
+
+  <view wx:if="{{!matrixKeyboardVisible && !loading}}" class="outsource-pick-footer">
+    <view
+      class="outsource-pick-footer__btn {{submitting ? 'outsource-pick-footer__btn--disabled' : ''}}"
+      bindtap="onSubmit"
+    >确认提交</view>
+  </view>
+
+  <matrix-qty-keyboard
+    visible="{{matrixKeyboardVisible}}"
+    bind:action="onMatrixKeyboardAction"
+  />
+</view>

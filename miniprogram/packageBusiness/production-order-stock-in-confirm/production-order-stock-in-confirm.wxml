@@ -1,0 +1,139 @@
+<view class="plan-create-shell">
+  <view class="plan-create-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-create-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-create-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-create-header__title">{{pageTitle}}</text>
+      <view class="plan-create-header__back plan-create-header__back--placeholder"></view>
+    </view>
+  </view>
+
+  <view class="plan-create-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view
+    class="plan-create-scroll"
+    scroll-y
+    scroll-top="{{matrixScrollTop}}"
+    scroll-with-animation
+    show-scrollbar="{{false}}"
+    style="height: {{scrollHeight}}px;"
+  >
+    <view wx:if="{{loading}}" class="plan-create-muted">加载中…</view>
+
+    <view wx:else class="plan-create-page {{matrixKeyboardVisible ? 'matrix-keyboard-page--open' : ''}}">
+      <view class="plan-form-card stock-in-summary-card">
+        <text class="stock-in-summary-card__title">{{summaryTitle}}</text>
+        <text class="stock-in-summary-card__meta">{{summaryMeta}}</text>
+      </view>
+
+      <view class="plan-form-card">
+        <picker
+          mode="selector"
+          range="{{warehouseNames}}"
+          value="{{warehousePickerIndex}}"
+          bindchange="onWarehouseChange"
+        >
+          <view class="plan-form-cell plan-form-cell--last">
+            <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>入库仓库</text>
+            <text class="plan-form-cell__value {{warehouseId ? '' : 'plan-form-cell__value--ph'}}">{{warehouseName || '请选择'}}</text>
+            <text class="plan-form-cell__chevron">›</text>
+          </view>
+        </picker>
+      </view>
+
+      <block wx:if="{{mode === 'batch'}}">
+        <view class="plan-form-card">
+          <view class="plan-form-cell plan-form-cell--matrix-head">
+            <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>入库数量</text>
+          </view>
+          <view
+            wx:for="{{batchLines}}"
+            wx:key="rowKey"
+            class="stock-in-batch-line"
+          >
+            <view class="stock-in-batch-line__head">
+              <text class="stock-in-batch-line__title">{{item.titleLine}}</text>
+              <text class="stock-in-batch-line__meta">{{item.pendingMeta}}</text>
+            </view>
+            <input
+              class="stock-in-batch-line__input"
+              type="number"
+              value="{{item.quantity}}"
+              data-row-key="{{item.rowKey}}"
+              bindinput="onBatchLineInput"
+              placeholder="0"
+            />
+          </view>
+        </view>
+      </block>
+
+      <block wx:else>
+        <view class="plan-form-card">
+          <view class="plan-form-cell plan-form-cell--matrix-head">
+            <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>入库数量</text>
+          </view>
+
+          <block wx:if="{{formMode === 'matrix' && matrixLayout}}">
+            <scroll-view class="plan-create-matrix-scroll" scroll-x show-scrollbar="{{false}}">
+              <view class="plan-create-matrix report-matrix stock-in-matrix">
+                <view class="plan-create-matrix__head">
+                  <view class="plan-create-matrix__corner">颜色</view>
+                  <view wx:for="{{matrixLayout.sizeColumns}}" wx:key="id" class="plan-create-matrix__size">{{item.header}}</view>
+                </view>
+                <view wx:for="{{matrixLayout.colorRows}}" wx:for-item="row" wx:key="key" class="plan-create-matrix__row">
+                  <view class="plan-create-matrix__color">
+                    <view wx:if="{{row.colorSwatch}}" class="plan-create-matrix__swatch" style="background-color: {{row.colorSwatch}};" />
+                    <text class="plan-create-matrix__color-text">{{row.colorLabel}}</text>
+                  </view>
+                  <view
+                    wx:for="{{row.cells}}"
+                    wx:for-item="cell"
+                    wx:key="index"
+                    class="plan-create-matrix__cell report-matrix__cell"
+                  >
+                    <view wx:if="{{cell.variantId}}" class="report-matrix__cell-inner">
+                      <view
+                        class="plan-create-matrix__input {{activeMatrixVariantId === cell.variantId ? 'plan-create-matrix__input--active' : ''}} {{activeMatrixVariantId === cell.variantId && matrixInputReplaceAll && cell.quantity ? 'plan-create-matrix__input--replace' : ''}} {{cell.quantity ? 'plan-create-matrix__input--filled' : 'plan-create-matrix__input--empty'}}"
+                        data-variant-id="{{cell.variantId}}"
+                        bindtap="onMatrixCellTap"
+                      >{{cell.quantity}}</view>
+                      <text class="report-matrix__max">{{cell.maxQtyLabel}}</text>
+                    </view>
+                    <view wx:else class="report-matrix__cell-inner report-matrix__cell-inner--empty">
+                      <text class="plan-create-matrix__dash">—</text>
+                      <text class="report-matrix__max report-matrix__max--placeholder"> </text>
+                    </view>
+                  </view>
+                </view>
+              </view>
+            </scroll-view>
+          </block>
+
+          <view wx:else class="plan-form-cell plan-form-cell--input plan-form-cell--last">
+            <text class="plan-form-cell__label">数量</text>
+            <input
+              class="plan-form-cell__input"
+              type="number"
+              value="{{singleQuantity}}"
+              bindinput="onSingleQtyInput"
+              placeholder="0"
+            />
+          </view>
+        </view>
+      </block>
+    </view>
+  </scroll-view>
+
+  <view class="plan-create-footer" wx:if="{{!matrixKeyboardVisible}}">
+    <button
+      class="plan-create-submit"
+      loading="{{submitting}}"
+      disabled="{{submitting}}"
+      bindtap="onSubmit"
+    >{{submitting ? '提交中…' : '确认入库'}}</button>
+  </view>
+
+  <matrix-qty-keyboard
+    visible="{{matrixKeyboardVisible}}"
+    bind:action="onMatrixKeyboardAction"
+  />
+</view>

@@ -1,0 +1,199 @@
+<view class="plan-create-shell">
+  <view class="plan-create-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-create-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-create-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-create-header__title">{{nodeName}} · 返工报工</text>
+      <view class="plan-create-header__back plan-create-header__back--placeholder"></view>
+    </view>
+  </view>
+
+  <view class="plan-create-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view
+    class="plan-create-scroll"
+    scroll-y
+    scroll-top="{{matrixScrollTop}}"
+    scroll-with-animation
+    show-scrollbar="{{false}}"
+    style="height: {{scrollHeight}}px;"
+  >
+    <view wx:if="{{loading}}" class="plan-create-muted">加载中…</view>
+
+    <view wx:else class="plan-create-page {{matrixKeyboardVisible ? 'matrix-keyboard-page--open' : ''}}">
+      <view class="plan-form-card report-context-card">
+        <view class="report-context-card__row">
+          <view class="report-context-card__main">
+            <view class="report-context-card__head">
+              <text wx:if="{{orderNumber}}" class="report-context-card__order">{{orderNumber}}</text>
+              <text wx:if="{{orderNumber && productName}}" class="report-context-card__dot">·</text>
+              <text class="report-context-card__product">{{productName}}</text>
+            </view>
+            <text wx:if="{{contextHint}}" class="report-context-card__hint">{{contextHint}}</text>
+          </view>
+          <view class="report-context-card__scan" bindtap="onGoScan">
+            <image class="report-context-card__scan-icon" src="/assets/tab/scan.png" mode="aspectFit" />
+            <text class="report-context-card__scan-text">扫码</text>
+          </view>
+        </view>
+      </view>
+
+      <view wx:if="{{!isOutsourceRework}}" class="plan-form-card">
+        <searchable-worker-select
+          cell="{{true}}"
+          label="生产人员"
+          workers="{{workers}}"
+          process-nodes="{{processNodes}}"
+          current-node-id="{{nodeId}}"
+          value-id="{{workerId}}"
+          value-name="{{workerName}}"
+          placeholder="{{workers.length ? '请选择' : '暂无可用人员'}}"
+          disabled="{{!workers.length}}"
+          bind:change="onWorkerChange"
+        />
+
+        <picker
+          wx:if="{{needEquipment}}"
+          mode="selector"
+          range="{{equipmentNames}}"
+          value="{{equipmentPickerIndex}}"
+          bindchange="onEquipmentChange"
+        >
+          <view class="plan-form-cell plan-form-cell--last">
+            <text class="plan-form-cell__label">设备</text>
+            <text class="plan-form-cell__value {{equipmentId ? '' : 'plan-form-cell__value--ph'}}">{{equipmentName || '请选择'}}</text>
+            <text class="plan-form-cell__chevron">›</text>
+          </view>
+        </picker>
+      </view>
+
+      <view wx:if="{{showSingleProductPrice}}" class="plan-form-card rework-report-price-card">
+        <view class="rework-report-summary-row">
+          <view class="rework-report-summary-col">
+            <text class="rework-report-summary-col__label">数量</text>
+            <block wx:if="{{showSimpleQtyInPriceRow}}">
+              <input
+                class="rework-report-summary-col__input"
+                type="digit"
+                value="{{simpleQuantity}}"
+                placeholder="0"
+                data-key="{{simpleQtyKey}}"
+                bindinput="onSimpleQtyInput"
+              />
+              <text class="rework-report-summary-col__meta">最多 {{simpleMaxPending}}</text>
+            </block>
+            <view wx:else class="rework-report-summary-col__readonly">
+              <text class="rework-report-summary-col__num">{{totalEnteredQty}}</text>
+              <text class="rework-report-summary-col__unit">{{unitName}}</text>
+            </view>
+          </view>
+          <view class="rework-report-summary-col">
+            <text class="rework-report-summary-col__label">单价 (元)</text>
+            <input
+              class="rework-report-summary-col__input"
+              type="digit"
+              value="{{unitPrice}}"
+              placeholder="0.00"
+              bindinput="onUnitPriceInput"
+            />
+          </view>
+          <view class="rework-report-summary-col">
+            <text class="rework-report-summary-col__label">金额 (元)</text>
+            <view class="rework-report-summary-col__readonly rework-report-summary-col__readonly--amount">
+              <text class="rework-report-summary-col__num">{{amountText || '0.00'}}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view wx:for="{{lines}}" wx:key="rowKey" class="plan-form-card">
+        <view class="plan-form-cell plan-form-cell--matrix-head">
+          <text class="plan-form-cell__label">{{item.productName}}</text>
+          <text class="plan-form-cell__hint">已填 {{item.enteredQty}} {{item.unitName}}</text>
+        </view>
+
+        <text wx:if="{{item.showPathLabel}}" class="rework-report-path-hint">返工路径：{{item.pathLabel}}</text>
+
+        <text wx:if="{{item.onlyUndiff}}" class="rework-report-path-hint">此路径返工未带规格：在各尺码中分配，合计不超过 {{item.pendingUndiff}} {{item.unitName}}。</text>
+
+        <view wx:if="{{item.showUndiffInput}}" class="rework-report-undiff">
+          <text class="rework-report-undiff__label">未分规格待返工（合计）</text>
+          <view class="rework-report-undiff__row">
+            <input
+              class="rework-report-undiff__input"
+              type="number"
+              value="{{item.undiffQuantity}}"
+              data-key="{{item.undiffKey}}"
+              bindinput="onUndiffQtyInput"
+              placeholder="0"
+            />
+            <text class="rework-report-undiff__meta">最多 {{item.pendingUndiff}} {{item.unitName}}</text>
+          </view>
+        </view>
+
+        <block wx:if="{{item.hasMatrix && item.matrixLayout}}">
+          <scroll-view class="plan-create-matrix-scroll" scroll-x enhanced show-scrollbar="{{false}}">
+            <view class="plan-create-matrix report-matrix">
+              <view class="plan-create-matrix__head">
+                <view class="plan-create-matrix__corner">颜色</view>
+                <view wx:for="{{item.matrixLayout.sizeColumns}}" wx:key="id" class="plan-create-matrix__size">{{item.header}}</view>
+              </view>
+              <view wx:for="{{item.matrixLayout.colorRows}}" wx:for-item="row" wx:key="key" class="plan-create-matrix__row">
+                <view class="plan-create-matrix__color">
+                  <view wx:if="{{row.colorSwatch}}" class="plan-create-matrix__swatch" style="background-color: {{row.colorSwatch}};" />
+                  <text class="plan-create-matrix__color-text">{{row.colorLabel}}</text>
+                </view>
+                <view wx:for="{{row.cells}}" wx:for-item="cell" wx:key="index" class="plan-create-matrix__cell report-matrix__cell">
+                  <view wx:if="{{cell.variantId}}" class="report-matrix__cell-inner">
+                    <view
+                      class="plan-create-matrix__input {{activeMatrixRowKey === item.rowKey && activeMatrixVariantId === cell.variantId ? 'plan-create-matrix__input--active' : ''}} {{activeMatrixRowKey === item.rowKey && activeMatrixVariantId === cell.variantId && matrixInputReplaceAll && cell.quantity ? 'plan-create-matrix__input--replace' : ''}} {{cell.quantity ? 'plan-create-matrix__input--filled' : 'plan-create-matrix__input--empty'}}"
+                      data-row-key="{{item.rowKey}}"
+                      data-variant-id="{{cell.variantId}}"
+                      bindtap="onMatrixCellTap"
+                    >{{cell.quantity}}</view>
+                    <text class="report-matrix__max">{{cell.maxQtyLabel}}</text>
+                  </view>
+                  <view wx:else class="report-matrix__cell-inner report-matrix__cell-inner--empty">
+                    <text class="plan-create-matrix__dash">—</text>
+                  </view>
+                </view>
+              </view>
+            </view>
+          </scroll-view>
+        </block>
+
+        <view wx:elif="{{!item.hasMatrix && !showSimpleQtyInPriceRow}}" class="plan-form-cell plan-form-cell--input plan-form-cell--last report-qty-cell">
+          <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>返工数量</text>
+          <view class="report-qty-cell__body">
+            <view class="report-stepper">
+              <view class="report-stepper__btn" data-key="{{item.simpleQtyKey}}" data-delta="-1" bindtap="onSimpleQtyStep">−</view>
+              <input
+                class="report-stepper__input"
+                type="number"
+                value="{{item.quantity}}"
+                data-key="{{item.simpleQtyKey}}"
+                bindinput="onSimpleQtyInput"
+                placeholder="0"
+              />
+              <view class="report-stepper__btn" data-key="{{item.simpleQtyKey}}" data-delta="1" bindtap="onSimpleQtyStep">+</view>
+            </view>
+            <text class="report-qty-cell__max">最多 {{item.maxPending}} {{item.unitName}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </scroll-view>
+
+  <view class="plan-create-footer" wx:if="{{!matrixKeyboardVisible}}">
+    <button
+      class="plan-create-submit"
+      loading="{{submitting}}"
+      disabled="{{submitting || !canSubmit}}"
+      bindtap="onSubmit"
+    >{{submitting ? '提交中…' : '确认报工'}}</button>
+  </view>
+
+  <matrix-qty-keyboard
+    visible="{{matrixKeyboardVisible}}"
+    bind:action="onMatrixKeyboardAction"
+  />
+</view>

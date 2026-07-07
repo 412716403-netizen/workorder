@@ -1,0 +1,112 @@
+<view class="home-shell">
+  <view class="home-header" style="padding-top: {{headerPaddingTop}}px;">
+    <view class="home-user" style="padding-right: {{headerPaddingRight}}px;">
+      <view class="home-user__avatar">{{avatarText}}</view>
+      <view class="home-user__info">
+        <view class="home-user__name-row">
+          <text class="home-user__name">{{displayName}}</text>
+        </view>
+        <text class="home-user__tenant">{{tenantName}}</text>
+      </view>
+    </view>
+
+    <view wx:if="{{shortcutsLoading}}" class="home-shortcuts home-shortcuts--loading">加载中…</view>
+    <scroll-view
+      wx:elif="{{shortcuts.length > 5}}"
+      class="home-shortcuts"
+      scroll-x
+      enhanced
+      show-scrollbar="{{false}}"
+    >
+      <view class="home-shortcuts__inner home-shortcuts__inner--scroll">
+        <view
+          wx:for="{{shortcuts}}"
+          wx:key="key"
+          class="home-shortcut"
+          data-key="{{item.key}}"
+          data-path="{{item.path}}"
+          bindtap="onShortcutTap"
+        >
+          <image wx:if="{{item.icon}}" class="home-shortcut__icon" src="{{item.icon}}" mode="aspectFit" />
+          <text wx:else class="home-shortcut__fallback">{{item.fallbackChar}}</text>
+          <text class="home-shortcut__label">{{item.label}}</text>
+        </view>
+      </view>
+    </scroll-view>
+    <view wx:elif="{{shortcuts.length}}" class="home-shortcuts">
+      <view class="home-shortcuts__inner home-shortcuts__inner--fill">
+        <view
+          wx:for="{{shortcuts}}"
+          wx:key="key"
+          class="home-shortcut"
+          data-key="{{item.key}}"
+          data-path="{{item.path}}"
+          bindtap="onShortcutTap"
+        >
+          <image wx:if="{{item.icon}}" class="home-shortcut__icon" src="{{item.icon}}" mode="aspectFit" />
+          <text wx:else class="home-shortcut__fallback">{{item.fallbackChar}}</text>
+          <text class="home-shortcut__label">{{item.label}}</text>
+        </view>
+      </view>
+    </view>
+    <view wx:else class="home-shortcuts home-shortcuts--empty">
+      <text>暂无快捷入口</text>
+    </view>
+  </view>
+
+  <scroll-view class="home-scroll" scroll-y show-scrollbar="{{false}}">
+    <view class="home-body">
+      <empty-state wx:if="{{bootError}}" text="{{bootError}}" />
+
+      <empty-state wx:elif="{{loading}}" loading="{{true}}" />
+
+      <view wx:else>
+        <view wx:if="{{statCards.length || statsLoading || showWorkbenchTabs}}" class="home-dashboard-head">
+          <view wx:if="{{!showWorkbenchTabs}}" class="home-section-head">
+            <text class="home-section-head__title">{{dashboardTitle}}</text>
+          </view>
+          <view class="home-period">
+            <view class="home-period__row">
+              <view class="home-period__tabs">
+                <view
+                  wx:for="{{periodTabs}}"
+                  wx:key="key"
+                  class="home-period__tab {{periodTab === item.key ? 'home-period__tab--active' : ''}}"
+                  data-key="{{item.key}}"
+                  bindtap="onPeriodTabTap"
+                >
+                  {{item.label}}
+                </view>
+              </view>
+              <view
+                wx:if="{{showWorkbenchTabs}}"
+                class="home-period__page-btn"
+                bindtap="onWorkbenchPageSwitchTap"
+              >
+                <text class="home-period__page-btn-text">{{dashboardTitle}}</text>
+                <view class="home-period__page-btn-arrow"></view>
+              </view>
+            </view>
+            <view wx:if="{{periodTab === 'custom'}}" class="home-period__range">
+              <picker mode="date" value="{{customStart}}" end="{{customEnd}}" bindchange="onCustomStartChange">
+                <view class="home-period__date">{{customStart}}</view>
+              </picker>
+              <text class="home-period__sep">至</text>
+              <picker mode="date" value="{{customEnd}}" start="{{customStart}}" bindchange="onCustomEndChange">
+                <view class="home-period__date">{{customEnd}}</view>
+              </picker>
+            </view>
+            <view wx:if="{{customRangeInvalid}}" class="home-period__warn">请选择有效的日期范围</view>
+          </view>
+        </view>
+
+        <workbench-stat-card wx:for="{{statCards}}" wx:key="id" card="{{item}}" />
+
+        <empty-state
+          wx:if="{{!statCards.length}}"
+          text="{{loadError ? '工作台加载失败，请下拉刷新' : emptyStatsText}}"
+        />
+      </view>
+    </view>
+  </scroll-view>
+</view>

@@ -1,0 +1,91 @@
+@import '../../styles/plan-list-shell.wxss';
+
+.settings-scroll {
+  height: 100vh;
+  box-sizing: border-box;
+}
+
+.settings-page {
+  padding: 24rpx var(--spacing-page) calc(48rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+}
+
+.settings-muted {
+  padding: 120rpx 24rpx;
+  text-align: center;
+  font-size: var(--font-caption);
+  color: var(--color-text-secondary);
+}
+
+.settings-group {
+  margin-bottom: 28rpx;
+}
+
+.settings-group__title {
+  margin-bottom: 12rpx;
+  padding-left: 8rpx;
+  font-size: var(--font-caption);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.settings-card {
+  background: var(--color-bg-card);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  padding: 28rpx var(--spacing-card);
+  border-bottom: 1rpx solid var(--color-border);
+}
+
+.settings-row:last-child {
+  border-bottom: none;
+}
+
+.settings-row__icon-wrap {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: var(--radius-icon);
+  background: var(--color-primary-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 20rpx;
+  flex-shrink: 0;
+}
+
+.settings-row__icon {
+  width: 40rpx;
+  height: 40rpx;
+}
+
+.settings-row__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-row__title {
+  font-size: var(--font-body);
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.settings-row__sub {
+  margin-top: 6rpx;
+  font-size: var(--font-small);
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+}
+
+.settings-chevron {
+  margin-left: 16rpx;
+  font-size: 40rpx;
+  font-weight: 300;
+  color: var(--color-text-tertiary);
+  line-height: 1;
+}

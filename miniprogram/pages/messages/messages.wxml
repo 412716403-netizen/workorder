@@ -1,0 +1,61 @@
+<view class="msg-shell">
+  <view class="msg-header" style="padding-top: {{headerPaddingTop}}px;">
+    <view class="msg-header__top" style="padding-right: {{headerPaddingRight}}px;">
+      <text class="msg-header__title">消息{{totalBadge > 0 ? '(' + totalBadge + ')' : ''}}</text>
+    </view>
+    <view class="msg-search">
+      <view class="msg-search__box">
+        <icon type="search" size="14" color="#8f959e" class="msg-search__icon" />
+        <input
+          class="msg-search__input"
+          type="text"
+          placeholder="搜索会话或消息内容"
+          placeholder-class="msg-search__placeholder"
+          value="{{searchKeyword}}"
+          bindinput="onSearchInput"
+          confirm-type="search"
+        />
+        <view wx:if="{{searchKeyword}}" class="msg-search__clear" bindtap="onSearchClear">×</view>
+      </view>
+    </view>
+  </view>
+
+  <scroll-view class="msg-scroll" scroll-y show-scrollbar="{{false}}" enhanced>
+    <view class="msg-body">
+      <empty-state wx:if="{{loading}}" loading="{{true}}" />
+
+      <view wx:elif="{{!displayConversations.length}}" class="msg-empty">
+        {{searchKeyword ? '无搜索结果' : '暂无消息'}}
+      </view>
+
+      <block wx:else>
+        <view
+          wx:for="{{displayConversations}}"
+          wx:key="id"
+          class="conv-row {{item.badge > 0 ? 'conv-row--unread' : ''}}"
+          data-id="{{item.id}}"
+          bindtap="onConversationTap"
+        >
+          <view class="conv-avatar-wrap">
+            <view class="conv-avatar conv-avatar--{{item.avatarTone}} {{item.kind === 'notifications' ? 'conv-avatar--notify' : ''}} {{item.kind === 'todos' ? 'conv-avatar--todo' : ''}}">
+              <text class="conv-avatar__text {{item.avatarText.length > 1 ? 'conv-avatar__text--compact' : ''}}">{{item.avatarText}}</text>
+            </view>
+            <view wx:if="{{item.badge > 0}}" class="conv-avatar-badge">
+              {{item.badge > 99 ? '99+' : item.badge}}
+            </view>
+          </view>
+          <view class="conv-body">
+            <view class="conv-body__top">
+              <text class="conv-body__title">{{item.title}}</text>
+              <text class="conv-body__time">{{item.lastTimeText}}</text>
+            </view>
+            <view class="conv-body__bottom">
+              <text class="conv-body__summary">{{item.lastSummary}}</text>
+            </view>
+            <view wx:if="{{!item.last}}" class="conv-body__line"></view>
+          </view>
+        </view>
+      </block>
+    </view>
+  </scroll-view>
+</view>

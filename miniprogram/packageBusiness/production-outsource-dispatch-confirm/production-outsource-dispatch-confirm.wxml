@@ -1,0 +1,98 @@
+<view class="plan-shell outsource-confirm-shell">
+  <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-header__title">外协发出</text>
+      <view class="plan-header__back plan-header__back--placeholder"></view>
+    </view>
+  </view>
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view
+    scroll-y
+    class="outsource-confirm-scroll"
+    style="height: {{scrollHeight}}px;"
+    scroll-top="{{matrixScrollTop}}"
+    scroll-with-animation
+    show-scrollbar="{{false}}"
+  >
+    <view class="outsource-confirm-form {{matrixKeyboardVisible ? 'matrix-keyboard-page--open' : ''}}">
+      <view class="plan-form-card outsource-confirm-partner-card">
+        <searchable-partner-select
+          cell="{{true}}"
+          required="{{true}}"
+          label="外协加工厂"
+          partners="{{partners}}"
+          categories="{{partnerCategories}}"
+          value="{{partnerName}}"
+          placeholder="{{partners.length ? '请选择合作单位' : '暂无合作单位'}}"
+          disabled="{{!partners.length}}"
+          bind:change="onPartnerChange"
+        />
+        <picker wx:if="{{showDeliveryDate}}" mode="date" value="{{deliveryDate}}" bindchange="onDeliveryDateChange">
+          <view class="plan-form-cell plan-form-cell--last">
+            <text class="plan-form-cell__label">交货日期</text>
+            <text class="plan-form-cell__value {{deliveryDate ? '' : 'plan-form-cell__value--ph'}}">{{deliveryDate || '请选择'}}</text>
+            <text class="plan-form-cell__chevron">›</text>
+          </view>
+        </picker>
+      </view>
+
+      <view wx:for="{{lines}}" wx:key="rowKey" class="outsource-confirm-card">
+        <text class="outsource-confirm-card__title">{{item.titleLine}}</text>
+        <text class="outsource-confirm-card__meta">{{item.milestoneName}} · 最多 {{item.maxQty}}{{item.hasMatrix ? ' · 色码矩阵' : ''}}</text>
+
+        <block wx:if="{{item.hasMatrix && item.matrixLayout}}">
+          <scroll-view class="plan-create-matrix-scroll" scroll-x enhanced show-scrollbar="{{false}}">
+            <view class="plan-create-matrix report-matrix">
+              <view class="plan-create-matrix__head">
+                <view class="plan-create-matrix__corner">颜色</view>
+                <view wx:for="{{item.matrixLayout.sizeColumns}}" wx:key="id" class="plan-create-matrix__size">{{item.header}}</view>
+              </view>
+              <view wx:for="{{item.matrixLayout.colorRows}}" wx:for-item="row" wx:key="key" class="plan-create-matrix__row">
+                <view class="plan-create-matrix__color">
+                  <view wx:if="{{row.colorSwatch}}" class="plan-create-matrix__swatch" style="background-color: {{row.colorSwatch}};" />
+                  <text class="plan-create-matrix__color-text">{{row.colorLabel}}</text>
+                </view>
+                <view wx:for="{{row.cells}}" wx:for-item="cell" wx:key="index" class="plan-create-matrix__cell report-matrix__cell">
+                  <view wx:if="{{cell.variantId}}" class="report-matrix__cell-inner">
+                    <view
+                      class="plan-create-matrix__input {{activeMatrixRowKey === item.rowKey && activeMatrixVariantId === cell.variantId ? 'plan-create-matrix__input--active' : ''}} {{activeMatrixRowKey === item.rowKey && activeMatrixVariantId === cell.variantId && matrixInputReplaceAll && cell.quantity ? 'plan-create-matrix__input--replace' : ''}} {{cell.quantity ? 'plan-create-matrix__input--filled' : 'plan-create-matrix__input--empty'}}"
+                      data-row-key="{{item.rowKey}}"
+                      data-variant-id="{{cell.variantId}}"
+                      bindtap="onMatrixCellTap"
+                    >{{cell.quantity}}</view>
+                    <text class="report-matrix__max">{{cell.maxQtyLabel}}</text>
+                  </view>
+                  <view wx:else class="report-matrix__cell-inner report-matrix__cell-inner--empty">
+                    <text class="plan-create-matrix__dash">—</text>
+                  </view>
+                </view>
+              </view>
+            </view>
+          </scroll-view>
+        </block>
+
+        <view wx:else class="outsource-confirm-qty">
+          <input
+            class="outsource-confirm-field__input"
+            type="digit"
+            value="{{item.quantity}}"
+            data-key="{{item.rowKey}}"
+            bindinput="onQtyInput"
+            placeholder="数量"
+          />
+        </view>
+      </view>
+    </view>
+  </scroll-view>
+
+  <view wx:if="{{!matrixKeyboardVisible}}" class="outsource-pick-footer">
+    <view class="outsource-pick-footer__btn {{submitting ? 'outsource-pick-footer__btn--disabled' : ''}}" bindtap="onSubmit">确认发出</view>
+  </view>
+
+  <matrix-qty-keyboard
+    visible="{{matrixKeyboardVisible}}"
+    bind:action="onMatrixKeyboardAction"
+  />
+</view>

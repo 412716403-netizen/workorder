@@ -1,0 +1,181 @@
+<view class="plan-shell">
+  <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-header__title">外协管理</text>
+      <view class="plan-header__back plan-header__back--placeholder"></view>
+    </view>
+
+    <view class="plan-header__tools">
+      <view class="plan-search">
+        <input
+          class="plan-search__input"
+          value="{{searchKeyword}}"
+          bindinput="onSearchInput"
+          placeholder="工单号 / 产品 / 外协厂 / 工序"
+          confirm-type="search"
+          placeholder-class="plan-search__ph"
+        />
+        <view wx:if="{{searchKeyword}}" class="plan-search__clear" bindtap="onSearchClear">×</view>
+      </view>
+      <view
+        class="plan-tool-btn {{filterActive ? 'plan-tool-btn--active' : ''}}"
+        bindtap="onFilterTap"
+      >
+        <image class="plan-tool-btn__icon" src="/assets/icons/list-filter.png" mode="aspectFit" />
+      </view>
+    </view>
+  </view>
+
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <view wx:if="{{showFilterPanel}}" class="plan-filter-panel">
+    <view wx:if="{{filterShortcuts.length}}" class="plan-filter-actions">
+      <view
+        wx:for="{{filterShortcuts}}"
+        wx:key="id"
+        class="plan-filter-action-btn"
+        bindtap="onShortcutTap"
+        data-id="{{item.id}}"
+      >
+        <image class="plan-filter-action-btn__icon" src="{{item.icon}}" mode="aspectFit" />
+        <text class="plan-filter-action-btn__label">{{item.label}}</text>
+        <text wx:if="{{item.badgeText}}" class="plan-filter-action-btn__badge">{{item.badgeText}}</text>
+      </view>
+    </view>
+
+    <view class="plan-filter-panel__row">
+      <text class="plan-filter-panel__label">仅显示未完成</text>
+      <view
+        class="plan-filter-switch {{draftOnlyShowIncomplete ? 'plan-filter-switch--on' : ''}}"
+        bindtap="onExcludeToggle"
+      >
+        <view class="plan-filter-switch__knob"></view>
+      </view>
+    </view>
+
+    <view class="plan-filter-panel__foot">
+      <view class="plan-filter-reset" bindtap="onFilterReset">重置</view>
+      <view class="plan-filter-apply" bindtap="onFilterApply">确定</view>
+    </view>
+  </view>
+
+  <view class="order-list-body outsource-list-body">
+    <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
+
+    <view wx:elif="{{!canViewList}}">
+      <view class="plan-list-empty">无权限查看外协列表</view>
+    </view>
+
+    <view wx:elif="{{cards.length}}" class="plan-list-wrap order-list-wrap">
+      <view wx:for="{{cards}}" wx:key="cardKey" class="order-list-row">
+        <view class="order-list-row__top">
+          <view class="order-list-row__left">
+            <view class="order-list-row__thumb">
+              <image
+                wx:if="{{item.showProductImage}}"
+                class="order-list-row__img"
+                src="{{item.productImageUrl}}"
+                mode="aspectFill"
+                data-key="{{item.cardKey}}"
+                binderror="onProductImageError"
+              />
+              <view wx:else class="order-list-row__img order-list-row__img--placeholder">
+                <image class="order-list-row__placeholder-icon" src="{{item.placeholderIconSrc}}" mode="aspectFit" />
+              </view>
+            </view>
+          </view>
+
+          <view class="order-list-row__content">
+            <view class="order-list-row__head">
+              <text wx:if="{{item.showOrderNumber}}" class="order-list-row__number">{{item.orderNumber}}</text>
+              <text wx:if="{{item.showDueDate}}" class="order-list-row__due">{{item.dueDateLabel}}</text>
+              <text wx:if="{{item.showOrderTotal}}" class="order-list-row__qty">{{item.orderTotalQtyText}}</text>
+            </view>
+            <view class="order-list-row__product-line">
+              <text class="order-list-row__product">{{item.productName}}</text>
+              <text wx:if="{{item.showProductSku}}" class="order-list-row__sku">{{item.productSku}}</text>
+            </view>
+            <view wx:if="{{item.showCustomer}}" class="order-list-row__customer">
+              <image class="order-list-row__customer-icon" src="/assets/icons/user.png" mode="aspectFit" />
+              <text class="order-list-row__customer-text">{{item.customer}}</text>
+            </view>
+          </view>
+        </view>
+
+        <view wx:if="{{item.partners.length || canMaterial}}" class="order-list-row__process">
+          <view class="order-list-row__process-scroll">
+            <scroll-view wx:if="{{item.partners.length}}" scroll-x class="order-process-scroll order-process-scroll--compact" enable-flex show-scrollbar="{{false}}">
+              <view class="order-process-scroll__inner">
+                <view
+                  wx:for="{{item.partners}}"
+                  wx:for-item="chip"
+                  wx:key="chipKey"
+                  class="order-process-chip order-process-chip--outsource {{chip.isCompleted ? 'order-process-chip--done' : ''}}"
+                  bindtap="onPartnerChipTap"
+                  data-order-id="{{item.orderId}}"
+                  data-product-id="{{item.productId}}"
+                  data-node-id="{{chip.nodeId}}"
+                  data-node-name="{{chip.nodeName}}"
+                  data-partner="{{chip.partner}}"
+                  data-product-name="{{item.productName}}"
+                  data-order-number="{{item.orderNumber}}"
+                >
+                  <view class="order-process-chip__head">
+                    <text class="order-process-chip__name">{{chip.nodeName}}</text>
+                    <text class="order-process-chip__name order-process-chip__partner">{{chip.partner}}</text>
+                  </view>
+                  <view class="order-process-chip__circle">
+                    <text class="order-process-chip__count">{{chip.received}}</text>
+                  </view>
+                  <view class="order-process-chip__meta-row">
+                    <text class="order-process-chip__meta">{{chip.metaText}}</text>
+                    <view
+                      class="order-process-chip__detail"
+                      catchtap="onPartnerDetailTap"
+                      data-order-id="{{item.orderId}}"
+                      data-product-id="{{item.productId}}"
+                      data-node-id="{{chip.nodeId}}"
+                      data-node-name="{{chip.nodeName}}"
+                      data-partner="{{chip.partner}}"
+                      data-product-name="{{item.productName}}"
+                      data-order-number="{{item.orderNumber}}"
+                    >
+                      <image class="order-process-chip__detail-icon" src="/assets/icons/scroll-text.png" mode="aspectFit" />
+                    </view>
+                  </view>
+                  <view class="order-process-chip__bar">
+                    <view class="order-process-chip__bar-fill" style="width: {{chip.progress}}%;"></view>
+                  </view>
+                </view>
+              </view>
+            </scroll-view>
+          </view>
+
+          <view wx:if="{{canMaterial}}" class="order-list-row__actions">
+            <view
+              class="order-list-row__action order-list-row__action--detail"
+              catchtap="onMaterialDispatchTap"
+              data-order-id="{{item.orderId}}"
+              data-product-id="{{item.productId}}"
+              data-order-number="{{item.orderNumber}}"
+              data-product-name="{{item.productName}}"
+              data-partners="{{item.uniquePartnersJson}}"
+            >领料</view>
+            <view
+              class="order-list-row__action order-list-row__action--detail"
+              catchtap="onMaterialReturnTap"
+              data-order-id="{{item.orderId}}"
+              data-product-id="{{item.productId}}"
+              data-order-number="{{item.orderNumber}}"
+              data-product-name="{{item.productName}}"
+              data-partners="{{item.uniquePartnersJson}}"
+            >退料</view>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view wx:else class="plan-list-empty">{{emptyText}}</view>
+  </view>
+</view>

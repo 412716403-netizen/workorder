@@ -1,0 +1,13 @@
+<page-header title="企业入驻" />
+
+<view class="st-page st-page--flow st-page--center">
+  <view style="width: 100%">
+    <view class="st-title-page st-text-center">尚未加入企业</view>
+    <view class="st-text-caption st-text-center st-mt-md">
+      可创建新企业或通过邀请码加入；也可稍后在「选择企业」中处理。
+    </view>
+
+    <button class="st-btn-primary st-mt-lg" bindtap="onOnboarding">创建或加入企业</button>
+    <button class="st-btn-secondary st-mt-md" bindtap="onLogout">退出登录</button>
+  </view>
+</view>

@@ -1,0 +1,158 @@
+<view class="plan-detail-shell">
+  <view class="plan-detail-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-detail-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-detail-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-detail-header__title">{{title}}</text>
+      <view class="plan-detail-header__back plan-detail-header__back--placeholder"></view>
+    </view>
+  </view>
+
+  <view class="plan-detail-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view
+    class="plan-detail-scroll"
+    scroll-y
+    show-scrollbar="{{false}}"
+    style="height: {{scrollHeight}}px;"
+  >
+    <view wx:if="{{loading}}" class="plan-detail-muted">加载中…</view>
+
+    <view wx:elif="{{hero}}" class="plan-detail-page">
+      <view class="plan-detail-hero po-detail-hero">
+        <view class="plan-detail-hero__text plan-detail-hero__text--full">
+          <text class="po-detail-hero__partner">{{hero.partner}}</text>
+          <text class="po-detail-hero__doc">{{hero.docNumberDisplay}}</text>
+          <view wx:if="{{hero.showDispatchPill}}" class="po-detail-hero__pill-row">
+            <view class="st-pill {{hero.statusPillClass}}">{{hero.statusLabel}}</view>
+          </view>
+        </view>
+      </view>
+
+      <view wx:if="{{summaryStats}}" class="order-detail-summary">
+        <view class="order-detail-summary__item">
+          <text class="order-detail-summary__label">合计数量</text>
+          <text class="order-detail-summary__value">{{summaryStats.totalText}}</text>
+        </view>
+        <view class="order-detail-summary__item">
+          <text class="order-detail-summary__label">入库仓库</text>
+          <text class="order-detail-summary__value">{{summaryStats.warehouseText}}</text>
+        </view>
+        <view wx:if="{{summaryStats.showAmount}}" class="order-detail-summary__item">
+          <text class="order-detail-summary__label">合计金额</text>
+          <text class="order-detail-summary__value">{{summaryStats.amountText}}</text>
+        </view>
+      </view>
+
+      <block wx:for="{{sections}}" wx:key="id">
+        <view class="plan-detail-section">
+          <view class="plan-detail-section__head">
+            <text class="plan-detail-section__title">{{item.title}}</text>
+          </view>
+
+          <view wx:if="{{item.kind === 'rows'}}" class="plan-form-card">
+            <view wx:for="{{item.rows}}" wx:for-item="row" wx:key="label" class="plan-form-cell">
+              <text class="plan-form-cell__label">{{row.label}}</text>
+              <text class="plan-form-cell__value">{{row.value}}</text>
+            </view>
+          </view>
+
+          <view wx:elif="{{item.kind === 'purchase-lines'}}" class="plan-form-card">
+            <view wx:for="{{item.rows}}" wx:for-item="line" wx:key="lineGroupId" class="po-detail-line">
+              <view class="po-detail-line__head">
+                <view class="po-detail-line__thumb">
+                  <image
+                    wx:if="{{line.showProductImage}}"
+                    class="po-detail-line__img"
+                    src="{{line.productImageUrl}}"
+                    mode="aspectFill"
+                    data-line-group-id="{{line.lineGroupId}}"
+                    binderror="onProductImageError"
+                  />
+                  <view wx:else class="po-detail-line__img po-detail-line__img--placeholder">
+                    <image class="po-detail-line__placeholder-icon" src="{{line.placeholderIconSrc}}" mode="aspectFit" />
+                  </view>
+                </view>
+                <view class="po-detail-line__info">
+                  <view class="report-history-row__product">
+                    <view class="report-history-row__product-left">
+                      <text class="report-history-row__product-name">{{line.productName}}</text>
+                      <text wx:if="{{line.showProductSku}}" class="report-history-row__sku">{{line.productSku}}</text>
+                    </view>
+                  </view>
+
+                  <view class="order-detail-summary order-detail-summary--compact">
+                    <view class="order-detail-summary__item">
+                      <text class="order-detail-summary__label">数量</text>
+                      <text class="order-detail-summary__value">{{line.quantityText}}</text>
+                    </view>
+                    <view wx:if="{{line.showAmount}}" class="order-detail-summary__item">
+                      <text class="order-detail-summary__label">单价</text>
+                      <text class="order-detail-summary__value">{{line.priceText}}</text>
+                    </view>
+                    <view wx:if="{{line.showAmount}}" class="order-detail-summary__item">
+                      <text class="order-detail-summary__label">金额</text>
+                      <text class="order-detail-summary__value">{{line.amountText}}</text>
+                    </view>
+                  </view>
+
+                  <text wx:if="{{line.showBatch}}" class="pb-detail-batch">批次 {{line.batch}}</text>
+                  <text
+                    wx:if="{{line.showSourceOrder}}"
+                    class="pb-detail-source"
+                    data-order-number="{{line.sourceOrderNumber}}"
+                    bindtap="onSourceOrderTap"
+                  >来源订单 {{line.sourceOrderNumber}} ›</text>
+                </view>
+              </view>
+
+              <view wx:if="{{line.useMatrix && line.matrixLayout}}" class="plan-detail-matrix-wrap">
+                <scroll-view class="plan-detail-matrix-scroll" scroll-x enhanced show-scrollbar="{{false}}">
+                  <view class="plan-detail-matrix">
+                    <view class="plan-detail-matrix__head">
+                      <view class="plan-detail-matrix__corner">颜色</view>
+                      <view wx:for="{{line.matrixLayout.sizeColumns}}" wx:for-item="col" wx:key="id" class="plan-detail-matrix__size">{{col.header}}</view>
+                    </view>
+                    <view wx:for="{{line.matrixLayout.colorRows}}" wx:for-item="colorRow" wx:key="key" class="plan-detail-matrix__row">
+                      <view class="plan-detail-matrix__color">
+                        <view
+                          wx:if="{{colorRow.colorSwatch}}"
+                          class="plan-detail-matrix__swatch"
+                          style="background-color: {{colorRow.colorSwatch}};"
+                        />
+                        <text class="plan-detail-matrix__color-text">{{colorRow.colorLabel}}</text>
+                      </view>
+                      <view wx:for="{{colorRow.cells}}" wx:for-item="cell" wx:key="index" class="plan-detail-matrix__cell">
+                        <text wx:if="{{cell.variantId && cell.quantity}}" class="plan-detail-matrix__qty">{{cell.quantity}}</text>
+                        <text wx:elif="{{cell.variantId}}" class="plan-detail-matrix__dash">0</text>
+                        <text wx:else class="plan-detail-matrix__dash">—</text>
+                      </view>
+                    </view>
+                  </view>
+                </scroll-view>
+              </view>
+            </view>
+          </view>
+        </view>
+      </block>
+    </view>
+
+    <view wx:else class="plan-detail-muted">未找到该采购入库单</view>
+  </scroll-view>
+
+  <view wx:if="{{showFooter && !loading && hero}}" class="report-batch-footer">
+    <view class="report-batch-footer__inner">
+      <view
+        wx:if="{{canDelete}}"
+        class="report-batch-footer__btn report-batch-footer__btn--danger"
+        hover-class="report-batch-footer__btn--pressed"
+        bindtap="onDeleteTap"
+      >删除</view>
+      <view
+        wx:if="{{canEdit}}"
+        class="report-batch-footer__btn report-batch-footer__btn--primary"
+        hover-class="report-batch-footer__btn--pressed"
+        bindtap="onEditTap"
+      >编辑</view>
+    </view>
+  </view>
+</view>

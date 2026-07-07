@@ -1,0 +1,35 @@
+@import '../searchable-partner-select/searchable-partner-select.wxss';
+
+.unit-select__quick {
+  display: flex;
+  gap: 12rpx;
+  padding: 16rpx 32rpx;
+  border-top: 1rpx solid #f3f4f6;
+}
+
+.unit-select__quick-input {
+  flex: 1;
+  height: 72rpx;
+  padding: 0 20rpx;
+  background: #f8fafc;
+  border-radius: 12rpx;
+  font-size: 28rpx;
+}
+
+.unit-select__quick-btn {
+  padding: 0 24rpx;
+  line-height: 72rpx;
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #fff;
+  background: var(--color-primary);
+  border-radius: 12rpx;
+}
+
+.unit-select__add-row {
+  padding: 20rpx 32rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--color-primary);
+  border-top: 1rpx solid #f3f4f6;
+}

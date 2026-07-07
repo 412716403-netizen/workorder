@@ -1,0 +1,44 @@
+<view wx:if="{{open}}" class="mms" catchtouchmove="noop">
+  <view
+    class="mms__mask {{sheetShow ? 'mms__mask--show' : ''}}"
+    bindtap="onClose"
+    catchtouchmove="noop"
+  />
+  <view
+    class="mms__sheet {{sheetMotion ? 'mms__sheet--motion' : ''}} {{sheetShow ? 'mms__sheet--show' : ''}}"
+    style="height: {{sheetHeightPx}}px; max-height: {{sheetHeightPx}}px;"
+    catchtouchmove="noop"
+  >
+    <view class="mms__head">
+      <view class="mms__head-text">
+        <text class="mms__title">分配生产工序权限</text>
+        <text wx:if="{{memberName}}" class="mms__subtitle">{{memberName}}</text>
+      </view>
+      <text class="mms__close" bindtap="onClose">关闭</text>
+    </view>
+
+    <view class="mms__summary">已分配 {{selectedIds.length}} 个工序节点</view>
+
+    <scroll-view class="mms__list" scroll-y enhanced show-scrollbar="{{true}}">
+      <view wx:if="{{!nodes.length}}" class="mms__empty">暂无工序节点，请先在系统设置中创建</view>
+      <view wx:else class="mms__chip-grid">
+        <view
+          wx:for="{{chips}}"
+          wx:key="id"
+          class="ncs__chip {{item.selected ? 'ncs__chip--active' : ''}}"
+          data-id="{{item.id}}"
+          bindtap="onToggle"
+        >
+          <text class="ncs__chip-text">{{item.name}}</text>
+        </view>
+      </view>
+    </scroll-view>
+
+    <view class="mms__footer">
+      <view class="mms__btn mms__btn--ghost" bindtap="onClose">取消</view>
+      <view class="mms__btn mms__btn--primary {{saving ? 'mms__btn--disabled' : ''}}" bindtap="onConfirm">
+        {{saving ? '保存中…' : '保存'}}
+      </view>
+    </view>
+  </view>
+</view>

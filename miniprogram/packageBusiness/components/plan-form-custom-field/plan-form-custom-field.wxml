@@ -1,0 +1,56 @@
+<view class="pfcf">
+  <view
+    wx:for="{{enrichedFields}}"
+    wx:key="id"
+    class="plan-form-cell {{index === enrichedFields.length - 1 ? 'plan-form-cell--last' : ''}}"
+  >
+    <block wx:if="{{item.isText}}">
+      <text class="plan-form-cell__label">{{item.label}}</text>
+      <input
+        class="plan-form-cell__input"
+        value="{{values[item.id]}}"
+        data-id="{{item.id}}"
+        bindinput="onTextInput"
+        placeholder="请填写"
+        placeholder-class="plan-form-cell__ph"
+      />
+    </block>
+
+    <block wx:elif="{{item.isSelect}}">
+      <text class="plan-form-cell__label">{{item.label}}</text>
+      <picker
+        mode="selector"
+        range="{{item.options}}"
+        value="{{item.pickerIndex}}"
+        data-id="{{item.id}}"
+        data-options="{{item.options}}"
+        bindchange="onSelectChange"
+      >
+        <view class="pfcf__picker-value">
+          <text class="plan-form-cell__value {{values[item.id] ? '' : 'plan-form-cell__value--ph'}}">{{values[item.id] || '请选择'}}</text>
+          <text class="plan-form-cell__chevron">›</text>
+        </view>
+      </picker>
+    </block>
+
+    <block wx:elif="{{item.isDate}}">
+      <text class="plan-form-cell__label">{{item.label}}</text>
+      <picker
+        mode="{{item.pickerMode}}"
+        value="{{values[item.id]}}"
+        data-id="{{item.id}}"
+        bindchange="onDateChange"
+      >
+        <view class="pfcf__picker-value">
+          <text class="plan-form-cell__value {{values[item.id] ? '' : 'plan-form-cell__value--ph'}}">{{values[item.id] || '请选择'}}</text>
+          <text class="plan-form-cell__chevron">›</text>
+        </view>
+      </picker>
+    </block>
+
+    <block wx:else>
+      <text class="plan-form-cell__label">{{item.label}}</text>
+      <text class="plan-form-cell__value plan-form-cell__value--ph">请在电脑端填写</text>
+    </block>
+  </view>
+</view>

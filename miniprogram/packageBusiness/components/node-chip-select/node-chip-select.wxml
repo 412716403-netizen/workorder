@@ -1,0 +1,31 @@
+<view class="ncs">
+  <view class="ncs__trigger" bindtap="onOpen">
+    <text class="ncs__label">{{label}}</text>
+    <text class="ncs__value {{selectedName ? '' : 'ncs__value--placeholder'}}">{{selectedName || placeholder}}</text>
+    <text class="ncs__chevron">›</text>
+  </view>
+
+  <view wx:if="{{open}}" class="ncs__mask" bindtap="onClose" catchtouchmove="noop" />
+  <view wx:if="{{open}}" class="ncs__sheet" catchtouchmove="noop">
+    <view class="ncs__sheet-head">
+      <text class="ncs__sheet-title">{{sheetTitle}}</text>
+      <text class="ncs__sheet-close" bindtap="onClose">关闭</text>
+    </view>
+
+    <scroll-view class="ncs__list" scroll-y enhanced show-scrollbar="{{true}}">
+      <view wx:if="{{nodes.length === 0}}" class="ncs__empty">{{emptyText}}</view>
+      <view wx:else class="ncs__chip-grid">
+        <view
+          wx:for="{{nodes}}"
+          wx:key="id"
+          class="ncs__chip {{value === item.id ? 'ncs__chip--active' : ''}}"
+          data-id="{{item.id}}"
+          data-name="{{item.name}}"
+          bindtap="onSelect"
+        >
+          <text class="ncs__chip-text">{{item.name}}</text>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+</view>

@@ -74,6 +74,11 @@ export function errorHandler(err: Error, req: Request, res: Response, _next: Nex
       case 'P2025':
         res.status(404).json({ error: '记录不存在或已被删除' });
         return;
+      case 'P2000':
+        res.status(400).json({
+          error: '提交字段超长或格式不符合数据库约束，请检查单号、批号、备注等后重试',
+        });
+        return;
       case 'P2002':
         res.status(409).json({ error: '数据重复，违反唯一约束' });
         return;

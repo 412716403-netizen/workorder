@@ -1,0 +1,8 @@
+{
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "tab-shell": "/components/tab-shell/tab-shell",
+    "icon-grid": "/components/icon-grid/icon-grid",
+    "empty-state": "/components/empty-state/empty-state"
+  }
+}

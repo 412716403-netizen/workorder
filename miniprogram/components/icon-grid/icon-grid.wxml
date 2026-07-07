@@ -1,0 +1,17 @@
+<view class="st-icon-grid {{variant === 'inverse' ? 'st-icon-grid--inverse' : ''}}" style="grid-template-columns: repeat({{columns}}, 1fr);">
+  <view
+    wx:for="{{items}}"
+    wx:key="key"
+    class="st-icon-grid__item"
+    data-key="{{item.key}}"
+    data-path="{{item.path}}"
+    bindtap="onTap"
+  >
+    <view class="st-icon-grid__icon-wrap">
+      <image wx:if="{{item.icon}}" class="st-icon-grid__icon" src="{{item.icon}}" mode="aspectFit" />
+      <text wx:if="{{item.iconChar}}" class="st-icon-grid__char">{{item.iconChar}}</text>
+      <text wx:elif="{{!item.icon}}" class="st-icon-grid__fallback">{{item.fallbackChar || item.iconChar || '·'}}</text>
+    </view>
+    <text class="st-icon-grid__label">{{item.label}}</text>
+  </view>
+</view>

@@ -1,0 +1,172 @@
+{
+  "pages": [
+    "pages/home/home",
+    "pages/apps/apps",
+    "pages/scan/scan",
+    "pages/messages/messages",
+    "pages/messages-chat/messages-chat",
+    "pages/mine/mine",
+    "pages/login/login",
+    "pages/tenant-select/tenant-select",
+    "pages/no-tenant/no-tenant",
+    "pages/onboarding/onboarding",
+    "pages/settings/settings",
+    "pages/settings-tab/settings-tab"
+  ],
+  "window": {
+    "navigationStyle": "custom",
+    "navigationBarTitleText": "生产报工",
+    "navigationBarBackgroundColor": "#F7F8FA",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#F7F8FA",
+    "backgroundTextStyle": "dark"
+  },
+  "tabBar": {
+    "color": "#8F959E",
+    "selectedColor": "#2F6BFF",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/home/home",
+        "text": "首页",
+        "iconPath": "assets/tab/home.png",
+        "selectedIconPath": "assets/tab/home-active.png"
+      },
+      {
+        "pagePath": "pages/apps/apps",
+        "text": "应用",
+        "iconPath": "assets/tab/apps.png",
+        "selectedIconPath": "assets/tab/apps-active.png"
+      },
+      {
+        "pagePath": "pages/scan/scan",
+        "text": "扫码",
+        "iconPath": "assets/tab/scan.png",
+        "selectedIconPath": "assets/tab/scan-active.png"
+      },
+      {
+        "pagePath": "pages/messages/messages",
+        "text": "消息",
+        "iconPath": "assets/tab/messages.png",
+        "selectedIconPath": "assets/tab/messages-active.png"
+      },
+      {
+        "pagePath": "pages/mine/mine",
+        "text": "我的",
+        "iconPath": "assets/tab/mine.png",
+        "selectedIconPath": "assets/tab/mine-active.png"
+      }
+    ]
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json",
+  "lazyCodeLoading": "requiredComponents",
+  "subPackages": [
+    {
+      "root": "packageBusiness",
+      "name": "business",
+      "pages": [
+        "scan-setup/scan-setup",
+        "scan-session/scan-session",
+        "production-plans/production-plans",
+        "production-plan-detail/production-plan-detail",
+        "production-plan-create/production-plan-create",
+        "production-orders/production-orders",
+        "production-order-flow/production-order-flow",
+        "production-order-detail/production-order-detail",
+        "production-order-report/production-order-report",
+        "production-order-report-history/production-order-report-history",
+        "production-order-report-batch-detail/production-order-report-batch-detail",
+        "production-order-pending-stock/production-order-pending-stock",
+        "production-order-stock-in-confirm/production-order-stock-in-confirm",
+        "production-order-stock-in-history/production-order-stock-in-history",
+        "production-order-stock-in-detail/production-order-stock-in-detail",
+        "production-order-material/production-order-material",
+        "production-stock-out/production-stock-out",
+        "production-stock-out-confirm/production-stock-out-confirm",
+        "production-stock-out-flow/production-stock-out-flow",
+        "production-stock-out-detail/production-stock-out-detail",
+        "production-outsource/production-outsource",
+        "production-outsource-partner-detail/production-outsource-partner-detail",
+        "production-outsource-dispatch/production-outsource-dispatch",
+        "production-outsource-dispatch-confirm/production-outsource-dispatch-confirm",
+        "production-outsource-receive/production-outsource-receive",
+        "production-outsource-receive-confirm/production-outsource-receive-confirm",
+        "production-outsource-flow/production-outsource-flow",
+        "production-outsource-flow-detail/production-outsource-flow-detail",
+        "production-rework/production-rework",
+        "production-rework-pending/production-rework-pending",
+        "production-rework-defect-action/production-rework-defect-action",
+        "production-rework-report/production-rework-report",
+        "production-rework-detail/production-rework-detail",
+        "production-rework-defect-flow/production-rework-defect-flow",
+        "production-rework-defect-flow-detail/production-rework-defect-flow-detail",
+        "production-rework-report-flow/production-rework-report-flow",
+        "production-rework-report-flow-detail/production-rework-report-flow-detail",
+        "psi-purchase-orders/psi-purchase-orders",
+        "psi-purchase-order-detail/psi-purchase-order-detail",
+        "psi-purchase-order-edit/psi-purchase-order-edit",
+        "psi-purchase-order-flow/psi-purchase-order-flow",
+        "psi-purchase-bills/psi-purchase-bills",
+        "psi-purchase-bill-detail/psi-purchase-bill-detail",
+        "psi-purchase-bill-edit/psi-purchase-bill-edit",
+        "psi-purchase-bill-flow/psi-purchase-bill-flow",
+        "psi-sales-orders/psi-sales-orders",
+        "psi-sales-order-detail/psi-sales-order-detail",
+        "psi-sales-order-edit/psi-sales-order-edit",
+        "psi-sales-order-flow/psi-sales-order-flow",
+        "psi-sales-order-allocate/psi-sales-order-allocate",
+        "psi-sales-order-pending-ship/psi-sales-order-pending-ship",
+        "psi-sales-bills/psi-sales-bills",
+        "psi-sales-bill-detail/psi-sales-bill-detail",
+        "psi-sales-bill-edit/psi-sales-bill-edit",
+        "psi-sales-bill-flow/psi-sales-bill-flow",
+        "psi-sales-order-pending-ship-detail/psi-sales-order-pending-ship-detail",
+        "psi-warehouses/psi-warehouses",
+        "psi-warehouse-flow/psi-warehouse-flow",
+        "psi-warehouse-product-flow/psi-warehouse-product-flow",
+        "psi-warehouse-transfer/psi-warehouse-transfer",
+        "psi-warehouse-transfer-detail/psi-warehouse-transfer-detail",
+        "psi-warehouse-transfer-edit/psi-warehouse-transfer-edit",
+        "psi-warehouse-stocktake/psi-warehouse-stocktake",
+        "psi-warehouse-stocktake-detail/psi-warehouse-stocktake-detail",
+        "psi-warehouse-stocktake-edit/psi-warehouse-stocktake-edit",
+        "psi-warehouse-flow-prod-detail/psi-warehouse-flow-prod-detail",
+        "finance-receipts/finance-receipts",
+        "finance-receipt-detail/finance-receipt-detail",
+        "finance-receipt-edit/finance-receipt-edit",
+        "finance-receipt-flow/finance-receipt-flow",
+        "finance-payments/finance-payments",
+        "finance-payment-detail/finance-payment-detail",
+        "finance-payment-edit/finance-payment-edit",
+        "finance-payment-flow/finance-payment-flow",
+        "finance-reconciliation/finance-reconciliation",
+        "finance-recon-work-detail/finance-recon-work-detail",
+        "basic-products/basic-products",
+        "basic-product-edit/basic-product-edit",
+        "basic-partners/basic-partners",
+        "basic-partner-edit/basic-partner-edit",
+        "basic-dictionaries/basic-dictionaries",
+        "basic-dictionary-edit/basic-dictionary-edit",
+        "basic-members/basic-members",
+        "settings-archive-list/settings-archive-list",
+        "settings-archive-edit/settings-archive-edit"
+      ]
+    }
+  ],
+  "preloadRule": {
+    "pages/scan/scan": {
+      "network": "all",
+      "packages": [
+        "business"
+      ]
+    },
+    "pages/apps/apps": {
+      "network": "all",
+      "packages": [
+        "business"
+      ]
+    }
+  }
+}

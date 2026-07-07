@@ -1,0 +1,40 @@
+@import '../production-order-stock-in-history/production-order-stock-in-history.wxss';
+
+.material-flow-thumb--issue {
+  background: #eef2ff;
+  border-color: #e0e7ff;
+}
+
+.material-flow-thumb--return {
+  background: #fff1f0;
+  border-color: #ffccc7;
+}
+
+.material-flow-main-left {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.material-flow-type {
+  flex-shrink: 0;
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--color-primary-dark);
+}
+
+.material-flow-type--return {
+  color: #ff4d4f;
+}
+
+.material-flow-warehouse-inline {
+  font-size: 24rpx;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.report-history-row__qty--return {
+  color: #ff4d4f;
+}

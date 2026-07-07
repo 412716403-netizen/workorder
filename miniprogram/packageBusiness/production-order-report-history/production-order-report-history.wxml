@@ -1,0 +1,124 @@
+<view class="plan-shell">
+  <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-header__title">报工流水</text>
+      <view class="plan-header__back plan-header__back--placeholder"></view>
+    </view>
+
+    <view class="plan-header__tools">
+      <view class="plan-search">
+        <input
+          class="plan-search__input"
+          value="{{searchKeyword}}"
+          bindinput="onSearchInput"
+          placeholder="{{searchPlaceholder}}"
+          confirm-type="search"
+          placeholder-class="plan-search__ph"
+        />
+        <view wx:if="{{searchKeyword}}" class="plan-search__clear" bindtap="onSearchClear">×</view>
+      </view>
+      <view
+        class="plan-tool-btn {{showFilterPanel || milestoneTemplateId ? 'plan-tool-btn--active' : ''}}"
+        bindtap="onFilterTap"
+      >
+        <image class="plan-tool-btn__icon" src="/assets/icons/list-filter.png" mode="aspectFit" />
+      </view>
+    </view>
+  </view>
+
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <view class="report-history-page">
+    <view wx:if="{{showFilterPanel}}" class="plan-filter-panel">
+      <view class="plan-filter-panel__row">
+        <text class="plan-filter-panel__label">开始时间</text>
+        <picker mode="date" value="{{dateFrom}}" bindchange="onDateFromChange">
+          <view class="report-history-filter report-history-filter--picker">{{dateFrom || '请选择'}}</view>
+        </picker>
+      </view>
+      <view class="plan-filter-panel__row">
+        <text class="plan-filter-panel__label">结束时间</text>
+        <picker mode="date" value="{{dateTo}}" bindchange="onDateToChange">
+          <view class="report-history-filter report-history-filter--picker">{{dateTo || '请选择'}}</view>
+        </picker>
+      </view>
+      <view class="plan-filter-panel__row">
+        <text class="plan-filter-panel__label">工序</text>
+        <picker
+          mode="selector"
+          range="{{milestoneOptions}}"
+          range-key="name"
+          value="{{milestoneFilterIndex}}"
+          bindchange="onMilestoneFilterChange"
+        >
+          <view class="report-history-filter report-history-filter--picker">{{milestoneFilterLabel}}</view>
+        </picker>
+      </view>
+      <view class="plan-filter-panel__foot">
+        <view class="plan-filter-reset" bindtap="onFilterReset">重置</view>
+        <view class="plan-filter-apply" bindtap="onFilterApply">确定</view>
+      </view>
+    </view>
+
+    <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
+
+    <view wx:elif="{{rows.length}}">
+      <view
+        wx:for="{{rows}}"
+        wx:key="batchKey"
+        class="report-history-row"
+        bindtap="onRowTap"
+        data-batch-key="{{item.batchKey}}"
+      >
+        <view class="report-history-row__body">
+          <view class="report-history-row__left">
+            <view class="report-history-row__thumb">
+              <image
+                wx:if="{{item.showProductImage}}"
+                class="report-history-row__img"
+                src="{{item.productImageUrl}}"
+                mode="aspectFill"
+                data-id="{{item.id}}"
+                binderror="onProductImageError"
+              />
+              <view wx:else class="report-history-row__img report-history-row__img--placeholder">
+                <image class="report-history-row__placeholder-icon" src="{{item.placeholderIconSrc}}" mode="aspectFit" />
+              </view>
+            </view>
+          </view>
+          <view class="report-history-row__content">
+            <view class="report-history-row__head">
+              <view class="report-history-row__head-main">
+                <text wx:if="{{item.showOrderNumber}}" class="report-history-row__order-no">{{item.orderNumber}}</text>
+                <text wx:if="{{item.showOrderNumber}}" class="report-history-row__head-dot">·</text>
+                <text class="report-history-row__time">{{item.timeLabel}}</text>
+              </view>
+              <text wx:if="{{item.showReportNo}}" class="report-history-row__report-no">{{item.reportNo}}</text>
+            </view>
+            <view class="report-history-row__main">
+              <text class="report-history-row__milestone">{{item.milestoneName}}</text>
+              <view class="report-history-row__aside">
+                <text class="report-history-row__qty">{{item.goodQtyText}}</text>
+                <text wx:if="{{item.showDefective}}" class="report-history-row__defective">{{item.defectiveText}}</text>
+                <text wx:if="{{item.showOperator}}" class="report-history-row__operator">{{item.operatorLine}}</text>
+              </view>
+            </view>
+            <view class="report-history-row__product">
+              <view class="report-history-row__product-left">
+                <text class="report-history-row__product-name">{{item.productName}}</text>
+                <text wx:if="{{item.showProductSku}}" class="report-history-row__sku">{{item.productSku}}</text>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view wx:else class="plan-list-empty">{{emptyText}}</view>
+
+    <view wx:if="{{!loading && rows.length}}" class="report-history-footer">
+      <text class="report-history-footer__text">共 {{stats.batchCount}} 批 · 良品 {{stats.goodTotal}} · 不良 {{stats.defectiveTotal}}</text>
+    </view>
+  </view>
+</view>

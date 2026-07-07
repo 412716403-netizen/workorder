@@ -1,0 +1,158 @@
+<view class="plan-shell">
+  <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-header__title">采购订单</text>
+      <view class="plan-header__back plan-header__back--placeholder"></view>
+    </view>
+
+    <view class="plan-header__tools">
+      <view class="plan-search">
+        <input
+          class="plan-search__input"
+          value="{{searchKeyword}}"
+          bindinput="onSearchInput"
+          placeholder="单号 / 供应商 / 产品 / 经办"
+          confirm-type="search"
+          placeholder-class="plan-search__ph"
+        />
+        <view wx:if="{{searchKeyword}}" class="plan-search__clear" bindtap="onSearchClear">×</view>
+      </view>
+      <view
+        class="plan-tool-btn {{showFilterPanel || filterActive ? 'plan-tool-btn--active' : ''}}"
+        bindtap="onFilterTap"
+      >
+        <image class="plan-tool-btn__icon" src="/assets/icons/list-filter.png" mode="aspectFit" />
+      </view>
+      <view
+        wx:if="{{canViewFlow}}"
+        class="po-flow-btn"
+        bindtap="onFlowTap"
+      >
+        <image class="po-flow-btn__icon" src="/assets/icons/scroll-text.png" mode="aspectFit" />
+        <text class="po-flow-btn__label">流水</text>
+      </view>
+      <view
+        wx:if="{{canCreate}}"
+        class="plan-tool-btn"
+        bindtap="onCreateTap"
+      >
+        <image class="plan-tool-btn__icon" src="/assets/icons/file-plus.png" mode="aspectFit" />
+      </view>
+    </view>
+
+    <view wx:if="{{showFilterPanel}}" class="plan-filter-panel po-orders-filter-panel">
+      <view class="plan-filter-panel__row">
+        <text class="plan-filter-panel__label">仅显示未交清</text>
+        <view
+          class="plan-filter-switch {{draftOnlyShowUnsettled ? 'plan-filter-switch--on' : ''}}"
+          bindtap="onUnsettledToggle"
+        >
+          <view class="plan-filter-switch__knob"></view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <view class="po-orders-page">
+    <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
+
+    <view wx:elif="{{cards.length}}">
+      <view
+        wx:for="{{cards}}"
+        wx:key="docNumber"
+        class="po-doc-card"
+      >
+        <view class="po-doc-card__head" bindtap="onCardTap" data-doc-number="{{item.docNumber}}">
+          <view class="po-doc-card__title-row">
+            <text class="po-doc-card__doc">{{item.docNumberDisplay}}</text>
+            <view wx:if="{{item.showStatusPill}}" class="st-pill {{item.statusPillClass}}">{{item.statusLabel}}</view>
+          </view>
+          <view class="po-doc-card__meta">
+            <text class="po-doc-card__meta-item">{{item.partner}}</text>
+            <text wx:if="{{item.showCreatedAt}}" class="po-doc-card__meta-item">{{item.createdAtText}}</text>
+            <view wx:if="{{item.showOperator}}" class="po-doc-card__meta-item po-doc-card__meta-item--operator">
+              <image class="po-doc-card__meta-icon" src="/assets/icons/user.png" mode="aspectFit" />
+              <text>{{item.operator}}</text>
+            </view>
+            <text wx:if="{{item.showSourcePlan}}" class="po-doc-card__meta-item">计划 {{item.sourcePlan}}</text>
+          </view>
+          <view class="po-doc-card__totals">
+            <text class="po-doc-card__qty">合计 {{item.orderedText}}</text>
+            <text wx:if="{{item.showDocAmount}}" class="po-doc-card__amount">{{item.totalAmountText}}</text>
+            <text class="po-doc-card__line-count">共 {{item.lineCount}} 项产品</text>
+          </view>
+        </view>
+
+        <view class="po-doc-card__lines">
+          <view
+            wx:for="{{item.lines}}"
+            wx:for-item="line"
+            wx:key="lineGroupId"
+            class="po-doc-card__line"
+            bindtap="onCardTap"
+            data-doc-number="{{item.docNumber}}"
+          >
+            <view class="report-history-row__body">
+              <view class="report-history-row__left">
+                <view class="report-history-row__thumb">
+                  <image
+                    wx:if="{{line.showProductImage}}"
+                    class="report-history-row__img"
+                    src="{{line.productImageUrl}}"
+                    mode="aspectFill"
+                    data-doc-number="{{item.docNumber}}"
+                    data-line-group-id="{{line.lineGroupId}}"
+                    binderror="onProductImageError"
+                  />
+                  <view wx:else class="report-history-row__img report-history-row__img--placeholder">
+                    <image class="report-history-row__placeholder-icon" src="{{line.placeholderIconSrc}}" mode="aspectFit" />
+                  </view>
+                </view>
+              </view>
+
+              <view class="report-history-row__content">
+                <view class="report-history-row__product">
+                  <view class="report-history-row__product-left">
+                    <text class="report-history-row__product-name">{{line.productName}}</text>
+                    <text wx:if="{{line.showProductSku}}" class="report-history-row__sku">{{line.productSku}}</text>
+                  </view>
+                  <view wx:if="{{line.showProgress}}" class="po-line-progress po-line-progress--compact po-line-progress--product">
+                    <view class="po-line-progress__bar">
+                      <view class="po-line-progress__ordered" style="width: {{line.progressOrderedBarPct}}%;"></view>
+                      <view wx:if="{{line.progressOverBarPct > 0}}" class="po-line-progress__over" style="width: {{line.progressOverBarPct}}%;"></view>
+                    </view>
+                    <text class="po-line-progress__nums">{{line.progressShortText}}</text>
+                    <text wx:if="{{line.progressOverReceived}}" class="po-line-progress__tag">超收</text>
+                  </view>
+                </view>
+
+                <view class="order-detail-summary order-detail-summary--compact">
+                  <view class="order-detail-summary__item">
+                    <text class="order-detail-summary__label">数量</text>
+                    <text class="order-detail-summary__value">{{line.quantityText}}</text>
+                  </view>
+                  <view wx:if="{{line.showPrice}}" class="order-detail-summary__item">
+                    <text class="order-detail-summary__label">单价</text>
+                    <text class="order-detail-summary__value">{{line.priceText}}</text>
+                  </view>
+                  <view wx:if="{{line.showAmount}}" class="order-detail-summary__item">
+                    <text class="order-detail-summary__label">金额</text>
+                    <text class="order-detail-summary__value">{{line.amountText}}</text>
+                  </view>
+                </view>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view wx:if="{{loadingMore}}" class="plan-list-footer">加载中…</view>
+      <view wx:elif="{{!hasMore}}" class="plan-list-footer">已加载全部 {{total}} 单</view>
+    </view>
+
+    <empty-state wx:else text="{{emptyText}}" />
+  </view>
+</view>

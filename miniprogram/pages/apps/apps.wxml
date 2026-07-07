@@ -1,0 +1,15 @@
+<tab-shell title="应用" subtitle="全部功能入口">
+  <block wx:if="{{categories.length}}">
+    <view wx:for="{{categories}}" wx:key="key" class="apps-section">
+      <view class="tab-section-head">
+        <view class="tab-section-head__accent"></view>
+        <text class="tab-section-head__title">{{item.title}}</text>
+      </view>
+      <view class="tab-panel tab-panel--flush">
+        <icon-grid items="{{item.items}}" columns="{{4}}" bind:tap="onGridTap" />
+      </view>
+    </view>
+  </block>
+
+  <empty-state wx:else text="暂无可用应用" />
+</tab-shell>

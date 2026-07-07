@@ -1,0 +1,31 @@
+<page-header title="选择企业" />
+
+<scroll-view class="st-scroll" scroll-y show-scrollbar="{{false}}">
+  <view class="st-page st-page--flow">
+    <view class="st-text-caption">轻点企业以进入；审核中或不可用的企业无法选择。</view>
+
+    <view wx:if="{{!tenants.length}}" class="st-muted">暂无企业，可创建或加入企业。</view>
+
+    <view wx:else class="st-card st-mt-md">
+      <view
+        wx:for="{{tenants}}"
+        wx:key="id"
+        wx:for-item="item"
+        class="st-list-cell {{item._disabled ? 'st-list-cell--disabled' : ''}}"
+        data-id="{{item.id}}"
+        bindtap="onTapTenant"
+      >
+        <view class="st-tenant-icon">{{item.name ? item.name[0] : '企'}}</view>
+        <view class="st-list-cell__body">
+          <view class="st-list-cell__title">{{item.name}}</view>
+          <view class="st-list-cell__subtitle">{{item._roleLabel}} · {{item._statusLabel}}</view>
+        </view>
+        <view wx:if="{{loadingId === item.id}}" class="st-spinner">…</view>
+        <view wx:else class="st-chevron">›</view>
+      </view>
+    </view>
+
+    <button class="st-btn-secondary st-mt-lg" bindtap="onOnboarding">创建新企业 / 加入其他企业</button>
+    <button class="st-btn-danger st-mt-md" bindtap="onLogout">退出登录</button>
+  </view>
+</scroll-view>

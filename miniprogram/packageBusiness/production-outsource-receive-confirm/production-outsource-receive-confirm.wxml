@@ -1,0 +1,149 @@
+<view class="plan-detail-shell">
+  <view class="plan-detail-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-detail-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-detail-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-detail-header__title">外协收回</text>
+      <view class="plan-detail-header__back plan-detail-header__back--placeholder"></view>
+    </view>
+  </view>
+
+  <view class="plan-detail-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view
+    class="plan-detail-scroll"
+    scroll-y
+    scroll-top="{{matrixScrollTop}}"
+    scroll-with-animation
+    show-scrollbar="{{false}}"
+    style="height: {{scrollHeight}}px;"
+  >
+    <view wx:if="{{loading}}" class="plan-detail-muted">加载中…</view>
+
+    <view wx:else class="plan-detail-page outsource-receive-confirm-page {{matrixKeyboardVisible ? 'matrix-keyboard-page--open' : ''}}">
+      <view wx:for="{{lines}}" wx:key="rowKey" class="outsource-receive-confirm-line">
+        <view class="report-batch-hero">
+          <view class="report-batch-hero__left">
+            <image
+              wx:if="{{item.showProductImage}}"
+              class="report-batch-hero__img"
+              src="{{item.productImageUrl}}"
+              mode="aspectFill"
+              data-key="{{item.rowKey}}"
+              binderror="onProductImageError"
+            />
+            <view wx:else class="report-batch-hero__img report-batch-hero__img--placeholder">
+              <image class="report-batch-hero__placeholder-icon" src="{{item.placeholderIconSrc}}" mode="aspectFit" />
+            </view>
+          </view>
+          <view class="report-batch-hero__text">
+            <view class="report-batch-hero__badges">
+              <text wx:if="{{item.showOrderNumber}}" class="report-batch-hero__badge">{{item.orderNumber}}</text>
+              <text wx:else class="report-batch-hero__badge">{{item.productName}}</text>
+            </view>
+            <text class="report-batch-hero__milestone">工序：{{item.milestoneName}}</text>
+            <view class="report-batch-hero__meta">
+              <text class="report-batch-hero__meta-item">{{item.pendingMeta}}</text>
+              <text wx:if="{{item.statsMeta}}" class="report-batch-hero__meta-item">{{item.statsMeta}}</text>
+              <text class="report-batch-hero__meta-item">经办：{{item.partnerLabel}}</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="order-detail-summary">
+          <view class="order-detail-summary__item">
+            <text class="order-detail-summary__label">本次收回</text>
+            <text class="order-detail-summary__value">{{item.totalReceiveText}}</text>
+          </view>
+          <view wx:if="{{canViewAmount}}" class="order-detail-summary__item outsource-receive-confirm-price">
+            <text class="order-detail-summary__label">单价</text>
+            <input
+              class="outsource-receive-confirm-price__input"
+              type="digit"
+              value="{{item.unitPrice}}"
+              data-key="{{item.rowKey}}"
+              bindinput="onPriceInput"
+              placeholder="—"
+            />
+          </view>
+          <view wx:if="{{item.showAmount}}" class="order-detail-summary__item">
+            <text class="order-detail-summary__label">金额</text>
+            <text class="order-detail-summary__value order-detail-summary__value--success">{{item.amountText}}</text>
+          </view>
+        </view>
+
+        <view class="plan-detail-section">
+          <view class="plan-detail-section__head">
+            <text class="plan-detail-section__title">收货明细</text>
+            <text wx:if="{{item.maxQtyHint}}" class="plan-detail-section__hint">{{item.maxQtyHint}}</text>
+          </view>
+
+          <view wx:if="{{item.hasMatrix && item.matrixLayout}}" class="plan-form-card">
+            <scroll-view class="plan-create-matrix-scroll" scroll-x enhanced show-scrollbar="{{false}}">
+              <view class="plan-create-matrix report-matrix">
+                <view class="plan-create-matrix__head">
+                  <view class="plan-create-matrix__corner">颜色</view>
+                  <view wx:for="{{item.matrixLayout.sizeColumns}}" wx:key="id" class="plan-create-matrix__size">{{item.header}}</view>
+                </view>
+                <view wx:for="{{item.matrixLayout.colorRows}}" wx:for-item="row" wx:key="key" class="plan-create-matrix__row">
+                  <view class="plan-create-matrix__color">
+                    <view wx:if="{{row.colorSwatch}}" class="plan-create-matrix__swatch" style="background-color: {{row.colorSwatch}};" />
+                    <text class="plan-create-matrix__color-text">{{row.colorLabel}}</text>
+                  </view>
+                  <view wx:for="{{row.cells}}" wx:for-item="cell" wx:key="index" class="plan-create-matrix__cell report-matrix__cell">
+                    <view wx:if="{{cell.variantId}}" class="report-matrix__cell-inner">
+                      <view
+                        class="plan-create-matrix__input {{activeMatrixRowKey === item.rowKey && activeMatrixVariantId === cell.variantId ? 'plan-create-matrix__input--active' : ''}} {{activeMatrixRowKey === item.rowKey && activeMatrixVariantId === cell.variantId && matrixInputReplaceAll && cell.quantity ? 'plan-create-matrix__input--replace' : ''}} {{cell.quantity ? 'plan-create-matrix__input--filled' : 'plan-create-matrix__input--empty'}}"
+                        data-row-key="{{item.rowKey}}"
+                        data-variant-id="{{cell.variantId}}"
+                        bindtap="onMatrixCellTap"
+                      >{{cell.quantity}}</view>
+                      <text class="report-matrix__max">{{cell.maxQtyLabel}}</text>
+                    </view>
+                    <view wx:else class="report-matrix__cell-inner report-matrix__cell-inner--empty">
+                      <text class="plan-create-matrix__dash">—</text>
+                    </view>
+                  </view>
+                </view>
+              </view>
+            </scroll-view>
+          </view>
+
+          <view wx:else class="plan-form-card">
+            <view class="plan-form-cell plan-form-cell--input plan-form-cell--last report-qty-cell">
+              <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>收回数量</text>
+              <view class="report-qty-cell__body">
+                <view class="report-stepper">
+                  <view class="report-stepper__btn" data-key="{{item.rowKey}}" data-delta="-1" bindtap="onQtyStep">−</view>
+                  <input
+                    class="report-stepper__input"
+                    type="number"
+                    value="{{item.quantity}}"
+                    data-key="{{item.rowKey}}"
+                    bindinput="onQtyInput"
+                    placeholder="0"
+                  />
+                  <view class="report-stepper__btn" data-key="{{item.rowKey}}" data-delta="1" bindtap="onQtyStep">+</view>
+                </view>
+                <text wx:if="{{item.maxQtyLabel}}" class="report-qty-cell__max">{{item.maxQtyLabel}}</text>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </scroll-view>
+
+  <view class="plan-create-footer" wx:if="{{!matrixKeyboardVisible}}">
+    <button
+      class="plan-create-submit"
+      loading="{{submitting}}"
+      disabled="{{submitting}}"
+      bindtap="onSubmit"
+    >{{submitting ? '提交中…' : '确认收回'}}</button>
+  </view>
+
+  <matrix-qty-keyboard
+    visible="{{matrixKeyboardVisible}}"
+    bind:action="onMatrixKeyboardAction"
+  />
+</view>

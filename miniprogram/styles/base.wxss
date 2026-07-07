@@ -1,0 +1,101 @@
+@import './tokens.wxss';
+
+page {
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', 'Segoe UI', sans-serif;
+  background-color: var(--color-bg-page);
+  color: var(--color-text-primary);
+  font-size: var(--font-body);
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+}
+
+.st-scroll {
+  height: 100vh;
+  box-sizing: border-box;
+}
+
+.st-page {
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: var(--spacing-page);
+  padding-bottom: calc(var(--spacing-page) + env(safe-area-inset-bottom));
+}
+
+.st-page--tab {
+  padding-bottom: calc(var(--spacing-page) + var(--tabbar-height) + env(safe-area-inset-bottom));
+}
+
+.st-page--flow {
+  padding-top: 16rpx;
+}
+
+.st-page--center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.st-section {
+  margin-bottom: var(--spacing-section);
+}
+
+.st-card {
+  background: var(--color-bg-card);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.st-card--padded {
+  padding: var(--spacing-card);
+}
+
+.st-title-page {
+  font-size: var(--font-title);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  line-height: 1.3;
+}
+
+.st-title-section {
+  font-size: var(--font-section);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.st-text-caption {
+  font-size: var(--font-caption);
+  color: var(--color-text-secondary);
+  line-height: 1.45;
+}
+
+.st-text-small {
+  font-size: var(--font-small);
+  color: var(--color-text-secondary);
+}
+
+.st-muted {
+  text-align: center;
+  padding: 120rpx 48rpx;
+  font-size: 30rpx;
+  color: var(--color-text-secondary);
+}
+
+.st-error {
+  text-align: center;
+  padding: 48rpx;
+  font-size: 30rpx;
+  color: var(--color-danger);
+}
+
+.st-mt-md {
+  margin-top: 32rpx;
+}
+
+.st-mt-lg {
+  margin-top: 48rpx;
+}
+
+.st-text-center {
+  text-align: center;
+}

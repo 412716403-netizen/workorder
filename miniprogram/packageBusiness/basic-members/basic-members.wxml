@@ -1,0 +1,143 @@
+<view class="plan-shell">
+  <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-header__title">成员管理</text>
+      <view class="plan-header__back plan-header__back--placeholder"></view>
+    </view>
+
+    <view class="plan-header__tools">
+      <view class="plan-search">
+        <input
+          class="plan-search__input"
+          value="{{searchKeyword}}"
+          bindinput="onSearchInput"
+          placeholder="搜索姓名、用户名、手机、角色…"
+          confirm-type="search"
+          placeholder-class="plan-search__ph"
+        />
+        <view wx:if="{{searchKeyword}}" class="plan-search__clear" bindtap="onSearchClear">×</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view class="basic-products-cats basic-members-segment" scroll-x enhanced show-scrollbar="{{false}}">
+    <view
+      wx:for="{{segmentTabs}}"
+      wx:key="key"
+      class="basic-products-cat basic-members-segment__item {{item.active ? 'basic-products-cat--active' : ''}}"
+      data-key="{{item.key}}"
+      bindtap="onSegmentTap"
+    >
+      <text>{{item.label}}</text>
+      <text wx:if="{{item.showBadge}}" class="basic-members-segment__badge">{{item.badge}}</text>
+    </view>
+  </scroll-view>
+
+  <view class="basic-members-page">
+    <empty-state wx:if="{{loading && activeTab === 'members' && !memberRows.length}}" loading="{{true}}" text="加载中…" />
+    <empty-state wx:elif="{{loading && activeTab === 'applications' && !applicationRows.length}}" loading="{{true}}" text="加载中…" />
+
+  <!-- 成员列表 -->
+    <view wx:elif="{{activeTab === 'members'}}">
+      <view wx:if="{{memberRows.length}}" class="basic-members-summary">共 {{memberCount}} 人</view>
+      <view wx:if="{{memberRows.length}}">
+        <view wx:for="{{memberRows}}" wx:key="id" class="basic-members-row">
+          <view class="basic-members-row__avatar">{{item.avatarText}}</view>
+          <view class="basic-members-row__body">
+            <view class="basic-members-row__head">
+              <text class="basic-members-row__name">{{item.displayName}}</text>
+              <text wx:if="{{item.showRoleName}}" class="basic-members-row__role-pill">{{item.roleName}}</text>
+              <text wx:elif="{{item.showTenantRole}}" class="basic-members-row__role-pill basic-members-row__role-pill--muted">{{item.tenantRoleLabel}}</text>
+            </view>
+            <text wx:if="{{item.subline}}" class="basic-members-row__sub">{{item.subline}}</text>
+            <view wx:if="{{item.showAssignRole || item.showMilestone || item.showRemove}}" class="basic-members-row__actions">
+              <view
+                wx:if="{{item.showMilestone}}"
+                class="basic-members-row__action basic-members-row__action--blue"
+                data-user-id="{{item.userId}}"
+                bindtap="onMilestoneTap"
+              >{{item.milestoneText}}</view>
+              <view
+                wx:if="{{item.showAssignRole}}"
+                class="basic-members-row__action"
+                data-user-id="{{item.userId}}"
+                bindtap="onAssignRoleTap"
+              >分配角色</view>
+              <view
+                wx:if="{{item.showRemove}}"
+                class="basic-members-row__action basic-members-row__action--danger"
+                data-user-id="{{item.userId}}"
+                bindtap="onRemoveMemberTap"
+              >移除</view>
+            </view>
+          </view>
+        </view>
+      </view>
+      <empty-state wx:else text="{{memberEmptyText}}" />
+    </view>
+
+    <!-- 待审核 -->
+    <view wx:elif="{{activeTab === 'applications'}}">
+      <view wx:if="{{applicationRows.length}}">
+        <view wx:for="{{applicationRows}}" wx:key="id" class="basic-members-app-row">
+          <view class="basic-members-row__avatar">{{item.avatarText}}</view>
+          <view class="basic-members-app-row__body">
+            <text class="basic-members-row__name">{{item.displayName}}</text>
+            <text class="basic-members-row__sub">{{item.phone}} · {{item.createdAtText}}</text>
+            <text wx:if="{{item.showMessage}}" class="basic-members-app-row__message">留言：{{item.message}}</text>
+          </view>
+          <view class="basic-members-app-row__btns">
+            <view
+              class="basic-members-app-row__btn basic-members-app-row__btn--approve"
+              data-id="{{item.id}}"
+              data-action="APPROVED"
+              bindtap="onReviewTap"
+            >通过</view>
+            <view
+              class="basic-members-app-row__btn basic-members-app-row__btn--reject"
+              data-id="{{item.id}}"
+              data-action="REJECTED"
+              bindtap="onReviewTap"
+            >拒绝</view>
+          </view>
+        </view>
+      </view>
+      <empty-state wx:else text="暂无待审核申请" />
+    </view>
+
+    <!-- 邀请码 -->
+    <view wx:elif="{{activeTab === 'invite'}}" class="basic-members-invite">
+      <view class="basic-members-invite__card">
+        <text class="basic-members-invite__title">企业邀请码</text>
+        <text class="basic-members-invite__desc">将此邀请码分享给需要加入的成员</text>
+        <text wx:if="{{tenantName}}" class="basic-members-invite__tenant">{{tenantName}}</text>
+        <view class="basic-members-invite__code-wrap">
+          <text class="basic-members-invite__code">{{inviteCode || '—'}}</text>
+        </view>
+        <view class="basic-members-invite__copy" bindtap="onCopyInviteCode">复制邀请码</view>
+      </view>
+    </view>
+  </view>
+
+  <role-picker-sheet
+    visible="{{rolePickerVisible}}"
+    roles="{{roleOptions}}"
+    value="{{rolePickerValue}}"
+    member-name="{{rolePickerMemberName}}"
+    bind:close="onRolePickerClose"
+    bind:select="onRolePickerSelect"
+  />
+
+  <milestone-multi-select
+    id="milestonePicker"
+    visible="{{milestonePickerVisible}}"
+    nodes="{{processNodes}}"
+    value="{{milestonePickerValue}}"
+    member-name="{{milestonePickerMemberName}}"
+    bind:close="onMilestonePickerClose"
+    bind:confirm="onMilestoneConfirm"
+  />
+</view>

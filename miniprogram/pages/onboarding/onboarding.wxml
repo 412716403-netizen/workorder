@@ -1,0 +1,84 @@
+<page-header title="企业入驻" showBack="{{mode !== 'choose' && mode !== 'createDone' && mode !== 'pending'}}" bind:back="onHeaderBack" />
+
+<scroll-view class="st-scroll" scroll-y show-scrollbar="{{false}}">
+  <!-- 等待审核 -->
+  <view wx:if="{{mode === 'pending'}}" class="st-page st-page--flow">
+    <view class="st-title-page">等待审核</view>
+    <view class="st-text-caption st-mt-md">加入申请已提交，企业管理员通过后将自动进入系统。</view>
+    <view wx:if="{{applications.length}}" class="st-card st-mt-lg">
+      <view wx:for="{{applications}}" wx:key="id" class="st-list-cell">
+        <view class="st-list-cell__body">
+          <view class="st-list-cell__title">{{item.tenant.name}}</view>
+          <view class="st-list-cell__subtitle">申请状态</view>
+        </view>
+        <view class="st-pill st-pill--{{item._pill}}">{{item._label}}</view>
+      </view>
+    </view>
+    <button class="st-btn-secondary st-mt-lg" bindtap="onBackPending">返回</button>
+  </view>
+
+  <!-- 创建已提交 -->
+  <view wx:elif="{{mode === 'createDone'}}" class="st-page st-page--flow">
+    <view class="st-title-page">已提交审核</view>
+    <view class="st-text-caption st-mt-md">企业创建申请已提交，平台管理员通过后即可在「选择企业」中看到。</view>
+    <button class="st-btn-primary st-mt-lg" bindtap="onAfterCreate">完成</button>
+  </view>
+
+  <!-- 创建企业 -->
+  <view wx:elif="{{mode === 'create'}}" class="st-page st-page--flow">
+    <view class="st-title-page">创建企业</view>
+    <view class="st-text-caption st-mt-md">提交后由平台审核</view>
+    <view class="st-card st-card--padded st-mt-lg">
+      <view class="st-field-label">企业名称</view>
+      <input class="st-input" value="{{createName}}" bindinput="onCreateName" placeholder="请输入企业名称" placeholder-class="st-ph" />
+    </view>
+    <button class="st-btn-primary st-mt-lg" loading="{{loading}}" disabled="{{loading}}" bindtap="onSubmitCreate">提交申请</button>
+    <button class="st-btn-secondary st-mt-md" bindtap="onModeChoose">取消</button>
+  </view>
+
+  <!-- 加入企业 -->
+  <view wx:elif="{{mode === 'join'}}" class="st-page st-page--flow">
+    <view class="st-title-page">加入企业</view>
+    <view class="st-text-caption st-mt-md">输入企业邀请码查询后加入</view>
+    <view class="st-card st-card--padded st-mt-lg">
+      <view class="st-field-label">邀请码</view>
+      <view class="st-form-row">
+        <input class="st-input" value="{{inviteCode}}" bindinput="onInviteCode" placeholder="输入邀请码" placeholder-class="st-ph" />
+        <button class="st-btn-compact" loading="{{lookupLoading}}" disabled="{{lookupLoading}}" bindtap="onLookup">查询</button>
+      </view>
+      <view wx:if="{{lookupResult}}" class="st-inset">
+        <view class="st-inset-row">
+          <text class="st-inset-name">{{lookupResult.name}}</text>
+          <text class="st-inset-meta">{{lookupResult.memberCount}} 位成员</text>
+        </view>
+        <button class="st-btn-primary st-mt-md" loading="{{loading}}" disabled="{{loading}}" bindtap="onApplyJoin">申请加入</button>
+      </view>
+    </view>
+    <button class="st-btn-secondary st-mt-md" bindtap="onJoinBack">返回</button>
+  </view>
+
+  <!-- 选择入口 -->
+  <view wx:else class="st-page st-page--flow">
+    <view class="st-title-page">企业入驻</view>
+    <view class="st-text-caption st-mt-md">创建新企业或通过邀请码加入已有企业</view>
+
+    <view class="st-card st-mt-lg">
+      <view class="st-list-cell" bindtap="onModeCreate">
+        <view class="st-list-cell__body">
+          <view class="st-list-cell__title">创建企业</view>
+          <view class="st-list-cell__subtitle">新建企业空间，您将成为创建者</view>
+        </view>
+        <view class="st-chevron">›</view>
+      </view>
+      <view class="st-list-cell" bindtap="onModeJoin">
+        <view class="st-list-cell__body">
+          <view class="st-list-cell__title">加入企业</view>
+          <view class="st-list-cell__subtitle">使用邀请码申请加入</view>
+        </view>
+        <view class="st-chevron">›</view>
+      </view>
+    </view>
+
+    <button class="st-btn-secondary st-mt-lg" bindtap="onBackChoose">返回</button>
+  </view>
+</scroll-view>

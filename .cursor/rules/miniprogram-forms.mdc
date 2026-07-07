@@ -1,0 +1,197 @@
+---
+description: 小程序表单录入默认组件（合作单位/产品/色码矩阵/键盘）
+globs: miniprogram/pages/**/*, miniprogram/components/**/*
+alwaysApply: false
+---
+
+# 小程序表单录入（默认）
+
+**参考实现**：[`miniprogram/packageBusiness/production-plan-create/`](../miniprogram/packageBusiness/production-plan-create/)（生产计划新建）。新页面涉及下列场景时**必须**复用同一套组件与交互，禁止各页自建 picker / 自定义键盘。
+
+## 组件与数据
+
+| 场景 | 组件 | API / 工具 |
+|------|------|------------|
+| 合作单位（客户/加工厂） | `searchable-partner-select`（`cell` + `plan-form-card`） | `fetchPartnersAll()`、`fetchPartnerCategoriesAll()` |
+| 产品 | `searchable-product-select`（`cell` + `plan-form-card`） | `fetchProductsAll()`、`fetchCategoriesAll()` |
+| 色码矩阵 | `plan-create-matrix` 类名 + 横向 `scroll-view` | `buildVariantMatrixUiModel()` 或业务 layout builder（如 `outsourceDispatchMatrix.js`） |
+| 矩阵数量键盘 | `matrix-qty-keyboard` | [`matrixQtyKeyboard.js`](../miniprogram/packageBusiness/utils/matrixQtyKeyboard.js) |
+| 采购入库批次 | `batch-return-input` | 点击选择；弹窗内可选已有批次或输入新批号；未填保存时默认「无批号」 |
+
+## 页面 `.json` 注册
+
+```json
+{
+  "usingComponents": {
+    "searchable-product-select": "/components/searchable-product-select/searchable-product-select",
+    "searchable-partner-select": "/components/searchable-partner-select/searchable-partner-select",
+    "matrix-qty-keyboard": "/components/matrix-qty-keyboard/matrix-qty-keyboard"
+  }
+}
+```
+
+按需注册，未用到的组件不必引入。
+
+## 样式
+
+- 表单：`plan-form-card`、`plan-form-cell`（见 [`production-plan-create.wxss`](../miniprogram/packageBusiness/production-plan-create/production-plan-create.wxss)）
+- **数量 / 单价 / 金额**：`order-detail-summary`（见 [`qty-price-amount-summary.wxss`](../miniprogram/styles/qty-price-amount-summary.wxss)）；列表/详情只读加 `--compact`；录入可编辑字段用 `order-detail-summary__input`
+- 矩阵：复用 `plan-create-matrix*`；报工/外协等带「最多 N」提示时可加 `report-matrix` 修饰
+- 键盘弹出：滚动区加 `matrix-keyboard-page--open`；`setData` 后调用 `afterMatrixKeyboardOpen(page, scrollViewSelector)` 将当前格滚到键盘上方；底栏提交按钮在键盘弹出时 `wx:if="{{!matrixKeyboardVisible}}"` 隐藏
+
+## 矩阵键盘 JS 模式
+
+`onMatrixKeyboardAction` 对齐 plan-create：
+
+- 页面 `onLoad`：`this._matrixKbInput = createMatrixKeyboardInputSession()`
+- 点格 / ↵ / → 切格：`activateMatrixKeyboardCell(this._matrixKbInput)` + `setData({ matrixInputReplaceAll: true })`
+- 按键：`applyMatrixKeyboardKey(this._matrixKbInput, current, action, digit)`（首键整格替换，等同全选后输入）
+- `confirm` → 关闭键盘
+- `enter` → `getNextMatrixVariantIdInRow`
+- `next` → `getNextMatrixVariantIdInColumn`
+
+WXML 选中态：`plan-create-matrix__input--replace`（有值且待替换时浅蓝底）。
+
+业务上限（如外协可发量）在切换格或 `confirm` 时校验，勿改键盘组件本身。
+
+## 禁止
+
+- `picker mode="selector"` 选择合作单位或产品（枚举筛选 Tab 除外）
+- 页面内复制粘贴自建数字键盘 UI
+- 矩阵格内用 `<input type="digit">` 直接输入（单行非矩阵数量字段除外）
+
+详细说明见 [`docs/10-miniprogram-ui.md`](../docs/10-miniprogram-ui.md) §表单录入标准。
+
+## 保存后导航
+
+单据/批次**保存或提交成功**后，统一回到**所属列表页**（不用裸 `navigateBack` 逐级退，也不跳详情）：
+
+```javascript
+const {
+  LIST_ROUTES,
+  MODULE_HUB_ROUTES,
+  buildReportHistoryListUrl,
+  afterSaveReturnToList,
+  consumeListRefreshOnShow,
+} = require('../utils/saveNavigation.js');
+
+afterSaveReturnToList({
+  listUrl: MODULE_HUB_ROUTES.rework, // 或 LIST_ROUTES.OUTSOURCE_DISPATCH 等
+  toastTitle: '报损成功',
+});
+```
+
+### Hub 列表保存后刷新（必做）
+
+保存/删除经 `afterSaveReturnToList` 回到 Hub 列表时，列表页 `onShow` **必须重新拉 API**，不能只 `reloadList` 重筛本地缓存：
+
+```javascript
+const { shouldHubListRefetch, trackHubListHidden, LIST_ROUTES } = require('../utils/saveNavigation.js');
+const HUB_LIST_ROUTE = LIST_ROUTES.PSI_PURCHASE_BILLS.replace(/^\//, '');
+
+onShow() {
+  // …鉴权…
+  if (!this._initialized) {
+    this.bootstrap();
+  } else if (shouldHubListRefetch(this, HUB_LIST_ROUTE)) {
+    this.bootstrap();
+  }
+},
+
+onHide() {
+  trackHubListHidden(this);
+},
+```
+
+下拉刷新 `reloadList` 亦须重新请求接口（本地缓存列表同理）。`redirectTo` 进列表会走 `onLoad` → `bootstrap`，无需额外处理。
+
+### 两类目标
+
+| 类型 | 说明 | 示例 |
+|------|------|------|
+| **模块 Hub** | 用户继续选下一单的主入口 | 返工管理、工单中心、外协中心、计划、领退料 |
+| **子列表 / 流水** | 从 Hub 快捷入口进入的业务线列表 | 待发/待收回、待入库、报工流水、处理不良流水 |
+
+### 页面 → 成功后列表
+
+| 页面 | `listUrl` |
+|------|-----------|
+| 处理不良（报损/厂内返工/委外返工） | `REWORK_HUB` |
+| 返工报工 | `REWORK_HUB` |
+| 返工领料 | `REWORK_HUB` |
+| 处理不良流水详情（保存/删除） | `REWORK_DEFECT_FLOW` |
+| 返工报工流水详情（保存/删除） | `REWORK_REPORT_FLOW` |
+| 工单报工 | `PRODUCTION_ORDERS` |
+| 报工批次详情（保存/删除） | `buildReportHistoryListUrl(...)` |
+| 工单领料 / 退料 | `PRODUCTION_ORDERS` |
+| 外协发出确认 | `OUTSOURCE_DISPATCH` |
+| 外协收回确认 | `OUTSOURCE_RECEIVE` |
+| 外协领退料 | `OUTSOURCE_HUB` |
+| 外协流水详情（保存/删除） | `OUTSOURCE_FLOW` |
+| 待入库确认 | `PENDING_STOCK` |
+| 入库流水详情（保存/删除） | `STOCK_IN_HISTORY` |
+| 领退料确认 | `STOCK_OUT`（`source=outsource` → `OUTSOURCE_HUB`） |
+| 领退料流水详情（保存/删除） | `STOCK_OUT` |
+| 计划新建 | `PRODUCTION_PLANS` |
+| 登记/编辑采购订单 | `PSI_PURCHASE_ORDERS` |
+| 采购订单详情（删除） | `PSI_PURCHASE_ORDERS` |
+| 登记/编辑采购入库 | `PSI_PURCHASE_BILLS` |
+| 采购入库详情（删除） | `PSI_PURCHASE_BILLS` |
+| 登记/编辑销售订单 | `PSI_SALES_ORDERS` |
+| 销售订单详情（删除） | `PSI_SALES_ORDERS` |
+| 销售订单配货 | `PSI_SALES_ORDERS` |
+| 待发货生成销售单 | `PSI_SALES_ORDERS` |
+| 登记/编辑销售单 | `PSI_SALES_BILLS` |
+| 销售单详情（删除） | `PSI_SALES_BILLS` |
+| 登记/编辑调拨单 | `PSI_WAREHOUSE_TRANSFER` |
+| 调拨单详情（删除） | `PSI_WAREHOUSE_TRANSFER` |
+| 登记/编辑盘点单 | `PSI_WAREHOUSE_STOCKTAKE` |
+| 盘点单详情（删除） | `PSI_WAREHOUSE_STOCKTAKE` |
+| 登记/编辑收款单 | `FINANCE_RECEIPTS` |
+| 收款单详情（删除） | `FINANCE_RECEIPTS` |
+| 登记/编辑付款单 | `FINANCE_PAYMENTS` |
+| 付款单详情（删除） | `FINANCE_PAYMENTS` |
+| 新建/编辑产品 | `BASIC_PRODUCTS` |
+| 新建/编辑合作单位 | `BASIC_PARTNERS` |
+| 新建/编辑字典项 | `BASIC_DICTIONARIES` |
+| 新建/编辑系统设置档案 | `SETTINGS_*`（见 `saveNavigation.js`） |
+
+**新功能必做**：选用上表目标；若无合适常量则在 `saveNavigation.js` 的 `LIST_ROUTES` 登记，并同步更新本表与 `docs/10-miniprogram-ui.md`。
+
+扫码连续作业（`scan-session`）不在此规则内。
+
+流水/单据**详情页**与报工批次详情保持一致：有权限时底部固定 `report-batch-footer`（删除 + 编辑；编辑态为取消 + 保存）。键盘弹出时隐藏底栏。
+
+| 详情页 | 编辑权限 | 删除权限 |
+|--------|----------|----------|
+| 报工批次 | `production:orders_report_records:edit` | `production:orders_report_records:delete` |
+| 入库流水 | `production:orders_pending_stock_in:edit` | `production:orders_pending_stock_in:delete` |
+| 外协流水 | `production:outsource_records:edit` | `production:outsource_records:delete` |
+| 领退料流水 | `production:material_records:edit` | `production:material_records:delete` |
+| 采购订单详情 | `psi:purchase_order:edit` | `psi:purchase_order:delete` |
+| 采购入库详情 | `psi:purchase_bill:edit` | `psi:purchase_bill:delete` |
+| 销售订单详情 | `psi:sales_order:edit` | `psi:sales_order:delete` |
+| 销售单详情 | `psi:sales_bill:edit` | `psi:sales_bill:delete` |
+| 调拨单详情 | `psi:warehouse_transfer:edit` | `psi:warehouse_transfer:delete` |
+| 盘点单详情 | `psi:warehouse_stocktake:edit` | `psi:warehouse_stocktake:delete` |
+| 收款单详情 | `finance:receipt:edit` | `finance:receipt:delete` |
+| 付款单详情 | `finance:payment:edit` | `finance:payment:delete` |
+
+保存/删除成功后 `afterSaveReturnToList` 回到所属列表（见上表）。
+
+扫码连续作业（`scan-session`）不在此规则内。
+
+## 列表/流水产品缩略图
+
+业务列表与流水行**默认左侧带产品图**（无图时用模块占位 icon）：
+
+```javascript
+const { listProductThumbFromProduct, DEFAULT_PRODUCT_PLACEHOLDER_ICON } = require('../../utils/listProductThumb.js');
+
+const thumb = listProductThumbFromProduct(product);
+// → productImageUrl / showProductImage / placeholderIconSrc（无图时默认 clipboard-list，与工单中心一致）
+```
+
+**无产品图占位**：统一使用 `DEFAULT_PRODUCT_PLACEHOLDER_ICON`（`/assets/icons/clipboard-list.png`，与工单中心相同）；勿在各模块写死 warehouse/truck/boxes 等图标。领退料流水等非产品缩略图（业务类型 icon）除外。
+
+WXML 模式：`__thumb` + `image`（`binderror` 降级）+ placeholder；参考 `production-outsource-flow`、`production-order-report-history`。

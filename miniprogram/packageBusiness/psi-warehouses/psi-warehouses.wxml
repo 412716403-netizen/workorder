@@ -1,0 +1,214 @@
+<view class="plan-shell">
+  <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-header__title">{{selectedWarehouseId ? selectedWarehouseName : '仓库管理'}}</text>
+      <view class="plan-header__back plan-header__back--placeholder"></view>
+    </view>
+
+    <view class="plan-header__tools">
+      <view class="plan-search">
+        <input
+          class="plan-search__input"
+          value="{{searchKeyword}}"
+          bindinput="onSearchInput"
+          placeholder="产品名称 / SKU / 分类"
+          confirm-type="search"
+          placeholder-class="plan-search__ph"
+        />
+        <view wx:if="{{searchKeyword}}" class="plan-search__clear" bindtap="onSearchClear">×</view>
+      </view>
+      <view class="wh-shortcuts">
+        <view
+          wx:for="{{shortcuts}}"
+          wx:key="id"
+          class="wh-shortcut-btn"
+          data-path="{{item.path}}"
+          bindtap="onShortcutTap"
+        >
+          <image class="wh-shortcut-btn__icon" src="{{item.icon}}" mode="aspectFit" />
+          <text class="wh-shortcut-btn__label">{{item.label}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <view class="wh-page">
+    <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
+
+    <block wx:else>
+      <view wx:if="{{!selectedWarehouseId}}" class="wh-view-tabs">
+        <view
+          class="wh-view-tab {{viewMode === 'warehouse' ? 'wh-view-tab--active' : ''}}"
+          data-mode="warehouse"
+          bindtap="onViewModeTap"
+        >按仓库</view>
+        <view
+          class="wh-view-tab {{viewMode === 'product' ? 'wh-view-tab--active' : ''}}"
+          data-mode="product"
+          bindtap="onViewModeTap"
+        >按物料</view>
+      </view>
+
+      <block wx:if="{{!selectedWarehouseId}}">
+      <empty-state wx:if="{{viewMode === 'warehouse' && !warehouseCards.length && !loading}}" text="{{emptyText}}" />
+      <empty-state wx:if="{{viewMode === 'product' && !productCards.length && !loading}}" text="{{emptyText}}" />
+
+      <block wx:if="{{viewMode === 'warehouse'}}">
+        <view
+          wx:for="{{warehouseCards}}"
+          wx:key="warehouseId"
+          class="wh-card"
+          data-warehouse-id="{{item.warehouseId}}"
+          data-warehouse-name="{{item.warehouseName}}"
+          bindtap="onWarehouseCardTap"
+        >
+          <view class="wh-card__head">
+            <text class="wh-card__title">{{item.warehouseName}}</text>
+            <view class="wh-card__meta">
+              <text wx:if="{{item.code}}">{{item.code}}</text>
+              <text wx:if="{{item.category}}">{{item.category}}</text>
+            </view>
+            <view class="wh-card__stats">
+              <text>总存量 <text class="wh-card__qty">{{item.totalQtyText}}</text></text>
+              <text>{{item.skuCount}} SKU</text>
+            </view>
+          </view>
+        </view>
+      </block>
+
+      <block wx:if="{{viewMode === 'product'}}">
+        <view wx:for="{{productCards}}" wx:key="productId" class="wh-card">
+          <view
+            class="wh-card__head"
+            bindtap="onProductFlowTap"
+            data-product-id="{{item.productId}}"
+          >
+            <view class="wh-card__top">
+              <view
+                wx:if="{{item.canExpand}}"
+                class="wh-expand-icon {{item.detailsExpanded ? 'wh-expand-icon--open' : ''}}"
+                catchtap="onToggleProductExpand"
+                data-product-id="{{item.productId}}"
+              >{{item.detailsExpanded ? '▼' : '▶'}}</view>
+              <view class="wh-card__info">
+                <view class="report-history-row__product">
+                  <view class="report-history-row__product-left">
+                    <text class="report-history-row__product-name">{{item.productName}}</text>
+                    <text wx:if="{{item.showProductSku}}" class="report-history-row__sku">{{item.productSku}}</text>
+                  </view>
+                </view>
+                <view class="wh-card__meta">
+                  <text>{{item.categoryName}}</text>
+                </view>
+              </view>
+              <view class="wh-card__aside">
+                <text class="wh-card__aside-qty">{{item.totalText}}</text>
+              </view>
+            </view>
+          </view>
+          <view wx:if="{{item.detailsExpanded}}" class="wh-expand-block">
+            <block wx:if="{{item.hasVariants}}">
+              <text class="wh-expand-block__title">颜色尺码</text>
+              <view wx:for="{{item.colorGroups}}" wx:for-item="cg" wx:key="colorId" class="wh-color-group">
+                <view class="wh-color-group__head">
+                  <view
+                    wx:if="{{cg.colorValue}}"
+                    class="wh-color-group__swatch"
+                    style="background-color: {{cg.colorValue}};"
+                  ></view>
+                  <text class="wh-color-group__name">{{cg.colorName}}</text>
+                </view>
+                <view class="wh-color-group__sizes">
+                  <view wx:for="{{cg.items}}" wx:for-item="sz" wx:key="sizeName" class="wh-size-chip">
+                    <text class="wh-size-chip__label">{{sz.sizeName}}</text>
+                    <text class="wh-size-chip__qty">{{sz.qtyText}}</text>
+                  </view>
+                </view>
+              </view>
+            </block>
+            <block wx:if="{{item.whLines.length}}">
+              <text class="wh-expand-block__title">仓库分布</text>
+              <view wx:for="{{item.whLines}}" wx:for-item="wh" wx:key="warehouseId" class="wh-expand-row">
+                <text>{{wh.warehouseName}}</text>
+                <text>{{wh.qtyText}}</text>
+              </view>
+            </block>
+          </view>
+        </view>
+      </block>
+    </block>
+
+    <block wx:else>
+      <empty-state wx:if="{{!drillLines.length}}" text="{{emptyText}}" />
+      <view wx:for="{{drillLines}}" wx:key="productId" class="wh-card">
+        <view class="wh-line wh-line--flat">
+          <view
+            class="wh-line__row"
+            bindtap="onProductFlowTap"
+            data-product-id="{{item.productId}}"
+            data-warehouse-id="{{selectedWarehouseId}}"
+          >
+            <view
+              wx:if="{{item.canExpand}}"
+              class="wh-expand-icon {{item.detailsExpanded ? 'wh-expand-icon--open' : ''}}"
+              catchtap="onToggleLineExpand"
+              data-product-id="{{item.productId}}"
+              data-warehouse-id="{{selectedWarehouseId}}"
+            >{{item.detailsExpanded ? '▼' : '▶'}}</view>
+            <view class="wh-line__left">
+              <view class="report-history-row__product">
+                <view class="report-history-row__product-left">
+                  <text class="report-history-row__product-name">{{item.productName}}</text>
+                  <text wx:if="{{item.showProductSku}}" class="report-history-row__sku">{{item.productSku}}</text>
+                </view>
+              </view>
+              <view class="wh-card__meta">
+                <text>{{item.categoryName}}</text>
+              </view>
+            </view>
+            <view class="wh-line__aside">
+              <text class="wh-line__qty">{{item.qtyText}}</text>
+            </view>
+          </view>
+          <view wx:if="{{item.detailsExpanded}}" class="wh-expand-block">
+            <block wx:if="{{item.usesBatch}}">
+              <text class="wh-expand-block__title">批次结存</text>
+              <view wx:if="{{item.batchLoading}}" class="wh-expand-row"><text>加载中…</text></view>
+              <view wx:elif="{{item.batchError}}" class="wh-expand-row"><text>{{item.batchError}}</text></view>
+              <block wx:elif="{{item.batchRows.length}}">
+                <view wx:for="{{item.batchRows}}" wx:for-item="br" wx:key="batchNo" class="wh-expand-row">
+                  <text>{{br.batchNo}}</text>
+                  <text>{{br.stockText}}</text>
+                </view>
+              </block>
+              <view wx:else class="wh-expand-row"><text>暂无批次明细</text></view>
+            </block>
+            <block wx:if="{{item.hasVariants}}">
+              <text class="wh-expand-block__title">颜色尺码</text>
+              <view wx:for="{{item.colorGroups}}" wx:for-item="cg" wx:key="colorId" class="wh-color-group">
+                <view class="wh-color-group__head">
+                  <view
+                    wx:if="{{cg.colorValue}}"
+                    class="wh-color-group__swatch"
+                    style="background-color: {{cg.colorValue}};"
+                  ></view>
+                  <text class="wh-color-group__name">{{cg.colorName}}</text>
+                </view>
+                <view class="wh-color-group__sizes">
+                  <view wx:for="{{cg.items}}" wx:for-item="sz" wx:key="sizeName" class="wh-size-chip">
+                    <text class="wh-size-chip__label">{{sz.sizeName}}</text>
+                    <text class="wh-size-chip__qty">{{sz.qtyText}}</text>
+                  </view>
+                </view>
+              </view>
+            </block>
+          </view>
+        </view>
+      </view>
+    </block>
+    </block>
+  </view>
+</view>

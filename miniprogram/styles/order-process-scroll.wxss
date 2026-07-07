@@ -1,0 +1,177 @@
+/* 工序横向滚动 + chip（组件 order-process-scroll 与 outsource-shared 共用） */
+
+.order-process-scroll-wrap {
+  width: 100%;
+}
+
+.order-process-scroll-wrap--compact {
+  margin-top: 0;
+}
+
+.order-process-scroll {
+  width: 100%;
+  margin-top: 8rpx;
+}
+
+.order-process-scroll--compact {
+  margin-top: 4rpx;
+}
+
+.order-process-scroll__inner {
+  display: flex;
+  flex-direction: row;
+  gap: 8rpx;
+  padding: 2rpx 0;
+}
+
+.order-process-scroll--compact .order-process-scroll__inner {
+  gap: 6rpx;
+}
+
+.order-process-chip {
+  flex-shrink: 0;
+  width: 176rpx;
+  min-height: 236rpx;
+  padding: 16rpx 12rpx;
+  border-radius: 16rpx;
+  background: var(--color-bg-page);
+  border: 1rpx solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  box-sizing: border-box;
+}
+
+.order-process-scroll--compact .order-process-chip {
+  width: 128rpx;
+  min-height: 164rpx;
+  padding: 8rpx 6rpx 10rpx;
+  border-radius: 12rpx;
+}
+
+.order-process-chip--done {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.order-process-chip--disabled {
+  opacity: 0.55;
+}
+
+.order-process-chip__head {
+  width: 100%;
+  min-height: 44rpx;
+  margin-bottom: 4rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.order-process-scroll--compact .order-process-chip__head {
+  min-height: 40rpx;
+}
+
+.order-process-chip__name {
+  font-size: 20rpx;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  text-align: center;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.order-process-scroll--compact .order-process-chip__name {
+  font-size: 20rpx;
+}
+
+.order-process-chip__partner {
+  margin-top: -4rpx;
+  margin-bottom: 4rpx;
+  color: var(--color-text-secondary);
+}
+
+.order-process-chip__partner--placeholder {
+  color: transparent;
+}
+
+.order-process-chip--outsource .order-process-chip__name:first-child {
+  color: #059669;
+}
+
+.order-process-chip__circle {
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 50%;
+  border: 4rpx solid #c7d2fe;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8rpx;
+  flex-shrink: 0;
+}
+
+.order-process-scroll--compact .order-process-chip__circle {
+  width: 64rpx;
+  height: 64rpx;
+  border-width: 3rpx;
+  margin-bottom: 4rpx;
+}
+
+.order-process-chip--done .order-process-chip__circle {
+  border-color: #86efac;
+}
+
+.order-process-chip__count,
+.order-process-chip__meta {
+  color: var(--color-text-primary);
+}
+
+.order-process-chip__count {
+  font-size: 32rpx;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.order-process-scroll--compact .order-process-chip__count {
+  font-size: 26rpx;
+}
+
+.order-process-chip__meta {
+  font-size: 20rpx;
+  font-weight: 600;
+  margin-bottom: 8rpx;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  width: 100%;
+}
+
+.order-process-scroll--compact .order-process-chip__meta {
+  font-size: 20rpx;
+  margin-bottom: 4rpx;
+}
+
+.order-process-chip__bar {
+  width: 100%;
+  height: 6rpx;
+  background: #eef0f3;
+  border-radius: 3rpx;
+  overflow: hidden;
+  margin-top: auto;
+}
+
+.order-process-scroll--compact .order-process-chip__bar {
+  height: 4rpx;
+}
+
+.order-process-chip__bar-fill {
+  height: 100%;
+  background: var(--color-primary);
+  border-radius: 3rpx;
+}

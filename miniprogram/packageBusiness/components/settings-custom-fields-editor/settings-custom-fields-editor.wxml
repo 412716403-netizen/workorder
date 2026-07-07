@@ -1,0 +1,129 @@
+<view class="settings-cf-editor">
+  <view
+    wx:for="{{enrichedFields}}"
+    wx:key="id"
+    class="settings-cf-field"
+  >
+    <view class="settings-cf-field__row">
+      <text class="settings-cf-field__label">名称</text>
+      <input
+        class="settings-cf-field__input"
+        value="{{item.label}}"
+        disabled="{{disabled}}"
+        data-id="{{item.id}}"
+        bindinput="onLabelInput"
+        placeholder="字段名称"
+        placeholder-class="settings-cf-field__ph"
+      />
+    </view>
+
+    <view class="settings-cf-field__row settings-cf-field__row--picker">
+      <text class="settings-cf-field__label">类型</text>
+      <picker
+        mode="selector"
+        range="{{item.typeNames}}"
+        value="{{item.typeIndex}}"
+        disabled="{{disabled}}"
+        data-id="{{item.id}}"
+        bindchange="onTypeChange"
+      >
+        <view class="settings-cf-field__picker {{disabled ? 'settings-cf-field__picker--disabled' : ''}}">
+          <text>{{item.typeNames[item.typeIndex]}}</text>
+          <text class="settings-cf-field__picker-chev">›</text>
+        </view>
+      </picker>
+    </view>
+
+    <view wx:if="{{item.desktopOnly}}" class="settings-cf-field__hint">
+      文件/资料库类型上传请在电脑端完成
+    </view>
+
+    <view wx:if="{{item.isSelect}}" class="settings-cf-field__select">
+      <view class="settings-cf-field__select-head">
+        <text class="settings-cf-field__select-title">下拉选项</text>
+        <text class="settings-cf-field__select-count">{{item.options.length}} 项</text>
+      </view>
+
+      <view wx:if="{{!item.options.length}}" class="settings-cf-field__select-empty">
+        暂无选项，请添加至少一项
+      </view>
+
+      <view class="settings-cf-field__opt-list">
+        <view
+          wx:for="{{item.options}}"
+          wx:for-item="opt"
+          wx:for-index="optIdx"
+          wx:key="*this"
+          class="settings-cf-field__opt-row"
+        >
+          <text class="settings-cf-field__opt-index">{{optIdx + 1}}</text>
+          <input
+            class="settings-cf-field__opt-input"
+            value="{{opt}}"
+            disabled="{{disabled}}"
+            data-id="{{item.id}}"
+            data-index="{{optIdx}}"
+            bindinput="onOptionInput"
+            placeholder="选项文案"
+            placeholder-class="settings-cf-field__opt-ph"
+          />
+          <view
+            wx:if="{{!disabled}}"
+            class="settings-cf-field__opt-remove"
+            data-id="{{item.id}}"
+            data-index="{{optIdx}}"
+            bindtap="onRemoveOption"
+            hover-class="settings-cf-field__opt-remove--hover"
+          >
+            <text class="settings-cf-field__opt-remove-icon">×</text>
+          </view>
+        </view>
+      </view>
+
+      <view
+        wx:if="{{!disabled}}"
+        class="settings-cf-field__add-opt"
+        data-id="{{item.id}}"
+        bindtap="onAddOption"
+      >
+        <text class="settings-cf-field__add-opt-icon">+</text>
+        <text>添加选项</text>
+      </view>
+    </view>
+
+    <view wx:if="{{item.showChecks || !disabled}}" class="settings-cf-field__foot">
+      <view wx:if="{{item.showChecks}}" class="settings-cf-field__checks">
+        <label wx:if="{{item.showRequiredCol}}" class="settings-cf-field__check">
+          <checkbox
+            value="required"
+            checked="{{item.required}}"
+            disabled="{{disabled}}"
+            color="#2F6BFF"
+            data-id="{{item.id}}"
+            bindchange="onRequiredChange"
+          />
+          <text>必填</text>
+        </label>
+        <label wx:if="{{item.showShowInFormCol}}" class="settings-cf-field__check">
+          <checkbox
+            value="showInForm"
+            checked="{{item.showInForm}}"
+            disabled="{{disabled}}"
+            color="#2F6BFF"
+            data-id="{{item.id}}"
+            bindchange="onShowInFormChange"
+          />
+          <text>表单中</text>
+        </label>
+      </view>
+      <view
+        wx:if="{{!disabled}}"
+        class="settings-cf-field__remove"
+        data-id="{{item.id}}"
+        bindtap="onRemoveField"
+      >删除</view>
+    </view>
+  </view>
+
+  <view wx:if="{{!disabled}}" class="settings-cf-editor__add" bindtap="onAddField">+ {{addLabel}}</view>
+</view>

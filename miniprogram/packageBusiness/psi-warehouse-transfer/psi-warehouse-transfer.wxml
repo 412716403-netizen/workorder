@@ -1,0 +1,62 @@
+<view class="plan-shell">
+  <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-header__title">仓库调拨</text>
+      <view class="plan-header__back plan-header__back--placeholder"></view>
+    </view>
+
+    <view class="plan-header__tools">
+      <view class="plan-search">
+        <input
+          class="plan-search__input"
+          value="{{searchKeyword}}"
+          bindinput="onSearchInput"
+          placeholder="单号 / 仓库 / 备注"
+          confirm-type="search"
+          placeholder-class="plan-search__ph"
+        />
+        <view wx:if="{{searchKeyword}}" class="plan-search__clear" bindtap="onSearchClear">×</view>
+      </view>
+      <view
+        wx:if="{{canCreate}}"
+        class="plan-tool-btn"
+        bindtap="onCreateTap"
+      >
+        <image class="plan-tool-btn__icon" src="/assets/icons/file-plus.png" mode="aspectFit" />
+      </view>
+    </view>
+  </view>
+
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <view class="wh-doc-list-page">
+    <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
+
+    <view wx:elif="{{cards.length}}">
+      <view
+        wx:for="{{cards}}"
+        wx:key="docNumber"
+        class="wh-doc-card"
+        bindtap="onCardTap"
+        data-doc-number="{{item.docNumber}}"
+      >
+        <view class="wh-doc-card__title-row">
+          <text class="wh-doc-card__doc">{{item.docNumberDisplay}}</text>
+        </view>
+        <view class="wh-doc-card__route">{{item.routeText}}</view>
+        <view class="wh-doc-card__meta">
+          <text class="wh-doc-card__meta-item">{{item.createdAtText}}</text>
+          <text class="wh-doc-card__meta-item">共 {{item.skuCount}} 项</text>
+          <text class="wh-doc-card__meta-item">合计 {{item.totalQtyText}}</text>
+        </view>
+        <text wx:if="{{item.note}}" class="wh-doc-card__note">{{item.note}}</text>
+      </view>
+
+      <view wx:if="{{loadingMore}}" class="plan-list-footer">加载中…</view>
+      <view wx:elif="{{!hasMore}}" class="plan-list-footer">已加载全部 {{total}} 单</view>
+    </view>
+
+    <empty-state wx:else text="{{emptyText}}" />
+  </view>
+</view>

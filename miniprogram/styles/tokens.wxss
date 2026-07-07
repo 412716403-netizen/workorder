@@ -1,0 +1,47 @@
+/* SmartTrack 小程序 Design Tokens — 企业蓝 + 卡片化 B2B 风格 */
+
+page {
+  --color-primary: #2f6bff;
+  --color-primary-dark: #1e56e6;
+  --color-primary-light: #eaf1ff;
+  --color-primary-gradient-start: #3d7bff;
+  --color-primary-gradient-end: #2f6bff;
+
+  --color-bg-page: #f7f8fa;
+  --color-bg-card: #ffffff;
+  --color-bg-input: #f2f3f5;
+
+  --color-text-primary: #1f2329;
+  --color-text-secondary: #8f959e;
+  --color-text-tertiary: #c9cdd4;
+  --color-text-inverse: #ffffff;
+
+  --color-border: #eef0f3;
+  --color-danger: #ff4d4f;
+  --color-danger-bg: rgba(255, 77, 79, 0.1);
+  --color-warning: #ff9500;
+  --color-warning-bg: rgba(255, 149, 0, 0.12);
+  --color-success: #34c759;
+  --color-success-bg: rgba(52, 199, 89, 0.12);
+
+  --radius-card: 24rpx;
+  --radius-icon: 20rpx;
+  --radius-button: 16rpx;
+  --radius-pill: 999rpx;
+
+  --spacing-page: 24rpx;
+  --spacing-card: 24rpx;
+  --spacing-section: 24rpx;
+
+  --shadow-card: 0 2rpx 12rpx rgba(31, 35, 41, 0.04);
+
+  --font-title: 36rpx;
+  --font-section: 32rpx;
+  --font-body: 30rpx;
+  --font-caption: 26rpx;
+  --font-small: 24rpx;
+  --font-stat-hero: 64rpx;
+  --font-stat-row: 44rpx;
+
+  --tabbar-height: 100rpx;
+}

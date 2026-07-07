@@ -1,0 +1,146 @@
+<view class="plan-create-shell">
+  <view class="plan-create-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-create-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-create-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-create-header__title">{{pageTitle}}</text>
+      <view class="plan-create-header__back plan-create-header__back--placeholder"></view>
+    </view>
+  </view>
+
+  <view class="plan-create-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view class="plan-create-scroll" scroll-y style="height: {{scrollHeight}}px;" show-scrollbar="{{false}}">
+    <view wx:if="{{loading}}" class="plan-create-muted">加载中…</view>
+
+    <view wx:else class="plan-create-page">
+      <view class="plan-form-card">
+        <view class="plan-form-cell plan-form-cell--section">
+          <text class="plan-form-cell__label">基础信息</text>
+        </view>
+
+        <view wx:if="{{showFinanceKind}}" class="plan-form-cell plan-form-cell--input">
+          <text class="plan-form-cell__label">单据类型</text>
+          <picker
+            mode="selector"
+            range="{{financeKindNames}}"
+            value="{{financeKindIndex}}"
+            disabled="{{!canEdit}}"
+            bindchange="onFinanceKindChange"
+          >
+            <view class="plan-form-cell__value">{{financeKindNames[financeKindIndex]}}</view>
+          </picker>
+        </view>
+
+        <view class="plan-form-cell plan-form-cell--input">
+          <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>名称</text>
+          <input
+            class="plan-form-cell__input"
+            value="{{form.name}}"
+            disabled="{{!canEdit}}"
+            bindinput="onNameInput"
+            placeholder="请输入名称"
+            placeholder-class="plan-form-cell__ph"
+          />
+        </view>
+      </view>
+
+      <view wx:if="{{showCategoryToggles}}" class="plan-form-card">
+        <view class="plan-form-cell plan-form-cell--section">
+          <text class="plan-form-cell__label">模块权限与特性开关</text>
+        </view>
+        <view
+          wx:for="{{categoryToggles}}"
+          wx:key="key"
+          class="settings-edit-toggle {{item.blocked ? 'settings-edit-toggle--blocked' : ''}}"
+        >
+          <text class="settings-edit-toggle__label">{{item.label}}</text>
+          <switch
+            checked="{{item.value}}"
+            disabled="{{!canEdit || item.blocked}}"
+            color="#2F6BFF"
+            data-key="{{item.key}}"
+            bindchange="onCategoryToggle"
+          />
+        </view>
+      </view>
+
+      <view wx:if="{{showFinanceToggles}}" class="plan-form-card">
+        <view class="plan-form-cell plan-form-cell--section">
+          <text class="plan-form-cell__label">关联项</text>
+        </view>
+        <view wx:for="{{financeToggles}}" wx:key="key" class="settings-edit-toggle">
+          <text class="settings-edit-toggle__label">{{item.label}}</text>
+          <switch
+            checked="{{item.value}}"
+            disabled="{{!canEdit}}"
+            color="#2F6BFF"
+            data-key="{{item.key}}"
+            bindchange="onFinanceToggle"
+          />
+        </view>
+      </view>
+
+      <view wx:if="{{showNodeToggles}}" class="plan-form-card">
+        <view class="plan-form-cell plan-form-cell--section">
+          <text class="plan-form-cell__label">工序功能开关</text>
+        </view>
+        <view wx:for="{{nodeToggles}}" wx:key="key" class="settings-edit-toggle">
+          <text class="settings-edit-toggle__label">{{item.label}}</text>
+          <switch
+            checked="{{item.value}}"
+            disabled="{{!canEdit}}"
+            color="#2F6BFF"
+            data-key="{{item.key}}"
+            bindchange="onNodeToggle"
+          />
+        </view>
+      </view>
+
+      <view wx:if="{{showCustomFields && !showNodeDisplayFields}}" class="plan-form-card plan-form-card--flush-bottom">
+        <view class="plan-form-cell plan-form-cell--section">
+          <text class="plan-form-cell__label">扩展字段</text>
+        </view>
+        <settings-custom-fields-editor
+          fields="{{form.customFields}}"
+          id-prefix="{{customFieldsIdPrefix}}"
+          show-required="{{customFieldsShowRequired}}"
+          show-show-in-form="{{customFieldsShowShowInForm}}"
+          allowed-types="{{customFieldsAllowedTypes}}"
+          knowledge-enabled="{{knowledgeEnabled}}"
+          add-label="{{customFieldsAddLabel}}"
+          disabled="{{!canEdit}}"
+          bind:change="onCustomFieldsChange"
+        />
+      </view>
+
+      <view wx:if="{{showNodeDisplayFields}}" class="plan-form-card plan-form-card--flush-bottom">
+        <view class="plan-form-cell plan-form-cell--section">
+          <text class="plan-form-cell__label">报工页展示内容</text>
+        </view>
+        <settings-custom-fields-editor
+          fields="{{form.reportDisplayTemplate}}"
+          id-prefix="{{customFieldsIdPrefix}}"
+          show-required="{{customFieldsShowRequired}}"
+          show-show-in-form="{{customFieldsShowShowInForm}}"
+          allowed-types="{{customFieldsAllowedTypes}}"
+          knowledge-enabled="{{knowledgeEnabled}}"
+          add-label="{{customFieldsAddLabel}}"
+          disabled="{{!canEdit}}"
+          bind:change="onNodeDisplayFieldsChange"
+        />
+      </view>
+    </view>
+  </scroll-view>
+
+  <view wx:if="{{!loading && canSave}}" class="report-batch-footer">
+    <view
+      wx:if="{{canDelete && isPersisted}}"
+      class="report-batch-footer__btn report-batch-footer__btn--ghost {{submitting ? 'report-batch-footer__btn--disabled' : ''}}"
+      bindtap="onDeleteTap"
+    >删除</view>
+    <view
+      class="report-batch-footer__btn report-batch-footer__btn--primary {{submitting ? 'report-batch-footer__btn--disabled' : ''}}"
+      bindtap="onSaveTap"
+    >{{submitting ? '保存中…' : '保存'}}</view>
+  </view>
+</view>

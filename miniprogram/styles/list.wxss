@@ -1,0 +1,131 @@
+.st-list-cell {
+  display: flex;
+  align-items: center;
+  padding: 28rpx var(--spacing-card);
+  min-height: 96rpx;
+  box-sizing: border-box;
+  border-bottom: 1rpx solid var(--color-border);
+}
+
+.st-list-cell:last-child {
+  border-bottom: none;
+}
+
+.st-list-cell--disabled {
+  opacity: 0.38;
+}
+
+.st-list-cell__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.st-list-cell__title {
+  font-size: var(--font-body);
+  font-weight: 400;
+  color: var(--color-text-primary);
+}
+
+.st-list-cell__subtitle {
+  margin-top: 6rpx;
+  font-size: var(--font-caption);
+  color: var(--color-text-secondary);
+}
+
+.st-chevron {
+  margin-left: 16rpx;
+  font-size: 40rpx;
+  font-weight: 300;
+  color: var(--color-text-tertiary);
+  line-height: 1;
+}
+
+/** 列表/流水/详情：产品名称后的编号（对齐报工流水 report-history-row__sku） */
+.list-product-sku {
+  font-size: 22rpx;
+  font-weight: 400;
+  color: var(--color-text-tertiary);
+}
+
+.st-tenant-icon {
+  width: 72rpx;
+  height: 72rpx;
+  margin-right: 24rpx;
+  border-radius: var(--radius-icon);
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  font-size: 30rpx;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.st-spinner {
+  margin-left: 12rpx;
+  font-size: 32rpx;
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.st-pill {
+  flex-shrink: 0;
+  font-size: var(--font-small);
+  font-weight: 600;
+  padding: 8rpx 16rpx;
+  border-radius: var(--radius-pill);
+}
+
+.st-pill--pending {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.st-pill--approved {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.st-pill--rejected {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.st-pill--muted {
+  background: #f2f3f5;
+  color: var(--color-text-secondary);
+}
+
+.st-pill--info {
+  background: #eef2ff;
+  color: #4f46e5;
+}
+
+.st-inset {
+  margin-top: 28rpx;
+  padding: 28rpx;
+  background: var(--color-bg-page);
+  border-radius: var(--radius-icon);
+}
+
+.st-inset-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 24rpx;
+}
+
+.st-inset-name {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  flex: 1;
+  min-width: 0;
+}
+
+.st-inset-meta {
+  font-size: var(--font-caption);
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}

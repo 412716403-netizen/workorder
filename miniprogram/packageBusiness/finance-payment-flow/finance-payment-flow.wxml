@@ -1,0 +1,106 @@
+<view class="plan-shell">
+  <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-header__title">付款流水</text>
+      <view class="plan-header__back plan-header__back--placeholder"></view>
+    </view>
+
+    <view class="plan-header__tools">
+      <view class="plan-search">
+        <input
+          class="plan-search__input"
+          value="{{searchKeyword}}"
+          bindinput="onSearchInput"
+          placeholder="单号 / 单位 / 经办人 / 备注"
+          confirm-type="search"
+          placeholder-class="plan-search__ph"
+        />
+        <view wx:if="{{searchKeyword}}" class="plan-search__clear" bindtap="onSearchClear">×</view>
+      </view>
+      <view
+        class="plan-tool-btn {{showFilterPanel || filterActive ? 'plan-tool-btn--active' : ''}}"
+        bindtap="onFilterTap"
+      >
+        <image class="plan-tool-btn__icon" src="/assets/icons/list-filter.png" mode="aspectFit" />
+      </view>
+    </view>
+  </view>
+
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <view class="fin-receipts-page">
+    <view wx:if="{{showFilterPanel}}" class="plan-filter-panel">
+      <view class="plan-filter-panel__row">
+        <text class="plan-filter-panel__label">开始时间</text>
+        <picker mode="date" value="{{dateFrom}}" bindchange="onDateFromChange">
+          <view class="report-history-filter report-history-filter--picker">{{dateFrom || '请选择'}}</view>
+        </picker>
+      </view>
+      <view class="plan-filter-panel__row">
+        <text class="plan-filter-panel__label">结束时间</text>
+        <picker mode="date" value="{{dateTo}}" bindchange="onDateToChange">
+          <view class="report-history-filter report-history-filter--picker">{{dateTo || '请选择'}}</view>
+        </picker>
+      </view>
+      <view class="plan-filter-panel__foot">
+        <view class="plan-filter-reset" bindtap="onFilterReset">重置</view>
+        <view class="plan-filter-apply" bindtap="onFilterApply">确定</view>
+      </view>
+    </view>
+
+    <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
+
+    <block wx:elif="{{cards.length}}">
+      <view
+        wx:for="{{cards}}"
+        wx:key="id"
+        class="fin-receipt-card"
+        bindtap="onCardTap"
+        data-id="{{item.id}}"
+      >
+        <view class="fin-receipt-card__title-row">
+          <text class="fin-receipt-card__partner">{{item.partner}}</text>
+          <text class="fin-receipt-card__amount fin-receipt-card__amount--payment">{{item.amountText}}</text>
+        </view>
+        <text class="fin-receipt-card__doc">{{item.docNo}}</text>
+        <view class="fin-receipt-card__meta">
+          <text class="fin-receipt-card__meta-item">{{item.categoryName}}</text>
+          <text class="fin-receipt-card__meta-item">{{item.timestampText}}</text>
+          <view wx:if="{{item.showOperator}}" class="fin-receipt-card__meta-item fin-receipt-card__meta-item--operator">
+            <image class="fin-receipt-card__meta-icon" src="/assets/icons/user.png" mode="aspectFit" />
+            <text>{{item.operator}}</text>
+          </view>
+        </view>
+        <view wx:if="{{item.showProduct}}" class="fin-receipt-card__product">
+          <view class="report-history-row__thumb">
+            <image
+              wx:if="{{item.showProductImage}}"
+              class="report-history-row__img"
+              src="{{item.productImageUrl}}"
+              mode="aspectFill"
+              data-id="{{item.id}}"
+              binderror="onProductImageError"
+            />
+            <view wx:else class="report-history-row__img report-history-row__img--placeholder">
+              <image class="report-history-row__placeholder-icon" src="{{item.placeholderIconSrc}}" mode="aspectFit" />
+            </view>
+          </view>
+          <view>
+            <text class="fin-receipt-card__product-name">{{item.productName}}</text>
+            <text wx:if="{{item.showProductSku}}" class="fin-receipt-card__product-sku">{{item.productSku}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view wx:if="{{loadingMore}}" class="plan-list-footer">加载中…</view>
+      <view wx:elif="{{!hasMore}}" class="plan-list-footer">已加载全部 {{total}} 笔</view>
+    </block>
+
+    <empty-state wx:else text="{{emptyText}}" />
+
+    <view wx:if="{{!loading && cards.length}}" class="report-history-footer">
+      <text class="report-history-footer__text">共 {{stats.count}} 笔 · 合计 {{stats.amountText}}</text>
+    </view>
+  </view>
+</view>

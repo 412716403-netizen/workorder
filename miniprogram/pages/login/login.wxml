@@ -1,0 +1,48 @@
+<view class="login-page">
+  <view class="login-hero">
+    <image class="login-hero__logo" src="{{logoPath}}" mode="aspectFit" />
+    <view class="login-hero__title">{{brandName}}</view>
+    <view class="login-hero__subtitle">{{brandTagline}}</view>
+  </view>
+
+  <view class="login-card">
+    <view class="login-card__head">
+      <text class="login-card__title">账号登录</text>
+      <text class="login-card__desc">请使用手机号或用户名与密码登录</text>
+    </view>
+
+    <view class="login-field">
+      <view class="login-field__label">手机号或用户名</view>
+      <view class="login-field__box">
+        <input
+          class="login-field__input"
+          value="{{username}}"
+          bindinput="onUser"
+          placeholder="请输入手机号或用户名"
+          placeholder-class="login-field__ph"
+        />
+      </view>
+    </view>
+
+    <view class="login-field">
+      <view class="login-field__label">密码</view>
+      <view class="login-field__box">
+        <input
+          class="login-field__input"
+          password="{{!showPassword}}"
+          value="{{password}}"
+          bindinput="onPass"
+          placeholder="请输入密码"
+          placeholder-class="login-field__ph"
+        />
+        <text class="login-field__toggle" bindtap="onTogglePassword">{{showPassword ? '隐藏' : '显示'}}</text>
+      </view>
+    </view>
+
+    <button class="login-submit" loading="{{loading}}" disabled="{{loading}}" bindtap="onLogin">登 录</button>
+  </view>
+
+  <view class="login-footer">
+    <text class="login-footer__text">{{brandName}} · 与网页端账号互通</text>
+  </view>
+</view>

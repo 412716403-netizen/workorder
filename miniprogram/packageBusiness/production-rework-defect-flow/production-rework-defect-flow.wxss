@@ -1,0 +1,10 @@
+@import '../production-plans/production-plans.wxss';
+@import '../../styles/outsource-shared.wxss';
+
+.rework-flow-row__type--scrap {
+  color: #ff4d4f;
+}
+
+.rework-flow-row__type--outsource {
+  color: #64748b;
+}

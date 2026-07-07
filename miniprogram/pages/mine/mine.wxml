@@ -1,0 +1,34 @@
+<tab-shell customHeader="{{true}}">
+  <view slot="header" class="tab-user">
+    <view class="tab-user__avatar">{{avatarText}}</view>
+    <view class="tab-user__info">
+      <text class="tab-user__name">{{displayName}}</text>
+      <text class="tab-user__tenant">{{tenantName}}</text>
+    </view>
+  </view>
+
+  <empty-state wx:if="{{loading}}" loading="{{true}}" />
+
+  <block wx:else>
+    <view class="tab-panel tab-panel--flush mine-menu">
+      <view
+        wx:for="{{menuItems}}"
+        wx:key="key"
+        class="mine-menu__row"
+        data-key="{{item.key}}"
+        bindtap="onMenuTap"
+      >
+        <view class="mine-menu__icon-wrap">
+          <image class="mine-menu__icon-img" src="{{item.icon}}" mode="aspectFit" />
+        </view>
+        <view class="mine-menu__body">
+          <view class="mine-menu__title">{{item.label}}</view>
+          <view wx:if="{{item.desc}}" class="mine-menu__desc">{{item.desc}}</view>
+        </view>
+        <text wx:if="{{item.arrow}}" class="mine-menu__chevron">›</text>
+      </view>
+    </view>
+
+    <button class="mine-logout" bindtap="onLogout">退出登录</button>
+  </block>
+</tab-shell>

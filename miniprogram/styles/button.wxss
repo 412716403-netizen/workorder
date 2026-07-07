@@ -1,0 +1,92 @@
+.st-btn-primary {
+  width: 100%;
+  margin: 0;
+  padding: 26rpx 32rpx;
+  border-radius: var(--radius-button);
+  font-size: var(--font-body);
+  font-weight: 600;
+  line-height: 1.25;
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+  border: none;
+  box-sizing: border-box;
+}
+
+.st-btn-primary::after {
+  border: none;
+}
+
+.st-btn-primary[disabled] {
+  opacity: 0.45;
+}
+
+.st-btn-secondary {
+  width: 100%;
+  margin: 0;
+  padding: 26rpx 32rpx;
+  border-radius: var(--radius-button);
+  font-size: var(--font-body);
+  font-weight: 500;
+  line-height: 1.25;
+  background: var(--color-bg-card);
+  color: var(--color-primary);
+  border: 2rpx solid var(--color-border);
+  box-sizing: border-box;
+}
+
+.st-btn-secondary::after {
+  border: none;
+}
+
+.st-btn-danger {
+  width: 100%;
+  margin: 0;
+  padding: 26rpx 32rpx;
+  border-radius: var(--radius-button);
+  font-size: var(--font-body);
+  font-weight: 500;
+  line-height: 1.25;
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+  border: none;
+  box-sizing: border-box;
+}
+
+.st-btn-danger::after {
+  border: none;
+}
+
+.st-btn-compact {
+  margin: 0;
+  padding: 18rpx 28rpx;
+  border-radius: var(--radius-icon);
+  font-size: 28rpx;
+  font-weight: 600;
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  border: none;
+  flex-shrink: 0;
+}
+
+.st-btn-compact::after {
+  border: none;
+}
+
+.st-btn-compact[disabled] {
+  opacity: 0.45;
+}
+
+.st-btn-text {
+  margin: 0;
+  padding: 0;
+  font-size: var(--font-caption);
+  font-weight: 500;
+  color: var(--color-primary);
+  background: transparent;
+  border: none;
+  line-height: 1.4;
+}
+
+.st-btn-text::after {
+  border: none;
+}

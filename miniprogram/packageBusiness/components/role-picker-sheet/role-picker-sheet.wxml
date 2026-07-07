@@ -1,0 +1,44 @@
+<view wx:if="{{open}}" class="rps" catchtouchmove="noop">
+  <view
+    class="rps__mask {{sheetShow ? 'rps__mask--show' : ''}}"
+    bindtap="onClose"
+    catchtouchmove="noop"
+  />
+  <view
+    class="rps__sheet rps__sheet--picker {{sheetMotion ? 'rps__sheet--motion' : ''}} {{sheetShow ? 'rps__sheet--show' : ''}}"
+    style="height: {{sheetHeightPx}}px; max-height: {{sheetHeightPx}}px;"
+    catchtouchmove="noop"
+  >
+    <view class="rps__picker-bar">
+      <text class="rps__picker-cancel" bindtap="onClose">取消</text>
+      <text class="rps__picker-title">分配角色</text>
+      <text class="rps__picker-action"></text>
+    </view>
+
+    <view wx:if="{{memberName}}" class="rps__subtitle">{{memberName}}</view>
+
+    <scroll-view class="rps__list" scroll-y enhanced show-scrollbar="{{true}}">
+      <view
+        class="rps__row {{!value ? 'rps__row--active' : ''}}"
+        data-id=""
+        bindtap="onSelect"
+      >
+        <text class="rps__row-text">未分配角色</text>
+        <text wx:if="{{!value}}" class="rps__row-check">✓</text>
+      </view>
+      <view
+        wx:for="{{roles}}"
+        wx:key="id"
+        class="rps__row {{value === item.id ? 'rps__row--active' : ''}}"
+        data-id="{{item.id}}"
+        bindtap="onSelect"
+      >
+        <view class="rps__row-main">
+          <text class="rps__row-text">{{item.name}}</text>
+          <text wx:if="{{item.description}}" class="rps__row-desc">{{item.description}}</text>
+        </view>
+        <text wx:if="{{value === item.id}}" class="rps__row-check">✓</text>
+      </view>
+    </scroll-view>
+  </view>
+</view>

@@ -1,0 +1,170 @@
+<view class="plan-shell">
+  <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-header__title">财务对账</text>
+      <view class="plan-header__back plan-header__back--placeholder"></view>
+    </view>
+  </view>
+
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <view class="fin-recon-page">
+    <view class="fin-recon-tabs">
+      <view
+        class="fin-recon-tab {{subTab === 'partner' ? 'fin-recon-tab--active' : ''}}"
+        data-tab="partner"
+        bindtap="onSubTabTap"
+      >合作单位</view>
+      <view
+        class="fin-recon-tab {{subTab === 'settlement' ? 'fin-recon-tab--active' : ''}}"
+        data-tab="settlement"
+        bindtap="onSubTabTap"
+      >报工结算</view>
+    </view>
+
+    <view class="fin-recon-filter">
+      <view class="fin-recon-filter__row fin-recon-filter__row--dates">
+        <picker mode="date" value="{{dateFrom}}" bindchange="onDateFromChange" class="fin-recon-filter__date-picker">
+          <view class="fin-recon-filter__date">{{dateFrom || '开始日期'}}</view>
+        </picker>
+        <text class="fin-recon-filter__date-sep">至</text>
+        <picker mode="date" value="{{dateTo}}" bindchange="onDateToChange" class="fin-recon-filter__date-picker">
+          <view class="fin-recon-filter__date">{{dateTo || '结束日期'}}</view>
+        </picker>
+      </view>
+
+      <view wx:if="{{subTab === 'partner'}}" class="fin-recon-filter__row--stack">
+        <searchable-partner-select
+          cell="{{true}}"
+          required="{{true}}"
+          label="合作单位"
+          partners="{{partners}}"
+          categories="{{partnerCategories}}"
+          value="{{partnerName}}"
+          placeholder="请选择合作单位"
+          bind:change="onPartnerChange"
+        />
+      </view>
+      <view wx:else class="fin-recon-filter__row--stack">
+        <searchable-worker-select
+          cell="{{true}}"
+          required="{{true}}"
+          label="工人"
+          workers="{{workers}}"
+          process-nodes="{{processNodes}}"
+          value-id="{{workerId}}"
+          value-name="{{workerName}}"
+          placeholder="{{workers.length ? '请选择工人' : '暂无可用人员'}}"
+          disabled="{{!workers.length}}"
+          bind:change="onWorkerChange"
+        />
+      </view>
+
+      <view class="fin-recon-mode-row">
+        <view class="fin-recon-modes">
+          <view
+            class="fin-recon-mode {{viewMode === 'document' ? 'fin-recon-mode--active' : ''}}"
+            data-mode="document"
+            bindtap="onViewModeTap"
+          >按单据</view>
+          <view
+            class="fin-recon-mode {{viewMode === 'product' ? 'fin-recon-mode--active' : ''}}"
+            data-mode="product"
+            bindtap="onViewModeTap"
+          >按产品</view>
+        </view>
+        <view
+          class="fin-recon-query-btn {{canQuery ? '' : 'fin-recon-query-btn--disabled'}}"
+          bindtap="onQueryTap"
+        >查询</view>
+      </view>
+    </view>
+
+    <view wx:if="{{hasQueried}}" class="fin-recon-search">
+      <input
+        class="fin-recon-search__input"
+        value="{{searchKeyword}}"
+        bindinput="onSearchInput"
+        placeholder="在当前对账结果中搜索…"
+        confirm-type="search"
+        placeholder-class="plan-search__ph"
+      />
+      <view wx:if="{{searchKeyword}}" class="fin-recon-search__clear" bindtap="onSearchClear">×</view>
+    </view>
+
+    <view wx:if="{{hasQueried}}" class="fin-recon-summary">
+      <view wx:if="{{loading}}" class="fin-recon-summary__loading">计算中…</view>
+      <block wx:elif="{{summary}}">
+        <view>
+          <view class="fin-recon-summary__label">上期余额</view>
+          <view class="fin-recon-summary__value">{{summary.openingBalanceText}}</view>
+        </view>
+        <view>
+          <view class="fin-recon-summary__label">本期累计增加</view>
+          <view class="fin-recon-summary__value">{{summary.periodIncText}}</view>
+        </view>
+        <view>
+          <view class="fin-recon-summary__label">本期累计减少</view>
+          <view class="fin-recon-summary__value">{{summary.periodDecText}}</view>
+        </view>
+        <view>
+          <view class="fin-recon-summary__label">本期应收余额</view>
+          <view class="fin-recon-summary__value">{{summary.closingBalanceText}}</view>
+        </view>
+      </block>
+    </view>
+
+    <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
+
+    <block wx:elif="{{hasQueried && cards.length}}">
+      <view
+        wx:for="{{cards}}"
+        wx:key="key"
+        class="fin-recon-card"
+        bindtap="onCardTap"
+        data-index="{{index}}"
+      >
+        <view class="fin-recon-card__head">
+          <text class="fin-recon-card__doc-type">{{item.docType}}</text>
+          <text class="fin-recon-card__balance">{{item.balanceText}}</text>
+        </view>
+        <view class="fin-recon-card__meta">
+          <text class="fin-recon-card__doc-no">{{item.docNo}}</text>
+          <text class="fin-recon-card__meta-item">{{item.timestampText}}</text>
+        </view>
+        <view wx:if="{{item.isProductView && item.showProduct}}" class="fin-recon-card__product">
+          <view class="report-history-row__thumb">
+            <image
+              wx:if="{{item.showProductImage}}"
+              class="report-history-row__img"
+              src="{{item.productImageUrl}}"
+              mode="aspectFill"
+            />
+            <view wx:else class="report-history-row__img report-history-row__img--placeholder">
+              <image class="report-history-row__placeholder-icon" src="{{item.placeholderIconSrc}}" mode="aspectFit" />
+            </view>
+          </view>
+          <view class="fin-recon-card__product-info">
+            <text class="fin-recon-card__product-name">{{item.productName}}</text>
+            <text wx:if="{{item.hasQtyPrice}}" class="fin-recon-card__product-qty">数量 {{item.quantityText}} · 单价 {{item.unitPriceText}}</text>
+          </view>
+        </view>
+        <view class="fin-recon-card__amounts">
+          <view class="fin-recon-card__amt">
+            <text class="fin-recon-card__amt-label">应收增加</text>
+            <text class="fin-recon-card__amt-value {{item.hasInc ? 'fin-recon-card__amt-value--inc' : ''}}">{{item.incText}}</text>
+          </view>
+          <view class="fin-recon-card__amt">
+            <text class="fin-recon-card__amt-label">应收减少</text>
+            <text class="fin-recon-card__amt-value {{item.hasDec ? 'fin-recon-card__amt-value--dec' : ''}}">{{item.decText}}</text>
+          </view>
+        </view>
+        <view wx:if="{{item.canNavigate}}" class="fin-recon-card__chevron">查看详情 ›</view>
+      </view>
+    </block>
+
+    <empty-state wx:elif="{{hasQueried}}" text="{{emptyText}}" />
+    <empty-state wx:else text="{{hintText}}" />
+  </view>
+</view>

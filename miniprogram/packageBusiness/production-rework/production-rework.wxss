@@ -1,0 +1,6 @@
+@import '../production-orders/production-orders.wxss';
+
+.rework-list-body {
+  flex: 1;
+  padding-bottom: calc(24rpx + env(safe-area-inset-bottom));
+}

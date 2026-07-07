@@ -1,0 +1,172 @@
+<view class="plan-create-shell">
+  <view class="plan-create-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-create-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-create-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-create-header__title">新建生产计划</text>
+      <view class="plan-create-header__back plan-create-header__back--placeholder"></view>
+    </view>
+  </view>
+
+  <view class="plan-create-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view
+    class="plan-create-scroll"
+    scroll-y
+    scroll-top="{{matrixScrollTop}}"
+    scroll-with-animation
+    show-scrollbar="{{false}}"
+    style="height: {{scrollHeight}}px;"
+  >
+    <view wx:if="{{loading}}" class="plan-create-muted">加载中…</view>
+
+    <view wx:else class="plan-create-page {{matrixKeyboardVisible ? 'matrix-keyboard-page--open' : ''}}">
+      <view class="plan-form-card">
+        <searchable-product-select
+          cell="{{true}}"
+          required="{{true}}"
+          label="产品"
+          products="{{products}}"
+          categories="{{categories}}"
+          value-id="{{productId}}"
+          value-name="{{productName}}"
+          placeholder="请选择"
+          bind:change="onProductChange"
+        />
+
+        <searchable-partner-select
+          wx:if="{{showCustomer}}"
+          cell="{{true}}"
+          label="客户"
+          partners="{{partners}}"
+          categories="{{partnerCategories}}"
+          value="{{customer}}"
+          placeholder="请选择"
+          bind:change="onCustomerChange"
+        />
+
+        <view
+          wx:if="{{productId && !useVariantMatrix}}"
+          class="plan-form-cell plan-form-cell--input {{!showDeliveryDate && !createCustomFields.length ? 'plan-form-cell--last' : ''}}"
+        >
+          <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>计划数</text>
+          <input
+            class="plan-form-cell__input"
+            type="number"
+            value="{{singleQuantity}}"
+            bindinput="onSingleQtyInput"
+            placeholder="请填写"
+            placeholder-class="plan-form-cell__ph"
+          />
+        </view>
+
+        <block wx:if="{{productId && useVariantMatrix}}">
+          <view wx:if="{{matrixLayout}}" class="plan-create-matrix-wrap">
+            <view class="plan-form-cell plan-form-cell--matrix-head">
+              <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>计划数</text>
+              <text wx:if="{{totalQuantity > 0}}" class="plan-form-cell__hint">合计 {{totalQuantity}} {{unitName}}</text>
+            </view>
+            <scroll-view class="plan-create-matrix-scroll" scroll-x enhanced show-scrollbar="{{false}}">
+              <view class="plan-create-matrix">
+                <view class="plan-create-matrix__head">
+                  <view class="plan-create-matrix__corner">颜色</view>
+                  <view
+                    wx:for="{{matrixLayout.sizeColumns}}"
+                    wx:key="id"
+                    class="plan-create-matrix__size"
+                  >{{item.header}}</view>
+                </view>
+                <view
+                  wx:for="{{matrixLayout.colorRows}}"
+                  wx:for-item="row"
+                  wx:key="key"
+                  class="plan-create-matrix__row"
+                >
+                  <view class="plan-create-matrix__color">
+                    <view
+                      wx:if="{{row.colorSwatch}}"
+                      class="plan-create-matrix__swatch"
+                      style="background-color: {{row.colorSwatch}};"
+                    />
+                    <text class="plan-create-matrix__color-text">{{row.colorLabel}}</text>
+                  </view>
+                  <view
+                    wx:for="{{row.cells}}"
+                    wx:for-item="cell"
+                    wx:key="index"
+                    class="plan-create-matrix__cell"
+                  >
+                    <view
+                      wx:if="{{cell.variantId}}"
+                      class="plan-create-matrix__input {{activeMatrixVariantId === cell.variantId ? 'plan-create-matrix__input--active' : ''}} {{activeMatrixVariantId === cell.variantId && matrixInputReplaceAll && cell.quantity ? 'plan-create-matrix__input--replace' : ''}} {{cell.quantity ? 'plan-create-matrix__input--filled' : 'plan-create-matrix__input--empty'}}"
+                      data-variant-id="{{cell.variantId}}"
+                      bindtap="onMatrixCellTap"
+                    >{{cell.quantity}}</view>
+                    <text wx:else class="plan-create-matrix__dash">—</text>
+                  </view>
+                </view>
+              </view>
+            </scroll-view>
+          </view>
+
+          <view wx:elif="{{variantRows.length}}">
+            <view class="plan-form-cell plan-form-cell--matrix-head">
+              <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>计划数</text>
+            </view>
+            <view
+              wx:for="{{variantRows}}"
+              wx:key="variantId"
+              class="plan-form-cell plan-form-cell--input"
+            >
+              <text class="plan-form-cell__label plan-form-cell__label--sm">{{item.colorLabel}} / {{item.sizeLabel}}</text>
+              <input
+                class="plan-form-cell__input"
+                type="number"
+                value="{{item.quantity}}"
+                data-index="{{index}}"
+                bindinput="onVariantQtyInput"
+                placeholder="请填写"
+                placeholder-class="plan-form-cell__ph"
+              />
+            </view>
+          </view>
+        </block>
+      </view>
+
+      <view wx:if="{{showDeliveryDate || createCustomFields.length}}" class="plan-form-card">
+        <picker
+          wx:if="{{showDeliveryDate}}"
+          mode="date"
+          value="{{dueDate}}"
+          bindchange="onDueDateChange"
+        >
+          <view class="plan-form-cell {{!createCustomFields.length ? 'plan-form-cell--last' : ''}}">
+            <text class="plan-form-cell__label">交货日期</text>
+            <text class="plan-form-cell__value {{dueDate ? '' : 'plan-form-cell__value--ph'}}">{{dueDate || '请选择'}}</text>
+            <text class="plan-form-cell__chevron">›</text>
+          </view>
+        </picker>
+
+        <plan-form-custom-field
+          wx:if="{{createCustomFields.length}}"
+          fields="{{createCustomFields}}"
+          values="{{customData}}"
+          bind:change="onCustomDataChange"
+        />
+      </view>
+    </view>
+  </scroll-view>
+
+  <view class="plan-create-footer" wx:if="{{!matrixKeyboardVisible}}">
+    <button
+      class="plan-create-submit"
+      loading="{{submitting}}"
+      disabled="{{submitting || !canSubmit}}"
+      bindtap="onSubmit"
+    >{{submitting ? '提交中…' : '创建'}}</button>
+  </view>
+
+  <matrix-qty-keyboard
+    visible="{{matrixKeyboardVisible}}"
+    bind:action="onMatrixKeyboardAction"
+  />
+</view>

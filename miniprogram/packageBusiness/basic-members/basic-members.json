@@ -1,0 +1,9 @@
+{
+  "navigationStyle": "custom",
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "empty-state": "/components/empty-state/empty-state",
+    "role-picker-sheet": "/packageBusiness/components/role-picker-sheet/role-picker-sheet",
+    "milestone-multi-select": "/packageBusiness/components/milestone-multi-select/milestone-multi-select"
+  }
+}

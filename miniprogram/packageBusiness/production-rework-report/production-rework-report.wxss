@@ -1,0 +1,133 @@
+@import '../../styles/tokens.wxss';
+@import '../../styles/matrix-keyboard-page.wxss';
+@import '../production-plan-create/production-plan-create.wxss';
+@import '../production-order-report/production-order-report.wxss';
+
+page {
+  background: var(--color-bg-page);
+  height: 100%;
+}
+
+.rework-report-path-hint {
+  padding: 16rpx 24rpx 0;
+  font-size: 22rpx;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.rework-report-undiff {
+  margin: 16rpx 24rpx 0;
+  padding: 20rpx 24rpx;
+  border-radius: 16rpx;
+  background: rgba(251, 191, 36, 0.12);
+  border: 1rpx solid rgba(251, 191, 36, 0.35);
+}
+
+.rework-report-undiff__label {
+  display: block;
+  font-size: 22rpx;
+  font-weight: 600;
+  color: #92400e;
+  margin-bottom: 12rpx;
+}
+
+.rework-report-undiff__row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.rework-report-undiff__input {
+  width: 160rpx;
+  height: 64rpx;
+  padding: 0 16rpx;
+  border-radius: 12rpx;
+  border: 1rpx solid rgba(251, 191, 36, 0.5);
+  background: #fff;
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #4338ca;
+}
+
+.rework-report-undiff__meta {
+  font-size: 22rpx;
+  color: #78716c;
+}
+
+.rework-report-price-card {
+  margin-top: 0;
+  padding: 24rpx 28rpx;
+}
+
+.rework-report-summary-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16rpx;
+}
+
+.rework-report-summary-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.rework-report-summary-col__label {
+  display: block;
+  height: 32rpx;
+  line-height: 32rpx;
+  margin-bottom: 8rpx;
+  font-size: 22rpx;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.rework-report-summary-col__input,
+.rework-report-summary-col__readonly {
+  width: 100%;
+  height: 64rpx;
+  min-height: 64rpx;
+  padding: 0 16rpx;
+  border-radius: 12rpx;
+  border: 1rpx solid var(--color-border);
+  background: #fff;
+  box-sizing: border-box;
+  font-size: 28rpx;
+  font-variant-numeric: tabular-nums;
+}
+
+.rework-report-summary-col__input {
+  text-align: right;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.rework-report-summary-col__readonly {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8rpx;
+}
+
+.rework-report-summary-col__num {
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.rework-report-summary-col__unit {
+  font-size: 22rpx;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+
+.rework-report-summary-col__readonly--amount .rework-report-summary-col__num {
+  color: #059669;
+}
+
+.rework-report-summary-col__meta {
+  margin-top: 6rpx;
+  font-size: 20rpx;
+  color: var(--color-text-secondary);
+  text-align: right;
+}

@@ -1,0 +1,13 @@
+@import '../../styles/tab-shell.wxss';
+
+.apps-section {
+  margin-bottom: 8rpx;
+}
+
+.apps-section:last-child {
+  margin-bottom: 0;
+}
+
+.tab-panel--flush .st-icon-grid {
+  padding: 20rpx 16rpx 24rpx;
+}

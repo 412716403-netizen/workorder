@@ -1,0 +1,36 @@
+.st-field-label {
+  display: block;
+  margin: 0 0 10rpx 4rpx;
+  font-size: var(--font-caption);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.st-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 26rpx 28rpx;
+  font-size: var(--font-body);
+  color: var(--color-text-primary);
+  background: var(--color-bg-input);
+  border-radius: var(--radius-icon);
+  border: none;
+}
+
+.st-input-wrap {
+  margin-bottom: 24rpx;
+}
+
+.st-ph {
+  color: var(--color-text-tertiary);
+}
+
+.st-form-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.st-form-row .st-input {
+  flex: 1;
+}

@@ -1,0 +1,8 @@
+{
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "plan-form-custom-field": "/packageBusiness/components/plan-form-custom-field/plan-form-custom-field",
+    "searchable-worker-select": "/packageBusiness/components/searchable-worker-select/searchable-worker-select",
+    "matrix-qty-keyboard": "/packageBusiness/components/matrix-qty-keyboard/matrix-qty-keyboard"
+  }
+}

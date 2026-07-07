@@ -1,0 +1,100 @@
+@import '../searchable-partner-select/searchable-partner-select.wxss';
+
+.cssp__confirm-link {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.cssp__selected-wrap {
+  padding: 20rpx 32rpx;
+  border-bottom: 1rpx solid #f3f4f6;
+  background: #f8fafc;
+}
+
+.cssp__selected-title {
+  display: block;
+  margin-bottom: 12rpx;
+  font-size: 24rpx;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.cssp__selected-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+
+.cssp__selected-empty {
+  font-size: 26rpx;
+  color: var(--color-text-tertiary);
+}
+
+.cssp__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8rpx;
+  padding: 8rpx 16rpx;
+  font-size: 24rpx;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  background: #fff;
+  border: 1rpx solid #e5e7eb;
+  border-radius: 999rpx;
+}
+
+.cssp__chip-remove {
+  margin-left: 4rpx;
+  font-size: 28rpx;
+  line-height: 1;
+  color: var(--color-text-tertiary);
+}
+
+.cssp__dot {
+  width: 20rpx;
+  height: 20rpx;
+  border-radius: 50%;
+  border: 1rpx solid #e5e7eb;
+  flex-shrink: 0;
+}
+
+.cssp__row-main {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.cssp__quick {
+  display: flex;
+  gap: 12rpx;
+  padding: 16rpx 32rpx;
+  border-top: 1rpx solid #f3f4f6;
+}
+
+.cssp__quick-input {
+  flex: 1;
+  height: 72rpx;
+  padding: 0 20rpx;
+  background: #f8fafc;
+  border-radius: 12rpx;
+  font-size: 28rpx;
+}
+
+.cssp__quick-btn {
+  padding: 0 24rpx;
+  line-height: 72rpx;
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #fff;
+  background: var(--color-primary);
+  border-radius: 12rpx;
+}
+
+.cssp__add-row {
+  padding: 20rpx 32rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--color-primary);
+  border-top: 1rpx solid #f3f4f6;
+}

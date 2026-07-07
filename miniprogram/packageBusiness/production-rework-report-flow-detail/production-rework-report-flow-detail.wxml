@@ -1,0 +1,222 @@
+<view class="plan-detail-shell">
+  <view class="plan-detail-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-detail-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-detail-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-detail-header__title">{{editing ? '返工报工 · 编辑' : '返工报工详情'}}</text>
+      <view class="plan-detail-header__back plan-detail-header__back--placeholder"></view>
+    </view>
+  </view>
+
+  <view class="plan-detail-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view
+    class="plan-detail-scroll"
+    scroll-y
+    scroll-top="{{matrixScrollTop}}"
+    scroll-with-animation
+    show-scrollbar="{{false}}"
+    style="height: {{scrollHeight}}px;"
+  >
+    <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
+
+    <view wx:elif="{{!detail}}" class="plan-detail-muted">未找到记录</view>
+
+    <view wx:else class="plan-detail-page rework-report-detail-page {{matrixKeyboardVisible ? 'matrix-keyboard-page--open' : ''}}">
+      <view class="report-batch-hero">
+        <view class="report-batch-hero__left">
+          <image
+            wx:if="{{detail.showProductImage}}"
+            class="report-batch-hero__img"
+            src="{{detail.productImageUrl}}"
+            mode="aspectFill"
+            binderror="onProductImageError"
+          />
+          <view wx:else class="report-batch-hero__img report-batch-hero__img--placeholder">
+            <image class="report-batch-hero__placeholder-icon" src="{{detail.placeholderIconSrc}}" mode="aspectFit" />
+          </view>
+        </view>
+        <view class="report-batch-hero__text">
+          <view class="report-batch-hero__badges">
+            <text class="report-batch-hero__badge report-batch-hero__badge--mono">{{detail.docNo}}</text>
+            <text wx:if="{{detail.orderNumber}}" class="report-batch-hero__badge">{{detail.orderNumber}}</text>
+            <text class="report-batch-hero__badge rework-report-detail__type">返工报工</text>
+          </view>
+          <text class="report-batch-hero__milestone">{{detail.productName}}<text wx:if="{{detail.showProductSku}}" class="list-product-sku"> {{detail.productSku}}</text></text>
+          <view class="rework-report-detail__milestone">
+            <text>工序：{{detail.milestoneName}}</text>
+          </view>
+          <view class="report-batch-hero__meta">
+            <text class="report-batch-hero__meta-item">{{detail.timeLabel}}</text>
+            <text wx:if="{{detail.showOutsourcePartner}}" class="report-batch-hero__meta-item">委外工厂：{{detail.outsourcePartnerDisplay}}</text>
+            <text wx:if="{{detail.showOperator}}" class="report-batch-hero__meta-item">经办：{{detail.operatorsLabel}}</text>
+            <text wx:if="{{detail.showWorker}}" class="report-batch-hero__meta-item">报工：{{detail.workerName}}</text>
+            <text wx:if="{{detail.showEquipment}}" class="report-batch-hero__meta-item">设备：{{detail.equipmentName}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view wx:if="{{!editing}}" class="order-detail-summary">
+        <view class="order-detail-summary__item">
+          <text class="order-detail-summary__label">合计数量</text>
+          <text class="order-detail-summary__value order-detail-summary__value--success">{{detail.totalQtyText}}</text>
+        </view>
+        <view wx:if="{{detail.showUnitPrice}}" class="order-detail-summary__item">
+          <text class="order-detail-summary__label">单价</text>
+          <text class="order-detail-summary__value">{{detail.unitPriceText}}</text>
+        </view>
+        <view wx:if="{{detail.showTotalAmount}}" class="order-detail-summary__item">
+          <text class="order-detail-summary__label">单据金额</text>
+          <text class="order-detail-summary__value order-detail-summary__value--success">{{detail.totalAmountText}}</text>
+        </view>
+      </view>
+
+      <view wx:if="{{editing}}" class="plan-detail-section">
+        <view class="plan-detail-section__head">
+          <text class="plan-detail-section__title">编辑信息</text>
+        </view>
+        <view class="plan-form-card">
+          <view class="plan-form-cell">
+            <text class="plan-form-cell__label">报工时间</text>
+            <view class="report-batch-edit__datetime">
+              <picker mode="date" value="{{detail.editDate}}" bindchange="onEditDateChange">
+                <view class="report-batch-edit__picker">{{detail.editDate}}</view>
+              </picker>
+              <picker mode="time" value="{{detail.editTime}}" bindchange="onEditTimeChange">
+                <view class="report-batch-edit__picker">{{detail.editTime}}</view>
+              </picker>
+            </view>
+          </view>
+          <view wx:if="{{!detail.isOutsourceReworkReport}}" class="plan-form-cell">
+            <text class="plan-form-cell__label">经办人</text>
+            <input class="report-batch-edit__input" value="{{detail.editOperator}}" bindinput="onEditOperatorInput" placeholder="经办人" />
+          </view>
+          <searchable-worker-select
+            wx:if="{{!detail.isOutsourceReworkReport}}"
+            cell="{{true}}"
+            label="报工人员"
+            workers="{{workers}}"
+            value-id="{{workerId}}"
+            value-name="{{workerName}}"
+            placeholder="{{workers.length ? '请选择' : '暂无可用人员'}}"
+            disabled="{{!workers.length}}"
+            bind:change="onWorkerChange"
+          />
+          <picker wx:if="{{showEquipmentField}}" mode="selector" range="{{equipmentNames}}" value="{{equipmentPickerIndex}}" bindchange="onEquipmentChange">
+            <view class="plan-form-cell">
+              <text class="plan-form-cell__label">设备</text>
+              <text class="plan-form-cell__value {{equipmentId ? '' : 'plan-form-cell__value--ph'}}">{{equipmentName || '请选择'}}</text>
+              <text class="plan-form-cell__chevron">›</text>
+            </view>
+          </picker>
+          <view wx:if="{{canViewAmount}}" class="plan-form-cell plan-form-cell--last plan-form-cell--input">
+            <text class="plan-form-cell__label">单价</text>
+            <input class="report-batch-edit__input" type="digit" value="{{editUnitPrice}}" bindinput="onUnitPriceInput" placeholder="选填" />
+          </view>
+        </view>
+      </view>
+
+      <view class="plan-detail-section">
+        <view class="plan-detail-section__head">
+          <text class="plan-detail-section__title">报工明细</text>
+          <text wx:if="{{!editing}}" class="plan-detail-section__sub">{{detail.totalQtyText}}</text>
+        </view>
+
+        <view wx:if="{{!editing && detail.showMatrix && detail.matrixLayout}}" class="plan-form-card">
+          <view class="plan-detail-matrix-wrap">
+            <scroll-view class="plan-detail-matrix-scroll" scroll-x show-scrollbar="{{false}}">
+              <view class="plan-detail-matrix">
+                <view class="plan-detail-matrix__head">
+                  <view class="plan-detail-matrix__corner">颜色</view>
+                  <view wx:for="{{detail.matrixLayout.sizeColumns}}" wx:for-item="col" wx:key="id" class="plan-detail-matrix__size">{{col.header}}</view>
+                </view>
+                <view wx:for="{{detail.matrixLayout.colorRows}}" wx:for-item="colorRow" wx:key="key" class="plan-detail-matrix__row">
+                  <view class="plan-detail-matrix__color">
+                    <view wx:if="{{colorRow.colorSwatch}}" class="plan-detail-matrix__swatch" style="background-color: {{colorRow.colorSwatch}};"></view>
+                    <text class="plan-detail-matrix__color-text">{{colorRow.colorLabel}}</text>
+                  </view>
+                  <view wx:for="{{colorRow.cells}}" wx:for-item="cell" wx:key="index" class="plan-detail-matrix__cell">
+                    <text wx:if="{{cell.variantId && cell.quantity}}" class="plan-detail-matrix__qty">{{cell.quantity}}</text>
+                    <text wx:elif="{{cell.variantId}}" class="plan-detail-matrix__dash">0</text>
+                    <text wx:else class="plan-detail-matrix__dash">—</text>
+                  </view>
+                </view>
+              </view>
+            </scroll-view>
+          </view>
+        </view>
+
+        <view wx:if="{{editing && editMatrixLayout}}" class="plan-form-card">
+          <scroll-view class="plan-create-matrix-scroll" scroll-x show-scrollbar="{{false}}">
+            <view class="plan-create-matrix report-matrix">
+              <view class="plan-create-matrix__head">
+                <view class="plan-create-matrix__corner">颜色</view>
+                <view wx:for="{{editMatrixLayout.sizeColumns}}" wx:key="id" class="plan-create-matrix__size">{{item.header}}</view>
+              </view>
+              <view wx:for="{{editMatrixLayout.colorRows}}" wx:for-item="row" wx:key="key" class="plan-create-matrix__row">
+                <view class="plan-create-matrix__color">
+                  <view wx:if="{{row.colorSwatch}}" class="plan-create-matrix__swatch" style="background-color: {{row.colorSwatch}};" />
+                  <text class="plan-create-matrix__color-text">{{row.colorLabel}}</text>
+                </view>
+                <view wx:for="{{row.cells}}" wx:for-item="cell" wx:key="index" class="plan-create-matrix__cell report-matrix__cell">
+                  <view
+                    wx:if="{{cell.variantId}}"
+                    class="plan-create-matrix__input {{activeMatrixVariantId === cell.variantId ? 'plan-create-matrix__input--active' : ''}} {{activeMatrixVariantId === cell.variantId && matrixInputReplaceAll && cell.quantity ? 'plan-create-matrix__input--replace' : ''}} {{cell.quantity ? 'plan-create-matrix__input--filled' : 'plan-create-matrix__input--empty'}}"
+                    data-variant-id="{{cell.variantId}}"
+                    bindtap="onMatrixCellTap"
+                  >{{cell.quantity}}</view>
+                  <text wx:else class="plan-create-matrix__dash">—</text>
+                </view>
+              </view>
+            </view>
+          </scroll-view>
+        </view>
+
+        <view wx:if="{{editing && !editMatrixLayout && editLineItems.length}}" class="plan-form-card">
+          <view wx:for="{{editLineItems}}" wx:key="id" class="report-batch-edit-line">
+            <view class="report-batch-edit-line__row">
+              <view class="report-batch-edit-line__field">
+                <text wx:if="{{detail.lineItems[index].showVariantLabel}}" class="report-batch-edit-line__hint">{{detail.lineItems[index].variantLabel}}</text>
+                <text class="report-batch-edit-line__label">数量</text>
+                <input class="report-batch-edit__input" type="number" value="{{item.editQty}}" data-index="{{index}}" bindinput="onLineQtyInput" />
+              </view>
+            </view>
+          </view>
+        </view>
+
+        <view wx:if="{{!editing && detail.showLineItems}}" class="plan-form-card">
+          <view wx:for="{{detail.lineItems}}" wx:key="id" class="report-batch-line">
+            <view class="report-batch-line__head">
+              <text wx:if="{{item.showVariantLabel}}" class="report-batch-line__variant">{{item.variantLabel}}</text>
+            </view>
+            <view class="report-batch-line__grid">
+              <view class="report-batch-line__cell">
+                <text class="report-batch-line__label">数量</text>
+                <text class="report-batch-line__value report-batch-line__value--good">{{item.qtyText}}</text>
+              </view>
+              <view wx:if="{{item.showAmount}}" class="report-batch-line__cell">
+                <text class="report-batch-line__label">金额</text>
+                <text class="report-batch-line__value report-batch-line__value--amount">{{item.amountText}}</text>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </scroll-view>
+
+  <view wx:if="{{showFooter && !loading && detail && !matrixKeyboardVisible}}" class="report-batch-footer">
+    <view wx:if="{{editing}}" class="report-batch-footer__inner">
+      <view class="report-batch-footer__btn report-batch-footer__btn--ghost" bindtap="onCancelEdit">取消</view>
+      <view class="report-batch-footer__btn report-batch-footer__btn--primary" bindtap="onSaveEdit">{{saving ? '保存中…' : '保存'}}</view>
+    </view>
+    <view wx:else class="report-batch-footer__inner">
+      <view wx:if="{{canDelete}}" class="report-batch-footer__btn report-batch-footer__btn--danger" bindtap="onDeleteTap">删除</view>
+      <view wx:if="{{canEdit}}" class="report-batch-footer__btn report-batch-footer__btn--primary" bindtap="onEnterEdit">编辑</view>
+    </view>
+  </view>
+
+  <matrix-qty-keyboard
+    visible="{{matrixKeyboardVisible}}"
+    bind:action="onMatrixKeyboardAction"
+  />
+</view>
