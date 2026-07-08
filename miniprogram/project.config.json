@@ -8,6 +8,18 @@
         "value": "scripts"
       },
       {
+        "type": "folder",
+        "value": "packageBusiness/__debug__"
+      },
+      {
+        "type": "folder",
+        "value": "packageBusiness/scan-session"
+      },
+      {
+        "type": "folder",
+        "value": "packageBusiness/scan-setup"
+      },
+      {
         "type": "suffix",
         "value": ".example"
       }
@@ -18,7 +30,7 @@
     "es6": true,
     "postcss": true,
     "minified": true,
-    "enhance": false,
+    "enhance": true,
     "showShadowRootInWxmlPanel": true,
     "packNpmManually": false,
     "babelSetting": {

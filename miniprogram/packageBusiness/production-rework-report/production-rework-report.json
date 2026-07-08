@@ -2,6 +2,7 @@
   "navigationStyle": "custom",
   "usingComponents": {
     "searchable-worker-select": "/packageBusiness/components/searchable-worker-select/searchable-worker-select",
-    "matrix-qty-keyboard": "/packageBusiness/components/matrix-qty-keyboard/matrix-qty-keyboard"
+    "matrix-qty-keyboard": "/packageBusiness/components/matrix-qty-keyboard/matrix-qty-keyboard",
+    "scan-batch-modal": "/packageBusiness/components/scan-batch-modal/scan-batch-modal"
   }
 }

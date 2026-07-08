@@ -1,25 +1,24 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const { buildOutsourceReceiveAggregates } = require('../utils/outsourceReceiveAggregates.js');
-const { outsourceReceiveBaseKey } = require('../utils/outsourceReceiveKeys.js');
-const { buildDispatchMilestoneOptions } = require('../utils/outsourceDispatchLite.js');
-const { buildScanSessionUrl } = require('../../utils/scanNav.js');
-const { fetchAllOrdersPaginated } = require('../utils/pendingStockBadge.js');
-const { fetchOutsourceRecordsForPanel } = require('../utils/outsourceRecordsLoad.js');
-const {
-  fetchTenantConfig,
-  fetchProductsAll,
-  fetchNodesAll,
-  fetchCategoriesAll,
-  listProductProgressAll,
-} = require('../utils/orderApi.js');
-const { normalizeMasterList } = require('../utils/productionPlans.js');
-const { listProductThumbFromProduct } = require('../utils/listProductThumb.js');
-const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 = require('../utils/outsourceReceiveAggregates.js'),buildOutsourceReceiveAggregates = _require3.buildOutsourceReceiveAggregates;
+const _require4 = require('../utils/outsourceReceiveKeys.js'),outsourceReceiveBaseKey = _require4.outsourceReceiveBaseKey;
+const _require5 = require('../utils/outsourceDispatchLite.js'),buildDispatchMilestoneOptions = _require5.buildDispatchMilestoneOptions;
+const _require1 = require('../utils/pendingStockBadge.js'),fetchAllOrdersPaginated = _require1.fetchAllOrdersPaginated;
+const _require10 = require('../utils/outsourceRecordsLoad.js'),fetchOutsourceRecordsForPanel = _require10.fetchOutsourceRecordsForPanel;
+const _require11 =
+
+
+
+
+
+  require('../utils/orderApi.js'),fetchTenantConfig = _require11.fetchTenantConfig,fetchProductsAll = _require11.fetchProductsAll,fetchNodesAll = _require11.fetchNodesAll,fetchCategoriesAll = _require11.fetchCategoriesAll,listProductProgressAll = _require11.listProductProgressAll;
+const _require12 = require('../utils/productionPlans.js'),normalizeMasterList = _require12.normalizeMasterList;
+const _require13 = require('../utils/listProductThumb.js'),listProductThumbFromProduct = _require13.listProductThumbFromProduct;
+const _require15 = require('../../utils/featurePlugins.js'),loadTraceabilityScanEnabled = _require15.loadTraceabilityScanEnabled;
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
-  const toolsPx = Math.ceil((win.windowWidth / 750) * 128);
+  const toolsPx = Math.ceil(win.windowWidth / 750 * 128);
   return nav.statusBarHeight + nav.navBarHeight + toolsPx;
 }
 
@@ -39,9 +38,9 @@ function mapReceiveRow(row, selectedKeys, productsById, productionLinkMode) {
   const product = productsById && row.productId ? productsById.get(row.productId) : null;
   const thumb = listProductThumbFromProduct(product);
   const partnerLabel = (row.partner || '').trim() || '—';
-  const subtitleLine = productionLinkMode === 'product'
-    ? (row.productName || '—')
-    : `${row.orderNumber || '—'} · ${row.productName || '—'}`;
+  const subtitleLine = productionLinkMode === 'product' ?
+  row.productName || '—' :
+  `${row.orderNumber || '—'} · ${row.productName || '—'}`;
   const pending = Number(row.pending) || 0;
   const dispatched = Number(row.dispatched) || 0;
   const received = Number(row.received) || 0;
@@ -57,12 +56,12 @@ function mapReceiveRow(row, selectedKeys, productsById, productionLinkMode) {
     milestoneName: row.milestoneName || '—',
     pendingQtyText: String(pending),
     statsLine: `已派 ${dispatched} / 已收 ${received}`,
-    showStatsLine: dispatched > 0 || received > 0,
+    showStatsLine: dispatched > 0 || received > 0
   };
 }
 
 function filterReceiveRows(rows, keyword, filterOptions) {
-  const milestoneNodeId = (filterOptions && filterOptions.milestoneNodeId) || '';
+  const milestoneNodeId = filterOptions && filterOptions.milestoneNodeId || '';
   let list = rows || [];
   if (milestoneNodeId) {
     list = list.filter((row) => row.nodeId === milestoneNodeId);
@@ -93,23 +92,27 @@ Page({
     emptyText: '暂无待收回外协',
     statusBarHeight: 20,
     navBarHeight: 44,
-    headerBlockHeight: 88,
+    headerBlockHeight: 88
   },
 
   onLoad() {
     const nav = readNavBarMetrics();
     const ctx = readTenantCtx();
-    if (!hasPermission((ctx && ctx.permissions) || [], 'production:outsource_receive:allow')) {
+    if (!hasPermission(ctx && ctx.permissions || [], 'production:outsource_receive:allow')) {
       wx.showToast({ title: '无权限', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 800);
       return;
     }
     this._selectedKeys = new Set();
+    const canReceive = hasPermission(ctx && ctx.permissions || [], 'production:outsource_receive:allow');
     this.setData({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
       headerBlockHeight: computeHeaderBlockHeight(nav),
-      canScan: hasPermission((ctx && ctx.permissions) || [], 'production:outsource_receive:allow'),
+      canScan: false,
+    });
+    loadTraceabilityScanEnabled().then((traceOn) => {
+      this.setData({ canScan: canReceive && traceOn });
     });
     this.bootstrap();
   },
@@ -139,7 +142,7 @@ Page({
   patchFilterActive(extra) {
     this.setData({
       ...extra,
-      filterActive: computeFilterActive({ ...this.data, ...extra }),
+      filterActive: computeFilterActive({ ...this.data, ...extra })
     });
   },
 
@@ -151,7 +154,7 @@ Page({
     this.patchFilterActive({
       showFilterPanel: true,
       draftMilestoneFilterIndex: this.data.milestoneFilterIndex,
-      draftMilestoneFilterLabel: this.data.milestoneFilterLabel,
+      draftMilestoneFilterLabel: this.data.milestoneFilterLabel
     });
   },
 
@@ -160,7 +163,7 @@ Page({
     const opt = milestoneOptionAt(this.data.milestoneOptions, idx);
     this.setData({
       draftMilestoneFilterIndex: idx,
-      draftMilestoneFilterLabel: opt.name || '全部工序',
+      draftMilestoneFilterLabel: opt.name || '全部工序'
     });
   },
 
@@ -172,7 +175,7 @@ Page({
       draftMilestoneFilterIndex: 0,
       draftMilestoneFilterLabel: '全部工序',
       showFilterPanel: false,
-      searchKeyword: '',
+      searchKeyword: ''
     });
     this.applyRows();
   },
@@ -184,7 +187,7 @@ Page({
       milestoneNodeId: opt.id || '',
       milestoneFilterIndex: idx,
       milestoneFilterLabel: opt.name || '全部工序',
-      showFilterPanel: false,
+      showFilterPanel: false
     });
     this.applyRows();
   },
@@ -198,12 +201,14 @@ Page({
       milestoneOptions,
       milestoneFilterIndex,
       milestoneNodeId: milestoneOpt.id || '',
-      milestoneFilterLabel: milestoneOpt.name || '全部工序',
+      milestoneFilterLabel: milestoneOpt.name || '全部工序'
     });
   },
 
   onScanTap() {
-    wx.navigateTo({ url: buildScanSessionUrl({ type: 'outsource' }) });
+    wx.navigateTo({
+      url: '/packageBusiness/production-outsource-receive-scan/production-outsource-receive-scan',
+    });
   },
 
   onSearchInput(e) {
@@ -217,18 +222,18 @@ Page({
   },
 
   onProductImageError(e) {
-    const { key } = e.currentTarget.dataset;
+    const key = e.currentTarget.dataset.key;
     if (!key) return;
     const rows = (this.data.rows || []).map((row) =>
-      (row.rowKey === key ? { ...row, showProductImage: false } : row),
+    row.rowKey === key ? { ...row, showProductImage: false } : row
     );
     this.setData({ rows });
   },
 
   onRowTap(e) {
     const key = e.currentTarget.dataset.key;
-    if (this._selectedKeys.has(key)) this._selectedKeys.delete(key);
-    else this._selectedKeys.add(key);
+    if (this._selectedKeys.has(key)) this._selectedKeys.delete(key);else
+    this._selectedKeys.add(key);
     this.applyRows();
   },
 
@@ -249,29 +254,29 @@ Page({
         products: this._products || [],
         categories: this._categories || [],
         productMilestoneProgresses: this._pmp || [],
-        productionLinkMode: this._productionLinkMode,
+        productionLinkMode: this._productionLinkMode
       };
     }
     wx.navigateTo({
-      url: '/packageBusiness/production-outsource-receive-confirm/production-outsource-receive-confirm',
+      url: '/packageBusiness/production-outsource-receive-confirm/production-outsource-receive-confirm'
     });
   },
 
   applyRows() {
     const filtered = filterReceiveRows(this._allRows || [], this.data.searchKeyword, {
-      milestoneNodeId: this.data.milestoneNodeId,
+      milestoneNodeId: this.data.milestoneNodeId
     });
     const rows = filtered.map((r) => mapReceiveRow(
       r,
       this._selectedKeys,
       this._productsById,
-      this._productionLinkMode,
+      this._productionLinkMode
     ));
     const hasFilter = !!(this.data.searchKeyword || this.data.milestoneNodeId);
     this.setData({
       rows,
       selectedCount: this._selectedKeys.size,
-      emptyText: hasFilter ? '所选条件下暂无待收回项' : '暂无待收回外协',
+      emptyText: hasFilter ? '所选条件下暂无待收回项' : '暂无待收回外协'
     });
   },
 
@@ -281,13 +286,13 @@ Page({
     try {
       const config = await fetchTenantConfig().catch(() => ({}));
       this._productionLinkMode = config.productionLinkMode || 'order';
-      const [orders, productsRaw, nodesRaw, categoriesRaw, pmpRaw] = await Promise.all([
+      const _await$Promise$all2 = await Promise.all([
         fetchAllOrdersPaginated({}),
         fetchProductsAll(),
         fetchNodesAll(),
         fetchCategoriesAll(),
-        listProductProgressAll().catch(() => []),
-      ]);
+        listProductProgressAll().catch(() => [])]
+        ),orders = _await$Promise$all2[0],productsRaw = _await$Promise$all2[1],nodesRaw = _await$Promise$all2[2],categoriesRaw = _await$Promise$all2[3],pmpRaw = _await$Promise$all2[4];
       const products = normalizeMasterList(productsRaw);
       this._orders = orders || [];
       this._products = products;
@@ -301,23 +306,23 @@ Page({
       this._records = await fetchOutsourceRecordsForPanel({
         productionLinkMode: this._productionLinkMode,
         orders: orders || [],
-        products,
+        products
       });
       this._allRows = buildOutsourceReceiveAggregates(
         this._records,
         ordersById,
         productsById,
-        nodesById,
+        nodesById
       ).filter((r) => r.pending > 0);
       this.setData({ loading: false });
       this.syncMilestoneOptions();
       this.applyRows();
     } catch (err) {
       this.setData({ loading: false });
-      wx.showToast({ title: (err && err.message) || '加载失败', icon: 'none' });
+      wx.showToast({ title: err && err.message || '加载失败', icon: 'none' });
     } finally {
       this._bootstrapping = false;
       this._loadedOnce = true;
     }
-  },
+  }
 });

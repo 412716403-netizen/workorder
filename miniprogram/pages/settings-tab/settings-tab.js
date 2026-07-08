@@ -85,10 +85,12 @@ Page({
     });
 
     try {
-      const [config, plugins] = await Promise.all([
+      const results = await Promise.all([
         fetchSettingsConfig(),
         fetchFeaturePlugins(),
       ]);
+      const config = results[0];
+      const plugins = results[1];
       this._config = config || {};
       this._plugins = plugins || {};
       const form = buildProductionConfigForm(this._config, this._plugins);

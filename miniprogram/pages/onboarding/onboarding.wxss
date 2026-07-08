@@ -1,4 +1,5 @@
-.st-scroll {
-  height: 100vh;
-  box-sizing: border-box;
+@import '../../styles/auth-flow.wxss';
+
+page {
+  background: var(--color-primary-gradient-end);
 }

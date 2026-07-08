@@ -1,26 +1,26 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const {
-  mapReceiptDetailView,
-  buildCategoryMap,
-  buildWorkerMap,
-  categoriesForReceipt,
-} = require('../utils/financeReceipts.js');
-const {
-  getFinanceRecord,
-  deleteFinanceRecord,
-  fetchFinanceCategoriesAll,
-  normalizeMasterList,
-} = require('../../utils/financeApi.js');
-const { fetchProductsAll } = require('../utils/planApi.js');
-const { fetchWorkersAll } = require('../utils/orderApi.js');
-const { buildProductMap } = require('../utils/purchaseOrders.js');
-const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
-const { LIST_ROUTES, afterSaveReturnToList } = require('../utils/saveNavigation.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 =
+
+
+
+
+  require('../utils/financeReceipts.js'),mapReceiptDetailView = _require3.mapReceiptDetailView,buildCategoryMap = _require3.buildCategoryMap,buildWorkerMap = _require3.buildWorkerMap,categoriesForReceipt = _require3.categoriesForReceipt;
+const _require4 =
+
+
+
+
+  require('../../utils/financeApi.js'),getFinanceRecord = _require4.getFinanceRecord,deleteFinanceRecord = _require4.deleteFinanceRecord,fetchFinanceCategoriesAll = _require4.fetchFinanceCategoriesAll,normalizeMasterList = _require4.normalizeMasterList;
+const _require5 = require('../utils/planApi.js'),fetchProductsAll = _require5.fetchProductsAll;
+const _require6 = require('../utils/orderApi.js'),fetchWorkersAll = _require6.fetchWorkersAll;
+const _require7 = require('../utils/purchaseOrders.js'),buildProductMap = _require7.buildProductMap;
+const _require8 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require8.readNavBarMetrics,readWindowMetrics = _require8.readWindowMetrics;
+const _require9 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require9.LIST_ROUTES,afterSaveReturnToList = _require9.afterSaveReturnToList;
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
-  const webTailPx = Math.ceil((win.windowWidth / 750) * 16);
+  const webTailPx = Math.ceil(win.windowWidth / 750 * 16);
   return nav.statusBarHeight + nav.navBarHeight + webTailPx;
 }
 
@@ -45,15 +45,15 @@ Page({
     statusBarHeight: 20,
     navBarHeight: 44,
     headerBlockHeight: 88,
-    scrollHeight: 500,
+    scrollHeight: 500
   },
 
   onLoad(options) {
     const nav = readNavBarMetrics();
     const id = options.id ? decodeURIComponent(options.id) : '';
     const ctx = readTenantCtx();
-    const canEdit = hasPermission((ctx && ctx.permissions) || [], 'finance:receipt:edit');
-    const canDelete = hasPermission((ctx && ctx.permissions) || [], 'finance:receipt:delete');
+    const canEdit = hasPermission(ctx && ctx.permissions || [], 'finance:receipt:edit');
+    const canDelete = hasPermission(ctx && ctx.permissions || [], 'finance:receipt:delete');
     const showFooter = canEdit || canDelete;
     this.setData({
       id,
@@ -63,7 +63,7 @@ Page({
       scrollHeight: computeScrollHeight(nav, showFooter),
       canEdit,
       canDelete,
-      showFooter,
+      showFooter
     });
     if (!id) {
       wx.showToast({ title: '缺少单据', icon: 'none' });
@@ -87,7 +87,7 @@ Page({
   onEditTap() {
     if (!this.data.canEdit) return;
     wx.navigateTo({
-      url: `/packageBusiness/finance-receipt-edit/finance-receipt-edit?id=${encodeURIComponent(this.data.id)}`,
+      url: `/packageBusiness/finance-receipt-edit/finance-receipt-edit?id=${encodeURIComponent(this.data.id)}`
     });
   },
 
@@ -101,32 +101,32 @@ Page({
       success: (res) => {
         if (!res.confirm) return;
         wx.showLoading({ title: '删除中…' });
-        deleteFinanceRecord(this.data.id)
-          .then(() => {
-            wx.hideLoading();
-            afterSaveReturnToList({
-              listUrl: LIST_ROUTES.FINANCE_RECEIPTS,
-              toastTitle: '已删除',
-              alsoRefreshListUrls: [LIST_ROUTES.FINANCE_RECEIPT_FLOW],
-            });
-          })
-          .catch(() => {
-            wx.hideLoading();
-            wx.showToast({ title: '删除失败', icon: 'none' });
+        deleteFinanceRecord(this.data.id).
+        then(() => {
+          wx.hideLoading();
+          afterSaveReturnToList({
+            listUrl: LIST_ROUTES.FINANCE_RECEIPTS,
+            toastTitle: '已删除',
+            alsoRefreshListUrls: [LIST_ROUTES.FINANCE_RECEIPT_FLOW]
           });
-      },
+        }).
+        catch(() => {
+          wx.hideLoading();
+          wx.showToast({ title: '删除失败', icon: 'none' });
+        });
+      }
     });
   },
 
   async loadDetail() {
     this.setData({ loading: true });
     try {
-      const [rec, categories, workers, products] = await Promise.all([
+      const _await$Promise$all = await Promise.all([
         getFinanceRecord(this.data.id),
         fetchFinanceCategoriesAll(),
         fetchWorkersAll().catch(() => []),
-        fetchProductsAll().catch(() => []),
-      ]);
+        fetchProductsAll().catch(() => [])]
+        ),rec = _await$Promise$all[0],categories = _await$Promise$all[1],workers = _await$Promise$all[2],products = _await$Promise$all[3];
       if (!rec || rec.type !== 'RECEIPT') {
         this.setData({ loading: false, found: false, docNo: '', sections: [] });
         return;
@@ -136,17 +136,17 @@ Page({
         categories: cats,
         categoryMap: buildCategoryMap(cats),
         workerMap: buildWorkerMap(normalizeMasterList(workers)),
-        productMap: buildProductMap(products || []),
+        productMap: buildProductMap(products || [])
       });
       this.setData({
         loading: false,
         found: true,
         docNo: view.docNo,
-        sections: view.sections,
+        sections: view.sections
       });
     } catch (err) {
       this.setData({ loading: false, found: false, docNo: '', sections: [] });
       wx.showToast({ title: '加载失败', icon: 'none' });
     }
-  },
+  }
 });

@@ -1,45 +1,45 @@
-const { readTenantCtx, readOperatorDisplayName } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const { PSI_TYPE } = require('../config/purchaseOrders.js');
-const {
-  buildInitialForm,
-  createEmptyLine,
-  recordsToLineItems,
-  enrichLineForUi,
-  computeFormTotals,
-  validatePurchaseOrderSave,
-  buildPurchaseOrderSaveRecords,
-  applyLastPurchasePrices,
-} = require('../utils/purchaseOrderForm.js');
-const { buildProductMap, buildCategoryMap } = require('../utils/purchaseOrders.js');
-const { groupRecordsByDocNumber } = require('../utils/psiOpsAggregators.js');
-const {
-  fetchAllPsiRecords,
-  createPsiRecordsBatch,
-  replacePsiRecords,
-  deletePsiRecords,
-  nextPsiDocNumber,
-  lastPurchasePrices,
-} = require('../utils/psiApi.js');
-const {
-  fetchProductsAll,
-  fetchCategoriesAll,
-  fetchPartnersAll,
-  fetchPartnerCategoriesAll,
-  fetchDictionaries,
-} = require('../utils/planApi.js');
-const { normalizeAppDictionaries, normalizeMasterList } = require('../utils/productionPlans.js');
-const {
-  activateMatrixKeyboardCell,
-  applyMatrixKeyboardKey,
-  buildMatrixKeyboardPreview,
-  createMatrixKeyboardInputSession,
-  getNextMatrixVariantIdInColumn,
-  getNextMatrixVariantIdInRow,
-} = require('../utils/matrixQtyKeyboard.js');
-const { readNavBarMetrics, readWindowMetrics, computePlanCreateHeaderHeight } = require('../../utils/windowMetrics.js');
-const { afterMatrixKeyboardOpen } = require('../utils/matrixKeyboardLayout.js');
-const { LIST_ROUTES, afterSaveReturnToList } = require('../utils/saveNavigation.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx,readOperatorDisplayName = _require.readOperatorDisplayName;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 = require('../config/purchaseOrders.js'),PSI_TYPE = _require3.PSI_TYPE;
+const _require4 =
+
+
+
+
+
+
+
+
+  require('../utils/purchaseOrderForm.js'),buildInitialForm = _require4.buildInitialForm,createEmptyLine = _require4.createEmptyLine,recordsToLineItems = _require4.recordsToLineItems,enrichLineForUi = _require4.enrichLineForUi,computeFormTotals = _require4.computeFormTotals,validatePurchaseOrderSave = _require4.validatePurchaseOrderSave,buildPurchaseOrderSaveRecords = _require4.buildPurchaseOrderSaveRecords,applyLastPurchasePrices = _require4.applyLastPurchasePrices;
+const _require5 = require('../utils/purchaseOrders.js'),buildProductMap = _require5.buildProductMap,buildCategoryMap = _require5.buildCategoryMap;
+const _require6 = require('../utils/psiOpsAggregators.js'),groupRecordsByDocNumber = _require6.groupRecordsByDocNumber;
+const _require7 =
+
+
+
+
+
+
+  require('../utils/psiApi.js'),fetchAllPsiRecords = _require7.fetchAllPsiRecords,createPsiRecordsBatch = _require7.createPsiRecordsBatch,replacePsiRecords = _require7.replacePsiRecords,deletePsiRecords = _require7.deletePsiRecords,nextPsiDocNumber = _require7.nextPsiDocNumber,lastPurchasePrices = _require7.lastPurchasePrices;
+const _require8 =
+
+
+
+
+
+  require('../utils/planApi.js'),fetchProductsAll = _require8.fetchProductsAll,fetchCategoriesAll = _require8.fetchCategoriesAll,fetchPartnersAll = _require8.fetchPartnersAll,fetchPartnerCategoriesAll = _require8.fetchPartnerCategoriesAll,fetchDictionaries = _require8.fetchDictionaries;
+const _require9 = require('../utils/productionPlans.js'),normalizeAppDictionaries = _require9.normalizeAppDictionaries,normalizeMasterList = _require9.normalizeMasterList;
+const _require0 =
+
+
+
+
+
+
+  require('../utils/matrixQtyKeyboard.js'),activateMatrixKeyboardCell = _require0.activateMatrixKeyboardCell,applyMatrixKeyboardKey = _require0.applyMatrixKeyboardKey,buildMatrixKeyboardPreview = _require0.buildMatrixKeyboardPreview,createMatrixKeyboardInputSession = _require0.createMatrixKeyboardInputSession,getNextMatrixVariantIdInColumn = _require0.getNextMatrixVariantIdInColumn,getNextMatrixVariantIdInRow = _require0.getNextMatrixVariantIdInRow;
+const _require1 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require1.readNavBarMetrics,readWindowMetrics = _require1.readWindowMetrics,computePlanCreateHeaderHeight = _require1.computePlanCreateHeaderHeight;
+const _require10 = require('../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require10.afterMatrixKeyboardOpen;
+const _require11 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require11.LIST_ROUTES,afterSaveReturnToList = _require11.afterSaveReturnToList;
 
 function computeHeaderBlockHeight(nav) {
   return computePlanCreateHeaderHeight(nav);
@@ -60,7 +60,7 @@ function emptyMatrixKeyboardState() {
     activeMatrixVariantId: '',
     activeLineId: '',
     matrixKeyboardLabel: '',
-    matrixKeyboardValue: '',
+    matrixKeyboardValue: ''
   };
 }
 
@@ -86,7 +86,7 @@ Page({
     headerBlockHeight: 88,
     scrollHeight: 500,
     matrixScrollTop: 0,
-    ...emptyMatrixKeyboardState(),
+    ...emptyMatrixKeyboardState()
   },
 
   onLoad(options) {
@@ -103,8 +103,8 @@ Page({
       navBarHeight: nav.navBarHeight,
       headerBlockHeight: computeHeaderBlockHeight(nav),
       scrollHeight: computeScrollHeight(nav),
-      showAmount: hasPermission((ctx && ctx.permissions) || [], 'psi:purchase_order:amount'),
-      canDelete: editing && hasPermission((ctx && ctx.permissions) || [], 'psi:purchase_order:delete'),
+      showAmount: hasPermission(ctx && ctx.permissions || [], 'psi:purchase_order:amount'),
+      canDelete: editing && hasPermission(ctx && ctx.permissions || [], 'psi:purchase_order:delete')
     });
     this.bootstrap();
   },
@@ -116,14 +116,14 @@ Page({
   async bootstrap() {
     this.setData({ loading: true });
     try {
-      const [products, categories, partners, partnerCategories, dictionaries, records] = await Promise.all([
+      const _await$Promise$all = await Promise.all([
         fetchProductsAll(),
         fetchCategoriesAll(),
         fetchPartnersAll(),
         fetchPartnerCategoriesAll(),
         fetchDictionaries().catch(() => ({})),
-        this._editingDocNumber ? fetchAllPsiRecords(PSI_TYPE) : Promise.resolve([]),
-      ]);
+        this._editingDocNumber ? fetchAllPsiRecords(PSI_TYPE) : Promise.resolve([])]
+        ),products = _await$Promise$all[0],categories = _await$Promise$all[1],partners = _await$Promise$all[2],partnerCategories = _await$Promise$all[3],dictionaries = _await$Promise$all[4],records = _await$Promise$all[5];
       this._products = normalizeMasterList(products);
       this._categories = normalizeMasterList(categories);
       this._productMap = buildProductMap(this._products);
@@ -146,7 +146,7 @@ Page({
           partner: first.partner || '',
           partnerId: first.partnerId || '',
           docNumber: this._editingDocNumber,
-          operator: first.operator || '',
+          operator: first.operator || ''
         };
         this._deleteIds = items.map((r) => r.id);
         lines = recordsToLineItems(items);
@@ -160,7 +160,7 @@ Page({
         products: this._products,
         categories: this._categories,
         partners: normalizeMasterList(partners),
-        partnerCategories: normalizeMasterList(partnerCategories),
+        partnerCategories: normalizeMasterList(partnerCategories)
       });
       this.refreshLinesUi();
     } catch (err) {
@@ -174,7 +174,7 @@ Page({
       productMap: this._productMap,
       categoryMap: this._categoryMap,
       dictionaries: this._dictionaries,
-      showAmount: this.data.showAmount,
+      showAmount: this.data.showAmount
     };
     const uiLines = (this._lines || []).map((line) => enrichLineForUi(line, ctx));
     const totals = computeFormTotals(this._lines, this.data.showAmount);
@@ -183,7 +183,7 @@ Page({
       totalQtyText: totals.totalQtyText,
       totalAmountText: totals.totalAmountText,
       showAmount: totals.showAmount,
-      canSubmit: totals.canSubmit && Boolean(String(this.data.form.partner || '').trim()),
+      canSubmit: totals.canSubmit && Boolean(String(this.data.form.partner || '').trim())
     });
   },
 
@@ -192,7 +192,7 @@ Page({
     const form = {
       ...this.data.form,
       partner: detail.name || detail.value || '',
-      partnerId: detail.id || '',
+      partnerId: detail.id || ''
     };
     this.setData({ form });
     this.refreshLinesUi();
@@ -201,7 +201,7 @@ Page({
         prefix: 'PO',
         psiType: 'PURCHASE_ORDER',
         partnerId: form.partnerId,
-        partnerName: form.partner,
+        partnerName: form.partner
       }).then((res) => {
         if (res && res.docNumber) {
           this.setData({ form: { ...form, docNumber: res.docNumber } });
@@ -233,7 +233,7 @@ Page({
         productId,
         productName: detail.name || '',
         quantity: '',
-        variantQuantities: {},
+        variantQuantities: {}
       };
     });
     this.refreshLinesUi();
@@ -242,7 +242,7 @@ Page({
       const prices = await lastPurchasePrices([{
         partnerId: this.data.form.partnerId,
         partnerName: this.data.form.partner,
-        productId,
+        productId
       }]);
       if (prices && prices[0] && prices[0].price != null) {
         this._lines = this._lines.map((line) => {
@@ -283,7 +283,7 @@ Page({
     const preview = buildMatrixKeyboardPreview(
       uiLine.matrixLayout,
       variantId,
-      uiLine.variantQuantities || {},
+      uiLine.variantQuantities || {}
     );
     this.setData({
       matrixKeyboardVisible: true,
@@ -291,14 +291,14 @@ Page({
       activeLineId: lineId,
       activeMatrixVariantId: variantId,
       matrixKeyboardLabel: preview.label,
-      matrixKeyboardValue: preview.value,
+      matrixKeyboardValue: preview.value
     }, () => {
       afterMatrixKeyboardOpen(this, '.plan-create-scroll');
     });
   },
 
   onMatrixKeyboardAction(e) {
-    const { action, digit } = e.detail || {};
+    const _ref = e.detail || {},action = _ref.action,digit = _ref.digit;
     if (action === 'confirm') {
       this.setData(emptyMatrixKeyboardState());
       return;
@@ -319,7 +319,7 @@ Page({
           activeMatrixVariantId: nextId,
           matrixInputReplaceAll: true,
           matrixKeyboardLabel: preview.label,
-          matrixKeyboardValue: preview.value,
+          matrixKeyboardValue: preview.value
         }, () => afterMatrixKeyboardOpen(this, '.plan-create-scroll'));
       } else {
         this.setData(emptyMatrixKeyboardState());
@@ -336,7 +336,7 @@ Page({
           activeMatrixVariantId: nextId,
           matrixInputReplaceAll: true,
           matrixKeyboardLabel: preview.label,
-          matrixKeyboardValue: preview.value,
+          matrixKeyboardValue: preview.value
         }, () => afterMatrixKeyboardOpen(this, '.plan-create-scroll'));
       } else {
         this.setData(emptyMatrixKeyboardState());
@@ -344,15 +344,15 @@ Page({
       return;
     }
 
-    const currentRaw = (rawLine.variantQuantities && rawLine.variantQuantities[variantId]) != null
-      ? String(rawLine.variantQuantities[variantId])
-      : '';
-    const { value, replaceConsumed } = applyMatrixKeyboardKey(
-      this._matrixKbInput,
-      currentRaw,
-      action,
-      digit,
-    );
+    const currentRaw = (rawLine.variantQuantities && rawLine.variantQuantities[variantId]) != null ?
+    String(rawLine.variantQuantities[variantId]) :
+    '';
+    const _applyMatrixKeyboardK = applyMatrixKeyboardKey(
+        this._matrixKbInput,
+        currentRaw,
+        action,
+        digit
+      ),value = _applyMatrixKeyboardK.value,replaceConsumed = _applyMatrixKeyboardK.replaceConsumed;
     const parsed = value === '' || value === '-' || value === '-.' ? 0 : Number(value);
     const qty = Number.isFinite(parsed) ? parsed : 0;
     const vq = { ...(rawLine.variantQuantities || {}), [variantId]: qty };
@@ -362,7 +362,7 @@ Page({
     });
     const patch = {
       matrixKeyboardValue: value,
-      matrixInputReplaceAll: replaceConsumed ? false : this.data.matrixInputReplaceAll,
+      matrixInputReplaceAll: replaceConsumed ? false : this.data.matrixInputReplaceAll
     };
     this.setData(patch);
     this.refreshLinesUi();
@@ -379,9 +379,9 @@ Page({
           prefix: 'PO',
           psiType: 'PURCHASE_ORDER',
           partnerId: this.data.form.partnerId,
-          partnerName: this.data.form.partner,
+          partnerName: this.data.form.partner
         });
-        docNumber = (res && res.docNumber) || '';
+        docNumber = res && res.docNumber || '';
       } catch (err) {
         wx.showToast({ title: '生成单号失败', icon: 'none' });
         return;
@@ -399,7 +399,7 @@ Page({
       docNumber,
       editingDocNumber: this._editingDocNumber,
       existingRecords: this._allRecords,
-      operator,
+      operator
     });
     if (!newRecords.length) {
       wx.showToast({ title: '明细数量须大于 0', icon: 'none' });
@@ -418,7 +418,7 @@ Page({
       this.setData({ submitting: false });
       afterSaveReturnToList({
         listUrl: LIST_ROUTES.PSI_PURCHASE_ORDERS,
-        toastTitle: '保存成功',
+        toastTitle: '保存成功'
       });
     } catch (err) {
       wx.hideLoading();
@@ -436,19 +436,19 @@ Page({
       success: (res) => {
         if (!res.confirm) return;
         wx.showLoading({ title: '删除中…' });
-        deletePsiRecords(this._deleteIds)
-          .then(() => {
-            wx.hideLoading();
-            afterSaveReturnToList({
-              listUrl: LIST_ROUTES.PSI_PURCHASE_ORDERS,
-              toastTitle: '已删除',
-            });
-          })
-          .catch(() => {
-            wx.hideLoading();
-            wx.showToast({ title: '删除失败', icon: 'none' });
+        deletePsiRecords(this._deleteIds).
+        then(() => {
+          wx.hideLoading();
+          afterSaveReturnToList({
+            listUrl: LIST_ROUTES.PSI_PURCHASE_ORDERS,
+            toastTitle: '已删除'
           });
-      },
+        }).
+        catch(() => {
+          wx.hideLoading();
+          wx.showToast({ title: '删除失败', icon: 'none' });
+        });
+      }
     });
-  },
+  }
 });

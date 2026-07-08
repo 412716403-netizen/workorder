@@ -1,55 +1,55 @@
-const { readTenantCtx, readOperatorDisplayName } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const {
-  buildDefectPendingByVariant,
-  shouldTreatMatrixAsAggregate,
-  productHasColorSizeMatrix,
-  buildDefectActionRecords,
-} = require('../utils/reworkDefectAction.js');
-const {
-  buildReworkTargetNodeOptions,
-  countCheckedReworkTargetNodes,
-  collectCheckedReworkTargetNodeIds,
-  toggleReworkTargetNode,
-} = require('../utils/reworkTargetNodeLite.js');
-const { buildReworkPendingRows } = require('../utils/reworkPendingLite.js');
-const { fetchReworkRecordsForPanel } = require('../utils/reworkRecordsLoad.js');
-const { fetchAllOrdersPaginated } = require('../utils/pendingStockBadge.js');
-const {
-  fetchTenantConfig,
-  fetchProductsAll,
-  fetchCategoriesAll,
-  fetchNodesAll,
-  listProductProgressAll,
-  createProductionRecord,
-  createProductionRecordBatch,
-} = require('../utils/orderApi.js');
-const { fetchPartnersAll, fetchPartnerCategoriesAll, fetchDictionaries } = require('../utils/planApi.js');
-const { resolveOutsourceDocNo } = require('../utils/outsourceConfirm.js');
-const { normalizeMasterList } = require('../utils/productionOrders.js');
-const { buildVariantMatrixUiModel } = require('../utils/variantQtyMatrix.js');
-const {
-  activateMatrixKeyboardCell,
-  applyMatrixKeyboardKey,
-  buildMatrixKeyboardPreview,
-  createMatrixKeyboardInputSession,
-  getNextMatrixVariantIdInColumn,
-  getNextMatrixVariantIdInRow,
-} = require('../utils/matrixQtyKeyboard.js');
-const { afterMatrixKeyboardOpen } = require('../utils/matrixKeyboardLayout.js');
-const { LIST_ROUTES, afterSaveReturnToList } = require('../utils/saveNavigation.js');
-const {
-  readNavBarMetrics,
-  readWindowMetrics,
-  computeSimplePlanHeaderHeight,
-  computeFixedFooterInsetPx,
-} = require('../../utils/windowMetrics.js');
+const _excluded = ["_clientId"],_excluded2 = ["_clientId"];function _objectWithoutPropertiesLoose(r, e) {if (null == r) return {};var t = {};for (var n in r) if ({}.hasOwnProperty.call(r, n)) {if (-1 !== e.indexOf(n)) continue;t[n] = r[n];}return t;}const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx,readOperatorDisplayName = _require.readOperatorDisplayName;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 =
+
+
+
+
+  require('../utils/reworkDefectAction.js'),buildDefectPendingByVariant = _require3.buildDefectPendingByVariant,shouldTreatMatrixAsAggregate = _require3.shouldTreatMatrixAsAggregate,productHasColorSizeMatrix = _require3.productHasColorSizeMatrix,buildDefectActionRecords = _require3.buildDefectActionRecords;
+const _require4 =
+
+
+
+
+  require('../utils/reworkTargetNodeLite.js'),buildReworkTargetNodeOptions = _require4.buildReworkTargetNodeOptions,countCheckedReworkTargetNodes = _require4.countCheckedReworkTargetNodes,collectCheckedReworkTargetNodeIds = _require4.collectCheckedReworkTargetNodeIds,toggleReworkTargetNode = _require4.toggleReworkTargetNode;
+const _require5 = require('../utils/reworkPendingLite.js'),buildReworkPendingRows = _require5.buildReworkPendingRows;
+const _require6 = require('../utils/reworkRecordsLoad.js'),fetchReworkRecordsForPanel = _require6.fetchReworkRecordsForPanel;
+const _require7 = require('../utils/pendingStockBadge.js'),fetchAllOrdersPaginated = _require7.fetchAllOrdersPaginated;
+const _require8 =
+
+
+
+
+
+
+
+  require('../utils/orderApi.js'),fetchTenantConfig = _require8.fetchTenantConfig,fetchProductsAll = _require8.fetchProductsAll,fetchCategoriesAll = _require8.fetchCategoriesAll,fetchNodesAll = _require8.fetchNodesAll,listProductProgressAll = _require8.listProductProgressAll,createProductionRecord = _require8.createProductionRecord,createProductionRecordBatch = _require8.createProductionRecordBatch;
+const _require9 = require('../utils/planApi.js'),fetchPartnersAll = _require9.fetchPartnersAll,fetchPartnerCategoriesAll = _require9.fetchPartnerCategoriesAll,fetchDictionaries = _require9.fetchDictionaries;
+const _require0 = require('../utils/outsourceConfirm.js'),resolveOutsourceDocNo = _require0.resolveOutsourceDocNo;
+const _require1 = require('../utils/productionOrders.js'),normalizeMasterList = _require1.normalizeMasterList;
+const _require10 = require('../utils/variantQtyMatrix.js'),buildVariantMatrixUiModel = _require10.buildVariantMatrixUiModel;
+const _require11 =
+
+
+
+
+
+
+  require('../utils/matrixQtyKeyboard.js'),activateMatrixKeyboardCell = _require11.activateMatrixKeyboardCell,applyMatrixKeyboardKey = _require11.applyMatrixKeyboardKey,buildMatrixKeyboardPreview = _require11.buildMatrixKeyboardPreview,createMatrixKeyboardInputSession = _require11.createMatrixKeyboardInputSession,getNextMatrixVariantIdInColumn = _require11.getNextMatrixVariantIdInColumn,getNextMatrixVariantIdInRow = _require11.getNextMatrixVariantIdInRow;
+const _require12 = require('../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require12.afterMatrixKeyboardOpen;
+const _require13 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require13.LIST_ROUTES,afterSaveReturnToList = _require13.afterSaveReturnToList;
+const _require14 =
+
+
+
+
+  require('../../utils/windowMetrics.js'),readNavBarMetrics = _require14.readNavBarMetrics,readWindowMetrics = _require14.readWindowMetrics,computeSimplePlanHeaderHeight = _require14.computeSimplePlanHeaderHeight,computeFixedFooterInsetPx = _require14.computeFixedFooterInsetPx;
 
 const MODE_OPTIONS = [
-  { id: 'rework', label: '厂内返工' },
-  { id: 'outsource_rework', label: '委外返工' },
-  { id: 'scrap', label: '报损' },
-];
+{ id: 'rework', label: '厂内返工' },
+{ id: 'outsource_rework', label: '委外返工' },
+{ id: 'scrap', label: '报损' }];
+
 
 function computeScrollHeight(nav) {
   const win = readWindowMetrics();
@@ -80,7 +80,7 @@ function parseRowFromOptions(options) {
     defectiveTotal: Number(decodeOpt(options.defectiveTotal)) || 0,
     reworkTotal: Number(decodeOpt(options.reworkTotal)) || 0,
     scrapTotal: Number(decodeOpt(options.scrapTotal)) || 0,
-    pendingQty: Number(decodeOpt(options.pendingQty)) || 0,
+    pendingQty: Number(decodeOpt(options.pendingQty)) || 0
   };
 }
 
@@ -97,14 +97,14 @@ function patchDefectMatrixLayout(matrixLayout, quantities, pendingByVariant) {
         const maxAllowed = Math.max(0, Number(pendingByVariant[cell.variantId]) || 0);
         return {
           ...cell,
-          quantity: quantities[cell.variantId] != null
-            ? String(quantities[cell.variantId])
-            : (cell.quantity || ''),
+          quantity: quantities[cell.variantId] != null ?
+          String(quantities[cell.variantId]) :
+          cell.quantity || '',
           disabled: maxAllowed <= 0,
-          maxQtyLabel: maxAllowed > 0 ? `最多 ${maxAllowed}` : '—',
+          maxQtyLabel: maxAllowed > 0 ? `最多 ${maxAllowed}` : '—'
         };
-      }),
-    })),
+      })
+    }))
   };
 }
 
@@ -115,14 +115,14 @@ function sumVariantQuantities(map) {
 function buildSubmitBatchPayload(result) {
   if (!result.batchMode) {
     return (result.records || []).map((rec) => {
-      const { _clientId, ...rest } = rec;
+      const _clientId = rec._clientId,rest = _objectWithoutPropertiesLoose(rec, _excluded);
       if (_clientId) return { ...rest, id: _clientId };
       return rest;
     });
   }
   const batch = [];
   (result.records || []).forEach((rec) => {
-    const { _clientId, ...rest } = rec;
+    const _clientId = rec._clientId,rest = _objectWithoutPropertiesLoose(rec, _excluded2);
     batch.push(_clientId ? { ...rest, id: _clientId } : rest);
   });
   (result.outsourceRecords || []).forEach((rec) => batch.push(rec));
@@ -161,13 +161,13 @@ Page({
     navBarHeight: 44,
     headerBlockHeight: 88,
     scrollHeight: 400,
-    matrixScrollTop: 0,
+    matrixScrollTop: 0
   },
 
   onLoad(options) {
     const nav = readNavBarMetrics();
     const ctx = readTenantCtx();
-    const permissions = (ctx && ctx.permissions) || [];
+    const permissions = ctx && ctx.permissions || [];
     if (!hasPermission(permissions, 'production:rework_defective:allow')) {
       wx.showToast({ title: '无权限', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 800);
@@ -191,13 +191,13 @@ Page({
       headerBlockHeight: computeSimplePlanHeaderHeight(nav),
       scrollHeight: computeScrollHeight(nav),
       canOutsourceRework: this._canOutsourceRework,
-      modeOptions: this._canOutsourceRework
-        ? MODE_OPTIONS
-        : MODE_OPTIONS.filter((m) => m.id !== 'outsource_rework'),
+      modeOptions: this._canOutsourceRework ?
+      MODE_OPTIONS :
+      MODE_OPTIONS.filter((m) => m.id !== 'outsource_rework'),
       titleLine: this._row.productName || '—',
       milestoneLine: `${this._row.milestoneName || '—'} · 待处理 ${this._row.pendingQty} 件`,
       pendingQty: this._row.pendingQty,
-      pendingQtyText: `${this._row.pendingQty} 件`,
+      pendingQtyText: `${this._row.pendingQty} 件`
     });
     this.bootstrap();
   },
@@ -219,13 +219,13 @@ Page({
       mode,
       qty: '',
       partnerName: '',
-      variantTotal: 0,
+      variantTotal: 0
     });
     this.rebuildUi();
   },
 
   onPartnerChange(e) {
-    const name = (e.detail && e.detail.name) ? String(e.detail.name) : '';
+    const name = e.detail && e.detail.name ? String(e.detail.name) : '';
     this.setData({ partnerName: name });
   },
 
@@ -239,15 +239,15 @@ Page({
     const toggled = toggleReworkTargetNode(
       this.data.reworkProductNodes,
       this.data.reworkOtherNodes,
-      id,
+      id
     );
     this.setData({
       reworkProductNodes: toggled.productNodes,
       reworkOtherNodes: toggled.otherNodes,
       selectedNodeCount: countCheckedReworkTargetNodes(
         toggled.productNodes,
-        toggled.otherNodes,
-      ),
+        toggled.otherNodes
+      )
     });
   },
 
@@ -259,7 +259,7 @@ Page({
       records: this._records || [],
       orders: this._orders || [],
       productMilestoneProgresses: this._pmp || [],
-      product,
+      product
     });
     this._pendingByVariant = pendingByVariant;
 
@@ -268,7 +268,7 @@ Page({
       product,
       category,
       pendingByVariant,
-      row.pendingQty,
+      row.pendingQty
     );
     const useVariantQtyGrid = hasMatrix && !matrixAggregate;
 
@@ -278,24 +278,24 @@ Page({
       matrixLayout = patchDefectMatrixLayout(
         buildVariantMatrixUiModel(product, this._dictionaries, this._variantQty),
         this._variantQty,
-        pendingByVariant,
+        pendingByVariant
       );
       variantTotal = sumVariantQuantities(this._variantQty);
     }
 
     const prevChecked = collectCheckedReworkTargetNodeIds(
       this.data.reworkProductNodes,
-      this.data.reworkOtherNodes,
+      this.data.reworkOtherNodes
     );
     const showReworkNodes = this.data.mode === 'rework' || this.data.mode === 'outsource_rework';
-    const nodeOptions = showReworkNodes
-      ? buildReworkTargetNodeOptions(
-        product,
-        this._nodes || [],
-        this._nodesById || new Map(),
-        prevChecked,
-      )
-      : { productNodes: [], otherNodes: [] };
+    const nodeOptions = showReworkNodes ?
+    buildReworkTargetNodeOptions(
+      product,
+      this._nodes || [],
+      this._nodesById || new Map(),
+      prevChecked
+    ) :
+    { productNodes: [], otherNodes: [] };
 
     this.setData({
       useVariantQtyGrid,
@@ -304,16 +304,16 @@ Page({
       variantTotal,
       reworkProductNodes: nodeOptions.productNodes,
       reworkOtherNodes: nodeOptions.otherNodes,
-      reworkNodeHint: row.scope === 'product'
-        ? '按产品工艺顺序，可多选'
-        : '可多选',
+      reworkNodeHint: row.scope === 'product' ?
+      '按产品工艺顺序，可多选' :
+      '可多选',
       selectedNodeCount: countCheckedReworkTargetNodes(
         nodeOptions.productNodes,
-        nodeOptions.otherNodes,
+        nodeOptions.otherNodes
       ),
       pendingQty: row.pendingQty,
       pendingQtyText: `${row.pendingQty} 件`,
-      milestoneLine: `${row.milestoneName || '—'} · 待处理 ${row.pendingQty} 件`,
+      milestoneLine: `${row.milestoneName || '—'} · 待处理 ${row.pendingQty} 件`
     });
   },
 
@@ -323,7 +323,7 @@ Page({
       const config = await fetchTenantConfig().catch(() => ({}));
       this._productionLinkMode = config.productionLinkMode || 'order';
 
-      const [orders, productsRaw, categoriesRaw, nodesRaw, pmpRaw, partnersRaw, partnerCategoriesRaw, dictionariesRaw] = await Promise.all([
+      const _await$Promise$all = await Promise.all([
         fetchAllOrdersPaginated({}),
         fetchProductsAll(),
         fetchCategoriesAll(),
@@ -331,8 +331,8 @@ Page({
         listProductProgressAll(),
         fetchPartnersAll(),
         fetchPartnerCategoriesAll().catch(() => []),
-        fetchDictionaries().catch(() => ({})),
-      ]);
+        fetchDictionaries().catch(() => ({}))]
+        ),orders = _await$Promise$all[0],productsRaw = _await$Promise$all[1],categoriesRaw = _await$Promise$all[2],nodesRaw = _await$Promise$all[3],pmpRaw = _await$Promise$all[4],partnersRaw = _await$Promise$all[5],partnerCategoriesRaw = _await$Promise$all[6],dictionariesRaw = _await$Promise$all[7];
 
       this._orders = orders || [];
       this._products = normalizeMasterList(productsRaw);
@@ -345,13 +345,13 @@ Page({
       this._records = await fetchReworkRecordsForPanel({
         productionLinkMode: this._productionLinkMode,
         orders: this._orders,
-        products: this._products,
+        products: this._products
       });
 
       this._product = this._products.find((p) => p.id === this._row.productId) || null;
-      this._category = this._product
-        ? this._categories.find((c) => c.id === this._product.categoryId)
-        : null;
+      this._category = this._product ?
+      this._categories.find((c) => c.id === this._product.categoryId) :
+      null;
 
       const freshRows = buildReworkPendingRows({
         productionLinkMode: this._productionLinkMode,
@@ -359,11 +359,11 @@ Page({
         orders: this._orders,
         products: this._products,
         nodes: this._nodes,
-        productMilestoneProgresses: this._pmp,
+        productMilestoneProgresses: this._pmp
       });
-      const rowKey = this._row.scope === 'product'
-        ? `${this._row.productId}|${this._row.nodeId}`
-        : `${this._row.orderId}|${this._row.nodeId}`;
+      const rowKey = this._row.scope === 'product' ?
+      `${this._row.productId}|${this._row.nodeId}` :
+      `${this._row.orderId}|${this._row.nodeId}`;
       const fresh = freshRows.find((r) => r.rowKey === rowKey);
 
       if (fresh) {
@@ -378,17 +378,17 @@ Page({
         loading: false,
         partners: this._partners,
         partnerCategories: normalizeMasterList(partnerCategoriesRaw),
-        titleLine: this._row.productName || '—',
+        titleLine: this._row.productName || '—'
       });
       this.rebuildUi();
     } catch (err) {
       this.setData({ loading: false });
-      wx.showToast({ title: (err && err.message) || '加载失败', icon: 'none' });
+      wx.showToast({ title: err && err.message || '加载失败', icon: 'none' });
     }
   },
 
   onMatrixCellTap(e) {
-    const { variantId } = e.currentTarget.dataset;
+    const variantId = e.currentTarget.dataset.variantId;
     if (!variantId) return;
     const maxAllowed = Math.max(0, Number((this._pendingByVariant || {})[variantId]) || 0);
     if (maxAllowed <= 0) return;
@@ -397,7 +397,7 @@ Page({
     const preview = buildMatrixKeyboardPreview(
       this.data.matrixLayout,
       variantId,
-      this._variantQty,
+      this._variantQty
     );
     const nav = { statusBarHeight: this.data.statusBarHeight, navBarHeight: this.data.navBarHeight };
     const win = readWindowMetrics();
@@ -408,7 +408,7 @@ Page({
       activeMatrixVariantId: variantId,
       matrixKeyboardLabel: preview.label,
       matrixKeyboardValue: preview.value,
-      scrollHeight: fullScroll,
+      scrollHeight: fullScroll
     }, () => {
       afterMatrixKeyboardOpen(this, '.defect-action-scroll');
     });
@@ -422,12 +422,12 @@ Page({
       activeMatrixVariantId: '',
       matrixKeyboardLabel: '',
       matrixKeyboardValue: '',
-      scrollHeight: computeScrollHeight(nav),
+      scrollHeight: computeScrollHeight(nav)
     });
   },
 
   _clampActiveMatrixCell() {
-    const { activeMatrixVariantId } = this.data;
+    const activeMatrixVariantId = this.data.activeMatrixVariantId;
     if (!activeMatrixVariantId) return;
     const maxAllowed = Math.max(0, Number((this._pendingByVariant || {})[activeMatrixVariantId]) || 0);
     const qty = Number(this._variantQty[activeMatrixVariantId]) || 0;
@@ -452,26 +452,26 @@ Page({
     const preview = buildMatrixKeyboardPreview(
       this.data.matrixLayout,
       nextVariantId,
-      this._variantQty,
+      this._variantQty
     );
     this.setData({
       activeMatrixVariantId: nextVariantId,
       matrixInputReplaceAll: true,
       matrixKeyboardLabel: preview.label,
-      matrixKeyboardValue: preview.value,
+      matrixKeyboardValue: preview.value
     }, () => {
       afterMatrixKeyboardOpen(this, '.defect-action-scroll');
     });
   },
 
   onMatrixKeyboardAction(e) {
-    const { action, digit } = e.detail || {};
+    const _ref = e.detail || {},action = _ref.action,digit = _ref.digit;
     if (action === 'confirm') {
       this._clampActiveMatrixCell();
       this._dismissMatrixKeyboard();
       return;
     }
-    const { activeMatrixVariantId, matrixLayout } = this.data;
+    const _this$data = this.data,activeMatrixVariantId = _this$data.activeMatrixVariantId,matrixLayout = _this$data.matrixLayout;
     if (action === 'enter') {
       this._clampActiveMatrixCell();
       this._moveMatrixFocus(getNextMatrixVariantIdInRow(matrixLayout, activeMatrixVariantId));
@@ -484,15 +484,15 @@ Page({
     }
     if (!activeMatrixVariantId) return;
 
-    const current = this._variantQty[activeMatrixVariantId] != null
-      ? String(this._variantQty[activeMatrixVariantId])
-      : '';
-    const { value, replaceConsumed } = applyMatrixKeyboardKey(
-      this._matrixKbInput,
-      current,
-      action,
-      digit,
-    );
+    const current = this._variantQty[activeMatrixVariantId] != null ?
+    String(this._variantQty[activeMatrixVariantId]) :
+    '';
+    const _applyMatrixKeyboardK = applyMatrixKeyboardKey(
+        this._matrixKbInput,
+        current,
+        action,
+        digit
+      ),value = _applyMatrixKeyboardK.value,replaceConsumed = _applyMatrixKeyboardK.replaceConsumed;
     this._variantQty[activeMatrixVariantId] = value;
     if (replaceConsumed) {
       this.setData({ matrixInputReplaceAll: false });
@@ -501,7 +501,7 @@ Page({
     const preview = buildMatrixKeyboardPreview(matrixLayout, activeMatrixVariantId, this._variantQty);
     this.setData({
       matrixKeyboardLabel: preview.label,
-      matrixKeyboardValue: preview.value,
+      matrixKeyboardValue: preview.value
     });
   },
 
@@ -522,7 +522,7 @@ Page({
     if (mode === 'rework' || mode === 'outsource_rework') {
       reworkNodeIds = collectCheckedReworkTargetNodeIds(
         this.data.reworkProductNodes,
-        this.data.reworkOtherNodes,
+        this.data.reworkOtherNodes
       );
       if (!reworkNodeIds.length) {
         wx.showToast({ title: '请选择返工目标工序', icon: 'none' });
@@ -540,7 +540,7 @@ Page({
         'dispatch',
         this._partners || [],
         this._records || [],
-        String(this.data.partnerName).trim(),
+        String(this.data.partnerName).trim()
       );
     }
 
@@ -557,7 +557,7 @@ Page({
       reworkNodeIds,
       outsourcePartner: this.data.partnerName,
       operator: readOperatorDisplayName(readTenantCtx()),
-      outsourceDocNo,
+      outsourceDocNo
     });
 
     if (result.error) {
@@ -580,17 +580,17 @@ Page({
         await createProductionRecordBatch(batch);
       }
       wx.hideLoading();
-      const toastTitle = mode === 'scrap'
-        ? '报损成功'
-        : (mode === 'outsource_rework' ? '委外返工成功' : '返工成功');
+      const toastTitle = mode === 'scrap' ?
+      '报损成功' :
+      mode === 'outsource_rework' ? '委外返工成功' : '返工成功';
       afterSaveReturnToList({
         listUrl: LIST_ROUTES.REWORK_HUB,
-        toastTitle,
+        toastTitle
       });
     } catch (err) {
       wx.hideLoading();
       this.setData({ submitting: false });
-      wx.showToast({ title: (err && err.message) || '提交失败', icon: 'none' });
+      wx.showToast({ title: err && err.message || '提交失败', icon: 'none' });
     }
-  },
+  }
 });

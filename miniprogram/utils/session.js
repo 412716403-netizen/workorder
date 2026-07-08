@@ -3,6 +3,11 @@ const { clearUnsavedFormDrafts } = require('./unsavedFormDrafts.js');
 
 function clearSession() {
   clearUnsavedFormDrafts();
+  try {
+    require('./featurePlugins.js').clearFeaturePluginsCache();
+  } catch (_err) {
+    /* ignore */
+  }
   wx.removeStorageSync('accessToken');
   wx.removeStorageSync('refreshToken');
   wx.removeStorageSync('tenantCtx');
@@ -20,6 +25,13 @@ function readTenants() {
   } catch (_) {
     return [];
   }
+}
+
+/** 兼容 GET /tenants?all=true 数组与默认分页体 { data, total } */
+function parseTenantListResponse(res) {
+  if (Array.isArray(res)) return res;
+  if (res && Array.isArray(res.data)) return res.data;
+  return [];
 }
 
 function readTenantCtx() {
@@ -60,6 +72,7 @@ function readOperatorDisplayName() {
 module.exports = {
   clearSession,
   readTenants,
+  parseTenantListResponse,
   readTenantCtx,
   readCurrentUser,
   readCurrentUserId,

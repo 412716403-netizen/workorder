@@ -1,6 +1,7 @@
-const { API_BASE } = require('../../config.js');
-const { BRAND_NAME, BRAND_LOGO_PATH, BRAND_TAGLINE } = require('../../config/branding.js');
-const { clearUnsavedFormDrafts } = require('../../utils/unsavedFormDrafts.js');
+const _require = require('../../config.js'),API_BASE = _require.API_BASE;
+const _require2 = require('../../config/branding.js'),BRAND_NAME = _require2.BRAND_NAME,BRAND_LOGO_PATH = _require2.BRAND_LOGO_PATH,BRAND_TAGLINE = _require2.BRAND_TAGLINE;
+const _require3 = require('../../utils/unsavedFormDrafts.js'),clearUnsavedFormDrafts = _require3.clearUnsavedFormDrafts;
+const { clearFeaturePluginsCache } = require('../../utils/featurePlugins.js');
 
 /**
  * 与网页端 AuthContext.handleLogin 一致：
@@ -16,7 +17,7 @@ Page({
     username: '',
     password: '',
     loading: false,
-    showPassword: false,
+    showPassword: false
   },
 
   onUser(e) {
@@ -47,13 +48,14 @@ Page({
       success: (res) => {
         if (res.statusCode !== 200 || !res.data || !res.data.accessToken) {
           const msg =
-            (res.data && (res.data.error || res.data.message)) || `登录失败 (${res.statusCode})`;
+          res.data && (res.data.error || res.data.message) || `登录失败 (${res.statusCode})`;
           wx.showToast({ title: String(msg).slice(0, 40), icon: 'none' });
           return;
         }
 
         const d = res.data;
         clearUnsavedFormDrafts();
+        clearFeaturePluginsCache();
         wx.setStorageSync('accessToken', d.accessToken);
         if (d.refreshToken) wx.setStorageSync('refreshToken', d.refreshToken);
         wx.setStorageSync('currentUser', JSON.stringify(d.user || {}));
@@ -65,7 +67,7 @@ Page({
 
         if (tenantId && tenants.length) {
           const matched = tenants.find((t) => t.id === tenantId);
-          if (matched && matched.status !== 'pending' && matched.status !== 'rejected') {
+          if (matched && matched.status !== 'pending' && matched.status !== 'rejected') {var _matched$expiresAt;
             wx.setStorageSync(
               'tenantCtx',
               JSON.stringify({
@@ -74,10 +76,10 @@ Page({
                 tenantRole: matched.role,
                 permissions: matched.permissions || [],
                 status: matched.status,
-                expiresAt: matched.expiresAt ?? null,
+                expiresAt: (_matched$expiresAt = matched.expiresAt) != null ? _matched$expiresAt : null,
                 industryKind: matched.industryKind || 'generic',
-                equipmentFeaturesEnabled: matched.equipmentFeaturesEnabled !== false,
-              }),
+                equipmentFeaturesEnabled: matched.equipmentFeaturesEnabled !== false
+              })
             );
             wx.switchTab({ url: '/pages/home/home' });
             return;
@@ -98,7 +100,7 @@ Page({
       },
       complete: () => {
         this.setData({ loading: false });
-      },
+      }
     });
-  },
+  }
 });

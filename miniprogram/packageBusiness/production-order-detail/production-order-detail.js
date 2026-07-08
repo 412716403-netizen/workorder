@@ -1,38 +1,38 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission, hasPrefixPermission } = require('../../utils/permissions.js');
-const { OrderDispatchStatus } = require('../config/productionOrders.js');
-const {
-  mapOrderDetailView,
-  buildOrderDispatchConfirmMessage,
-  buildOrderReportSummaryRows,
-  getProductUnitName,
-  normalizeMasterList,
-  formatOrderDate,
-} = require('../utils/productionOrders.js');
-const { buildReportHistoryDateRangeForOrder } = require('../utils/orderReportHistory.js');
-const { stockInAggregatesForOrder } = require('../utils/pendingStockComputeLite.js');
-const {
-  getOrder,
-  updateOrder,
-  updateOrderDispatchStatus,
-  fetchTenantConfig,
-  fetchProductsAll,
-  fetchCategoriesAll,
-  fetchProductionRecords,
-  fetchBomsAll,
-  fetchNodesAll,
-  listProductProgressAll,
-  getPlan,
-  listOrdersPaginated,
-} = require('../utils/orderApi.js');
-const {
-  buildOrderFamilyIds,
-  buildOrderDetailMaterialRows,
-  buildOrderDetailOutsourceCards,
-} = require('../utils/orderDetailExtras.js');
-const { buildMaterialIndexes } = require('../utils/materialStockPanel.js');
-const { fetchDictionaries } = require('../utils/planApi.js');
-const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission,hasPrefixPermission = _require2.hasPrefixPermission;
+const _require3 = require('../config/productionOrders.js'),OrderDispatchStatus = _require3.OrderDispatchStatus;
+const _require4 =
+
+
+
+
+
+
+  require('../utils/productionOrders.js'),mapOrderDetailView = _require4.mapOrderDetailView,buildOrderDispatchConfirmMessage = _require4.buildOrderDispatchConfirmMessage,buildOrderReportSummaryRows = _require4.buildOrderReportSummaryRows,getProductUnitName = _require4.getProductUnitName,normalizeMasterList = _require4.normalizeMasterList,formatOrderDate = _require4.formatOrderDate;
+const _require5 = require('../utils/orderReportHistory.js'),buildReportHistoryDateRangeForOrder = _require5.buildReportHistoryDateRangeForOrder;
+const _require6 = require('../utils/pendingStockComputeLite.js'),stockInAggregatesForOrder = _require6.stockInAggregatesForOrder;
+const _require7 =
+
+
+
+
+
+
+
+
+
+
+
+
+  require('../utils/orderApi.js'),getOrder = _require7.getOrder,updateOrder = _require7.updateOrder,updateOrderDispatchStatus = _require7.updateOrderDispatchStatus,fetchTenantConfig = _require7.fetchTenantConfig,fetchProductsAll = _require7.fetchProductsAll,fetchCategoriesAll = _require7.fetchCategoriesAll,fetchProductionRecords = _require7.fetchProductionRecords,fetchBomsAll = _require7.fetchBomsAll,fetchNodesAll = _require7.fetchNodesAll,listProductProgressAll = _require7.listProductProgressAll,getPlan = _require7.getPlan,listOrdersPaginated = _require7.listOrdersPaginated;
+const _require8 =
+
+
+
+  require('../utils/orderDetailExtras.js'),buildOrderFamilyIds = _require8.buildOrderFamilyIds,buildOrderDetailMaterialRows = _require8.buildOrderDetailMaterialRows,buildOrderDetailOutsourceCards = _require8.buildOrderDetailOutsourceCards;
+const _require9 = require('../utils/materialStockPanel.js'),buildMaterialIndexes = _require9.buildMaterialIndexes;
+const _require0 = require('../utils/planApi.js'),fetchDictionaries = _require0.fetchDictionaries;
+const _require1 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require1.readNavBarMetrics,readWindowMetrics = _require1.readWindowMetrics;
 
 async function fetchOrdersByProductId(productId) {
   const pageSize = 200;
@@ -53,7 +53,7 @@ async function fetchOrdersByProductId(productId) {
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
-  const tailPx = Math.ceil((win.windowWidth / 750) * 16);
+  const tailPx = Math.ceil(win.windowWidth / 750 * 16);
   return nav.statusBarHeight + nav.navBarHeight + tailPx;
 }
 
@@ -69,25 +69,25 @@ function buildEditForm(order) {
   return {
     customer: order.customer || '',
     dueDate: formatOrderDate(order.dueDate) || '',
-    startDate: formatOrderDate(order.startDate) || '',
+    startDate: formatOrderDate(order.startDate) || ''
   };
 }
 
 function buildSummaryStats(order, product, dictionaries, prodRecords) {
   const unitName = getProductUnitName(product, dictionaries);
   const totalQty = (order.items || []).reduce((s, it) => s + (Number(it.quantity) || 0), 0);
-  const { alreadyIn } = stockInAggregatesForOrder(order, prodRecords);
+  const _stockInAggregatesFor = stockInAggregatesForOrder(order, prodRecords),alreadyIn = _stockInAggregatesFor.alreadyIn;
   const milestones = order.milestones || [];
-  const completed = milestones.length
-    ? Number(milestones[milestones.length - 1].completedQuantity) || 0
-    : 0;
+  const completed = milestones.length ?
+  Number(milestones[milestones.length - 1].completedQuantity) || 0 :
+  0;
   const pendingTotal = Math.max(0, completed - alreadyIn);
   return {
     unitName,
     totalText: `${totalQty} ${unitName}`,
     stockInText: `${alreadyIn} ${unitName}`,
     pendingText: `${pendingTotal} ${unitName}`,
-    showPending: pendingTotal > 0,
+    showPending: pendingTotal > 0
   };
 }
 
@@ -119,7 +119,7 @@ Page({
     statusBarHeight: 20,
     navBarHeight: 44,
     headerBlockHeight: 88,
-    scrollHeight: 500,
+    scrollHeight: 500
   },
 
   onLoad(options) {
@@ -129,7 +129,7 @@ Page({
     this.setData({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
-      headerBlockHeight: computeHeaderBlockHeight(nav),
+      headerBlockHeight: computeHeaderBlockHeight(nav)
     });
 
     this._orderId = options.id ? decodeURIComponent(options.id) : '';
@@ -161,7 +161,7 @@ Page({
     if (!this.data.canEdit || !this._order) return;
     this.setData({
       editing: true,
-      editForm: buildEditForm(this._order),
+      editForm: buildEditForm(this._order)
     });
     this.updateScrollHeight(true);
   },
@@ -172,33 +172,33 @@ Page({
   },
 
   onEditFieldInput(e) {
-    const { field } = e.currentTarget.dataset;
+    const field = e.currentTarget.dataset.field;
     if (!field) return;
     this.setData({ [`editForm.${field}`]: e.detail.value || '' });
   },
 
   onEditDateChange(e) {
-    const { field } = e.currentTarget.dataset;
+    const field = e.currentTarget.dataset.field;
     if (!field) return;
     this.setData({ [`editForm.${field}`]: e.detail.value || '' });
   },
 
   async onEditSave() {
     if (!this._order) return;
-    const { editForm } = this.data;
+    const editForm = this.data.editForm;
     wx.showLoading({ title: '保存中' });
     try {
       await updateOrder(this._orderId, {
         customer: editForm.customer,
         dueDate: editForm.dueDate || null,
-        startDate: editForm.startDate || null,
+        startDate: editForm.startDate || null
       });
       wx.showToast({ title: '已保存', icon: 'success' });
       this.setData({ editing: false });
       this.updateScrollHeight(false);
       await this.loadDetail();
     } catch (err) {
-      wx.showToast({ title: (err && err.message) || '保存失败', icon: 'none' });
+      wx.showToast({ title: err && err.message || '保存失败', icon: 'none' });
     } finally {
       wx.hideLoading();
     }
@@ -213,9 +213,9 @@ Page({
     const order = this._order;
     if (!order) return;
     const current = order.dispatchStatus || OrderDispatchStatus.IN_PROGRESS;
-    const next = current === OrderDispatchStatus.COMPLETED
-      ? OrderDispatchStatus.IN_PROGRESS
-      : OrderDispatchStatus.COMPLETED;
+    const next = current === OrderDispatchStatus.COMPLETED ?
+    OrderDispatchStatus.IN_PROGRESS :
+    OrderDispatchStatus.COMPLETED;
     wx.showModal({
       title: '切换完成状态',
       content: buildOrderDispatchConfirmMessage(order.orderNumber, current, next),
@@ -226,9 +226,9 @@ Page({
           wx.showToast({ title: '已更新', icon: 'success' });
           await this.loadDetail();
         } catch (err) {
-          wx.showToast({ title: (err && err.message) || '更新失败', icon: 'none' });
+          wx.showToast({ title: err && err.message || '更新失败', icon: 'none' });
         }
-      },
+      }
     });
   },
 
@@ -238,30 +238,30 @@ Page({
     const dateFrom = encodeURIComponent(range.start);
     const dateTo = encodeURIComponent(range.end);
     wx.navigateTo({
-      url: `/packageBusiness/production-order-report-history/production-order-report-history?orderId=${id}&dateFrom=${dateFrom}&dateTo=${dateTo}`,
+      url: `/packageBusiness/production-order-report-history/production-order-report-history?orderId=${id}&dateFrom=${dateFrom}&dateTo=${dateTo}`
     });
   },
 
   onPendingStockTap() {
     if (!this.data.canViewPendingStock || !this._orderId) return;
     wx.navigateTo({
-      url: `/packageBusiness/production-order-stock-in-confirm/production-order-stock-in-confirm?mode=single&rowKeys=${encodeURIComponent(this._orderId)}`,
+      url: `/packageBusiness/production-order-stock-in-confirm/production-order-stock-in-confirm?mode=single&rowKeys=${encodeURIComponent(this._orderId)}`
     });
   },
 
   onPlanLinkTap(e) {
-    const { planId } = e.currentTarget.dataset;
+    const planId = e.currentTarget.dataset.planId;
     if (!planId) return;
     wx.navigateTo({
-      url: `/packageBusiness/production-plan-detail/production-plan-detail?id=${encodeURIComponent(planId)}`,
+      url: `/packageBusiness/production-plan-detail/production-plan-detail?id=${encodeURIComponent(planId)}`
     });
   },
 
   onChildOrderTap(e) {
-    const { orderId } = e.currentTarget.dataset;
+    const orderId = e.currentTarget.dataset.orderId;
     if (!orderId || orderId === this._orderId) return;
     wx.navigateTo({
-      url: `/packageBusiness/production-order-detail/production-order-detail?id=${encodeURIComponent(orderId)}`,
+      url: `/packageBusiness/production-order-detail/production-order-detail?id=${encodeURIComponent(orderId)}`
     });
   },
 
@@ -274,15 +274,15 @@ Page({
   },
 
   navigateOutsourceFromChip(d) {
-    const {
-      orderId,
-      productId,
-      nodeId,
-      nodeName,
-      partner,
-      productName,
-      orderNumber,
-    } = d || {};
+    const _ref =
+
+
+
+
+
+
+
+      d || {},orderId = _ref.orderId,productId = _ref.productId,nodeId = _ref.nodeId,nodeName = _ref.nodeName,partner = _ref.partner,productName = _ref.productName,orderNumber = _ref.orderNumber;
     if (!partner || !nodeId) return;
 
     if (this.data.showPartnerFlowDetailOnList) {
@@ -291,16 +291,16 @@ Page({
         return;
       }
       const q = [
-        `productId=${encodeURIComponent(productId || '')}`,
-        `nodeId=${encodeURIComponent(nodeId || '')}`,
-        `partner=${encodeURIComponent(partner || '')}`,
-        `nodeName=${encodeURIComponent(nodeName || '')}`,
-        `productName=${encodeURIComponent(productName || '')}`,
-        `orderNumber=${encodeURIComponent(orderNumber || '')}`,
-      ];
+      `productId=${encodeURIComponent(productId || '')}`,
+      `nodeId=${encodeURIComponent(nodeId || '')}`,
+      `partner=${encodeURIComponent(partner || '')}`,
+      `nodeName=${encodeURIComponent(nodeName || '')}`,
+      `productName=${encodeURIComponent(productName || '')}`,
+      `orderNumber=${encodeURIComponent(orderNumber || '')}`];
+
       if (orderId) q.push(`orderId=${encodeURIComponent(orderId)}`);
       wx.navigateTo({
-        url: `/packageBusiness/production-outsource-partner-detail/production-outsource-partner-detail?${q.join('&')}`,
+        url: `/packageBusiness/production-outsource-partner-detail/production-outsource-partner-detail?${q.join('&')}`
       });
       return;
     }
@@ -310,13 +310,13 @@ Page({
       return;
     }
     const q = [
-      `orderKeyword=${encodeURIComponent(orderNumber || '')}`,
-      `productKeyword=${encodeURIComponent(productName || '')}`,
-      `partnerKeyword=${encodeURIComponent(partner || '')}`,
-      `milestoneNodeId=${encodeURIComponent(nodeId || '')}`,
-    ];
+    `orderKeyword=${encodeURIComponent(orderNumber || '')}`,
+    `productKeyword=${encodeURIComponent(productName || '')}`,
+    `partnerKeyword=${encodeURIComponent(partner || '')}`,
+    `milestoneNodeId=${encodeURIComponent(nodeId || '')}`];
+
     wx.navigateTo({
-      url: `/packageBusiness/production-outsource-flow/production-outsource-flow?${q.join('&')}`,
+      url: `/packageBusiness/production-outsource-flow/production-outsource-flow?${q.join('&')}`
     });
   },
 
@@ -343,53 +343,53 @@ Page({
       canViewPendingStock,
       canViewOutsourceFlow,
       canViewOutsourcePartnerDetail,
-      loading: true,
+      loading: true
     });
 
     try {
-      const [order, config, dictionariesRaw] = await Promise.all([
+      const _await$Promise$all = await Promise.all([
         getOrder(this._orderId),
         fetchTenantConfig(),
-        fetchDictionaries(),
-      ]);
+        fetchDictionaries()]
+        ),order = _await$Promise$all[0],config = _await$Promise$all[1],dictionariesRaw = _await$Promise$all[2];
       if (seq !== this._loadSeq) return;
       if (!order || !order.id) throw new Error('工单不存在');
 
       this._order = order;
-      this._productionLinkMode = (config && config.productionLinkMode) || 'order';
-      const planFormSettings = (config && config.planFormSettings) || {};
+      this._productionLinkMode = config && config.productionLinkMode || 'order';
+      const planFormSettings = config && config.planFormSettings || {};
       const showDeliveryDate = (planFormSettings.listDisplay || {}).showDeliveryDate !== false;
       const dictionaries = dictionariesRaw || { colors: [], sizes: [], units: [] };
 
       this.setData({ title: order.orderNumber || '工单详情' });
 
-      const [productsRaw, categoriesRaw, plan, prodRecordsRaw, relatedOrders, bomsRaw, nodesRaw, pmpRaw] = await Promise.all([
+      const _await$Promise$all2 = await Promise.all([
         fetchProductsAll(),
         fetchCategoriesAll(),
         order.planOrderId ? getPlan(order.planOrderId) : Promise.resolve(null),
         fetchProductionRecords({
           types: 'STOCK_IN',
-          orderIds: this._orderId,
+          orderIds: this._orderId
         }),
         order.productId ? fetchOrdersByProductId(order.productId) : Promise.resolve([order]),
         fetchBomsAll(),
         fetchNodesAll(),
-        this._productionLinkMode === 'product' ? listProductProgressAll() : Promise.resolve([]),
-      ]);
+        this._productionLinkMode === 'product' ? listProductProgressAll() : Promise.resolve([])]
+        ),productsRaw = _await$Promise$all2[0],categoriesRaw = _await$Promise$all2[1],plan = _await$Promise$all2[2],prodRecordsRaw = _await$Promise$all2[3],relatedOrders = _await$Promise$all2[4],bomsRaw = _await$Promise$all2[5],nodesRaw = _await$Promise$all2[6],pmpRaw = _await$Promise$all2[7];
       if (seq !== this._loadSeq) return;
 
-      const orders = (relatedOrders && relatedOrders.length) ? relatedOrders : [order];
+      const orders = relatedOrders && relatedOrders.length ? relatedOrders : [order];
       const familyOrderIds = buildOrderFamilyIds(order, orders, buildMaterialIndexes(productsRaw, bomsRaw, orders));
       const stockRecordsRaw = await fetchProductionRecords({
         types: 'STOCK_OUT,STOCK_RETURN',
         orderIds: familyOrderIds.join(','),
-        ...(this._productionLinkMode === 'product' && order.productId
-          ? { sourceProductIds: order.productId }
-          : {}),
+        ...(this._productionLinkMode === 'product' && order.productId ?
+        { sourceProductIds: order.productId } :
+        {})
       });
       const outsourceRecordsRaw = await fetchProductionRecords({
         types: 'OUTSOURCE',
-        orderIds: this._orderId,
+        orderIds: this._orderId
       });
       if (seq !== this._loadSeq) return;
 
@@ -400,38 +400,38 @@ Page({
       const productMilestoneProgresses = Array.isArray(pmpRaw) ? pmpRaw : [];
       const product = products.find((p) => p.id === order.productId) || null;
       const category = product ? categories.find((c) => c.id === product.categoryId) : null;
-      const prodRecords = Array.isArray(prodRecordsRaw)
-        ? prodRecordsRaw
-        : (prodRecordsRaw && prodRecordsRaw.data) || [];
-      const stockRecords = Array.isArray(stockRecordsRaw)
-        ? stockRecordsRaw
-        : (stockRecordsRaw && stockRecordsRaw.data) || [];
-      const outsourceRecords = Array.isArray(outsourceRecordsRaw)
-        ? outsourceRecordsRaw
-        : (outsourceRecordsRaw && outsourceRecordsRaw.data) || [];
-      const outsourceFormSettings = (config && config.outsourceFormSettings) || {};
+      const prodRecords = Array.isArray(prodRecordsRaw) ?
+      prodRecordsRaw :
+      prodRecordsRaw && prodRecordsRaw.data || [];
+      const stockRecords = Array.isArray(stockRecordsRaw) ?
+      stockRecordsRaw :
+      stockRecordsRaw && stockRecordsRaw.data || [];
+      const outsourceRecords = Array.isArray(outsourceRecordsRaw) ?
+      outsourceRecordsRaw :
+      outsourceRecordsRaw && outsourceRecordsRaw.data || [];
+      const outsourceFormSettings = config && config.outsourceFormSettings || {};
 
       const unitName = getProductUnitName(product, dictionaries);
       const reportSummaryRows = buildOrderReportSummaryRows(order, prodRecords, unitName);
       const summaryStats = buildSummaryStats(order, product, dictionaries, prodRecords);
 
-      const { rows: materialRows, emptyText: materialEmptyText } = buildOrderDetailMaterialRows({
-        order,
-        orders,
-        products,
-        boms,
-        nodes,
-        stockRecords,
-        productMilestoneProgresses,
-        productionLinkMode: this._productionLinkMode,
-      });
+      const _buildOrderDetailMate = buildOrderDetailMaterialRows({
+          order,
+          orders,
+          products,
+          boms,
+          nodes,
+          stockRecords,
+          productMilestoneProgresses,
+          productionLinkMode: this._productionLinkMode
+        }),materialRows = _buildOrderDetailMate.rows,materialEmptyText = _buildOrderDetailMate.emptyText;
       const outsourceCards = buildOrderDetailOutsourceCards({
         order,
         records: outsourceRecords,
         hideZeroPendingPartnerOnList: outsourceFormSettings.hideZeroPendingPartnerOnList === true,
-        productName: (product && product.name) || order.productName || '',
+        productName: product && product.name || order.productName || '',
         orderNumber: order.orderNumber || '',
-        productionLinkMode: this._productionLinkMode,
+        productionLinkMode: this._productionLinkMode
       });
 
       const view = mapOrderDetailView(order, {
@@ -443,7 +443,7 @@ Page({
         productionLinkMode: this._productionLinkMode,
         showDeliveryDate,
         canEdit,
-        processRows: [],
+        processRows: []
       });
 
       const sections = view.sections.filter((s) => s.kind !== 'hint' && s.id !== 'process' && s.id !== 'basic');
@@ -463,7 +463,7 @@ Page({
         showMaterialHint: this._productionLinkMode === 'product',
         showOutsourceSection: outsourceCards.length > 0,
         outsourceCards,
-        showPartnerFlowDetailOnList: outsourceFormSettings.showPartnerFlowDetailOnList === true,
+        showPartnerFlowDetailOnList: outsourceFormSettings.showPartnerFlowDetailOnList === true
       });
       this.updateScrollHeight(this.data.editing);
     } catch (err) {
@@ -478,10 +478,10 @@ Page({
         showMaterialSection: false,
         materialRows: [],
         showOutsourceSection: false,
-        outsourceCards: [],
+        outsourceCards: []
       });
-      wx.showToast({ title: (err && err.message) || '加载失败', icon: 'none' });
+      wx.showToast({ title: err && err.message || '加载失败', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 1000);
     }
-  },
+  }
 });

@@ -63,13 +63,21 @@ SmartTrack Pro 微信小程序采用 **企业蓝 + 卡片化 + 底部 Tab** 的 
 
 ## 入口菜单
 
-单一事实源：[`miniprogram/config/menus.js`](../miniprogram/config/menus.js)
+RBAC 字段单一事实源：[`shared/workbenchShortcuts.ts`](../shared/workbenchShortcuts.ts)（小程序在 [`miniprogram/config/menus.js`](../miniprogram/config/menus.js) 维护同构 `WORKBENCH_SHORTCUT_CATALOG` + 专属 `path`）。
 
 - `HOME_QUICK_ENTRIES` / `DEFAULT_HOME_SHORTCUT_IDS`：默认快捷 id 列表，与 Web [`DEFAULT_DASHBOARD_SHORTCUT_IDS`](../shared/workbenchShortcuts.ts) 一致
-- 首页蓝色区域拉取 `GET /dashboard/shortcuts`，经 [`utils/workbenchShortcuts.js`](../miniprogram/utils/workbenchShortcuts.js) 解析并按权限过滤后展示（与 Web 快捷入口组件同步）
+- 首页蓝色区域拉取 `GET /dashboard/shortcuts`，经 [`utils/workbenchShortcuts.js`](../miniprogram/utils/workbenchShortcuts.js) 解析后，用 [`utils/accessControl.js`](../miniprogram/utils/accessControl.js) 的 `filterShortcutsByAccess` 过滤（与 Web `filterWorkbenchShortcutsByAccess` + 协作侧栏规则一致；含 owner/admin 提权、插件开关、协作双门控）
 - `APP_CATEGORIES`：应用中心，由同文件内 `WORKBENCH_SHORTCUT_CATALOG` 按 `group` 派生；展示顺序见 `APP_GROUP_ORDER`（**插件中心**置顶，其后生产管理、进销存、财务结算、基础信息）
-- `buildAppCategories(permissions, keyword)`：按权限过滤（`keyword` 保留供扩展，应用页未启用搜索）
-- 每项可配置 `permission`，由 [`utils/permissions.js`](../miniprogram/utils/permissions.js) 过滤
+- `buildAppCategories(permissions, keyword, plugins, tenantRole)`：按 RBAC + 插件过滤（`keyword` 保留供扩展，应用页未启用搜索）
+- 系统设置 Tab 可见性：`config/settingsTabs.js` 使用 `canViewSettingsTab`（对齐 Web `SettingsView`：`owner` 全开，其余按 `settings:<tab>:view` 与裸 `settings` 模块键）
+
+### 权限热同步
+
+与 Web [`AuthContext`](../contexts/AuthContext.tsx) 一致：已登录且存在 `tenantCtx` 时，[`utils/tenantCtxSync.js`](../miniprogram/utils/tenantCtxSync.js) 调用 `GET /tenants?all=true` 刷新 `permissions` / `tenantRole` 等。触发点：`app.onShow`、首页/应用/设置 `onShow`、首页下拉刷新。
+
+各业务页 `onShow` 守卫仍用 [`utils/permissions.js`](../miniprogram/utils/permissions.js)（细粒度 API 兜底）；**菜单/快捷入口**勿再单独写过滤逻辑。
+
+插件开关缓存：登录、切租户、登出（`clearSession`）时调用 `clearFeaturePluginsCache()`，与网页重新拉取 `feature-plugins` 对齐。
 
 `icon-grid` 支持可选字段 `iconChar`，在图标中央叠汉字（仅首页常用入口使用）。
 
@@ -686,7 +694,7 @@ npm run miniprogram:icons
 | 预备 | [`packageBusiness/scan-setup/`](../miniprogram/packageBusiness/scan-setup/) | 已废弃，自动跳转会话页 |
 | 会话 | [`packageBusiness/scan-session/`](../miniprogram/packageBusiness/scan-session/) | 条件选择 + 取景扫码 + 下方本次扫码记录 |
 
-类型目录：[`config/scanTypes.js`](../miniprogram/config/scanTypes.js)
+类型目录：[`packageBusiness/config/scanTypes.js`](../miniprogram/packageBusiness/config/scanTypes.js)
 
 | 类型 | 页内条件 | 扫码后解析 | 写入 |
 |------|----------|------------|------|

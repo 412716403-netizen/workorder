@@ -7,7 +7,7 @@ const {
   DEFAULT_HOME_SHORTCUT_IDS,
   catalogItemToMenuItem,
 } = require('../config/menus.js');
-const { filterByPermission } = require('./permissions.js');
+const { filterShortcutsByAccess } = require('./accessControl.js');
 
 const catalogById = WORKBENCH_SHORTCUT_CATALOG.reduce((acc, item) => {
   acc[item.id] = item;
@@ -36,9 +36,10 @@ function resolveShortcutItems(ids) {
     .filter(Boolean);
 }
 
-function buildHomeShortcuts(selectedIds, permissions) {
-  const items = resolveShortcutItems(selectedIds).map(catalogItemToMenuItem);
-  return filterByPermission(items, permissions || []).map((item) => ({
+function buildHomeShortcuts(selectedIds, permissions, plugins, tenantRole) {
+  const catalogItems = resolveShortcutItems(selectedIds);
+  const filtered = filterShortcutsByAccess(catalogItems, plugins, tenantRole, permissions || []);
+  return filtered.map(catalogItemToMenuItem).map((item) => ({
     key: item.key,
     label: item.label,
     icon: item.icon,

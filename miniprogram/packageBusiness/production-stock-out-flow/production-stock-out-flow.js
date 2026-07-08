@@ -1,31 +1,31 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const {
-  fetchProductionRecords,
-  fetchTenantConfig,
-  fetchProductsAll,
-  fetchWarehousesAll,
-} = require('../utils/orderApi.js');
-const { normalizeMasterList } = require('../utils/productionPlans.js');
-const { fetchAllOrdersPaginated } = require('../utils/pendingStockBadge.js');
-const {
-  dateInputToIsoStart,
-  dateInputToIsoEndExclusive,
-  localTodayYmd,
-} = require('../utils/orderReportHistory.js');
-const { fetchDictionaries } = require('../utils/planApi.js');
-const {
-  buildMaterialFlowListRows,
-  filterMaterialFlowRows,
-  computeMaterialFlowStats,
-  TYPE_FILTER_LABELS,
-  TYPE_FILTER_VALUES,
-} = require('../utils/materialStockFlow.js');
-const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 =
+
+
+
+
+  require('../utils/orderApi.js'),fetchProductionRecords = _require3.fetchProductionRecords,fetchTenantConfig = _require3.fetchTenantConfig,fetchProductsAll = _require3.fetchProductsAll,fetchWarehousesAll = _require3.fetchWarehousesAll;
+const _require4 = require('../utils/productionPlans.js'),normalizeMasterList = _require4.normalizeMasterList;
+const _require5 = require('../utils/pendingStockBadge.js'),fetchAllOrdersPaginated = _require5.fetchAllOrdersPaginated;
+const _require6 =
+
+
+
+  require('../utils/orderReportHistory.js'),dateInputToIsoStart = _require6.dateInputToIsoStart,dateInputToIsoEndExclusive = _require6.dateInputToIsoEndExclusive,localTodayYmd = _require6.localTodayYmd;
+const _require7 = require('../utils/planApi.js'),fetchDictionaries = _require7.fetchDictionaries;
+const _require8 =
+
+
+
+
+
+  require('../utils/materialStockFlow.js'),buildMaterialFlowListRows = _require8.buildMaterialFlowListRows,filterMaterialFlowRows = _require8.filterMaterialFlowRows,computeMaterialFlowStats = _require8.computeMaterialFlowStats,TYPE_FILTER_LABELS = _require8.TYPE_FILTER_LABELS,TYPE_FILTER_VALUES = _require8.TYPE_FILTER_VALUES;
+const _require9 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require9.readNavBarMetrics,readWindowMetrics = _require9.readWindowMetrics;
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
-  const toolsPx = Math.ceil((win.windowWidth / 750) * 128);
+  const toolsPx = Math.ceil(win.windowWidth / 750 * 128);
   return nav.statusBarHeight + nav.navBarHeight + toolsPx;
 }
 
@@ -55,13 +55,13 @@ Page({
     stats: { batchCount: 0, footerText: '共 0 条' },
     statusBarHeight: 20,
     navBarHeight: 44,
-    headerBlockHeight: 88,
+    headerBlockHeight: 88
   },
 
   onLoad() {
     const nav = readNavBarMetrics();
     const ctx = readTenantCtx();
-    if (!hasPermission((ctx && ctx.permissions) || [], 'production:material_records:view')) {
+    if (!hasPermission(ctx && ctx.permissions || [], 'production:material_records:view')) {
       wx.showToast({ title: '无查看权限', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 800);
       return;
@@ -75,7 +75,7 @@ Page({
       dateFrom: today,
       dateTo: today,
       draftDateFrom: today,
-      draftDateTo: today,
+      draftDateTo: today
     });
     this.loadRows();
   },
@@ -92,7 +92,7 @@ Page({
     const today = this._today || localTodayYmd();
     this.setData({
       ...extra,
-      filterActive: computeFilterActive({ ...this.data, ...extra }, today),
+      filterActive: computeFilterActive({ ...this.data, ...extra }, today)
     });
   },
 
@@ -104,7 +104,7 @@ Page({
     this.setData({
       draftDateFrom: this.data.dateFrom,
       draftDateTo: this.data.dateTo,
-      draftTypeIndex: this.data.typeFilterIndex,
+      draftTypeIndex: this.data.typeFilterIndex
     });
     this.patchFilterActive({ showFilterPanel: true });
   },
@@ -129,7 +129,7 @@ Page({
       typeFilter: '',
       typeFilterIndex: 0,
       draftTypeIndex: 0,
-      showFilterPanel: false,
+      showFilterPanel: false
     });
     this.loadRows();
   },
@@ -146,7 +146,7 @@ Page({
       dateTo,
       typeFilter,
       typeFilterIndex: typeIdx,
-      showFilterPanel: false,
+      showFilterPanel: false
     });
 
     if (datesChanged) {
@@ -181,56 +181,56 @@ Page({
 
   onRowTap(e) {
     this.closeFilterPanel();
-    const { batchKey } = e.currentTarget.dataset;
+    const batchKey = e.currentTarget.dataset.batchKey;
     if (!batchKey) return;
     const row = (this._allRows || []).find((r) => r.batchKey === batchKey);
     if (!row || !row.docNo) return;
     wx.navigateTo({
-      url: `/packageBusiness/production-stock-out-detail/production-stock-out-detail?docNo=${encodeURIComponent(row.docNo)}`,
+      url: `/packageBusiness/production-stock-out-detail/production-stock-out-detail?docNo=${encodeURIComponent(row.docNo)}`
     });
   },
 
   applyFilter() {
     const filtered = filterMaterialFlowRows(this._allRows || [], {
       keyword: this.data.searchKeyword,
-      typeFilter: this.data.typeFilter,
+      typeFilter: this.data.typeFilter
     });
     this.setData({
       rows: filtered,
-      stats: computeMaterialFlowStats(filtered),
+      stats: computeMaterialFlowStats(filtered)
     });
   },
 
   async loadRows() {
     this.setData({ loading: true });
     try {
-      const [config, orders, productsRaw, warehousesRaw, dictionariesRaw] = await Promise.all([
+      const _await$Promise$all = await Promise.all([
         fetchTenantConfig(),
         fetchAllOrdersPaginated({}),
         fetchProductsAll().catch(() => []),
         fetchWarehousesAll().catch(() => []),
-        fetchDictionaries().catch(() => ({})),
-      ]);
-      const productionLinkMode = (config && config.productionLinkMode) || 'order';
+        fetchDictionaries().catch(() => ({}))]
+        ),config = _await$Promise$all[0],orders = _await$Promise$all[1],productsRaw = _await$Promise$all[2],warehousesRaw = _await$Promise$all[3],dictionariesRaw = _await$Promise$all[4];
+      const productionLinkMode = config && config.productionLinkMode || 'order';
       const orderMap = new Map((orders || []).map((o) => [o.id, o]));
       const products = normalizeMasterList(productsRaw);
       const productMap = new Map(products.map((p) => [p.id, p]));
-      const warehouses = Array.isArray(warehousesRaw) ? warehousesRaw : (warehousesRaw.data || []);
+      const warehouses = Array.isArray(warehousesRaw) ? warehousesRaw : warehousesRaw.data || [];
       const warehouseMap = new Map(warehouses.map((w) => [w.id, w]));
 
       const records = await fetchProductionRecords({
         types: 'STOCK_OUT,STOCK_RETURN',
         all: 'true',
         startDate: dateInputToIsoStart(this.data.dateFrom),
-        endDate: dateInputToIsoEndExclusive(this.data.dateTo),
+        endDate: dateInputToIsoEndExclusive(this.data.dateTo)
       });
-      const list = Array.isArray(records) ? records : (records.data || []);
+      const list = Array.isArray(records) ? records : records.data || [];
       const allRows = buildMaterialFlowListRows(list, {
         productionLinkMode,
         orderMap,
         productMap,
         warehouseMap,
-        dictionaries: dictionariesRaw || {},
+        dictionaries: dictionariesRaw || {}
       });
       this._allRows = allRows;
       this.applyFilter();
@@ -238,16 +238,16 @@ Page({
       const today = this._today || localTodayYmd();
       this.setData({
         loading: false,
-        filterActive: computeFilterActive(this.data, today),
+        filterActive: computeFilterActive(this.data, today)
       });
     } catch {
       this._allRows = [];
       this.setData({
         loading: false,
         rows: [],
-        stats: { batchCount: 0, footerText: '共 0 条' },
+        stats: { batchCount: 0, footerText: '共 0 条' }
       });
       wx.showToast({ title: '加载失败', icon: 'none' });
     }
-  },
+  }
 });

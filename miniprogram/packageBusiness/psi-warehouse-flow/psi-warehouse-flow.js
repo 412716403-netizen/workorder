@@ -1,29 +1,29 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const { WAREHOUSE_FLOW_TYPE_OPTIONS } = require('../config/warehouses.js');
-const {
-  computeWarehouseFlowRows,
-  filterWarehouseFlowRows,
-  computeWarehouseFlowTotals,
-  formatWarehouseFlowQty,
-  buildFlowDetailUrl,
-} = require('../utils/warehouseFlow.js');
-const { buildProductMap } = require('../utils/purchaseOrders.js');
-const { buildWarehouseMap } = require('../utils/warehouseInventory.js');
-const { fetchAllPsiRecords } = require('../utils/psiApi.js');
-const { fetchProductionRecords, listOrdersPaginated } = require('../utils/orderApi.js');
-const { fetchProductsAll } = require('../utils/planApi.js');
-const { fetchWarehousesAll } = require('../utils/orderApi.js');
-const { listProductNameSkuFields } = require('../utils/listProductThumb.js');
-const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
-const { localTodayYmd } = require('../utils/dateYmd.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 = require('../config/warehouses.js'),WAREHOUSE_FLOW_TYPE_OPTIONS = _require3.WAREHOUSE_FLOW_TYPE_OPTIONS;
+const _require4 =
+
+
+
+
+
+  require('../utils/warehouseFlow.js'),computeWarehouseFlowRows = _require4.computeWarehouseFlowRows,filterWarehouseFlowRows = _require4.filterWarehouseFlowRows,computeWarehouseFlowTotals = _require4.computeWarehouseFlowTotals,formatWarehouseFlowQty = _require4.formatWarehouseFlowQty,buildFlowDetailUrl = _require4.buildFlowDetailUrl;
+const _require5 = require('../utils/purchaseOrders.js'),buildProductMap = _require5.buildProductMap;
+const _require6 = require('../utils/warehouseInventory.js'),buildWarehouseMap = _require6.buildWarehouseMap;
+const _require7 = require('../utils/psiApi.js'),fetchAllPsiRecords = _require7.fetchAllPsiRecords;
+const _require8 = require('../utils/orderApi.js'),fetchProductionRecords = _require8.fetchProductionRecords,listOrdersPaginated = _require8.listOrdersPaginated;
+const _require9 = require('../utils/planApi.js'),fetchProductsAll = _require9.fetchProductsAll;
+const _require0 = require('../utils/orderApi.js'),fetchWarehousesAll = _require0.fetchWarehousesAll;
+const _require1 = require('../utils/listProductThumb.js'),listProductNameSkuFields = _require1.listProductNameSkuFields;
+const _require10 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require10.readNavBarMetrics,readWindowMetrics = _require10.readWindowMetrics;
+const _require11 = require('../utils/dateYmd.js'),localTodayYmd = _require11.localTodayYmd;
 
 const TYPE_FILTER_LABELS = WAREHOUSE_FLOW_TYPE_OPTIONS.map((o) => o.label);
 const TYPE_FILTER_VALUES = WAREHOUSE_FLOW_TYPE_OPTIONS.map((o) => o.value);
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
-  const toolsPx = Math.ceil((win.windowWidth / 750) * 128);
+  const toolsPx = Math.ceil(win.windowWidth / 750 * 128);
   return nav.statusBarHeight + nav.navBarHeight + toolsPx;
 }
 
@@ -66,9 +66,9 @@ function computeFilterActive(data, today) {
 
 function enrichFlowRow(row) {
   const nameFields = listProductNameSkuFields(
-    row.productId && row.productName !== '—'
-      ? { name: row.productName, sku: row.productSku }
-      : null,
+    row.productId && row.productName !== '—' ?
+    { name: row.productName, sku: row.productSku } :
+    null
   );
   return {
     ...row,
@@ -76,7 +76,7 @@ function enrichFlowRow(row) {
     productSku: nameFields.productSku,
     showProductSku: nameFields.showProductSku,
     qtyText: formatWarehouseFlowQty(row.quantity),
-    qtyClass: row.isOutbound ? 'wh-flow-row__qty--out' : 'wh-flow-row__qty--in',
+    qtyClass: row.isOutbound ? 'wh-flow-row__qty--out' : 'wh-flow-row__qty--in'
   };
 }
 
@@ -103,7 +103,7 @@ Page({
     stats: { inboundText: '0', outboundText: '0', netText: '0', count: 0 },
     statusBarHeight: 20,
     navBarHeight: 44,
-    headerBlockHeight: 88,
+    headerBlockHeight: 88
   },
 
   onLoad() {
@@ -117,7 +117,7 @@ Page({
       dateFrom: today,
       dateTo: today,
       draftDateFrom: today,
-      draftDateTo: today,
+      draftDateTo: today
     });
   },
 
@@ -159,7 +159,7 @@ Page({
     const today = this._today || localTodayYmd();
     this.setData({
       ...extra,
-      filterActive: computeFilterActive({ ...this.data, ...extra }, today),
+      filterActive: computeFilterActive({ ...this.data, ...extra }, today)
     });
   },
 
@@ -168,7 +168,7 @@ Page({
       draftDateFrom: this.data.dateFrom,
       draftDateTo: this.data.dateTo,
       draftTypeIndex: this.data.typeFilterIndex,
-      draftWarehouseIndex: this.data.filterWarehouseIndex,
+      draftWarehouseIndex: this.data.filterWarehouseIndex
     });
   },
 
@@ -211,7 +211,7 @@ Page({
       filterWarehouseId: '',
       filterWarehouseIndex: 0,
       draftWarehouseIndex: 0,
-      showFilterPanel: false,
+      showFilterPanel: false
     });
     this.bootstrap();
   },
@@ -232,7 +232,7 @@ Page({
       typeFilterIndex: typeIdx,
       filterWarehouseId,
       filterWarehouseIndex: warehouseIdx,
-      showFilterPanel: false,
+      showFilterPanel: false
     });
 
     if (datesChanged) {
@@ -270,10 +270,10 @@ Page({
   async bootstrap() {
     this.setData({ loading: true });
     try {
-      const { dateFrom, dateTo } = this.data;
+      const _this$data = this.data,dateFrom = _this$data.dateFrom,dateTo = _this$data.dateTo;
       const startDate = dateInputToIsoStart(dateFrom);
       const endDate = dateInputToIsoEndExclusive(dateTo);
-      const [products, warehouses, purchaseBills, salesBills, transfers, stocktakes, prodRecords, ordersPage] = await Promise.all([
+      const _await$Promise$all = await Promise.all([
         fetchProductsAll().catch(() => []),
         fetchWarehousesAll().catch(() => []),
         fetchAllPsiRecords('PURCHASE_BILL').catch(() => []),
@@ -283,34 +283,34 @@ Page({
         fetchProductionRecords({
           types: 'STOCK_IN,STOCK_OUT,STOCK_RETURN',
           startDate,
-          endDate,
+          endDate
         }).catch(() => []),
-        listOrdersPaginated({ page: 1, pageSize: 500 }).catch(() => ({ data: [] })),
-      ]);
+        listOrdersPaginated({ page: 1, pageSize: 500 }).catch(() => ({ data: [] }))]
+        ),products = _await$Promise$all[0],warehouses = _await$Promise$all[1],purchaseBills = _await$Promise$all[2],salesBills = _await$Promise$all[3],transfers = _await$Promise$all[4],stocktakes = _await$Promise$all[5],prodRecords = _await$Promise$all[6],ordersPage = _await$Promise$all[7];
 
-      const warehouseList = Array.isArray(warehouses) ? warehouses : (warehouses.data || []);
+      const warehouseList = Array.isArray(warehouses) ? warehouses : warehouses.data || [];
       this._warehouseFilterIds = buildWarehouseFilterIds(warehouseList);
       const productMap = buildProductMap(Array.isArray(products) ? products : []);
       const warehouseMap = buildWarehouseMap(warehouseList);
-      const psiRecords = []
-        .concat(purchaseBills, salesBills, transfers, stocktakes)
-        .filter((r) => {
-          const ds = (r.createdAt || r.timestamp || '').toString().slice(0, 10);
-          if (dateFrom && ds < dateFrom) return false;
-          if (dateTo && ds > dateTo) return false;
-          return true;
-        });
+      const psiRecords = [].
+      concat(purchaseBills, salesBills, transfers, stocktakes).
+      filter((r) => {
+        const ds = (r.createdAt || r.timestamp || '').toString().slice(0, 10);
+        if (dateFrom && ds < dateFrom) return false;
+        if (dateTo && ds > dateTo) return false;
+        return true;
+      });
 
       this._allRows = computeWarehouseFlowRows({
         recordsList: psiRecords,
         prodRecords,
         productMap,
         warehouseMap,
-        ordersList: ordersPage.data || [],
+        ordersList: ordersPage.data || []
       });
 
       this.setData({
-        warehouseFilterLabels: buildWarehouseFilterLabels(warehouseList),
+        warehouseFilterLabels: buildWarehouseFilterLabels(warehouseList)
       });
       this.applyClientFilter();
     } catch {
@@ -325,7 +325,7 @@ Page({
       dateFrom: this.data.dateFrom,
       dateTo: this.data.dateTo,
       typeFilter: this.data.typeFilter,
-      warehouseId: this.data.filterWarehouseId,
+      warehouseId: this.data.filterWarehouseId
     });
     this._filteredRows = filtered.map(enrichFlowRow);
     const totals = computeWarehouseFlowTotals(filtered);
@@ -336,9 +336,9 @@ Page({
         inboundText: formatWarehouseFlowQty(totals.inboundTotal),
         outboundText: formatWarehouseFlowQty(totals.outboundTotal),
         netText: formatWarehouseFlowQty(totals.netChange),
-        count: filtered.length,
+        count: filtered.length
       },
-      emptyText: filtered.length ? '' : '所选条件下暂无流水',
+      emptyText: filtered.length ? '' : '所选条件下暂无流水'
     });
-  },
+  }
 });

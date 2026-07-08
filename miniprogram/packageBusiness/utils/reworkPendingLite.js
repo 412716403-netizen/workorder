@@ -2,8 +2,8 @@
  * 待处理不良行计算（对齐 Web ReworkPanel reworkPendingRows）
  */
 
-const { shouldShowOrderInIncompleteList } = require('./reworkPanelLite.js');
-const { listProductNameSkuFields } = require('./listProductThumb.js');
+const _require = require('./reworkPanelLite.js'),shouldShowOrderInIncompleteList = _require.shouldShowOrderInIncompleteList;
+const _require2 = require('./listProductThumb.js'),listProductNameSkuFields = _require2.listProductNameSkuFields;
 
 function orderCreatedMs(order) {
   if (!order) return 0;
@@ -19,7 +19,7 @@ function milestoneIndexInOrder(order, nodeId) {
 }
 
 function milestoneIndexInProduct(product, nodeId) {
-  const seq = (product && product.milestoneNodeIds) || [];
+  const seq = product && product.milestoneNodeIds || [];
   const idx = seq.indexOf(nodeId);
   return idx >= 0 ? idx : 999;
 }
@@ -34,15 +34,15 @@ function productNewestOrderCreatedMs(productId, orders) {
 }
 
 function buildReworkPendingRows(params) {
-  const {
-    productionLinkMode = 'order',
-    records = [],
-    orders = [],
-    products = [],
-    productMilestoneProgresses = [],
-    nodes = [],
-    onlyShowIncompleteOrders = false,
-  } = params;
+  const _params$productionLin =
+
+
+
+
+
+
+
+    params.productionLinkMode,productionLinkMode = _params$productionLin === void 0 ? 'order' : _params$productionLin,_params$records = params.records,records = _params$records === void 0 ? [] : _params$records,_params$orders = params.orders,orders = _params$orders === void 0 ? [] : _params$orders,_params$products = params.products,products = _params$products === void 0 ? [] : _params$products,_params$productMilest = params.productMilestoneProgresses,productMilestoneProgresses = _params$productMilest === void 0 ? [] : _params$productMilest,_params$nodes = params.nodes,nodes = _params$nodes === void 0 ? [] : _params$nodes,_params$onlyShowIncom = params.onlyShowIncompleteOrders,onlyShowIncompleteOrders = _params$onlyShowIncom === void 0 ? false : _params$onlyShowIncom;
 
   const productsById = new Map((products || []).map((p) => [p.id, p]));
   const nodesById = new Map((nodes || []).map((n) => [n.id, n]));
@@ -62,28 +62,28 @@ function buildReworkPendingRows(params) {
 
   if (productionLinkMode === 'order') {
     const reworkByKey = {};
-    (records || [])
-      .filter((r) => r.type === 'REWORK' && r.orderId)
-      .forEach((r) => {
-        const srcNode = r.sourceNodeId || r.nodeId;
-        if (!srcNode) return;
-        const key = `${r.orderId}|${srcNode}`;
-        reworkByKey[key] = (reworkByKey[key] || 0) + (Number(r.quantity) || 0);
-      });
+    (records || []).
+    filter((r) => r.type === 'REWORK' && r.orderId).
+    forEach((r) => {
+      const srcNode = r.sourceNodeId || r.nodeId;
+      if (!srcNode) return;
+      const key = `${r.orderId}|${srcNode}`;
+      reworkByKey[key] = (reworkByKey[key] || 0) + (Number(r.quantity) || 0);
+    });
     const scrapByKey = {};
-    (records || [])
-      .filter((r) => r.type === 'SCRAP' && r.orderId && r.nodeId)
-      .forEach((r) => {
-        const key = `${r.orderId}|${r.nodeId}`;
-        scrapByKey[key] = (scrapByKey[key] || 0) + (Number(r.quantity) || 0);
-      });
+    (records || []).
+    filter((r) => r.type === 'SCRAP' && r.orderId && r.nodeId).
+    forEach((r) => {
+      const key = `${r.orderId}|${r.nodeId}`;
+      scrapByKey[key] = (scrapByKey[key] || 0) + (Number(r.quantity) || 0);
+    });
 
     const rows = [];
     (orders || []).forEach((order) => {
       if (onlyShowIncompleteOrders && !shouldShowOrderInIncompleteList(order)) return;
       const product = productsById.get(order.productId);
       (order.milestones || []).forEach((ms) => {
-        const defectiveTotal = (ms.reports || []).reduce((s, r) => s + (r.defectiveQuantity ?? 0), 0);
+        const defectiveTotal = (ms.reports || []).reduce((s, r) => {var _r$defectiveQuantity;return s + ((_r$defectiveQuantity = r.defectiveQuantity) != null ? _r$defectiveQuantity : 0);}, 0);
         if (defectiveTotal <= 0) return;
         const key = `${order.id}|${ms.templateId}`;
         const reworkTotal = reworkByKey[key] || 0;
@@ -106,7 +106,7 @@ function buildReworkPendingRows(params) {
           reworkTotal,
           scrapTotal,
           pendingQty,
-          pendingQtyText: `${pendingQty} 件`,
+          pendingQtyText: `${pendingQty} 件`
         });
       });
     });
@@ -128,12 +128,12 @@ function buildReworkPendingRows(params) {
   const defectiveMap = new Map();
   (productMilestoneProgresses || []).forEach((pmp) => {
     const k = prodKey(pmp.productId, pmp.milestoneTemplateId);
-    const d = (pmp.reports || []).reduce((s, r) => s + (r.defectiveQuantity ?? 0), 0);
+    const d = (pmp.reports || []).reduce((s, r) => {var _r$defectiveQuantity2;return s + ((_r$defectiveQuantity2 = r.defectiveQuantity) != null ? _r$defectiveQuantity2 : 0);}, 0);
     defectiveMap.set(k, (defectiveMap.get(k) || 0) + d);
   });
   (orders || []).forEach((order) => {
     (order.milestones || []).forEach((ms) => {
-      const d = (ms.reports || []).reduce((s, r) => s + (r.defectiveQuantity ?? 0), 0);
+      const d = (ms.reports || []).reduce((s, r) => {var _r$defectiveQuantity3;return s + ((_r$defectiveQuantity3 = r.defectiveQuantity) != null ? _r$defectiveQuantity3 : 0);}, 0);
       if (d <= 0) return;
       const k = prodKey(order.productId, ms.templateId);
       defectiveMap.set(k, (defectiveMap.get(k) || 0) + d);
@@ -141,55 +141,55 @@ function buildReworkPendingRows(params) {
   });
 
   const reworkProd = new Map();
-  (records || [])
-    .filter((r) => r.type === 'REWORK' && r.productId)
-    .forEach((r) => {
-      const src = r.sourceNodeId || r.nodeId;
-      if (!src) return;
-      const k = prodKey(r.productId, src);
-      reworkProd.set(k, (reworkProd.get(k) || 0) + (Number(r.quantity) || 0));
-    });
+  (records || []).
+  filter((r) => r.type === 'REWORK' && r.productId).
+  forEach((r) => {
+    const src = r.sourceNodeId || r.nodeId;
+    if (!src) return;
+    const k = prodKey(r.productId, src);
+    reworkProd.set(k, (reworkProd.get(k) || 0) + (Number(r.quantity) || 0));
+  });
   const scrapProd = new Map();
-  (records || [])
-    .filter((r) => r.type === 'SCRAP' && r.productId && r.nodeId)
-    .forEach((r) => {
-      const k = prodKey(r.productId, r.nodeId);
-      scrapProd.set(k, (scrapProd.get(k) || 0) + (Number(r.quantity) || 0));
-    });
+  (records || []).
+  filter((r) => r.type === 'SCRAP' && r.productId && r.nodeId).
+  forEach((r) => {
+    const k = prodKey(r.productId, r.nodeId);
+    scrapProd.set(k, (scrapProd.get(k) || 0) + (Number(r.quantity) || 0));
+  });
 
   const rows = [];
   defectiveMap.forEach((defectiveTotal, key) => {
     if (defectiveTotal <= 0) return;
-    const [productId, nodeId] = key.split('|');
+    const _key$split = key.split('|'),productId = _key$split[0],nodeId = _key$split[1];
     const reworkTotal = reworkProd.get(key) || 0;
     const scrapTotal = scrapProd.get(key) || 0;
     const pendingQty = defectiveTotal - reworkTotal - scrapTotal;
     if (pendingQty <= 0) return;
     const product = productsById.get(productId);
-    const parents = rootOrdersByProductId.get(productId)
-      || ordersByProductId.get(productId)
-      || [];
+    const parents = rootOrdersByProductId.get(productId) ||
+    ordersByProductId.get(productId) ||
+    [];
     const cnt = parents.length;
     const parentNos = parents.map((o) => o.orderNumber).filter(Boolean);
     const productOrdersTitle = parentNos.join('、');
-    const productOrdersLine = parentNos.length === 0
-      ? undefined
-      : (parentNos.length <= 2
-        ? productOrdersTitle
-        : `${parentNos.slice(0, 2).join('、')} … 共 ${cnt} 单`);
+    const productOrdersLine = parentNos.length === 0 ?
+    undefined :
+    parentNos.length <= 2 ?
+    productOrdersTitle :
+    `${parentNos.slice(0, 2).join('、')} … 共 ${cnt} 单`;
     const firstNo = parents[0] && parents[0].orderNumber;
     const nameSku = listProductNameSkuFields(product);
     rows.push({
       rowKey: key,
       scope: 'product',
       orderId: '',
-      orderNumber: cnt > 1 ? `关联产品（${cnt}条工单）` : (firstNo ? `${firstNo}（按产品）` : '按产品汇总'),
+      orderNumber: cnt > 1 ? `关联产品（${cnt}条工单）` : firstNo ? `${firstNo}（按产品）` : '按产品汇总',
       productId,
       productName: nameSku.productName,
       productSku: nameSku.productSku,
       showProductSku: nameSku.showProductSku,
       nodeId,
-      milestoneName: (nodesById.get(nodeId) && nodesById.get(nodeId).name) || nodeId,
+      milestoneName: nodesById.get(nodeId) && nodesById.get(nodeId).name || nodeId,
       defectiveTotal,
       reworkTotal,
       scrapTotal,
@@ -197,13 +197,13 @@ function buildReworkPendingRows(params) {
       pendingQtyText: `${pendingQty} 件`,
       productOrderCount: cnt,
       productOrdersLine,
-      productOrdersTitle: parentNos.length ? productOrdersTitle : undefined,
+      productOrdersTitle: parentNos.length ? productOrdersTitle : undefined
     });
   });
 
   rows.sort((a, b) => {
-    const d = productNewestOrderCreatedMs(b.productId, orders)
-      - productNewestOrderCreatedMs(a.productId, orders);
+    const d = productNewestOrderCreatedMs(b.productId, orders) -
+    productNewestOrderCreatedMs(a.productId, orders);
     if (d !== 0) return d;
     if (a.productId !== b.productId) return a.productId.localeCompare(b.productId);
     const pa = productsById.get(a.productId);
@@ -214,8 +214,8 @@ function buildReworkPendingRows(params) {
 }
 
 function filterPendingRows(rows, opts) {
-  const searchKeyword = typeof opts === 'string' ? opts : (opts && opts.searchKeyword) || '';
-  const milestoneNodeId = typeof opts === 'object' && opts ? (opts.milestoneNodeId || '') : '';
+  const searchKeyword = typeof opts === 'string' ? opts : opts && opts.searchKeyword || '';
+  const milestoneNodeId = typeof opts === 'object' && opts ? opts.milestoneNodeId || '' : '';
   let out = rows || [];
   if (milestoneNodeId) {
     out = out.filter((row) => row.nodeId === milestoneNodeId);
@@ -224,12 +224,12 @@ function filterPendingRows(rows, opts) {
   if (!q) return out;
   return out.filter((row) => {
     const parts = [
-      row.orderNumber,
-      row.productName,
-      row.productSku,
-      row.milestoneName,
-      row.productOrdersLine,
-    ];
+    row.orderNumber,
+    row.productName,
+    row.productSku,
+    row.milestoneName,
+    row.productOrdersLine];
+
     return parts.filter(Boolean).join(' ').toLowerCase().includes(q);
   });
 }
@@ -245,7 +245,7 @@ function buildPendingMilestoneOptions(rows, nodes) {
     const node = nodesById.get(id);
     rest.push({
       id,
-      name: row.milestoneName || (node && node.name) || id,
+      name: row.milestoneName || node && node.name || id
     });
   });
   rest.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
@@ -260,5 +260,5 @@ module.exports = {
   buildReworkPendingRows,
   filterPendingRows,
   buildPendingMilestoneOptions,
-  countPendingRows,
+  countPendingRows
 };

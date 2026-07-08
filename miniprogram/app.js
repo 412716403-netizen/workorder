@@ -1,9 +1,8 @@
 const { readTenants, readTenantCtx } = require('./utils/session.js');
+const { syncTenantCtx } = require('./utils/tenantCtxSync.js');
 
 App({
-  globalData: {
-    scanPreset: null,
-  },
+  globalData: {},
 
   onLaunch() {
     const token = wx.getStorageSync('accessToken');
@@ -21,5 +20,13 @@ App({
       return;
     }
     wx.reLaunch({ url: '/pages/no-tenant/no-tenant' });
+  },
+
+  onShow() {
+    if (!wx.getStorageSync('accessToken')) return;
+    const ctx = readTenantCtx();
+    if (ctx && ctx.tenantId) {
+      syncTenantCtx().catch(() => {});
+    }
   },
 });

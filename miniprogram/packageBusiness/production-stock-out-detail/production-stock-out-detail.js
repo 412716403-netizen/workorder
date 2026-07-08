@@ -1,24 +1,24 @@
-const { fetchDictionaries } = require('../utils/planApi.js');
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const {
-  fetchProductsAll,
-  fetchTenantConfig,
-  fetchWarehousesAll,
-  fetchProductionRecords,
-  updateProductionRecord,
-  deleteProductionRecord,
-} = require('../utils/orderApi.js');
-const { normalizeMasterList } = require('../utils/productionPlans.js');
-const { fetchAllOrdersPaginated } = require('../utils/pendingStockBadge.js');
-const { buildMaterialFlowDetailView } = require('../utils/materialStockFlow.js');
-const {
-  initMaterialFlowEditState,
-  validateMaterialFlowEditSave,
-  buildMaterialFlowEditSaveOperations,
-} = require('../utils/materialFlowDetailEdit.js');
-const { readNavBarMetrics, readWindowMetrics, computePlanCreateHeaderHeight } = require('../../utils/windowMetrics.js');
-const { LIST_ROUTES, afterSaveReturnToList } = require('../utils/saveNavigation.js');
+const _require = require('../utils/planApi.js'),fetchDictionaries = _require.fetchDictionaries;
+const _require2 = require('../../utils/session.js'),readTenantCtx = _require2.readTenantCtx;
+const _require3 = require('../../utils/permissions.js'),hasPermission = _require3.hasPermission;
+const _require4 =
+
+
+
+
+
+
+  require('../utils/orderApi.js'),fetchProductsAll = _require4.fetchProductsAll,fetchTenantConfig = _require4.fetchTenantConfig,fetchWarehousesAll = _require4.fetchWarehousesAll,fetchProductionRecords = _require4.fetchProductionRecords,updateProductionRecord = _require4.updateProductionRecord,deleteProductionRecord = _require4.deleteProductionRecord;
+const _require5 = require('../utils/productionPlans.js'),normalizeMasterList = _require5.normalizeMasterList;
+const _require6 = require('../utils/pendingStockBadge.js'),fetchAllOrdersPaginated = _require6.fetchAllOrdersPaginated;
+const _require7 = require('../utils/materialStockFlow.js'),buildMaterialFlowDetailView = _require7.buildMaterialFlowDetailView;
+const _require8 =
+
+
+
+  require('../utils/materialFlowDetailEdit.js'),initMaterialFlowEditState = _require8.initMaterialFlowEditState,validateMaterialFlowEditSave = _require8.validateMaterialFlowEditSave,buildMaterialFlowEditSaveOperations = _require8.buildMaterialFlowEditSaveOperations;
+const _require9 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require9.readNavBarMetrics,readWindowMetrics = _require9.readWindowMetrics,computePlanCreateHeaderHeight = _require9.computePlanCreateHeaderHeight;
+const _require0 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require0.LIST_ROUTES,afterSaveReturnToList = _require0.afterSaveReturnToList;
 
 function computeHeaderBlockHeight(nav) {
   return computePlanCreateHeaderHeight(nav);
@@ -49,7 +49,7 @@ Page({
     statusBarHeight: 20,
     navBarHeight: 44,
     headerBlockHeight: 88,
-    scrollHeight: 400,
+    scrollHeight: 400
   },
 
   _rows: [],
@@ -77,7 +77,7 @@ Page({
       canEdit: this._canEdit,
       canDelete: this._canDelete,
       showFooter,
-      scrollHeight: computeScrollHeight(nav, showFooter),
+      scrollHeight: computeScrollHeight(nav, showFooter)
     });
 
     if (!this._docNo) {
@@ -102,7 +102,7 @@ Page({
       warehouseMap: this._warehouseMap,
       orderMap: this._orderMap,
       productionLinkMode: this._productionLinkMode,
-      dictionaries: this._dictionaries,
+      dictionaries: this._dictionaries
     });
     const showFooter = (this._canEdit || this._canDelete) && !this.data.editing;
     this.setData({
@@ -111,14 +111,14 @@ Page({
       detail,
       docNo: detail ? detail.docNo : this._docNo,
       showFooter,
-      scrollHeight: computeScrollHeight(readNavBarMetrics(), showFooter || this.data.editing),
+      scrollHeight: computeScrollHeight(readNavBarMetrics(), showFooter || this.data.editing)
     });
   },
 
   async bootstrap() {
     this.setData({ loading: true });
     try {
-      const [config, orders, productsRaw, warehousesRaw, dictionariesRaw, recordsRaw] = await Promise.all([
+      const _await$Promise$all = await Promise.all([
         fetchTenantConfig().catch(() => ({})),
         fetchAllOrdersPaginated({}).catch(() => []),
         fetchProductsAll().catch(() => []),
@@ -126,19 +126,19 @@ Page({
         fetchDictionaries().catch(() => ({})),
         fetchProductionRecords({
           docNo: this._docNo,
-          types: 'STOCK_OUT,STOCK_RETURN',
-        }).catch(() => []),
-      ]);
+          types: 'STOCK_OUT,STOCK_RETURN'
+        }).catch(() => [])]
+        ),config = _await$Promise$all[0],orders = _await$Promise$all[1],productsRaw = _await$Promise$all[2],warehousesRaw = _await$Promise$all[3],dictionariesRaw = _await$Promise$all[4],recordsRaw = _await$Promise$all[5];
 
-      this._productionLinkMode = (config && config.productionLinkMode) || 'order';
+      this._productionLinkMode = config && config.productionLinkMode || 'order';
       const products = normalizeMasterList(productsRaw);
       this._productMap = new Map(products.map((p) => [p.id, p]));
       this._orderMap = new Map((orders || []).map((o) => [o.id, o]));
-      const warehouses = Array.isArray(warehousesRaw) ? warehousesRaw : (warehousesRaw.data || []);
+      const warehouses = Array.isArray(warehousesRaw) ? warehousesRaw : warehousesRaw.data || [];
       this._warehouseMap = new Map(warehouses.map((w) => [w.id, w]));
       this._dictionaries = dictionariesRaw || {};
       this._warehouses = warehouses;
-      this._rows = Array.isArray(recordsRaw) ? recordsRaw : (recordsRaw && recordsRaw.data) || [];
+      this._rows = Array.isArray(recordsRaw) ? recordsRaw : recordsRaw && recordsRaw.data || [];
 
       if (!this._rows.length) {
         this.setData({ loading: false, detail: null });
@@ -157,14 +157,14 @@ Page({
   exitEditMode() {
     const detail = this.data.detail;
     const first = this._rows[0] || {};
-    const wh = (this._warehouses || []).find((w) => w.id === (first.warehouseId || (detail && detail.warehouseId)));
+    const wh = (this._warehouses || []).find((w) => w.id === (first.warehouseId || detail && detail.warehouseId));
     this.setData({
       editing: false,
-      editWarehouseId: first.warehouseId || (detail && detail.warehouseId) || '',
-      editWarehouseName: (detail && detail.warehouseName) || (wh && (wh.name || wh.code)) || '',
+      editWarehouseId: first.warehouseId || detail && detail.warehouseId || '',
+      editWarehouseName: detail && detail.warehouseName || wh && (wh.name || wh.code) || '',
       warehousePickerIndex: Math.max(0, (this._warehouses || []).findIndex(
-        (w) => w.id === (first.warehouseId || (detail && detail.warehouseId)),
-      )),
+        (w) => w.id === (first.warehouseId || detail && detail.warehouseId)
+      ))
     });
     this.refreshViewModel();
   },
@@ -178,10 +178,10 @@ Page({
       showFooter: true,
       editLineItems: init.lineItems,
       editWarehouseId: init.editWarehouseId,
-      editWarehouseName: (wh && (wh.name || wh.code)) || '',
+      editWarehouseName: wh && (wh.name || wh.code) || '',
       warehouseNames: (this._warehouses || []).map((w) => w.name || w.code || w.id),
       warehousePickerIndex: Math.max(0, (this._warehouses || []).findIndex((w) => w.id === init.editWarehouseId)),
-      scrollHeight: computeScrollHeight(readNavBarMetrics(), true),
+      scrollHeight: computeScrollHeight(readNavBarMetrics(), true)
     });
   },
 
@@ -190,7 +190,7 @@ Page({
   },
 
   onLineQtyInput(e) {
-    const { index } = e.currentTarget.dataset;
+    const index = e.currentTarget.dataset.index;
     this.setData({ [`editLineItems[${index}].editQty`]: e.detail.value || '' });
   },
 
@@ -201,7 +201,7 @@ Page({
     this.setData({
       warehousePickerIndex: idx,
       editWarehouseId: wh.id,
-      editWarehouseName: wh.name || wh.code || '',
+      editWarehouseName: wh.name || wh.code || ''
     });
   },
 
@@ -209,11 +209,11 @@ Page({
     if (!this._canEdit || !this._rows.length || this.data.saving) return;
     const editState = {
       editWarehouseId: this.data.editWarehouseId,
-      lineItems: this.data.editLineItems,
+      lineItems: this.data.editLineItems
     };
     const errMsg = validateMaterialFlowEditSave({
       warehouseId: editState.editWarehouseId,
-      lineItems: editState.lineItems,
+      lineItems: editState.lineItems
     });
     if (errMsg) {
       wx.showToast({ title: errMsg, icon: 'none' });
@@ -237,12 +237,12 @@ Page({
       wx.hideLoading();
       afterSaveReturnToList({
         listUrl: LIST_ROUTES.STOCK_OUT,
-        toastTitle: '已保存',
+        toastTitle: '已保存'
       });
     } catch (err) {
       wx.hideLoading();
       this.setData({ saving: false });
-      wx.showToast({ title: (err && err.message) || '保存失败', icon: 'none' });
+      wx.showToast({ title: err && err.message || '保存失败', icon: 'none' });
     }
   },
 
@@ -254,7 +254,7 @@ Page({
       confirmColor: '#ff4d4f',
       success: (res) => {
         if (res.confirm) this.deleteDoc();
-      },
+      }
     });
   },
 
@@ -267,11 +267,11 @@ Page({
       wx.hideLoading();
       afterSaveReturnToList({
         listUrl: LIST_ROUTES.STOCK_OUT,
-        toastTitle: '已删除',
+        toastTitle: '已删除'
       });
     } catch (err) {
       wx.hideLoading();
-      wx.showToast({ title: (err && err.message) || '删除失败', icon: 'none' });
+      wx.showToast({ title: err && err.message || '删除失败', icon: 'none' });
     }
-  },
+  }
 });

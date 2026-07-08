@@ -1,84 +1,127 @@
-<page-header title="企业入驻" showBack="{{mode !== 'choose' && mode !== 'createDone' && mode !== 'pending'}}" bind:back="onHeaderBack" />
+<page-header title="{{headerTitle}}" theme="primary" showBack="{{mode !== 'choose' && mode !== 'createDone' && mode !== 'pending'}}" bind:back="onHeaderBack" />
 
-<scroll-view class="st-scroll" scroll-y show-scrollbar="{{false}}">
+<scroll-view class="st-scroll auth-flow-scroll" scroll-y show-scrollbar="{{false}}">
   <!-- 等待审核 -->
-  <view wx:if="{{mode === 'pending'}}" class="st-page st-page--flow">
-    <view class="st-title-page">等待审核</view>
-    <view class="st-text-caption st-mt-md">加入申请已提交，企业管理员通过后将自动进入系统。</view>
-    <view wx:if="{{applications.length}}" class="st-card st-mt-lg">
+  <view wx:if="{{mode === 'pending'}}" class="auth-flow-body st-page st-page--flow auth-flow-page">
+    <view class="auth-flow-hero auth-flow-hero--inset">
+      <view class="auth-flow-hero__icon-wrap auth-flow-hero__icon-wrap--warning">
+        <image class="auth-flow-hero__icon" src="/assets/icons/clock.png" mode="aspectFit" />
+      </view>
+      <view class="auth-flow-hero__title">等待审核</view>
+      <view class="auth-flow-hero__desc">加入申请已提交，企业管理员通过后将自动进入系统。</view>
+    </view>
+
+    <view wx:if="{{applications.length}}" class="st-card auth-flow-status-card">
       <view wx:for="{{applications}}" wx:key="id" class="st-list-cell">
+        <view class="st-tenant-icon">{{item.tenant.name ? item.tenant.name[0] : '企'}}</view>
         <view class="st-list-cell__body">
           <view class="st-list-cell__title">{{item.tenant.name}}</view>
-          <view class="st-list-cell__subtitle">申请状态</view>
+          <view class="st-list-cell__subtitle">加入申请</view>
         </view>
         <view class="st-pill st-pill--{{item._pill}}">{{item._label}}</view>
       </view>
     </view>
-    <button class="st-btn-secondary st-mt-lg" bindtap="onBackPending">返回</button>
+    <view wx:else class="auth-flow-status-card">
+      <empty-state text="暂无申请记录" />
+    </view>
+
+    <view class="auth-flow-footer">
+      <button class="st-btn-text auth-flow-footer__logout" bindtap="onBackPending">返回</button>
+    </view>
   </view>
 
   <!-- 创建已提交 -->
-  <view wx:elif="{{mode === 'createDone'}}" class="st-page st-page--flow">
-    <view class="st-title-page">已提交审核</view>
-    <view class="st-text-caption st-mt-md">企业创建申请已提交，平台管理员通过后即可在「选择企业」中看到。</view>
-    <button class="st-btn-primary st-mt-lg" bindtap="onAfterCreate">完成</button>
+  <view wx:elif="{{mode === 'createDone'}}" class="auth-flow-body st-page st-page--flow auth-flow-page">
+    <view class="auth-flow-hero auth-flow-hero--inset">
+      <view class="auth-flow-hero__icon-wrap auth-flow-hero__icon-wrap--success">
+        <image class="auth-flow-hero__icon" src="/assets/icons/circle-check.png" mode="aspectFit" />
+      </view>
+      <view class="auth-flow-hero__title">已提交审核</view>
+      <view class="auth-flow-hero__desc">企业创建申请已提交，平台管理员通过后即可在「选择企业」中看到。</view>
+    </view>
+
+    <view class="auth-flow-actions st-mt-lg">
+      <button class="st-btn-primary" bindtap="onAfterCreate">完成</button>
+    </view>
   </view>
 
   <!-- 创建企业 -->
-  <view wx:elif="{{mode === 'create'}}" class="st-page st-page--flow">
-    <view class="st-title-page">创建企业</view>
-    <view class="st-text-caption st-mt-md">提交后由平台审核</view>
-    <view class="st-card st-card--padded st-mt-lg">
+  <view wx:elif="{{mode === 'create'}}" class="auth-flow-body auth-flow-body--form st-page st-page--flow auth-flow-page">
+    <view class="auth-flow-form-card auth-flow-form-card--flat">
       <view class="st-field-label">企业名称</view>
-      <input class="st-input" value="{{createName}}" bindinput="onCreateName" placeholder="请输入企业名称" placeholder-class="st-ph" />
+      <view class="auth-flow-field-box">
+        <input
+          class="st-input"
+          value="{{createName}}"
+          bindinput="onCreateName"
+          placeholder="例如：阿华服饰"
+          placeholder-class="auth-flow-ph"
+          maxlength="50"
+        />
+      </view>
     </view>
-    <button class="st-btn-primary st-mt-lg" loading="{{loading}}" disabled="{{loading}}" bindtap="onSubmitCreate">提交申请</button>
-    <button class="st-btn-secondary st-mt-md" bindtap="onModeChoose">取消</button>
+
+    <view class="auth-flow-actions auth-flow-actions--sticky">
+      <button class="st-btn-primary" loading="{{loading}}" disabled="{{loading}}" bindtap="onSubmitCreate">提交申请</button>
+    </view>
+
+    <view class="auth-flow-footer">
+      <button class="st-btn-text auth-flow-footer__logout" bindtap="onModeChoose">取消</button>
+    </view>
   </view>
 
   <!-- 加入企业 -->
-  <view wx:elif="{{mode === 'join'}}" class="st-page st-page--flow">
-    <view class="st-title-page">加入企业</view>
-    <view class="st-text-caption st-mt-md">输入企业邀请码查询后加入</view>
-    <view class="st-card st-card--padded st-mt-lg">
+  <view wx:elif="{{mode === 'join'}}" class="auth-flow-body auth-flow-body--form st-page st-page--flow auth-flow-page">
+    <view class="auth-flow-form-card auth-flow-form-card--flat">
       <view class="st-field-label">邀请码</view>
-      <view class="st-form-row">
-        <input class="st-input" value="{{inviteCode}}" bindinput="onInviteCode" placeholder="输入邀请码" placeholder-class="st-ph" />
-        <button class="st-btn-compact" loading="{{lookupLoading}}" disabled="{{lookupLoading}}" bindtap="onLookup">查询</button>
-      </view>
-      <view wx:if="{{lookupResult}}" class="st-inset">
-        <view class="st-inset-row">
-          <text class="st-inset-name">{{lookupResult.name}}</text>
-          <text class="st-inset-meta">{{lookupResult.memberCount}} 位成员</text>
+      <view class="auth-flow-form-row">
+        <view class="auth-flow-field-box auth-flow-field-box--grow">
+          <input
+            class="st-input"
+            value="{{inviteCode}}"
+            bindinput="onInviteCode"
+            placeholder="输入邀请码"
+            placeholder-class="auth-flow-ph"
+            maxlength="16"
+          />
         </view>
-        <button class="st-btn-primary st-mt-md" loading="{{loading}}" disabled="{{loading}}" bindtap="onApplyJoin">申请加入</button>
+        <button class="auth-flow-btn-lookup" loading="{{lookupLoading}}" disabled="{{lookupLoading}}" bindtap="onLookup">查询</button>
+      </view>
+
+      <view wx:if="{{lookupResult}}" class="auth-flow-lookup-card">
+        <view class="auth-flow-lookup-card__head">
+          <view class="st-tenant-icon">{{lookupResultIcon}}</view>
+          <view class="auth-flow-lookup-card__meta">
+            <view class="auth-flow-lookup-card__name">{{lookupResult.name}}</view>
+            <view class="auth-flow-lookup-card__count">{{lookupResult.memberCount}} 位成员</view>
+          </view>
+        </view>
+        <button class="st-btn-primary st-mt-md" loading="{{loading}}" disabled="{{loading}}" bindtap="onApplyJoin">申请加入该企业</button>
       </view>
     </view>
-    <button class="st-btn-secondary st-mt-md" bindtap="onJoinBack">返回</button>
+
+    <view class="auth-flow-footer">
+      <button class="st-btn-text auth-flow-footer__logout" bindtap="onJoinBack">返回</button>
+    </view>
   </view>
 
   <!-- 选择入口 -->
-  <view wx:else class="st-page st-page--flow">
-    <view class="st-title-page">企业入驻</view>
-    <view class="st-text-caption st-mt-md">创建新企业或通过邀请码加入已有企业</view>
-
-    <view class="st-card st-mt-lg">
-      <view class="st-list-cell" bindtap="onModeCreate">
-        <view class="st-list-cell__body">
-          <view class="st-list-cell__title">创建企业</view>
-          <view class="st-list-cell__subtitle">新建企业空间，您将成为创建者</view>
-        </view>
-        <view class="st-chevron">›</view>
+  <view wx:else class="auth-flow-body st-page st-page--flow auth-flow-page">
+    <view class="auth-flow-hero auth-flow-hero--inset">
+      <view class="auth-flow-hero__icon-wrap">
+        <image class="auth-flow-hero__icon" src="/assets/icons/building-2.png" mode="aspectFit" />
       </view>
-      <view class="st-list-cell" bindtap="onModeJoin">
-        <view class="st-list-cell__body">
-          <view class="st-list-cell__title">加入企业</view>
-          <view class="st-list-cell__subtitle">使用邀请码申请加入</view>
-        </view>
-        <view class="st-chevron">›</view>
-      </view>
+      <view class="auth-flow-hero__title">企业入驻</view>
+      <view class="auth-flow-hero__desc">创建新企业或通过邀请码加入已有企业</view>
     </view>
 
-    <button class="st-btn-secondary st-mt-lg" bindtap="onBackChoose">返回</button>
+    <view class="auth-flow-actions st-mt-lg">
+      <button class="st-btn-primary" bindtap="onModeCreate">创建新企业</button>
+      <button class="st-btn-secondary" bindtap="onModeJoin">加入企业</button>
+    </view>
+
+    <view class="auth-flow-footer">
+      <button class="st-btn-text auth-flow-footer__logout" bindtap="onBackChoose">返回</button>
+    </view>
   </view>
 </scroll-view>

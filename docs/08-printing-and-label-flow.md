@@ -297,6 +297,21 @@ PrintRenderContext.virtualBatch
 | 生产入库 | `views/order-list/PendingStockPanel.tsx` | 入库弹窗内 `ScanBatchTrigger`（同上，矩阵/单量两处） | 同上；计划校验 + 矩阵写 `variantQuantities` / 否则 `singleQuantity` |
 | 产品追溯 | `views/TraceView.tsx` | `App.tsx` 侧栏「切换企业」与主导航之间独立「扫码追溯」 | **无批量弹窗、无摄像头**：`ScanPanel`（`showCameraButton={false}`）仅扫码枪 + 粘贴，每扫一次即 `scan+trace` 刷新下方；再扫下一条码即切换为当前码的追溯信息 |
 
+**小程序（页内扫码，不跳转 `scan-session`）**
+
+| 场景 | 文件 | 入口 | 行为 |
+|------|------|------|------|
+| Tab 报工 | `pages/scan/scan` | TabBar 居中「报工」 | **占位页**（功能开发中）；工单/返工报工请从应用中心进入 |
+| 产品追溯 | `packageBusiness/product-trace/product-trace` | 应用中心「追溯查询」 | **需追溯码插件**；仅单品码；底部「扫码录入」 |
+| 工单报工 | `production-order-report` | 页头「扫码报工」 | **需追溯码插件**；批量扫码弹窗累加数量 → 确认报工 |
+| 待入库 | `production-order-pending-stock` | 底栏「扫码入库」 | **需追溯码插件**；批量扫码 → 确认后进入入库确认页 |
+| 外协待收回 | `production-outsource-receive` | 底栏「扫码收货」 | **需追溯码插件**；跳转扫码收货页批量扫码 |
+| 返工报工 | `production-rework-report` | 页头「扫码报工」 | **需追溯码插件**；批量扫码累加数量 → 确认报工 |
+
+插件开关：`GET /dashboard/feature-plugins` 中 `traceability === false` 时，上述扫码入口与「追溯查询」菜单项均隐藏（对齐 Web `useTraceabilityPlugin`）。
+
+页内批量扫码复用 `scan-batch-modal` + `scanBatchController.js` + 各场景 `scanBatchApply*.js`；**不做扫码称重**。`scan-session` 仍注册于分包但业务入口不再导航至该页。
+
 通用能力：`utils/scanPayload.ts`、`utils/scanBatchIntent.ts`（批量弹窗「按批累计 / 按件累计」归一化）、`hooks/useScanGun.ts`；**报工 / 返工 / 外协收货 / 生产入库**使用 `ScanBatchSessionModal` + `ScanBatchTrigger`（先收集列表再确认；列表行展示依赖 `resolveRowPreview`）。**产品追溯**使用 `ScanPanel`（即时查询，`suppressDispatchSounds` + 关闭摄像头）。`ScanInputButton` 供其他入口复用；摄像头依赖 `@zxing/browser`（`ScanInputButton`、`ScanPanel` 在 `showCameraButton` 为真时、`ScanBatchSessionModal` 在开启 `showCameraButton` 时）。
 
 ### 10.2 后端接口

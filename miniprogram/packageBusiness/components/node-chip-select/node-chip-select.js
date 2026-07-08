@@ -29,10 +29,13 @@ Component({
     onOpen() {
       if (!(this.properties.nodes || []).length) return;
       this.setData({ open: true });
+      this.triggerEvent('sheetopen');
     },
 
     onClose() {
+      if (!this.data.open) return;
       this.setData({ open: false });
+      this.triggerEvent('sheetclose');
     },
 
     noop() {},

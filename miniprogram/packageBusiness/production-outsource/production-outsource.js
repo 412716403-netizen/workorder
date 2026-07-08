@@ -1,43 +1,43 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission, filterByPermission } = require('../../utils/permissions.js');
-const {
-  OUTSOURCE_SHORTCUTS,
-} = require('../config/productionOutsource.js');
-const {
-  buildOutsourceStatsByOrder,
-  filterDisplayOutsourceStats,
-  mapOutsourceCardForUi,
-  countPendingReceiveRows,
-} = require('../utils/outsourcePanelLite.js');
-const { buildOutsourceReceiveAggregates } = require('../utils/outsourceReceiveAggregates.js');
-const {
-  listOutsourceDispatchPartnersForCard,
-} = require('../utils/outsourceMaterialLite.js');
-const {
-  fetchOutsourceRecordsForPanel,
-  fetchStockRecordsForOutsourcePanel,
-} = require('../utils/outsourceRecordsLoad.js');
-const { fetchPartnersAll } = require('../utils/planApi.js');
-const { fetchAllOrdersPaginated } = require('../utils/pendingStockBadge.js');
-const {
-  fetchTenantConfig,
-  fetchProductsAll,
-  fetchNodesAll,
-  fetchBomsAll,
-} = require('../utils/orderApi.js');
-const { normalizeMasterList } = require('../utils/productionPlans.js');
-const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission,filterByPermission = _require2.filterByPermission;
+const _require3 =
+
+  require('../config/productionOutsource.js'),OUTSOURCE_SHORTCUTS = _require3.OUTSOURCE_SHORTCUTS;
+const _require4 =
+
+
+
+
+  require('../utils/outsourcePanelLite.js'),buildOutsourceStatsByOrder = _require4.buildOutsourceStatsByOrder,filterDisplayOutsourceStats = _require4.filterDisplayOutsourceStats,mapOutsourceCardForUi = _require4.mapOutsourceCardForUi,countPendingReceiveRows = _require4.countPendingReceiveRows;
+const _require5 = require('../utils/outsourceReceiveAggregates.js'),buildOutsourceReceiveAggregates = _require5.buildOutsourceReceiveAggregates;
+const _require6 =
+
+  require('../utils/outsourceMaterialLite.js'),listOutsourceDispatchPartnersForCard = _require6.listOutsourceDispatchPartnersForCard;
+const _require7 =
+
+
+  require('../utils/outsourceRecordsLoad.js'),fetchOutsourceRecordsForPanel = _require7.fetchOutsourceRecordsForPanel,fetchStockRecordsForOutsourcePanel = _require7.fetchStockRecordsForOutsourcePanel;
+const _require8 = require('../utils/planApi.js'),fetchPartnersAll = _require8.fetchPartnersAll;
+const _require9 = require('../utils/pendingStockBadge.js'),fetchAllOrdersPaginated = _require9.fetchAllOrdersPaginated;
+const _require0 =
+
+
+
+
+  require('../utils/orderApi.js'),fetchTenantConfig = _require0.fetchTenantConfig,fetchProductsAll = _require0.fetchProductsAll,fetchNodesAll = _require0.fetchNodesAll,fetchBomsAll = _require0.fetchBomsAll;
+const _require1 = require('../utils/productionPlans.js'),normalizeMasterList = _require1.normalizeMasterList;
+const _require10 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require10.readNavBarMetrics,readWindowMetrics = _require10.readWindowMetrics;
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
-  const toolsPx = Math.ceil((win.windowWidth / 750) * 128);
+  const toolsPx = Math.ceil(win.windowWidth / 750 * 128);
   return nav.statusBarHeight + nav.navBarHeight + toolsPx;
 }
 
 function buildFilterShortcuts(permissions, pendingCount) {
   return filterByPermission(OUTSOURCE_SHORTCUTS, permissions || []).map((item) => ({
     ...item,
-    badgeText: item.id === 'receive' && pendingCount > 0 ? `(${pendingCount})` : '',
+    badgeText: item.id === 'receive' && pendingCount > 0 ? `(${pendingCount})` : ''
   }));
 }
 
@@ -56,13 +56,13 @@ Page({
     emptyText: '暂无委外数据',
     statusBarHeight: 20,
     navBarHeight: 44,
-    headerBlockHeight: 88,
+    headerBlockHeight: 88
   },
 
   onLoad() {
     const nav = readNavBarMetrics();
     const ctx = readTenantCtx();
-    if (!hasPermission((ctx && ctx.permissions) || [], 'production:outsource:view')) {
+    if (!hasPermission(ctx && ctx.permissions || [], 'production:outsource:view')) {
       wx.showToast({ title: '无权限', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 800);
       return;
@@ -71,8 +71,8 @@ Page({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
       headerBlockHeight: computeHeaderBlockHeight(nav),
-      canViewList: hasPermission((ctx && ctx.permissions) || [], 'production:outsource_list:allow'),
-      canMaterial: hasPermission((ctx && ctx.permissions) || [], 'production:outsource_material:allow'),
+      canViewList: hasPermission(ctx && ctx.permissions || [], 'production:outsource_list:allow'),
+      canMaterial: hasPermission(ctx && ctx.permissions || [], 'production:outsource_material:allow')
     });
   },
 
@@ -86,10 +86,10 @@ Page({
 
   async ensureMaterialDeps() {
     if (this._materialDepsLoaded) return;
-    const [stockRaw, bomsRaw] = await Promise.all([
+    const _await$Promise$all = await Promise.all([
       fetchStockRecordsForOutsourcePanel(this._orders || []),
-      fetchBomsAll(),
-    ]);
+      fetchBomsAll()]
+      ),stockRaw = _await$Promise$all[0],bomsRaw = _await$Promise$all[1];
     this._stockRecords = stockRaw || [];
     this._boms = normalizeMasterList(bomsRaw);
     this._materialDepsLoaded = true;
@@ -102,9 +102,9 @@ Page({
   onProductImageError(e) {
     const key = e.currentTarget.dataset.key;
     if (!key || !this._allStats) return;
-    const cards = (this.data.cards || []).map((c) => (
-      c.cardKey === key ? { ...c, showProductImage: false } : c
-    ));
+    const cards = (this.data.cards || []).map((c) =>
+    c.cardKey === key ? { ...c, showProductImage: false } : c
+    );
     this.setData({ cards });
   },
 
@@ -131,7 +131,7 @@ Page({
     this.setData({
       showFilterPanel: true,
       draftOnlyShowIncomplete: this.data.onlyShowIncomplete,
-      filterActive: true,
+      filterActive: true
     });
   },
 
@@ -149,7 +149,7 @@ Page({
     this.setData({
       onlyShowIncomplete: this.data.draftOnlyShowIncomplete,
       showFilterPanel: false,
-      filterActive: this.computeFilterActive(false, this.data.draftOnlyShowIncomplete),
+      filterActive: this.computeFilterActive(false, this.data.draftOnlyShowIncomplete)
     });
     this.bootstrap();
   },
@@ -178,16 +178,16 @@ Page({
 
   navigatePartnerDetail(d) {
     const q = [
-      `productId=${encodeURIComponent(d.productId || '')}`,
-      `nodeId=${encodeURIComponent(d.nodeId || '')}`,
-      `partner=${encodeURIComponent(d.partner || '')}`,
-      `nodeName=${encodeURIComponent(d.nodeName || '')}`,
-      `productName=${encodeURIComponent(d.productName || '')}`,
-      `orderNumber=${encodeURIComponent(d.orderNumber || '')}`,
-    ];
+    `productId=${encodeURIComponent(d.productId || '')}`,
+    `nodeId=${encodeURIComponent(d.nodeId || '')}`,
+    `partner=${encodeURIComponent(d.partner || '')}`,
+    `nodeName=${encodeURIComponent(d.nodeName || '')}`,
+    `productName=${encodeURIComponent(d.productName || '')}`,
+    `orderNumber=${encodeURIComponent(d.orderNumber || '')}`];
+
     if (d.orderId) q.push(`orderId=${encodeURIComponent(d.orderId)}`);
     wx.navigateTo({
-      url: `/packageBusiness/production-outsource-partner-detail/production-outsource-partner-detail?${q.join('&')}`,
+      url: `/packageBusiness/production-outsource-partner-detail/production-outsource-partner-detail?${q.join('&')}`
     });
   },
 
@@ -221,7 +221,7 @@ Page({
       const dispatchPartners = listOutsourceDispatchPartnersForCard(
         stockRecords,
         scope,
-        this._productionLinkMode,
+        this._productionLinkMode
       );
       if (!dispatchPartners.length) {
         wx.showToast({ title: '暂无领料记录，无法退料', icon: 'none' });
@@ -249,7 +249,7 @@ Page({
         success: (res) => {
           const partnerKey = names[res.tapIndex] || '';
           this.navigateMaterialConfirm(d, mode, partnerKey);
-        },
+        }
       });
     } catch {
       wx.showToast({ title: '加载加工厂失败', icon: 'none' });
@@ -266,7 +266,7 @@ Page({
       }
       if (partnerKey) q.push(`partner=${encodeURIComponent(partnerKey)}`);
       wx.navigateTo({
-        url: `/packageBusiness/production-order-material/production-order-material?${q.join('&')}`,
+        url: `/packageBusiness/production-order-material/production-order-material?${q.join('&')}`
       });
       return;
     }
@@ -279,7 +279,7 @@ Page({
     }
     if (partnerKey) q.push(`partner=${encodeURIComponent(partnerKey)}`);
     wx.navigateTo({
-      url: `/packageBusiness/production-order-material/production-order-material?${q.join('&')}`,
+      url: `/packageBusiness/production-order-material/production-order-material?${q.join('&')}`
     });
   },
 
@@ -292,20 +292,20 @@ Page({
       productionLinkMode: this._productionLinkMode,
       hideZeroPendingPartnerOnList: settings.hideZeroPendingPartnerOnList === true,
       onlyShowIncompleteOrders: this.data.onlyShowIncomplete,
-      ordersById,
+      ordersById
     });
     const cards = filtered.map((item) => {
       const card = mapOutsourceCardForUi(item, this._productionLinkMode);
       return {
         ...card,
-        uniquePartnersJson: JSON.stringify(card.uniquePartners || []),
+        uniquePartnersJson: JSON.stringify(card.uniquePartners || [])
       };
     });
     this.setData({
       cards,
-      emptyText: filtered.length === 0 && this._allStats.length > 0
-        ? '无匹配项，请调整搜索'
-        : (settings.hideZeroPendingPartnerOnList ? '暂无待收回外协' : '暂无委外数据'),
+      emptyText: filtered.length === 0 && this._allStats.length > 0 ?
+      '无匹配项，请调整搜索' :
+      settings.hideZeroPendingPartnerOnList ? '暂无待收回外协' : '暂无委外数据'
     });
   },
 
@@ -323,11 +323,11 @@ Page({
         this.setData({ onlyShowIncomplete: true });
       }
 
-      const [allOrders, productsRaw, nodesRaw] = await Promise.all([
+      const _await$Promise$all2 = await Promise.all([
         fetchAllOrdersPaginated({}),
         fetchProductsAll(),
-        fetchNodesAll(),
-      ]);
+        fetchNodesAll()]
+        ),allOrders = _await$Promise$all2[0],productsRaw = _await$Promise$all2[1],nodesRaw = _await$Promise$all2[2];
 
       this._products = normalizeMasterList(productsRaw);
       this._nodes = normalizeMasterList(nodesRaw);
@@ -339,7 +339,7 @@ Page({
       const outsourceRaw = await fetchOutsourceRecordsForPanel({
         productionLinkMode: this._productionLinkMode,
         orders: this._orders,
-        products: this._products,
+        products: this._products
       });
 
       const ordersById = new Map(this._orders.map((o) => [o.id, o]));
@@ -349,34 +349,34 @@ Page({
         (outsourceRaw || []).filter((r) => r.type === 'OUTSOURCE'),
         ordersById,
         productsById,
-        nodesById,
+        nodesById
       );
       const pendingCount = countPendingReceiveRows(receiveRows);
       const ctx = readTenantCtx();
-      const shortcuts = buildFilterShortcuts((ctx && ctx.permissions) || [], pendingCount);
+      const shortcuts = buildFilterShortcuts(ctx && ctx.permissions || [], pendingCount);
 
       this._allStats = buildOutsourceStatsByOrder({
         productionLinkMode: this._productionLinkMode,
         records: outsourceRaw || [],
         orders: this._orders,
         products: this._products,
-        nodes: this._nodes,
+        nodes: this._nodes
       });
 
       this.setData({
         filterShortcuts: shortcuts,
         filterActive: this.computeFilterActive(this.data.showFilterPanel),
-        loading: false,
+        loading: false
       });
       this.applyListFilter();
     } catch (err) {
       this.setData({ loading: false });
       if (err && err.statusCode === 401) return;
       wx.showToast({
-        title: (err && err.message) || '加载失败',
+        title: err && err.message || '加载失败',
         icon: 'none',
-        duration: 2500,
+        duration: 2500
       });
     }
-  },
+  }
 });

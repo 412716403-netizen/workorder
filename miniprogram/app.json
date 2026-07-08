@@ -41,7 +41,7 @@
       },
       {
         "pagePath": "pages/scan/scan",
-        "text": "扫码",
+        "text": "报工",
         "iconPath": "assets/tab/scan.png",
         "selectedIconPath": "assets/tab/scan-active.png"
       },
@@ -67,8 +67,6 @@
       "root": "packageBusiness",
       "name": "business",
       "pages": [
-        "scan-setup/scan-setup",
-        "scan-session/scan-session",
         "production-plans/production-plans",
         "production-plan-detail/production-plan-detail",
         "production-plan-create/production-plan-create",
@@ -92,6 +90,7 @@
         "production-outsource-dispatch/production-outsource-dispatch",
         "production-outsource-dispatch-confirm/production-outsource-dispatch-confirm",
         "production-outsource-receive/production-outsource-receive",
+        "production-outsource-receive-scan/production-outsource-receive-scan",
         "production-outsource-receive-confirm/production-outsource-receive-confirm",
         "production-outsource-flow/production-outsource-flow",
         "production-outsource-flow-detail/production-outsource-flow-detail",
@@ -104,6 +103,7 @@
         "production-rework-defect-flow-detail/production-rework-defect-flow-detail",
         "production-rework-report-flow/production-rework-report-flow",
         "production-rework-report-flow-detail/production-rework-report-flow-detail",
+        "product-trace/product-trace",
         "psi-purchase-orders/psi-purchase-orders",
         "psi-purchase-order-detail/psi-purchase-order-detail",
         "psi-purchase-order-edit/psi-purchase-order-edit",
@@ -156,12 +156,6 @@
     }
   ],
   "preloadRule": {
-    "pages/scan/scan": {
-      "network": "all",
-      "packages": [
-        "business"
-      ]
-    },
     "pages/apps/apps": {
       "network": "all",
       "packages": [

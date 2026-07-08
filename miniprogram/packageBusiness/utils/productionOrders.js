@@ -2,16 +2,16 @@
  * 工单中心 UI 模型（对齐 Web OrderListView / OrderDetailModal）
  */
 
-const {
-  OrderDispatchStatus,
-  ORDER_DISPATCH_STATUS_LABEL,
-} = require('../config/productionOrders.js');
-const { buildOrderProcessChips, sumOrderQty } = require('./orderProcessChips.js');
-const { mapProductCustomTags } = require('./reportCustomDocField.js');
-const { DEFAULT_PRODUCT_PLACEHOLDER_ICON } = require('./listProductThumb.js');
-const { buildVariantMatrixUiModel } = require('./variantQtyMatrix.js');
-const { normalizeListBody } = require('../../utils/listResponse.js');
-const { productHasColorSizeMatrix, variantLabel } = require('./productionPlans.js');
+const _require =
+
+
+  require('../config/productionOrders.js'),OrderDispatchStatus = _require.OrderDispatchStatus,ORDER_DISPATCH_STATUS_LABEL = _require.ORDER_DISPATCH_STATUS_LABEL;
+const _require2 = require('./orderProcessChips.js'),buildOrderProcessChips = _require2.buildOrderProcessChips,sumOrderQty = _require2.sumOrderQty;
+const _require3 = require('./reportCustomDocField.js'),mapProductCustomTags = _require3.mapProductCustomTags;
+const _require4 = require('./listProductThumb.js'),DEFAULT_PRODUCT_PLACEHOLDER_ICON = _require4.DEFAULT_PRODUCT_PLACEHOLDER_ICON;
+const _require5 = require('./variantQtyMatrix.js'),buildVariantMatrixUiModel = _require5.buildVariantMatrixUiModel;
+const _require6 = require('../../utils/listResponse.js'),normalizeListBody = _require6.normalizeListBody;
+const _require7 = require('./productionPlans.js'),productHasColorSizeMatrix = _require7.productHasColorSizeMatrix,variantLabel = _require7.variantLabel;
 
 function pad(n) {
   return String(n).padStart(2, '0');
@@ -70,7 +70,7 @@ function normalizeMasterList(body) {
 }
 
 function parseOrderSearch(raw) {
-  const trimmed = String(raw ?? '').trim();
+  const trimmed = String(raw != null ? raw : '').trim();
   return trimmed ? { search: trimmed } : { search: '' };
 }
 
@@ -84,8 +84,8 @@ function buildParentToSubOrders(orders) {
   });
   map.forEach((arr) => {
     arr.sort(
-      (a, b) => orderCreatedMs(b) - orderCreatedMs(a)
-        || String(a.orderNumber || '').localeCompare(String(b.orderNumber || '')),
+      (a, b) => orderCreatedMs(b) - orderCreatedMs(a) ||
+      String(a.orderNumber || '').localeCompare(String(b.orderNumber || ''))
     );
   });
   return map;
@@ -111,16 +111,16 @@ function blockOrderCreatedMs(block, parentToSub) {
       return orderCreatedMs(block.order);
     case 'orderGroup':
       return Math.max(0, ...block.orders.map(orderCreatedMs));
-    case 'parentChild': {
-      let m = orderCreatedMs(block.parent);
-      const stack = [...(parentToSub.get(block.parent.id) || [])];
-      while (stack.length) {
-        const x = stack.pop();
-        m = Math.max(m, orderCreatedMs(x));
-        (parentToSub.get(x.id) || []).forEach((c) => stack.push(c));
+    case 'parentChild':{
+        let m = orderCreatedMs(block.parent);
+        const stack = [...(parentToSub.get(block.parent.id) || [])];
+        while (stack.length) {
+          const x = stack.pop();
+          m = Math.max(m, orderCreatedMs(x));
+          (parentToSub.get(x.id) || []).forEach((c) => stack.push(c));
+        }
+        return m;
       }
-      return m;
-    }
     case 'productGroup':
       return Math.max(0, ...block.orders.map(orderCreatedMs));
     default:
@@ -154,25 +154,25 @@ function buildOrderListBlocks(orders, productionLinkMode, productMap) {
       if (!byProduct.has(pid)) byProduct.set(pid, []);
       byProduct.get(pid).push(order);
     });
-    return Array.from(byProduct.entries())
-      .map(([productId, ords]) => {
-        const sortedOrds = [...ords].sort(
-          (a, b) => orderCreatedMs(b) - orderCreatedMs(a)
-            || String(a.orderNumber || '').localeCompare(String(b.orderNumber || '')),
-        );
-        const product = productMap && productMap.get ? productMap.get(productId) : null;
-        return {
-          type: 'productGroup',
-          productId,
-          productName: sortedOrds[0]?.productName || product?.name || '未知产品',
-          orders: sortedOrds,
-        };
-      })
-      .sort(
-        (a, b) => Math.max(0, ...b.orders.map(orderCreatedMs))
-          - Math.max(0, ...a.orders.map(orderCreatedMs))
-          || String(a.productId).localeCompare(String(b.productId)),
+    return Array.from(byProduct.entries()).
+    map(([productId, ords]) => {var _sortedOrds$;
+      const sortedOrds = [...ords].sort(
+        (a, b) => orderCreatedMs(b) - orderCreatedMs(a) ||
+        String(a.orderNumber || '').localeCompare(String(b.orderNumber || ''))
       );
+      const product = productMap && productMap.get ? productMap.get(productId) : null;
+      return {
+        type: 'productGroup',
+        productId,
+        productName: ((_sortedOrds$ = sortedOrds[0]) == null ? void 0 : _sortedOrds$.productName) || (product == null ? void 0 : product.name) || '未知产品',
+        orders: sortedOrds
+      };
+    }).
+    sort(
+      (a, b) => Math.max(0, ...b.orders.map(orderCreatedMs)) -
+      Math.max(0, ...a.orders.map(orderCreatedMs)) ||
+      String(a.productId).localeCompare(String(b.productId))
+    );
   }
 
   const parentToSub = buildParentToSubOrders(orders);
@@ -201,9 +201,9 @@ function buildOrderListBlocks(orders, productionLinkMode, productMap) {
         type: 'orderGroup',
         groupKey: root,
         orders: [...groupOrders].sort(
-          (a, b) => orderCreatedMs(b) - orderCreatedMs(a)
-            || String(a.orderNumber || '').localeCompare(String(b.orderNumber || '')),
-        ),
+          (a, b) => orderCreatedMs(b) - orderCreatedMs(a) ||
+          String(a.orderNumber || '').localeCompare(String(b.orderNumber || ''))
+        )
       });
     } else {
       const children = parentToSub.get(order.id) || [];
@@ -219,8 +219,8 @@ function buildOrderListBlocks(orders, productionLinkMode, productMap) {
   });
 
   return blocks.sort(
-    (a, b) => blockOrderCreatedMs(b, parentToSub) - blockOrderCreatedMs(a, parentToSub)
-      || blockSortTieId(a).localeCompare(blockSortTieId(b)),
+    (a, b) => blockOrderCreatedMs(b, parentToSub) - blockOrderCreatedMs(a, parentToSub) ||
+    blockSortTieId(a).localeCompare(blockSortTieId(b))
   );
 }
 
@@ -230,25 +230,25 @@ function flattenBlockOrders(block) {
       return [{ order: block.order, depth: 0, isPrimary: true }];
     case 'orderGroup':
       return block.orders.map((order, i) => ({ order, depth: 0, isPrimary: i === 0 }));
-    case 'parentChild': {
-      const rows = [{ order: block.parent, depth: 0, isPrimary: true, blockKey: block.parent.id }];
-      const walk = (parentId, depth) => {
-        const children = (block.children || []).filter((c) => c.parentOrderId === parentId);
-        children.forEach((c) => {
-          rows.push({ order: c, depth, isPrimary: false, blockKey: block.parent.id });
-          walk(c.id, depth + 1);
-        });
-      };
-      walk(block.parent.id, 1);
-      return rows;
-    }
+    case 'parentChild':{
+        const rows = [{ order: block.parent, depth: 0, isPrimary: true, blockKey: block.parent.id }];
+        const walk = (parentId, depth) => {
+          const children = (block.children || []).filter((c) => c.parentOrderId === parentId);
+          children.forEach((c) => {
+            rows.push({ order: c, depth, isPrimary: false, blockKey: block.parent.id });
+            walk(c.id, depth + 1);
+          });
+        };
+        walk(block.parent.id, 1);
+        return rows;
+      }
     case 'productGroup':
       return block.orders.map((order, i) => ({
         order,
         depth: 0,
         isPrimary: i === 0,
         productGroupLabel: block.productName,
-        productId: block.productId,
+        productId: block.productId
       }));
     default:
       return [];
@@ -256,38 +256,38 @@ function flattenBlockOrders(block) {
 }
 
 function mapOrderListRow(order, ctx = {}) {
-  const {
-    productName = '',
-    productSku = '',
-    showProductSku,
-    productImageUrl = '',
-    productCustomTags = [],
-    showDeliveryDate = true,
-    processChips = [],
-    depth = 0,
-    blockType = 'single',
-    productGroupLabel = '',
-    expanded = true,
-    hasChildren = false,
-    canReport = false,
-    productionLinkMode = 'order',
-  } = ctx;
+  const _ctx$productName =
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    ctx.productName,productName = _ctx$productName === void 0 ? '' : _ctx$productName,_ctx$productSku = ctx.productSku,productSku = _ctx$productSku === void 0 ? '' : _ctx$productSku,showProductSku = ctx.showProductSku,_ctx$productImageUrl = ctx.productImageUrl,productImageUrl = _ctx$productImageUrl === void 0 ? '' : _ctx$productImageUrl,_ctx$productCustomTag = ctx.productCustomTags,productCustomTags = _ctx$productCustomTag === void 0 ? [] : _ctx$productCustomTag,_ctx$showDeliveryDate = ctx.showDeliveryDate,showDeliveryDate = _ctx$showDeliveryDate === void 0 ? true : _ctx$showDeliveryDate,_ctx$processChips = ctx.processChips,processChips = _ctx$processChips === void 0 ? [] : _ctx$processChips,_ctx$depth = ctx.depth,depth = _ctx$depth === void 0 ? 0 : _ctx$depth,_ctx$blockType = ctx.blockType,blockType = _ctx$blockType === void 0 ? 'single' : _ctx$blockType,_ctx$productGroupLabe = ctx.productGroupLabel,productGroupLabel = _ctx$productGroupLabe === void 0 ? '' : _ctx$productGroupLabe,_ctx$expanded = ctx.expanded,expanded = _ctx$expanded === void 0 ? true : _ctx$expanded,_ctx$hasChildren = ctx.hasChildren,hasChildren = _ctx$hasChildren === void 0 ? false : _ctx$hasChildren,_ctx$canReport = ctx.canReport,canReport = _ctx$canReport === void 0 ? false : _ctx$canReport,_ctx$productionLinkMo = ctx.productionLinkMode,productionLinkMode = _ctx$productionLinkMo === void 0 ? 'order' : _ctx$productionLinkMo;
 
   const dispatchStatus = order.dispatchStatus || OrderDispatchStatus.IN_PROGRESS;
   const qty = sumOrderQty(order);
   const customer = String(order.customer || '').trim();
-  const dueDateLabel = showDeliveryDate && order.dueDate
-    ? `交期 ${formatOrderDate(order.dueDate)}`
-    : '';
+  const dueDateLabel = showDeliveryDate && order.dueDate ?
+  `交期 ${formatOrderDate(order.dueDate)}` :
+  '';
 
   return {
     id: order.id,
     orderNumber: order.orderNumber || '',
     productName: productName || order.productName || '—',
     productSku: productSku || order.sku || '',
-    showProductSku: showProductSku != null
-      ? !!showProductSku
-      : Boolean(String(productSku || order.sku || '').trim()),
+    showProductSku: showProductSku != null ?
+    !!showProductSku :
+    Boolean(String(productSku || order.sku || '').trim()),
     productImageUrl: productImageUrl || '',
     showProductImage: Boolean(String(productImageUrl || '').trim()),
     productCustomTags: productCustomTags || [],
@@ -313,7 +313,7 @@ function mapOrderListRow(order, ctx = {}) {
     canReport,
     navigateId: order.id,
     productId: order.productId,
-    reworkOrderId: order.parentOrderId || order.id,
+    reworkOrderId: order.parentOrderId || order.id
   };
 }
 
@@ -330,9 +330,9 @@ function buildOrderItemQtyMap(order) {
 function getProductUnitName(product, dictionaries) {
   const unitId = product && product.unitId;
   if (!unitId) return '件';
-  const units = (dictionaries && dictionaries.units) || [];
+  const units = dictionaries && dictionaries.units || [];
   const u = units.find((x) => x.id === unitId);
-  return (u && String(u.name || '').trim()) || '件';
+  return u && String(u.name || '').trim() || '件';
 }
 
 function formatOrderDateTime(iso) {
@@ -347,16 +347,16 @@ function buildOrderReportSummaryRows(order, prodRecords, unitName) {
   (order.milestones || []).forEach((m) => {
     const goodQty = (m.reports || []).reduce((s, r) => s + (Number(r.quantity) || 0), 0);
     const defQty = (m.reports || []).reduce((s, r) => s + (Number(r.defectiveQuantity) || 0), 0);
-    const scrapQty = (prodRecords || [])
-      .filter((r) => r.type === 'SCRAP' && r.orderId === order.id && r.nodeId === m.templateId)
-      .reduce((s, r) => s + (Number(r.quantity) || 0), 0);
+    const scrapQty = (prodRecords || []).
+    filter((r) => r.type === 'SCRAP' && r.orderId === order.id && r.nodeId === m.templateId).
+    reduce((s, r) => s + (Number(r.quantity) || 0), 0);
     if (goodQty === 0 && defQty === 0 && scrapQty === 0) return;
     rows.push({
       milestoneId: m.id,
       name: m.name || '—',
       goodText: `${goodQty} ${unitName}`,
       defText: defQty > 0 ? `${defQty} ${unitName}` : '—',
-      scrapText: scrapQty > 0 ? `${scrapQty} ${unitName}` : '—',
+      scrapText: scrapQty > 0 ? `${scrapQty} ${unitName}` : '—'
     });
   });
   return rows;
@@ -375,7 +375,7 @@ function buildQuantitySection(order, product, category, dictionaries) {
     const matrixLayout = buildVariantMatrixUiModel(
       product,
       dictionaries,
-      buildOrderItemQtyMap(order),
+      buildOrderItemQtyMap(order)
     );
     if (matrixLayout) {
       const total = sumOrderQty(order);
@@ -386,7 +386,7 @@ function buildQuantitySection(order, product, category, dictionaries) {
         matrixLayout,
         totalQuantity: total,
         showTotal: total > 0,
-        unitName,
+        unitName
       };
     }
   }
@@ -394,7 +394,7 @@ function buildQuantitySection(order, product, category, dictionaries) {
   if (items.some((it) => it.variantId != null) && product && product.variants) {
     const rows = items.map((item) => {
       const variant = product.variants.find((v) => v.id === item.variantId);
-      const label = variantLabel(variant, dictionaries) || (variant && variant.skuSuffix) || '规格';
+      const label = variantLabel(variant, dictionaries) || variant && variant.skuSuffix || '规格';
       const qty = item.quantity != null ? Number(item.quantity) : 0;
       return { label, value: `${qty} ${unitName}` };
     });
@@ -405,7 +405,7 @@ function buildQuantitySection(order, product, category, dictionaries) {
       kind: 'rows',
       rows,
       unitName,
-      totalText: `${total} ${unitName}`,
+      totalText: `${total} ${unitName}`
     };
   }
 
@@ -416,32 +416,32 @@ function buildQuantitySection(order, product, category, dictionaries) {
     kind: 'rows',
     rows: [{ label: '工单数量', value: `${total} ${unitName}` }],
     unitName,
-    totalText: `${total} ${unitName}`,
+    totalText: `${total} ${unitName}`
   };
 }
 
 function mapOrderDetailView(order, ctx = {}) {
-  const {
-    product,
-    category,
-    dictionaries,
-    plan,
-    childOrders = [],
-    productionLinkMode = 'order',
-    showDeliveryDate = true,
-    processRows = [],
-    canEdit = false,
-    editing = false,
-    editForm = null,
-  } = ctx;
+  const
+    product =
+
+
+
+
+
+
+
+
+
+
+    ctx.product,category = ctx.category,dictionaries = ctx.dictionaries,plan = ctx.plan,_ctx$childOrders = ctx.childOrders,childOrders = _ctx$childOrders === void 0 ? [] : _ctx$childOrders,_ctx$productionLinkMo2 = ctx.productionLinkMode,productionLinkMode = _ctx$productionLinkMo2 === void 0 ? 'order' : _ctx$productionLinkMo2,_ctx$showDeliveryDate2 = ctx.showDeliveryDate,showDeliveryDate = _ctx$showDeliveryDate2 === void 0 ? true : _ctx$showDeliveryDate2,_ctx$processRows = ctx.processRows,processRows = _ctx$processRows === void 0 ? [] : _ctx$processRows,_ctx$canEdit = ctx.canEdit,canEdit = _ctx$canEdit === void 0 ? false : _ctx$canEdit,_ctx$editing = ctx.editing,editing = _ctx$editing === void 0 ? false : _ctx$editing,_ctx$editForm = ctx.editForm,editForm = _ctx$editForm === void 0 ? null : _ctx$editForm;
 
   const dispatchStatus = order.dispatchStatus || OrderDispatchStatus.IN_PROGRESS;
   const parts = productNameSkuParts(product);
   const customTags = mapProductCustomTags(product, category, { includeFile: false });
 
-  const dueDateLabel = showDeliveryDate && order.dueDate
-    ? `交期 ${formatOrderDate(order.dueDate)}`
-    : '';
+  const dueDateLabel = showDeliveryDate && order.dueDate ?
+  `交期 ${formatOrderDate(order.dueDate)}` :
+  '';
   const unitName = getProductUnitName(product, dictionaries);
   const qty = sumOrderQty(order);
 
@@ -450,7 +450,7 @@ function mapOrderDetailView(order, ctx = {}) {
     productName: parts.name || order.productName || '—',
     productSku: parts.sku || order.sku || '',
     showProductSku: parts.showSku,
-    productImageUrl: (product && product.imageUrl) || '',
+    productImageUrl: product && product.imageUrl || '',
     showProductImage: Boolean(product && product.imageUrl),
     productCustomTags: customTags,
     showProductCustomTags: customTags.length > 0,
@@ -462,13 +462,13 @@ function mapOrderDetailView(order, ctx = {}) {
     showQuantity: qty > 0,
     dueDateLabel,
     showDueDate: Boolean(dueDateLabel),
-    unitName,
+    unitName
   };
 
   const basicRows = [
-    { label: '工单号', value: order.orderNumber || '—' },
-    { label: '产品', value: parts.showSku ? `${parts.name} ${parts.sku}` : parts.name },
-  ];
+  { label: '工单号', value: order.orderNumber || '—' },
+  { label: '产品', value: parts.showSku ? `${parts.name} ${parts.sku}` : parts.name }];
+
   if (productionLinkMode !== 'product') {
     basicRows.push({ label: '客户', value: order.customer || '—', field: 'customer', editable: canEdit });
   }
@@ -476,14 +476,14 @@ function mapOrderDetailView(order, ctx = {}) {
     label: '开始日期',
     value: order.startDate ? formatOrderDate(order.startDate) : '—',
     field: 'startDate',
-    editable: canEdit,
+    editable: canEdit
   });
   if (showDeliveryDate && productionLinkMode !== 'product') {
     basicRows.push({
       label: '交货日期',
       value: order.dueDate ? formatOrderDate(order.dueDate) : '—',
       field: 'dueDate',
-      editable: canEdit,
+      editable: canEdit
     });
   }
   if (order.createdAt) {
@@ -491,16 +491,16 @@ function mapOrderDetailView(order, ctx = {}) {
   }
 
   const sections = [
-    { id: 'basic', title: '基础信息', rows: basicRows },
-    buildQuantitySection(order, product, category, dictionaries),
-  ];
+  { id: 'basic', title: '基础信息', rows: basicRows },
+  buildQuantitySection(order, product, category, dictionaries)];
+
 
   if (processRows.length) {
     sections.push({
       id: 'process',
       title: '工序进度',
       rows: processRows,
-      kind: 'process',
+      kind: 'process'
     });
   }
 
@@ -519,7 +519,7 @@ function mapOrderDetailView(order, ctx = {}) {
     editForm,
     orderNumber: order.orderNumber || '',
     dispatchStatus,
-    planOrderId: order.planOrderId || plan?.id || '',
+    planOrderId: order.planOrderId || (plan == null ? void 0 : plan.id) || ''
   };
 }
 
@@ -547,5 +547,5 @@ module.exports = {
   buildOrderReportSummaryRows,
   getProductUnitName,
   buildOrderItemQtyMap,
-  sumOrderQty,
+  sumOrderQty
 };

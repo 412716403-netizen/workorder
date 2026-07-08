@@ -1,4 +1,4 @@
-const { hasPermission } = require('../utils/permissions.js');
+const { hasPermission } = require('../../utils/permissions.js');
 
 /** 扫码类型目录（枢纽页与会话页单一事实源） */
 const SCAN_TYPE_CATALOG = [

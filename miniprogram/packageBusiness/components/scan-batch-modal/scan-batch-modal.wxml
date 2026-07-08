@@ -1,0 +1,73 @@
+<view wx:if="{{open}}" class="scan-batch-mask" catchtouchmove="preventMove" bindtap="onMaskTap">
+  <view class="scan-batch-panel" catchtap="noop" catchtouchmove="preventMove">
+    <view class="scan-batch-panel__head">
+      <text class="scan-batch-panel__title">{{title}}</text>
+      <view class="scan-batch-panel__close" bindtap="onClose">×</view>
+    </view>
+
+    <text wx:if="{{hint}}" class="scan-batch-panel__hint">{{hint}}</text>
+
+    <slot name="header"></slot>
+
+    <view wx:if="{{showIntentToggle}}" class="scan-batch-intent">
+      <view
+        class="scan-batch-intent__btn {{scanIntent === 'BATCH' ? 'scan-batch-intent__btn--on' : ''}}"
+        bindtap="onIntentBatch"
+      >按批累计</view>
+      <view
+        class="scan-batch-intent__btn {{scanIntent === 'ITEM' ? 'scan-batch-intent__btn--on' : ''}}"
+        bindtap="onIntentItem"
+      >按件累计</view>
+    </view>
+
+    <view class="scan-batch-foot">
+      <view class="scan-batch-foot__cancel" bindtap="onClose">取消</view>
+      <view
+        class="scan-batch-foot__confirm {{rows.length && !scanDisabled ? '' : 'scan-batch-foot__confirm--disabled'}}"
+        bindtap="onConfirm"
+      >确认应用</view>
+    </view>
+
+    <scroll-view
+      class="scan-batch-list"
+      scroll-y
+      enhanced
+      show-scrollbar="{{false}}"
+      enable-flex
+    >
+      <view class="scan-batch-list__inner">
+        <view class="scan-batch-list__head">
+          <text class="scan-batch-list__title">本次扫码</text>
+          <text wx:if="{{rows.length}}" class="scan-batch-list__count">{{rows.length}} 条</text>
+        </view>
+        <view wx:if="{{scanDisabled && scanDisabledHint}}" class="scan-batch-list__empty">{{scanDisabledHint}}</view>
+        <view wx:elif="{{!rows.length}}" class="scan-batch-list__empty">暂无扫码，点击下方按钮开始</view>
+        <view wx:for="{{rows}}" wx:key="id" class="scan-batch-row">
+          <view class="scan-batch-row__main">
+            <text class="scan-batch-row__kind">{{item.detail.kindLabel}}</text>
+            <text class="scan-batch-row__line">{{item.displayLine}}</text>
+          </view>
+          <view class="scan-batch-row__remove" data-id="{{item.id}}" bindtap="onRemove">删除</view>
+        </view>
+      </view>
+    </scroll-view>
+
+    <view class="scan-batch-scan-row">
+      <button
+        class="scan-batch-scan-btn"
+        hover-class="scan-batch-scan-btn--hover"
+        loading="{{processing}}"
+        disabled="{{processing || scanDisabled}}"
+        bindtap="onScanTap"
+      >
+        <view class="scan-batch-scan-btn__inner">
+          <view class="scan-batch-scan-btn__icon" aria-hidden="true">
+            <view class="scan-batch-scan-btn__icon-frame"></view>
+            <view class="scan-batch-scan-btn__icon-line"></view>
+          </view>
+          <text class="scan-batch-scan-btn__text">扫码录入</text>
+        </view>
+      </button>
+    </view>
+  </view>
+</view>

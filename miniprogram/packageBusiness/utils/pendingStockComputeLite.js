@@ -2,17 +2,17 @@
  * 待入库计算精简版（对齐 utils/pendingStockCompute.ts）
  */
 
-const { sumOrderQty } = require('./orderProcessChips.js');
+const _require = require('./orderProcessChips.js'),sumOrderQty = _require.sumOrderQty;
 
 function stockInAggregatesForOrder(order, prodRecords) {
   const stockInRecords = (prodRecords || []).filter(
-    (r) => r.type === 'STOCK_IN' && r.orderId === order.id,
+    (r) => r.type === 'STOCK_IN' && r.orderId === order.id
   );
   const alreadyIn = stockInRecords.reduce((s, r) => s + (Number(r.quantity) || 0), 0);
   const alreadyInByVariant = {};
-  stockInRecords.forEach((r) => {
-    const vid = r.variantId ?? '';
-    alreadyInByVariant[vid] = (alreadyInByVariant[vid] ?? 0) + (Number(r.quantity) || 0);
+  stockInRecords.forEach((r) => {var _r$variantId, _alreadyInByVariant$v;
+    const vid = (_r$variantId = r.variantId) != null ? _r$variantId : '';
+    alreadyInByVariant[vid] = ((_alreadyInByVariant$v = alreadyInByVariant[vid]) != null ? _alreadyInByVariant$v : 0) + (Number(r.quantity) || 0);
   });
   return { alreadyIn, alreadyInByVariant };
 }
@@ -23,31 +23,31 @@ function sumBlockOrderQty(orders) {
 
 function combinedCompletedByVariantAtTemplate(blockOrders, pmp, productId, templateId) {
   const byVariant = {};
-  const add = (vid, q) => {
+  const add = (vid, q) => {var _byVariant$key;
     if (!(q > 0)) return;
     const key = vid || '';
-    byVariant[key] = (byVariant[key] ?? 0) + q;
+    byVariant[key] = ((_byVariant$key = byVariant[key]) != null ? _byVariant$key : 0) + q;
   };
 
-  (pmp || [])
-    .filter((p) => p.productId === productId && p.milestoneTemplateId === templateId)
-    .forEach((row) => {
-      const reps = row.reports;
-      if (reps && reps.length > 0) {
-        reps.forEach((r) => add(r.variantId ?? row.variantId ?? '', Number(r.quantity) || 0));
-      } else {
-        add(row.variantId ?? '', Number(row.completedQuantity) || 0);
-      }
-    });
+  (pmp || []).
+  filter((p) => p.productId === productId && p.milestoneTemplateId === templateId).
+  forEach((row) => {
+    const reps = row.reports;
+    if (reps && reps.length > 0) {
+      reps.forEach((r) => {var _ref, _r$variantId2;return add((_ref = (_r$variantId2 = r.variantId) != null ? _r$variantId2 : row.variantId) != null ? _ref : '', Number(r.quantity) || 0);});
+    } else {var _row$variantId;
+      add((_row$variantId = row.variantId) != null ? _row$variantId : '', Number(row.completedQuantity) || 0);
+    }
+  });
 
   (blockOrders || []).forEach((o) => {
     const m = (o.milestones || []).find((x) => x.templateId === templateId);
     if (!m) return;
     const reps = m.reports;
     if (reps && reps.length > 0) {
-      reps.forEach((r) => add(r.variantId ?? '', Number(r.quantity) || 0));
-    } else {
-      const total = m.completedQuantity ?? 0;
+      reps.forEach((r) => {var _r$variantId3;return add((_r$variantId3 = r.variantId) != null ? _r$variantId3 : '', Number(r.quantity) || 0);});
+    } else {var _m$completedQuantity;
+      const total = (_m$completedQuantity = m.completedQuantity) != null ? _m$completedQuantity : 0;
       if (total <= 0) return;
       const totalQty = (o.items || []).reduce((s, i) => s + (Number(i.quantity) || 0), 0);
       if (totalQty <= 0) {
@@ -55,12 +55,12 @@ function combinedCompletedByVariantAtTemplate(blockOrders, pmp, productId, templ
         return;
       }
       let rem = total;
-      (o.items || []).forEach((item, idx) => {
-        const part = idx === o.items.length - 1
-          ? rem
-          : Math.floor((total * item.quantity) / totalQty);
+      (o.items || []).forEach((item, idx) => {var _item$variantId;
+        const part = idx === o.items.length - 1 ?
+        rem :
+        Math.floor(total * item.quantity / totalQty);
         rem -= part;
-        add(item.variantId ?? '', part);
+        add((_item$variantId = item.variantId) != null ? _item$variantId : '', part);
       });
     }
   });
@@ -76,37 +76,37 @@ function combinedCompletedAtTemplate(blockOrders, pmp, productId, templateId) {
 function computeOrderMode(orders, prodRecords) {
   const list = [];
 
-  for (const order of orders || []) {
+  for (const order of orders || []) {var _completedByVariant$;
     if (!order.milestones || !order.milestones.length) continue;
     const orderTotal = sumOrderQty(order);
     const lastMilestone = order.milestones[order.milestones.length - 1];
-    const { alreadyIn, alreadyInByVariant } = stockInAggregatesForOrder(order, prodRecords);
+    const _stockInAggregatesFor = stockInAggregatesForOrder(order, prodRecords),alreadyIn = _stockInAggregatesFor.alreadyIn,alreadyInByVariant = _stockInAggregatesFor.alreadyInByVariant;
 
     let completedByVariant = {};
-    (lastMilestone.reports || []).forEach((r) => {
-      const vid = r.variantId ?? '';
-      completedByVariant[vid] = (completedByVariant[vid] ?? 0) + (Number(r.quantity) || 0);
+    (lastMilestone.reports || []).forEach((r) => {var _r$variantId4, _completedByVariant$v;
+      const vid = (_r$variantId4 = r.variantId) != null ? _r$variantId4 : '';
+      completedByVariant[vid] = ((_completedByVariant$v = completedByVariant[vid]) != null ? _completedByVariant$v : 0) + (Number(r.quantity) || 0);
     });
     let hasVariantBreakdown = Object.keys(completedByVariant).some((k) => k !== '');
     if (!hasVariantBreakdown) {
       completedByVariant = { '': Number(lastMilestone.completedQuantity) || 0 };
     }
 
-    const completedProduced = hasVariantBreakdown
-      ? Object.values(completedByVariant).reduce((s, q) => s + q, 0)
-      : (completedByVariant[''] ?? 0);
+    const completedProduced = hasVariantBreakdown ?
+    Object.values(completedByVariant).reduce((s, q) => s + q, 0) : (_completedByVariant$ =
+    completedByVariant['']) != null ? _completedByVariant$ : 0;
     const pendingTotal = Math.max(0, completedProduced - alreadyIn);
     if (pendingTotal <= 0) continue;
 
     const pendingByVariant = {};
     if (hasVariantBreakdown) {
-      Object.entries(completedByVariant).forEach(([vid, qty]) => {
-        pendingByVariant[vid] = Math.max(0, qty - (alreadyInByVariant[vid] ?? 0));
+      Object.entries(completedByVariant).forEach(([vid, qty]) => {var _alreadyInByVariant$v2;
+        pendingByVariant[vid] = Math.max(0, qty - ((_alreadyInByVariant$v2 = alreadyInByVariant[vid]) != null ? _alreadyInByVariant$v2 : 0));
       });
     }
 
     const productBlockOrderTotal = sumBlockOrderQty(
-      (orders || []).filter((o) => o.productId === order.productId),
+      (orders || []).filter((o) => o.productId === order.productId)
     );
 
     list.push({
@@ -122,12 +122,12 @@ function computeOrderMode(orders, prodRecords) {
       pendingTotal,
       alreadyInByVariant,
       pendingByVariant: Object.keys(pendingByVariant).length > 0 ? pendingByVariant : { '': pendingTotal },
-      canStockIn: pendingTotal > 0,
+      canStockIn: pendingTotal > 0
     });
   }
 
   return list.sort((a, b) =>
-    (b.orderNumber || '').localeCompare(a.orderNumber || '', 'zh-CN'),
+  (b.orderNumber || '').localeCompare(a.orderNumber || '', 'zh-CN')
   );
 }
 
@@ -142,7 +142,7 @@ function computeProductMode(orders, prodRecords, pmp) {
 
   const merged = [];
 
-  for (const [productId, blockOrders] of byProduct) {
+  for (const _ref2 of byProduct) {const productId = _ref2[0];const blockOrders = _ref2[1];
     const rep = blockOrders[0];
     const lastMilestone = rep.milestones[rep.milestones.length - 1];
     if (!lastMilestone) continue;
@@ -152,16 +152,16 @@ function computeProductMode(orders, prodRecords, pmp) {
     const globalKeys = Object.keys(globalByVariant);
 
     const productStockInRecords = (prodRecords || []).filter(
-      (r) => r.type === 'STOCK_IN' && r.productId === productId,
+      (r) => r.type === 'STOCK_IN' && r.productId === productId
     );
     const productAlreadyIn = productStockInRecords.reduce(
       (s, r) => s + (Number(r.quantity) || 0),
-      0,
+      0
     );
     const productAlreadyInByVariant = {};
-    productStockInRecords.forEach((r) => {
-      const vid = r.variantId ?? '';
-      productAlreadyInByVariant[vid] = (productAlreadyInByVariant[vid] ?? 0) + (Number(r.quantity) || 0);
+    productStockInRecords.forEach((r) => {var _r$variantId5, _productAlreadyInByVa;
+      const vid = (_r$variantId5 = r.variantId) != null ? _r$variantId5 : '';
+      productAlreadyInByVariant[vid] = ((_productAlreadyInByVa = productAlreadyInByVariant[vid]) != null ? _productAlreadyInByVa : 0) + (Number(r.quantity) || 0);
     });
 
     const anyNamedVariant = globalKeys.some((k) => k !== '');
@@ -169,26 +169,26 @@ function computeProductMode(orders, prodRecords, pmp) {
     let pendingByVariant = {};
 
     if (anyNamedVariant) {
-      globalCompleted = globalKeys.reduce((s, k) => s + (globalByVariant[k] ?? 0), 0);
-      globalKeys.forEach((vid) => {
-        const done = globalByVariant[vid] ?? 0;
-        const already = productAlreadyInByVariant[vid] ?? 0;
+      globalCompleted = globalKeys.reduce((s, k) => {var _globalByVariant$k;return s + ((_globalByVariant$k = globalByVariant[k]) != null ? _globalByVariant$k : 0);}, 0);
+      globalKeys.forEach((vid) => {var _globalByVariant$vid, _productAlreadyInByVa2;
+        const done = (_globalByVariant$vid = globalByVariant[vid]) != null ? _globalByVariant$vid : 0;
+        const already = (_productAlreadyInByVa2 = productAlreadyInByVariant[vid]) != null ? _productAlreadyInByVa2 : 0;
         const p = Math.max(0, done - already);
         if (p > 0) pendingByVariant[vid] = p;
       });
     } else {
-      globalCompleted = globalKeys.length > 0
-        ? globalKeys.reduce((s, k) => s + (globalByVariant[k] ?? 0), 0)
-        : combinedCompletedAtTemplate(blockOrders, pmp, productId, lastTid);
+      globalCompleted = globalKeys.length > 0 ?
+      globalKeys.reduce((s, k) => {var _globalByVariant$k2;return s + ((_globalByVariant$k2 = globalByVariant[k]) != null ? _globalByVariant$k2 : 0);}, 0) :
+      combinedCompletedAtTemplate(blockOrders, pmp, productId, lastTid);
     }
 
     const pendingTotal = Math.max(0, globalCompleted - productAlreadyIn);
     if (pendingTotal <= 0) continue;
 
     const blockOrderTotal = sumBlockOrderQty(blockOrders);
-    const normalizedPbv = Object.keys(pendingByVariant).length > 0
-      ? pendingByVariant
-      : { '': pendingTotal };
+    const normalizedPbv = Object.keys(pendingByVariant).length > 0 ?
+    pendingByVariant :
+    { '': pendingTotal };
 
     merged.push({
       rowKey: productId,
@@ -204,20 +204,20 @@ function computeProductMode(orders, prodRecords, pmp) {
       alreadyInByVariant: productAlreadyInByVariant,
       pendingByVariant: normalizedPbv,
       canStockIn: pendingTotal > 0,
-      productionLinkMode: 'product',
+      productionLinkMode: 'product'
     });
   }
 
   return merged.sort(
     (a, b) =>
-      (a.productName || '').localeCompare(b.productName || '', 'zh-CN') ||
-      a.rowKey.localeCompare(b.rowKey),
+    (a.productName || '').localeCompare(b.productName || '', 'zh-CN') ||
+    a.rowKey.localeCompare(b.rowKey)
   );
 }
 
 function computePendingStockOrders(orders, prodRecords, opts) {
-  const productionLinkMode = (opts && opts.productionLinkMode) || 'order';
-  const pmp = (opts && opts.productMilestoneProgresses) || [];
+  const productionLinkMode = opts && opts.productionLinkMode || 'order';
+  const pmp = opts && opts.productMilestoneProgresses || [];
 
   if (productionLinkMode !== 'product') {
     return computeOrderMode(orders, prodRecords);
@@ -237,7 +237,7 @@ function computeOrderPendingStockRow(order, prodRecords) {
   const rows = computeOrderMode([order], prodRecords);
   if (rows.length) return rows[0];
   const orderTotal = sumOrderQty(order);
-  const { alreadyIn } = stockInAggregatesForOrder(order, prodRecords);
+  const _stockInAggregatesFor2 = stockInAggregatesForOrder(order, prodRecords),alreadyIn = _stockInAggregatesFor2.alreadyIn;
   const completed = lastMilestoneCompletedQty(order);
   const pendingTotal = Math.max(0, completed - alreadyIn);
   return {
@@ -250,13 +250,13 @@ function computeOrderPendingStockRow(order, prodRecords) {
     completed,
     alreadyIn,
     pendingTotal,
-    canStockIn: pendingTotal > 0,
+    canStockIn: pendingTotal > 0
   };
 }
 
 function computePendingStockForOrders(orders, prodRecords, opts) {
   return computePendingStockOrders(orders, prodRecords, opts).filter(
-    (row) => row.pendingTotal > 0 || row.alreadyIn > 0,
+    (row) => row.pendingTotal > 0 || row.alreadyIn > 0
   );
 }
 
@@ -265,5 +265,5 @@ module.exports = {
   computePendingStockForOrders,
   computePendingStockOrders,
   stockInAggregatesForOrder,
-  lastMilestoneCompletedQty,
+  lastMilestoneCompletedQty
 };

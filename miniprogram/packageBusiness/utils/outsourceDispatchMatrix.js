@@ -2,13 +2,13 @@
  * 外协发出色码矩阵（对齐 Web OutsourceDispatchQuantityModal + outsourceDispatchVariantCaps）
  */
 
-const {
-  isProcessSequential,
-  findGatingPredecessorIndex,
-  buildOutOfSequenceTemplateIds,
-} = require('./reportVariantMaxQty.js');
-const { productHasColorSizeMatrix } = require('./productionPlans.js');
-const { dispatchRowKey } = require('./outsourceReceiveKeys.js');
+const _require =
+
+
+
+  require('./reportVariantMaxQty.js'),isProcessSequential = _require.isProcessSequential,findGatingPredecessorIndex = _require.findGatingPredecessorIndex,buildOutOfSequenceTemplateIds = _require.buildOutOfSequenceTemplateIds;
+const _require2 = require('./productionPlans.js'),productHasColorSizeMatrix = _require2.productHasColorSizeMatrix;
+const _require3 = require('./outsourceReceiveKeys.js'),dispatchRowKey = _require3.dispatchRowKey;
 
 function variantQuantityKey(baseKey, variantId) {
   return variantId ? `${baseKey}|${variantId}` : baseKey;
@@ -17,10 +17,10 @@ function variantQuantityKey(baseKey, variantId) {
 function sumVariantQtyInOrders(orders, variantId) {
   const vid = variantId || '';
   return (orders || []).reduce(
-    (s, o) => s + (o.items || [])
-      .filter((i) => (i.variantId || '') === vid)
-      .reduce((a, i) => a + (Number(i.quantity) || 0), 0),
-    0,
+    (s, o) => s + (o.items || []).
+    filter((i) => (i.variantId || '') === vid).
+    reduce((a, i) => a + (Number(i.quantity) || 0), 0),
+    0
   );
 }
 
@@ -35,9 +35,9 @@ function combinedCompletedByVariantAtTemplate(blockOrders, pmp, productId, templ
     if (row.productId !== productId || row.milestoneTemplateId !== templateId) return;
     const reps = row.reports;
     if (reps && reps.length) {
-      reps.forEach((r) => add(r.variantId ?? row.variantId ?? '', Number(r.quantity) || 0));
-    } else {
-      add(row.variantId ?? '', Number(row.completedQuantity) || 0);
+      reps.forEach((r) => {var _ref, _r$variantId;return add((_ref = (_r$variantId = r.variantId) != null ? _r$variantId : row.variantId) != null ? _ref : '', Number(r.quantity) || 0);});
+    } else {var _row$variantId;
+      add((_row$variantId = row.variantId) != null ? _row$variantId : '', Number(row.completedQuantity) || 0);
     }
   });
   (blockOrders || []).forEach((o) => {
@@ -45,7 +45,7 @@ function combinedCompletedByVariantAtTemplate(blockOrders, pmp, productId, templ
     if (!m) return;
     const reps = m.reports;
     if (reps && reps.length) {
-      reps.forEach((r) => add(r.variantId ?? '', Number(r.quantity) || 0));
+      reps.forEach((r) => {var _r$variantId2;return add((_r$variantId2 = r.variantId) != null ? _r$variantId2 : '', Number(r.quantity) || 0);});
     } else {
       const total = Number(m.completedQuantity) || 0;
       if (total <= 0) return;
@@ -55,12 +55,12 @@ function combinedCompletedByVariantAtTemplate(blockOrders, pmp, productId, templ
         return;
       }
       let rem = total;
-      (o.items || []).forEach((item, idx) => {
-        const part = idx === o.items.length - 1
-          ? rem
-          : Math.floor((total * (Number(item.quantity) || 0)) / totalQty);
+      (o.items || []).forEach((item, idx) => {var _item$variantId;
+        const part = idx === o.items.length - 1 ?
+        rem :
+        Math.floor(total * (Number(item.quantity) || 0) / totalQty);
         rem -= part;
-        add(item.variantId ?? '', part);
+        add((_item$variantId = item.variantId) != null ? _item$variantId : '', part);
       });
     }
   });
@@ -78,7 +78,7 @@ function buildDefectiveReworkByOrderMilestone(orders, prodRecords) {
     (o.milestones || []).forEach((m) => {
       const defective = (m.reports || []).reduce(
         (s, r) => s + (Number(r.defectiveQuantity) || 0),
-        0,
+        0
       );
       map.set(`${o.id}|${m.templateId}`, { defective, rework: 0, reworkByVariant: {} });
     });
@@ -90,9 +90,9 @@ function buildDefectiveReworkByOrderMilestone(orders, prodRecords) {
   const recordById = new Map((prodRecords || []).map((r) => [r.id, r]));
   const reworkRecords = (prodRecords || []).filter((r) => r.type === 'REWORK');
   const reworkByOrderSource = new Map();
-  reworkRecords.forEach((r) => {
+  reworkRecords.forEach((r) => {var _ref2, _r$sourceNodeId;
     if (!r.orderId) return;
-    const src = r.sourceNodeId ?? r.nodeId ?? '';
+    const src = (_ref2 = (_r$sourceNodeId = r.sourceNodeId) != null ? _r$sourceNodeId : r.nodeId) != null ? _ref2 : '';
     const k = `${r.orderId}|${src}`;
     const arr = reworkByOrderSource.get(k) || [];
     arr.push(r);
@@ -117,38 +117,38 @@ function buildDefectiveReworkByOrderMilestone(orders, prodRecords) {
 function netOutsourceDispatchedProductNodeVariant(records, productId, nodeId, variantId) {
   const vid = variantId || '';
   const rows = (records || []).filter(
-    (r) => r.type === 'OUTSOURCE' && !r.orderId && r.productId === productId && r.nodeId === nodeId,
+    (r) => r.type === 'OUTSOURCE' && !r.orderId && r.productId === productId && r.nodeId === nodeId
   );
-  const sent = rows
-    .filter((r) => r.status === '加工中' && (r.variantId || '') === vid)
-    .reduce((s, r) => s + (Number(r.quantity) || 0), 0);
-  const recv = rows
-    .filter((r) => r.status === '已收回' && (r.variantId || '') === vid)
-    .reduce((s, r) => s + (Number(r.quantity) || 0), 0);
+  const sent = rows.
+  filter((r) => r.status === '加工中' && (r.variantId || '') === vid).
+  reduce((s, r) => s + (Number(r.quantity) || 0), 0);
+  const recv = rows.
+  filter((r) => r.status === '已收回' && (r.variantId || '') === vid).
+  reduce((s, r) => s + (Number(r.quantity) || 0), 0);
   return Math.max(0, sent - recv);
 }
 
 function netOutsourceDispatchedOrderNodeVariant(records, orderId, nodeId, variantId) {
   const vid = variantId || '';
   const rows = (records || []).filter(
-    (r) => r.type === 'OUTSOURCE' && r.orderId === orderId && r.nodeId === nodeId,
+    (r) => r.type === 'OUTSOURCE' && r.orderId === orderId && r.nodeId === nodeId
   );
-  const sent = rows
-    .filter((r) => r.status === '加工中' && (r.variantId || '') === vid)
-    .reduce((s, r) => s + (Number(r.quantity) || 0), 0);
-  const recv = rows
-    .filter((r) => r.status === '已收回' && (r.variantId || '') === vid)
-    .reduce((s, r) => s + (Number(r.quantity) || 0), 0);
+  const sent = rows.
+  filter((r) => r.status === '加工中' && (r.variantId || '') === vid).
+  reduce((s, r) => s + (Number(r.quantity) || 0), 0);
+  const recv = rows.
+  filter((r) => r.status === '已收回' && (r.variantId || '') === vid).
+  reduce((s, r) => s + (Number(r.quantity) || 0), 0);
   return Math.max(0, sent - recv);
 }
 
 function productOutsourceDispatchUsesAggregateVariantPool(
-  blockOrders,
-  pmp,
-  productId,
-  nodeId,
-  product,
-) {
+blockOrders,
+pmp,
+productId,
+nodeId,
+product)
+{
   const variantIdsInBlock = new Set();
   (blockOrders || []).forEach((o) => {
     (o.items || []).forEach((i) => {
@@ -165,26 +165,26 @@ function productOutsourceDispatchUsesAggregateVariantPool(
   });
   (blockOrders || []).forEach((o) => {
     const ms = (o.milestones || []).find((m) => m.templateId === nodeId);
-    (ms?.reports || []).forEach((r) => {
+    ((ms == null ? void 0 : ms.reports) || []).forEach((r) => {
       if (r.variantId) variantIdsFromProgress.add(r.variantId);
     });
   });
-  const variants = (product && product.variants) || [];
+  const variants = product && product.variants || [];
   const unionSize = new Set([...variantIdsInBlock, ...variantIdsFromProgress]).size;
   return variants.length > 0 && unionSize === 0;
 }
 
 function variantMaxGoodProductMode(
-  variantId,
-  templateId,
-  productId,
-  blockOrders,
-  pmp,
-  processSequenceMode,
-  milestoneNodeIds,
-  getDefectiveRework,
-  outOfSequenceTemplateIds,
-) {
+variantId,
+templateId,
+productId,
+blockOrders,
+pmp,
+processSequenceMode,
+milestoneNodeIds,
+getDefectiveRework,
+outOfSequenceTemplateIds)
+{
   const tid = templateId;
   const idx = (milestoneNodeIds || []).indexOf(tid);
   const vid = variantId || '';
@@ -198,38 +198,38 @@ function variantMaxGoodProductMode(
       baseV = combinedCompletedAtTemplateVariant(blockOrders, pmp, productId, prevTid, vid);
     }
   }
-  let defectiveV = (pmp || [])
-    .filter((p) => p.productId === productId && p.milestoneTemplateId === tid && (p.variantId ?? '') === vid)
-    .flatMap((p) => p.reports || [])
-    .reduce((s, r) => s + (Number(r.defectiveQuantity) || 0), 0);
+  let defectiveV = (pmp || []).
+  filter((p) => {var _p$variantId;return p.productId === productId && p.milestoneTemplateId === tid && ((_p$variantId = p.variantId) != null ? _p$variantId : '') === vid;}).
+  flatMap((p) => p.reports || []).
+  reduce((s, r) => s + (Number(r.defectiveQuantity) || 0), 0);
   if (defectiveV === 0) {
     (blockOrders || []).forEach((o) => {
       const ms = (o.milestones || []).find((m) => m.templateId === tid);
-      defectiveV += (ms?.reports || [])
-        .filter((r) => (r.variantId || '') === vid)
-        .reduce((s, r) => s + (Number(r.defectiveQuantity) || 0), 0);
+      defectiveV += ((ms == null ? void 0 : ms.reports) || []).
+      filter((r) => (r.variantId || '') === vid).
+      reduce((s, r) => s + (Number(r.defectiveQuantity) || 0), 0);
     });
   }
   let reworkV = 0;
   (blockOrders || []).forEach((o) => {
     const dr = getDefectiveRework(o.id, tid);
-    reworkV += (dr.reworkByVariant && dr.reworkByVariant[vid]) || 0;
+    reworkV += dr.reworkByVariant && dr.reworkByVariant[vid] || 0;
   });
   const availableV = Math.max(0, baseV - defectiveV + reworkV);
   return Math.max(0, availableV - curDone);
 }
 
 function sumOutsourceableByVariantProductMatrix(
-  records,
-  product,
-  nodeId,
-  blockOrders,
-  productMilestoneProgresses,
-  processSequenceMode,
-  getDefectiveRework,
-  outOfSequenceTemplateIds,
-) {
-  const variants = (product && product.variants) || [];
+records,
+product,
+nodeId,
+blockOrders,
+productMilestoneProgresses,
+processSequenceMode,
+getDefectiveRework,
+outOfSequenceTemplateIds)
+{
+  const variants = product && product.variants || [];
   if (!variants.length) return Number.POSITIVE_INFINITY;
   const milestoneNodeIds = product.milestoneNodeIds || [];
   let sum = 0;
@@ -245,7 +245,7 @@ function sumOutsourceableByVariantProductMatrix(
       processSequenceMode,
       milestoneNodeIds,
       getDefectiveRework,
-      outOfSequenceTemplateIds,
+      outOfSequenceTemplateIds
     );
     const dispatched = netOutsourceDispatchedProductNodeVariant(records, product.id, nodeId, vid);
     sum += Math.max(0, maxGood - dispatched);
@@ -253,20 +253,20 @@ function sumOutsourceableByVariantProductMatrix(
   return sum;
 }
 
-function resolveDispatchRowMatrixContext(row, ctx) {
-  const {
-    productionLinkMode = 'order',
-    orders = [],
-    products = [],
-    categories = [],
-  } = ctx || {};
+function resolveDispatchRowMatrixContext(row, ctx) {var _product$variants;
+  const _ref3 =
+
+
+
+
+    ctx || {},_ref3$productionLinkM = _ref3.productionLinkMode,productionLinkMode = _ref3$productionLinkM === void 0 ? 'order' : _ref3$productionLinkM,_ref3$orders = _ref3.orders,orders = _ref3$orders === void 0 ? [] : _ref3$orders,_ref3$products = _ref3.products,products = _ref3$products === void 0 ? [] : _ref3$products,_ref3$categories = _ref3.categories,categories = _ref3$categories === void 0 ? [] : _ref3$categories;
   const product = products.find((p) => p.id === row.productId);
-  const category = categories.find((c) => c.id === product?.categoryId);
+  const category = categories.find((c) => c.id === (product == null ? void 0 : product.categoryId));
   const hasColorSizeMatrix = productHasColorSizeMatrix(product, category);
   const isProductBlock = productionLinkMode === 'product' && !row.orderId;
   const baseKey = dispatchRowKey(row);
 
-  if (!hasColorSizeMatrix || !product?.variants?.length) {
+  if (!hasColorSizeMatrix || !(product != null && (_product$variants = product.variants) != null && _product$variants.length)) {
     return { baseKey, hasMatrix: false, variants: [], aggregate: false };
   }
 
@@ -280,10 +280,10 @@ function resolveDispatchRowMatrixContext(row, ctx) {
         ctx.productMilestoneProgresses,
         row.productId,
         row.nodeId,
-        product,
+        product
       ),
       product,
-      blockOrders: orders.filter((o) => o.productId === row.productId),
+      blockOrders: orders.filter((o) => o.productId === row.productId)
     };
   }
 
@@ -291,92 +291,92 @@ function resolveDispatchRowMatrixContext(row, ctx) {
     baseKey,
     hasMatrix: true,
     variants: [...product.variants],
-    aggregate: (() => {
+    aggregate: ((_order$milestones) => {
       const order = orders.find((o) => o.id === row.orderId);
       const variantIdsInOrderItems = new Set(
-        (order?.items || []).map((i) => i.variantId).filter(Boolean),
+        ((order == null ? void 0 : order.items) || []).map((i) => i.variantId).filter(Boolean)
       );
       const variantIdsFromOrderMilestone = new Set();
-      const msRow = order?.milestones?.find((m) => m.templateId === row.nodeId);
-      (msRow?.reports || []).forEach((r) => {
+      const msRow = order == null || (_order$milestones = order.milestones) == null ? void 0 : _order$milestones.find((m) => m.templateId === row.nodeId);
+      ((msRow == null ? void 0 : msRow.reports) || []).forEach((r) => {
         if (r.variantId) variantIdsFromOrderMilestone.add(r.variantId);
       });
       return variantIdsInOrderItems.size === 0 && variantIdsFromOrderMilestone.size === 0;
     })(),
     product,
-    order: orders.find((o) => o.id === row.orderId),
+    order: orders.find((o) => o.id === row.orderId)
   };
 }
 
-function getAvailableForVariantOrder(row, variantId, qtyMap, ctx) {
-  const { records = [], orders = [], defectiveReworkMap, processSequenceMode, outOfSequenceTemplateIds } = ctx;
+function getAvailableForVariantOrder(row, variantId, qtyMap, ctx) {var _order$milestones2, _order$milestones$fin, _order$milestones3, _order$milestones4;
+  const _ctx$records = ctx.records,records = _ctx$records === void 0 ? [] : _ctx$records,_ctx$orders = ctx.orders,orders = _ctx$orders === void 0 ? [] : _ctx$orders,defectiveReworkMap = ctx.defectiveReworkMap,processSequenceMode = ctx.processSequenceMode,outOfSequenceTemplateIds = ctx.outOfSequenceTemplateIds;
   const order = orders.find((o) => o.id === row.orderId);
   const baseKey = dispatchRowKey(row);
-  const ms = order?.milestones?.find((m) => m.templateId === row.nodeId);
-  const msIdx = order?.milestones?.findIndex((m) => m.templateId === row.nodeId) ?? -1;
-  const templateIds = (order?.milestones || []).map((m) => m.templateId);
+  const ms = order == null || (_order$milestones2 = order.milestones) == null ? void 0 : _order$milestones2.find((m) => m.templateId === row.nodeId);
+  const msIdx = (_order$milestones$fin = order == null || (_order$milestones3 = order.milestones) == null ? void 0 : _order$milestones3.findIndex((m) => m.templateId === row.nodeId)) != null ? _order$milestones$fin : -1;
+  const templateIds = ((order == null ? void 0 : order.milestones) || []).map((m) => m.templateId);
   const gateIdx = findGatingPredecessorIndex(templateIds, msIdx, outOfSequenceTemplateIds);
-  const prevMs = isProcessSequential(processSequenceMode, row.nodeId, outOfSequenceTemplateIds) && gateIdx >= 0
-    ? order?.milestones?.[gateIdx]
-    : undefined;
+  const prevMs = isProcessSequential(processSequenceMode, row.nodeId, outOfSequenceTemplateIds) && gateIdx >= 0 ?
+  order == null || (_order$milestones4 = order.milestones) == null ? void 0 : _order$milestones4[gateIdx] :
+  undefined;
   const vid = variantId || '';
-  const drForNode = defectiveReworkMap?.get(`${row.orderId}|${row.nodeId}`)
-    || { defective: 0, rework: 0, reworkByVariant: {} };
+  const drForNode = (defectiveReworkMap == null ? void 0 : defectiveReworkMap.get(`${row.orderId}|${row.nodeId}`)) ||
+  { defective: 0, rework: 0, reworkByVariant: {} };
 
-  const completedInMs = (ms?.reports || [])
-    .filter((r) => (r.variantId || '') === vid)
-    .reduce((s, r) => s + (Number(r.quantity) || 0), 0);
-  const defectiveForVariant = (ms?.reports || [])
-    .filter((r) => (r.variantId || '') === vid)
-    .reduce((s, r) => s + (Number(r.defectiveQuantity) || 0), 0);
+  const completedInMs = ((ms == null ? void 0 : ms.reports) || []).
+  filter((r) => (r.variantId || '') === vid).
+  reduce((s, r) => s + (Number(r.quantity) || 0), 0);
+  const defectiveForVariant = ((ms == null ? void 0 : ms.reports) || []).
+  filter((r) => (r.variantId || '') === vid).
+  reduce((s, r) => s + (Number(r.defectiveQuantity) || 0), 0);
 
   let seqRemaining;
   if (prevMs) {
-    const prevCompleted = (prevMs.reports || [])
-      .filter((r) => (r.variantId || '') === vid)
-      .reduce((s, r) => s + (Number(r.quantity) || 0), 0);
+    const prevCompleted = (prevMs.reports || []).
+    filter((r) => (r.variantId || '') === vid).
+    reduce((s, r) => s + (Number(r.quantity) || 0), 0);
     seqRemaining = prevCompleted - completedInMs;
-  } else {
-    const orderItem = order?.items?.find((i) => (i.variantId || '') === vid);
-    seqRemaining = (Number(orderItem?.quantity) || 0) - completedInMs;
+  } else {var _order$items;
+    const orderItem = order == null || (_order$items = order.items) == null ? void 0 : _order$items.find((i) => (i.variantId || '') === vid);
+    seqRemaining = (Number(orderItem == null ? void 0 : orderItem.quantity) || 0) - completedInMs;
   }
   const base = Math.max(0, seqRemaining - defectiveForVariant);
-  const reworkForVariant = (drForNode.reworkByVariant && drForNode.reworkByVariant[vid]) || 0;
+  const reworkForVariant = drForNode.reworkByVariant && drForNode.reworkByVariant[vid] || 0;
   const dispatched = netOutsourceDispatchedOrderNodeVariant(records, row.orderId, row.nodeId, vid);
 
   const matrixCtx = resolveDispatchRowMatrixContext(row, ctx);
   if (matrixCtx.aggregate) {
     const variants = matrixCtx.variants || [];
-    const sumOther = variants.reduce((s, v) => (
-      v.id === variantId ? s : s + (Number(qtyMap[variantQuantityKey(baseKey, v.id)]) || 0)
-    ), 0);
+    const sumOther = variants.reduce((s, v) =>
+    v.id === variantId ? s : s + (Number(qtyMap[variantQuantityKey(baseKey, v.id)]) || 0),
+    0);
     return Math.max(0, row.availableQty - sumOther);
   }
   return Math.max(0, base + reworkForVariant - dispatched);
 }
 
-function getAvailableForVariantProduct(row, variantId, qtyMap, ctx) {
-  const {
-    records = [],
-    orders = [],
-    productMilestoneProgresses = [],
-    processSequenceMode,
-    outOfSequenceTemplateIds,
-    defectiveReworkMap,
-  } = ctx;
+function getAvailableForVariantProduct(row, variantId, qtyMap, ctx) {var _ctx$products;
+  const _ctx$records2 =
+
+
+
+
+
+
+    ctx.records,records = _ctx$records2 === void 0 ? [] : _ctx$records2,_ctx$orders2 = ctx.orders,orders = _ctx$orders2 === void 0 ? [] : _ctx$orders2,_ctx$productMilestone = ctx.productMilestoneProgresses,productMilestoneProgresses = _ctx$productMilestone === void 0 ? [] : _ctx$productMilestone,processSequenceMode = ctx.processSequenceMode,outOfSequenceTemplateIds = ctx.outOfSequenceTemplateIds,defectiveReworkMap = ctx.defectiveReworkMap;
   const baseKey = dispatchRowKey(row);
-  const product = ctx.products?.find((p) => p.id === row.productId);
+  const product = (_ctx$products = ctx.products) == null ? void 0 : _ctx$products.find((p) => p.id === row.productId);
   const blockOrders = orders.filter((o) => o.productId === row.productId);
   const matrixCtx = resolveDispatchRowMatrixContext(row, ctx);
 
-  const getDr = (oid, tid) => defectiveReworkMap?.get(`${oid}|${tid}`)
-    || { defective: 0, rework: 0, reworkByVariant: {} };
+  const getDr = (oid, tid) => (defectiveReworkMap == null ? void 0 : defectiveReworkMap.get(`${oid}|${tid}`)) ||
+  { defective: 0, rework: 0, reworkByVariant: {} };
 
   if (matrixCtx.aggregate) {
     const variants = matrixCtx.variants || [];
-    const sumOther = variants.reduce((s, v) => (
-      v.id === variantId ? s : s + (Number(qtyMap[variantQuantityKey(baseKey, v.id)]) || 0)
-    ), 0);
+    const sumOther = variants.reduce((s, v) =>
+    v.id === variantId ? s : s + (Number(qtyMap[variantQuantityKey(baseKey, v.id)]) || 0),
+    0);
     return Math.max(0, row.availableQty - sumOther);
   }
 
@@ -387,9 +387,9 @@ function getAvailableForVariantProduct(row, variantId, qtyMap, ctx) {
     blockOrders,
     productMilestoneProgresses,
     processSequenceMode,
-    product?.milestoneNodeIds || [],
+    (product == null ? void 0 : product.milestoneNodeIds) || [],
     getDr,
-    outOfSequenceTemplateIds,
+    outOfSequenceTemplateIds
   );
   const dispatched = netOutsourceDispatchedProductNodeVariant(records, row.productId, row.nodeId, variantId);
   return Math.max(0, maxGood - dispatched);
@@ -402,11 +402,11 @@ function buildDispatchVariantMaxMap(row, ctx, qtyMap) {
   }
   const map = {};
   (matrixCtx.variants || []).forEach((v) => {
-    if (!v?.id) return;
+    if (!(v != null && v.id)) return;
     const isProductBlock = ctx.productionLinkMode === 'product' && !row.orderId;
-    map[v.id] = isProductBlock
-      ? getAvailableForVariantProduct(row, v.id, qtyMap || {}, ctx)
-      : getAvailableForVariantOrder(row, v.id, qtyMap || {}, ctx);
+    map[v.id] = isProductBlock ?
+    getAvailableForVariantProduct(row, v.id, qtyMap || {}, ctx) :
+    getAvailableForVariantOrder(row, v.id, qtyMap || {}, ctx);
   });
   return map;
 }
@@ -436,9 +436,9 @@ function buildDefaultDispatchQuantities(rows, ctx) {
 
     let remaining = row.availableQty;
     variants.forEach((v) => {
-      const cap = isProductBlock
-        ? getAvailableForVariantProduct(row, v.id, out, ctx)
-        : getAvailableForVariantOrder(row, v.id, out, ctx);
+      const cap = isProductBlock ?
+      getAvailableForVariantProduct(row, v.id, out, ctx) :
+      getAvailableForVariantOrder(row, v.id, out, ctx);
       const take = Math.min(Math.max(0, cap), remaining);
       out[variantQuantityKey(baseKey, v.id)] = take;
       remaining -= take;
@@ -465,16 +465,16 @@ function computeOutsourceCellMaxAllowed(maxForVariant, variantId, baseKey, quant
 }
 
 function buildOutsourceDispatchMatrixLayout(product, dict, quantities, maxByVariant, baseKey) {
-  const { buildVariantMatrixUiModel } = require('./variantQtyMatrix.js');
+  const _require4 = require('./variantQtyMatrix.js'),buildVariantMatrixUiModel = _require4.buildVariantMatrixUiModel;
   const subsetVariantIds = new Set(Object.keys(maxByVariant || {}));
-  const subsetVariants = (product?.variants || []).filter((v) => v?.id && subsetVariantIds.has(v.id));
+  const subsetVariants = ((product == null ? void 0 : product.variants) || []).filter((v) => (v == null ? void 0 : v.id) && subsetVariantIds.has(v.id));
   if (!subsetVariants.length) return null;
 
   const subsetProduct = {
     ...product,
     variants: subsetVariants,
     colorIds: product.colorIds,
-    sizeIds: product.sizeIds,
+    sizeIds: product.sizeIds
   };
   const qtyMap = {};
   subsetVariants.forEach((v) => {
@@ -486,14 +486,14 @@ function buildOutsourceDispatchMatrixLayout(product, dict, quantities, maxByVari
 
   matrix.colorRows = matrix.colorRows.map((row) => ({
     ...row,
-    cells: row.cells.map((cell) => {
+    cells: row.cells.map((cell) => {var _maxByVariant$cell$va;
       if (!cell.variantId) return cell;
-      const maxQty = maxByVariant[cell.variantId] ?? 0;
+      const maxQty = (_maxByVariant$cell$va = maxByVariant[cell.variantId]) != null ? _maxByVariant$cell$va : 0;
       return {
         ...cell,
-        maxQtyLabel: maxQty > 0 ? `最多 ${maxQty}` : '',
+        maxQtyLabel: maxQty > 0 ? `最多 ${maxQty}` : ''
       };
-    }),
+    })
   }));
   return matrix;
 }
@@ -511,7 +511,7 @@ function collectDispatchQuantityEntries(rows, quantities) {
           row,
           baseKey,
           variantId: k.slice(baseKey.length + 1),
-          quantity: qty,
+          quantity: qty
         });
       });
       return;
@@ -537,5 +537,5 @@ module.exports = {
   collectDispatchQuantityEntries,
   sumMatrixQuantitiesForRow,
   netOutsourceDispatchedOrderNodeVariant,
-  netOutsourceDispatchedProductNodeVariant,
+  netOutsourceDispatchedProductNodeVariant
 };

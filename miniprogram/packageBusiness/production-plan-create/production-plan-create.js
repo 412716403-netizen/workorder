@@ -1,42 +1,42 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const { PlanStatus } = require('../config/productionPlans.js');
-const {
-  productHasColorSizeMatrix,
-  variantLabel,
-  localTodayYmd,
-  normalizeMasterList,
-  normalizeAppDictionaries,
-  formatProductLabelWithSku,
-} = require('../utils/productionPlans.js');
-const {
-  customerShowInCreate,
-  buildPlanCreateCustomFields,
-  buildInitialPlanCustomData,
-  getProductUnitName,
-  buildCustomDataPayload,
-} = require('../utils/planFormCustomField.js');
-const { buildVariantMatrixUiModel } = require('../utils/variantQtyMatrix.js');
-const {
-  activateMatrixKeyboardCell,
-  applyMatrixKeyboardKey,
-  buildMatrixKeyboardPreview,
-  createMatrixKeyboardInputSession,
-  getNextMatrixVariantIdInColumn,
-  getNextMatrixVariantIdInRow,
-} = require('../utils/matrixQtyKeyboard.js');
-const {
-  createPlan,
-  fetchTenantConfig,
-  fetchProductsAll,
-  fetchCategoriesAll,
-  fetchPartnersAll,
-  fetchPartnerCategoriesAll,
-  fetchDictionaries,
-} = require('../utils/planApi.js');
-const { readNavBarMetrics, readWindowMetrics, computePlanCreateHeaderHeight } = require('../../utils/windowMetrics.js');
-const { LIST_ROUTES, afterSaveReturnToList } = require('../utils/saveNavigation.js');
-const { afterMatrixKeyboardOpen } = require('../utils/matrixKeyboardLayout.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 = require('../config/productionPlans.js'),PlanStatus = _require3.PlanStatus;
+const _require4 =
+
+
+
+
+
+
+  require('../utils/productionPlans.js'),productHasColorSizeMatrix = _require4.productHasColorSizeMatrix,variantLabel = _require4.variantLabel,localTodayYmd = _require4.localTodayYmd,normalizeMasterList = _require4.normalizeMasterList,normalizeAppDictionaries = _require4.normalizeAppDictionaries,formatProductLabelWithSku = _require4.formatProductLabelWithSku;
+const _require5 =
+
+
+
+
+
+  require('../utils/planFormCustomField.js'),customerShowInCreate = _require5.customerShowInCreate,buildPlanCreateCustomFields = _require5.buildPlanCreateCustomFields,buildInitialPlanCustomData = _require5.buildInitialPlanCustomData,getProductUnitName = _require5.getProductUnitName,buildCustomDataPayload = _require5.buildCustomDataPayload;
+const _require6 = require('../utils/variantQtyMatrix.js'),buildVariantMatrixUiModel = _require6.buildVariantMatrixUiModel;
+const _require7 =
+
+
+
+
+
+
+  require('../utils/matrixQtyKeyboard.js'),activateMatrixKeyboardCell = _require7.activateMatrixKeyboardCell,applyMatrixKeyboardKey = _require7.applyMatrixKeyboardKey,buildMatrixKeyboardPreview = _require7.buildMatrixKeyboardPreview,createMatrixKeyboardInputSession = _require7.createMatrixKeyboardInputSession,getNextMatrixVariantIdInColumn = _require7.getNextMatrixVariantIdInColumn,getNextMatrixVariantIdInRow = _require7.getNextMatrixVariantIdInRow;
+const _require8 =
+
+
+
+
+
+
+
+  require('../utils/planApi.js'),createPlan = _require8.createPlan,fetchTenantConfig = _require8.fetchTenantConfig,fetchProductsAll = _require8.fetchProductsAll,fetchCategoriesAll = _require8.fetchCategoriesAll,fetchPartnersAll = _require8.fetchPartnersAll,fetchPartnerCategoriesAll = _require8.fetchPartnerCategoriesAll,fetchDictionaries = _require8.fetchDictionaries;
+const _require9 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require9.readNavBarMetrics,readWindowMetrics = _require9.readWindowMetrics,computePlanCreateHeaderHeight = _require9.computePlanCreateHeaderHeight;
+const _require0 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require0.LIST_ROUTES,afterSaveReturnToList = _require0.afterSaveReturnToList;
+const _require1 = require('../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require1.afterMatrixKeyboardOpen;
 
 function computeHeaderBlockHeight(nav) {
   return computePlanCreateHeaderHeight(nav);
@@ -82,7 +82,7 @@ Page({
     activeMatrixVariantId: '',
     matrixKeyboardLabel: '',
     matrixKeyboardValue: '',
-    matrixScrollTop: 0,
+    matrixScrollTop: 0
   },
 
   onLoad() {
@@ -92,7 +92,7 @@ Page({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
       headerBlockHeight: computeHeaderBlockHeight(nav),
-      scrollHeight: computeScrollHeight(nav),
+      scrollHeight: computeScrollHeight(nav)
     });
     this.bootstrap();
   },
@@ -119,19 +119,19 @@ Page({
 
   async bootstrap() {
     try {
-      const [config, productsRaw, categoriesRaw, partnersRaw, partnerCategoriesRaw, dictionariesRaw] =
+      const _await$Promise$all =
         await Promise.all([
-          fetchTenantConfig(),
-          fetchProductsAll(),
-          fetchCategoriesAll(),
-          fetchPartnersAll(),
-          fetchPartnerCategoriesAll(),
-          fetchDictionaries(),
-        ]);
+        fetchTenantConfig(),
+        fetchProductsAll(),
+        fetchCategoriesAll(),
+        fetchPartnersAll(),
+        fetchPartnerCategoriesAll(),
+        fetchDictionaries()]
+        ),config = _await$Promise$all[0],productsRaw = _await$Promise$all[1],categoriesRaw = _await$Promise$all[2],partnersRaw = _await$Promise$all[3],partnerCategoriesRaw = _await$Promise$all[4],dictionariesRaw = _await$Promise$all[5];
 
-      const planFormSettings = (config && config.planFormSettings) || {};
+      const planFormSettings = config && config.planFormSettings || {};
       const listDisplay = planFormSettings.listDisplay || {};
-      const productionLinkMode = (config && config.productionLinkMode) || 'order';
+      const productionLinkMode = config && config.productionLinkMode || 'order';
       const createCustomFields = buildPlanCreateCustomFields(planFormSettings);
       const customData = buildInitialPlanCustomData(createCustomFields);
       const products = normalizeMasterList(productsRaw);
@@ -156,7 +156,7 @@ Page({
         showCustomer: customerShowInCreate(planFormSettings, productionLinkMode),
         showDeliveryDate: listDisplay.showDeliveryDate !== false,
         createCustomFields,
-        customData,
+        customData
       });
     } catch {
       this.setData({ loading: false });
@@ -181,15 +181,15 @@ Page({
           const colors = this._dictionaries.colors || [];
           const sizes = this._dictionaries.sizes || [];
           const colorLabel =
-            (colors.find((c) => c.id === v.colorId) || {}).name || '—';
+          (colors.find((c) => c.id === v.colorId) || {}).name || '—';
           const sizeLabel =
-            (sizes.find((s) => s.id === v.sizeId) || {}).name || '—';
+          (sizes.find((s) => s.id === v.sizeId) || {}).name || '—';
           return {
             variantId: v.id,
             colorLabel,
             sizeLabel,
             label: variantLabel(v, this._dictionaries),
-            quantity: '',
+            quantity: ''
           };
         });
       }
@@ -206,18 +206,18 @@ Page({
       totalQuantity: 0,
       matrixKeyboardVisible: false,
       matrixInputReplaceAll: false,
-      activeMatrixVariantId: '',
+      activeMatrixVariantId: ''
     });
     this.refreshCanSubmit();
   },
 
   onProductChange(e) {
-    const { product } = e.detail || {};
+    const _ref = e.detail || {},product = _ref.product;
     this.applyProductSelection(product || null);
   },
 
   onCustomerChange(e) {
-    this.setData({ customer: (e.detail && e.detail.name) || '' });
+    this.setData({ customer: e.detail && e.detail.name || '' });
   },
 
   onDueDateChange(e) {
@@ -225,7 +225,7 @@ Page({
   },
 
   onCustomDataChange(e) {
-    const customData = (e.detail && e.detail.customData) || {};
+    const customData = e.detail && e.detail.customData || {};
     this.setData({ customData });
   },
 
@@ -238,7 +238,7 @@ Page({
     const matrixLayout = buildVariantMatrixUiModel(
       this._selectedProduct,
       this._dictionaries,
-      this._variantQty,
+      this._variantQty
     );
     this.setData({ matrixLayout });
     this.syncMatrixKeyboardPreview();
@@ -250,12 +250,12 @@ Page({
     const preview = buildMatrixKeyboardPreview(this.data.matrixLayout, id, this._variantQty);
     this.setData({
       matrixKeyboardLabel: preview.label,
-      matrixKeyboardValue: preview.value,
+      matrixKeyboardValue: preview.value
     });
   },
 
   onMatrixCellTap(e) {
-    const { variantId } = e.currentTarget.dataset;
+    const variantId = e.currentTarget.dataset.variantId;
     if (!variantId) return;
     activateMatrixKeyboardCell(this._matrixKbInput);
     const preview = buildMatrixKeyboardPreview(this.data.matrixLayout, variantId, this._variantQty);
@@ -264,25 +264,25 @@ Page({
       matrixInputReplaceAll: true,
       activeMatrixVariantId: variantId,
       matrixKeyboardLabel: preview.label,
-      matrixKeyboardValue: preview.value,
+      matrixKeyboardValue: preview.value
     }, () => {
       afterMatrixKeyboardOpen(this, '.plan-create-scroll');
     });
   },
 
   onMatrixKeyboardAction(e) {
-    const { action, digit } = e.detail || {};
+    const _ref2 = e.detail || {},action = _ref2.action,digit = _ref2.digit;
     if (action === 'confirm') {
       this.setData({
         matrixKeyboardVisible: false,
         matrixInputReplaceAll: false,
         activeMatrixVariantId: '',
         matrixKeyboardLabel: '',
-        matrixKeyboardValue: '',
+        matrixKeyboardValue: ''
       });
       return;
     }
-    const { activeMatrixVariantId, matrixLayout } = this.data;
+    const _this$data = this.data,activeMatrixVariantId = _this$data.activeMatrixVariantId,matrixLayout = _this$data.matrixLayout;
     if (action === 'enter') {
       const nextId = getNextMatrixVariantIdInRow(matrixLayout, activeMatrixVariantId);
       if (nextId) {
@@ -292,7 +292,7 @@ Page({
           activeMatrixVariantId: nextId,
           matrixInputReplaceAll: true,
           matrixKeyboardLabel: preview.label,
-          matrixKeyboardValue: preview.value,
+          matrixKeyboardValue: preview.value
         }, () => {
           afterMatrixKeyboardOpen(this, '.plan-create-scroll');
         });
@@ -302,7 +302,7 @@ Page({
           matrixInputReplaceAll: false,
           activeMatrixVariantId: '',
           matrixKeyboardLabel: '',
-          matrixKeyboardValue: '',
+          matrixKeyboardValue: ''
         });
       }
       return;
@@ -316,7 +316,7 @@ Page({
           activeMatrixVariantId: nextId,
           matrixInputReplaceAll: true,
           matrixKeyboardLabel: preview.label,
-          matrixKeyboardValue: preview.value,
+          matrixKeyboardValue: preview.value
         }, () => {
           afterMatrixKeyboardOpen(this, '.plan-create-scroll');
         });
@@ -326,14 +326,14 @@ Page({
           matrixInputReplaceAll: false,
           activeMatrixVariantId: '',
           matrixKeyboardLabel: '',
-          matrixKeyboardValue: '',
+          matrixKeyboardValue: ''
         });
       }
       return;
     }
     if (!activeMatrixVariantId) return;
     const current = this._variantQty[activeMatrixVariantId] || '';
-    const { value, replaceConsumed } = applyMatrixKeyboardKey(this._matrixKbInput, current, action, digit);
+    const _applyMatrixKeyboardK = applyMatrixKeyboardKey(this._matrixKbInput, current, action, digit),value = _applyMatrixKeyboardK.value,replaceConsumed = _applyMatrixKeyboardK.replaceConsumed;
     this._variantQty[activeMatrixVariantId] = value;
     if (replaceConsumed) {
       this.setData({ matrixInputReplaceAll: false });
@@ -342,7 +342,7 @@ Page({
   },
 
   onVariantQtyInput(e) {
-    const { index } = e.currentTarget.dataset;
+    const index = e.currentTarget.dataset.index;
     const val = e.detail.value || '';
     const rows = (this.data.variantRows || []).slice();
     if (rows[index]) {
@@ -351,7 +351,7 @@ Page({
         colorLabel: rows[index].colorLabel,
         sizeLabel: rows[index].sizeLabel,
         label: rows[index].label,
-        quantity: val,
+        quantity: val
       };
     }
     this.setData({ variantRows: rows });
@@ -359,7 +359,7 @@ Page({
   },
 
   computeTotalQuantity() {
-    const { useVariantMatrix, matrixLayout, variantRows, singleQuantity } = this.data;
+    const _this$data2 = this.data,useVariantMatrix = _this$data2.useVariantMatrix,matrixLayout = _this$data2.matrixLayout,variantRows = _this$data2.variantRows,singleQuantity = _this$data2.singleQuantity;
     if (!useVariantMatrix) return parseInt(singleQuantity, 10) || 0;
     if (matrixLayout) {
       let sum = 0;
@@ -374,7 +374,7 @@ Page({
   },
 
   refreshCanSubmit() {
-    const { productId, useVariantMatrix, singleQuantity, variantRows, matrixLayout } = this.data;
+    const _this$data3 = this.data,productId = _this$data3.productId,useVariantMatrix = _this$data3.useVariantMatrix,singleQuantity = _this$data3.singleQuantity,variantRows = _this$data3.variantRows,matrixLayout = _this$data3.matrixLayout;
     const totalQuantity = this.computeTotalQuantity();
     if (!productId) {
       this.setData({ canSubmit: false, totalQuantity: 0 });
@@ -394,7 +394,7 @@ Page({
   },
 
   buildItems() {
-    const { useVariantMatrix, singleQuantity, variantRows, matrixLayout } = this.data;
+    const _this$data4 = this.data,useVariantMatrix = _this$data4.useVariantMatrix,singleQuantity = _this$data4.singleQuantity,variantRows = _this$data4.variantRows,matrixLayout = _this$data4.matrixLayout;
     if (useVariantMatrix) {
       if (matrixLayout) {
         const items = [];
@@ -408,9 +408,9 @@ Page({
         });
         return items;
       }
-      return variantRows
-        .map((r) => ({ variantId: r.variantId, quantity: parseInt(r.quantity, 10) || 0 }))
-        .filter((it) => it.quantity > 0);
+      return variantRows.
+      map((r) => ({ variantId: r.variantId, quantity: parseInt(r.quantity, 10) || 0 })).
+      filter((it) => it.quantity > 0);
     }
     const qty = parseInt(singleQuantity, 10) || 0;
     return qty > 0 ? [{ quantity: qty }] : [];
@@ -436,7 +436,7 @@ Page({
     const today = localTodayYmd();
     const customData = buildCustomDataPayload(
       this.data.createCustomFields,
-      this.data.customData,
+      this.data.customData
     );
     const body = {
       id: `plan-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -444,10 +444,10 @@ Page({
       items,
       startDate: today,
       status: PlanStatus.APPROVED,
-      customer: this.data.showCustomer ? (this.data.customer || '') : '',
+      customer: this.data.showCustomer ? this.data.customer || '' : '',
       priority: 'Medium',
       assignments: {},
-      createdAt: today,
+      createdAt: today
     };
     if (customData) body.customData = customData;
     if (this.data.showDeliveryDate && this.data.dueDate) {
@@ -459,14 +459,14 @@ Page({
       await createPlan(body);
       afterSaveReturnToList({
         listUrl: LIST_ROUTES.PRODUCTION_PLANS,
-        toastTitle: '创建成功',
+        toastTitle: '创建成功'
       });
     } catch (err) {
       wx.showToast({
-        title: (err && err.message) || '创建失败',
-        icon: 'none',
+        title: err && err.message || '创建失败',
+        icon: 'none'
       });
       this.setData({ submitting: false });
     }
-  },
+  }
 });

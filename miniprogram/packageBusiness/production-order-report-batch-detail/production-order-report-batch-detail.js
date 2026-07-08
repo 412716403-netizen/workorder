@@ -1,46 +1,46 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const {
-  listReportHistory,
-  fetchTenantConfig,
-  fetchProductsAll,
-  fetchCategoriesAll,
-  fetchNodesAll,
-  updateOrderReport,
-  deleteOrderReport,
-  updateProductReport,
-  deleteProductReport,
-  createOrderReport,
-  createProductReport,
-} = require('../utils/orderApi.js');
-const { fetchDictionaries } = require('../utils/planApi.js');
-const { normalizeMasterList, normalizeAppDictionaries } = require('../utils/productionPlans.js');
-const {
-  dateInputToIsoStart,
-  dateInputToIsoEndExclusive,
-} = require('../utils/orderReportHistory.js');
-const {
-  buildReportBatches,
-  findBatchByKey,
-  buildBatchDetailView,
-  editPartsToTimestamp,
-} = require('../utils/reportBatchDetail.js');
-const {
-  initBatchEditQuantities,
-  buildBatchSaveOperations,
-} = require('../utils/reportBatchEdit.js');
-const { buildReportMatrixLayout } = require('../utils/orderReportForm.js');
-const {
-  activateMatrixKeyboardCell,
-  applyMatrixKeyboardKey,
-  buildMatrixKeyboardPreview,
-  createMatrixKeyboardInputSession,
-  getNextMatrixVariantIdInColumn,
-  getNextMatrixVariantIdInRow,
-} = require('../utils/matrixQtyKeyboard.js');
-const { readNavBarMetrics, readWindowMetrics, computePlanCreateHeaderHeight } = require('../../utils/windowMetrics.js');
-const { afterMatrixKeyboardOpen } = require('../utils/matrixKeyboardLayout.js');
-const { LIST_ROUTES, buildReportHistoryListUrl, afterSaveReturnToList } = require('../utils/saveNavigation.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 =
+
+
+
+
+
+
+
+
+
+
+
+  require('../utils/orderApi.js'),listReportHistory = _require3.listReportHistory,fetchTenantConfig = _require3.fetchTenantConfig,fetchProductsAll = _require3.fetchProductsAll,fetchCategoriesAll = _require3.fetchCategoriesAll,fetchNodesAll = _require3.fetchNodesAll,updateOrderReport = _require3.updateOrderReport,deleteOrderReport = _require3.deleteOrderReport,updateProductReport = _require3.updateProductReport,deleteProductReport = _require3.deleteProductReport,createOrderReport = _require3.createOrderReport,createProductReport = _require3.createProductReport;
+const _require4 = require('../utils/planApi.js'),fetchDictionaries = _require4.fetchDictionaries;
+const _require5 = require('../utils/productionPlans.js'),normalizeMasterList = _require5.normalizeMasterList,normalizeAppDictionaries = _require5.normalizeAppDictionaries;
+const _require6 =
+
+
+  require('../utils/orderReportHistory.js'),dateInputToIsoStart = _require6.dateInputToIsoStart,dateInputToIsoEndExclusive = _require6.dateInputToIsoEndExclusive;
+const _require7 =
+
+
+
+
+  require('../utils/reportBatchDetail.js'),buildReportBatches = _require7.buildReportBatches,findBatchByKey = _require7.findBatchByKey,buildBatchDetailView = _require7.buildBatchDetailView,editPartsToTimestamp = _require7.editPartsToTimestamp;
+const _require8 =
+
+
+  require('../utils/reportBatchEdit.js'),initBatchEditQuantities = _require8.initBatchEditQuantities,buildBatchSaveOperations = _require8.buildBatchSaveOperations;
+const _require9 = require('../utils/orderReportForm.js'),buildReportMatrixLayout = _require9.buildReportMatrixLayout;
+const _require0 =
+
+
+
+
+
+
+  require('../utils/matrixQtyKeyboard.js'),activateMatrixKeyboardCell = _require0.activateMatrixKeyboardCell,applyMatrixKeyboardKey = _require0.applyMatrixKeyboardKey,buildMatrixKeyboardPreview = _require0.buildMatrixKeyboardPreview,createMatrixKeyboardInputSession = _require0.createMatrixKeyboardInputSession,getNextMatrixVariantIdInColumn = _require0.getNextMatrixVariantIdInColumn,getNextMatrixVariantIdInRow = _require0.getNextMatrixVariantIdInRow;
+const _require1 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require1.readNavBarMetrics,readWindowMetrics = _require1.readWindowMetrics,computePlanCreateHeaderHeight = _require1.computePlanCreateHeaderHeight;
+const _require10 = require('../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require10.afterMatrixKeyboardOpen;
+const _require11 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require11.LIST_ROUTES,buildReportHistoryListUrl = _require11.buildReportHistoryListUrl,afterSaveReturnToList = _require11.afterSaveReturnToList;
 
 function computeHeaderBlockHeight(nav) {
   return computePlanCreateHeaderHeight(nav);
@@ -60,7 +60,7 @@ function emptyMatrixKeyboardState() {
     matrixInputReplaceAll: false,
     activeMatrixVariantId: '',
     matrixKeyboardLabel: '',
-    matrixKeyboardValue: '',
+    matrixKeyboardValue: ''
   };
 }
 
@@ -84,7 +84,7 @@ Page({
     activeMatrixVariantId: '',
     matrixKeyboardLabel: '',
     matrixKeyboardValue: '',
-    matrixScrollTop: 0,
+    matrixScrollTop: 0
   },
 
   _quantities: {},
@@ -109,7 +109,7 @@ Page({
       navBarHeight: nav.navBarHeight,
       headerBlockHeight: computeHeaderBlockHeight(nav),
       canEdit: this._canEdit,
-      canDelete: this._canDelete,
+      canDelete: this._canDelete
     });
     this.loadDetail();
   },
@@ -130,7 +130,7 @@ Page({
     return buildReportHistoryListUrl({
       dateFrom: this._dateFrom,
       dateTo: this._dateTo,
-      orderId: this._orderId,
+      orderId: this._orderId
     });
   },
 
@@ -143,7 +143,7 @@ Page({
       editing: false,
       editMatrixLayout: null,
       qtyInputMode: 'good',
-      ...emptyMatrixKeyboardState(),
+      ...emptyMatrixKeyboardState()
     });
     this.refreshViewModel();
   },
@@ -157,13 +157,13 @@ Page({
       nodes: this._nodes,
       productMap: this._productMap,
       categoryMap: this._categoryMap,
-      showAmount: true,
+      showAmount: true
     });
     const showFooter = !detail.isOutsourceReceive && (this._canEdit || this._canDelete) && !this.data.editing;
     this.setData({
       detail,
       showFooter,
-      scrollHeight: computeScrollHeight(readNavBarMetrics(), showFooter || this.data.editing),
+      scrollHeight: computeScrollHeight(readNavBarMetrics(), showFooter || this.data.editing)
     });
   },
 
@@ -174,26 +174,26 @@ Page({
     }
     this.setData({ loading: true });
     try {
-      const [config, productsRaw, categoriesRaw, nodesRaw, dictionariesRaw] = await Promise.all([
+      const _await$Promise$all = await Promise.all([
         fetchTenantConfig(),
         fetchProductsAll().catch(() => []),
         fetchCategoriesAll().catch(() => []),
         fetchNodesAll().catch(() => []),
-        fetchDictionaries().catch(() => []),
-      ]);
-      const productionLinkMode = (config && config.productionLinkMode) || 'order';
+        fetchDictionaries().catch(() => [])]
+        ),config = _await$Promise$all[0],productsRaw = _await$Promise$all[1],categoriesRaw = _await$Promise$all[2],nodesRaw = _await$Promise$all[3],dictionariesRaw = _await$Promise$all[4];
+      const productionLinkMode = config && config.productionLinkMode || 'order';
       const params = {
         startDate: dateInputToIsoStart(this._dateFrom),
         endDate: dateInputToIsoEndExclusive(this._dateTo),
-        productionLinkMode,
+        productionLinkMode
       };
       if (this._orderId) params.orderIds = this._orderId;
 
       const res = await listReportHistory(params);
       const batches = buildReportBatches(
-        (res && res.orderReports) || [],
-        (res && res.productReports) || [],
-        productionLinkMode,
+        res && res.orderReports || [],
+        res && res.productReports || [],
+        productionLinkMode
       );
       this._batch = findBatchByKey(batches, this._batchKey);
       this._products = normalizeMasterList(productsRaw);
@@ -213,7 +213,7 @@ Page({
       this.refreshViewModel();
     } catch (err) {
       this.setData({ loading: false, detail: null, showFooter: false });
-      wx.showToast({ title: (err && err.message) || '加载失败', icon: 'none' });
+      wx.showToast({ title: err && err.message || '加载失败', icon: 'none' });
     }
   },
 
@@ -223,7 +223,7 @@ Page({
       this._editProduct,
       this._dictionaries,
       this._quantities,
-      this._defectiveQuantities,
+      this._defectiveQuantities
     );
   },
 
@@ -237,11 +237,11 @@ Page({
     const preview = buildMatrixKeyboardPreview(
       this.data.editMatrixLayout,
       id,
-      this.getActiveMatrixQtyMap(),
+      this.getActiveMatrixQtyMap()
     );
     this.setData({
       matrixKeyboardLabel: preview.label,
-      matrixKeyboardValue: preview.value,
+      matrixKeyboardValue: preview.value
     });
   },
 
@@ -272,7 +272,7 @@ Page({
       nodes: this._nodes,
       productMap: this._productMap,
       categoryMap: this._categoryMap,
-      showAmount: true,
+      showAmount: true
     });
     detail.editRate = detail.batchUnitRate > 0 ? String(detail.batchUnitRate) : '';
 
@@ -289,7 +289,7 @@ Page({
         this._editProduct,
         this._dictionaries,
         this._quantities,
-        this._defectiveQuantities,
+        this._defectiveQuantities
       );
     } else {
       this._quantities = {};
@@ -304,7 +304,7 @@ Page({
       showFooter: true,
       qtyInputMode: 'good',
       ...emptyMatrixKeyboardState(),
-      scrollHeight: computeScrollHeight(readNavBarMetrics(), true),
+      scrollHeight: computeScrollHeight(readNavBarMetrics(), true)
     });
   },
 
@@ -325,12 +325,12 @@ Page({
   },
 
   onLineGoodInput(e) {
-    const { index } = e.currentTarget.dataset;
+    const index = e.currentTarget.dataset.index;
     this.setData({ [`detail.lineItems[${index}].editGoodQty`]: e.detail.value || '' });
   },
 
   onLineDefectiveInput(e) {
-    const { index } = e.currentTarget.dataset;
+    const index = e.currentTarget.dataset.index;
     this.setData({ [`detail.lineItems[${index}].editDefectiveQty`]: e.detail.value || '' });
   },
 
@@ -340,37 +340,37 @@ Page({
     if (mode === this.data.qtyInputMode) return;
     this.setData({
       qtyInputMode: mode,
-      ...emptyMatrixKeyboardState(),
+      ...emptyMatrixKeyboardState()
     });
   },
 
   onMatrixCellTap(e) {
-    const { variantId } = e.currentTarget.dataset;
+    const variantId = e.currentTarget.dataset.variantId;
     if (!variantId) return;
     activateMatrixKeyboardCell(this._matrixKbInput);
     const preview = buildMatrixKeyboardPreview(
       this.data.editMatrixLayout,
       variantId,
-      this.getActiveMatrixQtyMap(),
+      this.getActiveMatrixQtyMap()
     );
     this.setData({
       matrixKeyboardVisible: true,
       matrixInputReplaceAll: true,
       activeMatrixVariantId: variantId,
       matrixKeyboardLabel: preview.label,
-      matrixKeyboardValue: preview.value,
+      matrixKeyboardValue: preview.value
     }, () => {
       afterMatrixKeyboardOpen(this, '.plan-detail-scroll');
     });
   },
 
   onMatrixKeyboardAction(e) {
-    const { action, digit } = e.detail || {};
+    const _ref = e.detail || {},action = _ref.action,digit = _ref.digit;
     if (action === 'confirm') {
       this.setData(emptyMatrixKeyboardState());
       return;
     }
-    const { activeMatrixVariantId, editMatrixLayout } = this.data;
+    const _this$data = this.data,activeMatrixVariantId = _this$data.activeMatrixVariantId,editMatrixLayout = _this$data.editMatrixLayout;
     const qtyMap = this.getActiveMatrixQtyMap();
     if (action === 'enter') {
       const nextId = getNextMatrixVariantIdInRow(editMatrixLayout, activeMatrixVariantId);
@@ -381,7 +381,7 @@ Page({
           activeMatrixVariantId: nextId,
           matrixInputReplaceAll: true,
           matrixKeyboardLabel: preview.label,
-          matrixKeyboardValue: preview.value,
+          matrixKeyboardValue: preview.value
         }, () => {
           afterMatrixKeyboardOpen(this, '.plan-detail-scroll');
         });
@@ -399,7 +399,7 @@ Page({
           activeMatrixVariantId: nextId,
           matrixInputReplaceAll: true,
           matrixKeyboardLabel: preview.label,
-          matrixKeyboardValue: preview.value,
+          matrixKeyboardValue: preview.value
         }, () => {
           afterMatrixKeyboardOpen(this, '.plan-detail-scroll');
         });
@@ -410,7 +410,7 @@ Page({
     }
     if (!activeMatrixVariantId) return;
     const current = qtyMap[activeMatrixVariantId] || '';
-    const { value, replaceConsumed } = applyMatrixKeyboardKey(this._matrixKbInput, current, action, digit);
+    const _applyMatrixKeyboardK = applyMatrixKeyboardKey(this._matrixKbInput, current, action, digit),value = _applyMatrixKeyboardK.value,replaceConsumed = _applyMatrixKeyboardK.replaceConsumed;
     this.setActiveMatrixQty(activeMatrixVariantId, value);
     if (replaceConsumed) {
       this.setData({ matrixInputReplaceAll: false });
@@ -466,7 +466,7 @@ Page({
       matrixLayout: this.data.editMatrixLayout,
       useMatrix,
       timestamp,
-      operator,
+      operator
     });
 
     if (!ops.length) {
@@ -483,12 +483,12 @@ Page({
       wx.hideLoading();
       afterSaveReturnToList({
         listUrl: this.reportHistoryListUrl(),
-        toastTitle: '已保存',
+        toastTitle: '已保存'
       });
     } catch (err) {
       wx.hideLoading();
       this.setData({ saving: false });
-      wx.showToast({ title: (err && err.message) || '保存失败', icon: 'none' });
+      wx.showToast({ title: err && err.message || '保存失败', icon: 'none' });
     }
   },
 
@@ -505,7 +505,7 @@ Page({
       confirmColor: '#ff4d4f',
       success: (res) => {
         if (res.confirm) this.deleteBatch();
-      },
+      }
     });
   },
 
@@ -524,15 +524,15 @@ Page({
       wx.hideLoading();
       afterSaveReturnToList({
         listUrl: this.reportHistoryListUrl(),
-        toastTitle: '已删除',
+        toastTitle: '已删除'
       });
     } catch (err) {
       wx.hideLoading();
-      wx.showToast({ title: (err && err.message) || '删除失败', icon: 'none' });
+      wx.showToast({ title: err && err.message || '删除失败', icon: 'none' });
     }
   },
 
   onProductImageError() {
     this.setData({ 'detail.showProductImage': false });
-  },
+  }
 });

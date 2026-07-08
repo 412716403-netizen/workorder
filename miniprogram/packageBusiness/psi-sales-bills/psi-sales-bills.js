@@ -1,25 +1,25 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const { DEFAULT_PAGE_SIZE, PSI_TYPE } = require('../config/salesBills.js');
-const {
-  parseSalesBillSearch,
-  buildSalesBillListCards,
-  slimSalesBillListCard,
-} = require('../utils/salesBills.js');
-const { groupRecordsByDocNumber } = require('../utils/psiOpsAggregators.js');
-const { fetchAllPsiRecords } = require('../utils/psiApi.js');
-const { fetchProductsAll, fetchDictionaries, fetchCategoriesAll } = require('../utils/planApi.js');
-const { fetchWarehousesAll } = require('../utils/orderApi.js');
-const { buildProductMap, buildCategoryMap } = require('../utils/purchaseOrders.js');
-const { normalizeAppDictionaries } = require('../utils/productionPlans.js');
-const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
-const { shouldHubListRefetch, trackHubListHidden, LIST_ROUTES } = require('../utils/saveNavigation.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 = require('../config/salesBills.js'),DEFAULT_PAGE_SIZE = _require3.DEFAULT_PAGE_SIZE,PSI_TYPE = _require3.PSI_TYPE;
+const _require4 =
+
+
+
+  require('../utils/salesBills.js'),parseSalesBillSearch = _require4.parseSalesBillSearch,buildSalesBillListCards = _require4.buildSalesBillListCards,slimSalesBillListCard = _require4.slimSalesBillListCard;
+const _require5 = require('../utils/psiOpsAggregators.js'),groupRecordsByDocNumber = _require5.groupRecordsByDocNumber;
+const _require6 = require('../utils/psiApi.js'),fetchAllPsiRecords = _require6.fetchAllPsiRecords;
+const _require7 = require('../utils/planApi.js'),fetchProductsAll = _require7.fetchProductsAll,fetchDictionaries = _require7.fetchDictionaries,fetchCategoriesAll = _require7.fetchCategoriesAll;
+const _require8 = require('../utils/orderApi.js'),fetchWarehousesAll = _require8.fetchWarehousesAll;
+const _require9 = require('../utils/purchaseOrders.js'),buildProductMap = _require9.buildProductMap,buildCategoryMap = _require9.buildCategoryMap;
+const _require0 = require('../utils/productionPlans.js'),normalizeAppDictionaries = _require0.normalizeAppDictionaries;
+const _require1 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require1.readNavBarMetrics,readWindowMetrics = _require1.readWindowMetrics;
+const _require10 = require('../utils/saveNavigation.js'),shouldHubListRefetch = _require10.shouldHubListRefetch,trackHubListHidden = _require10.trackHubListHidden,LIST_ROUTES = _require10.LIST_ROUTES;
 
 const HUB_LIST_ROUTE = LIST_ROUTES.PSI_SALES_BILLS.replace(/^\//, '');
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
-  const toolsPx = Math.ceil((win.windowWidth / 750) * 128);
+  const toolsPx = Math.ceil(win.windowWidth / 750 * 128);
   return nav.statusBarHeight + nav.navBarHeight + toolsPx;
 }
 
@@ -47,7 +47,7 @@ Page({
     hasMore: false,
     statusBarHeight: 20,
     navBarHeight: 44,
-    headerBlockHeight: 88,
+    headerBlockHeight: 88
   },
 
   onLoad(options) {
@@ -55,13 +55,13 @@ Page({
     this.setData({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
-      headerBlockHeight: computeHeaderBlockHeight(nav),
+      headerBlockHeight: computeHeaderBlockHeight(nav)
     });
 
     const docNumber = options.docNumber ? decodeURIComponent(options.docNumber) : '';
     if (docNumber) {
       wx.redirectTo({
-        url: `/packageBusiness/psi-sales-bill-detail/psi-sales-bill-detail?docNumber=${encodeURIComponent(docNumber)}`,
+        url: `/packageBusiness/psi-sales-bill-detail/psi-sales-bill-detail?docNumber=${encodeURIComponent(docNumber)}`
       });
       return;
     }
@@ -86,7 +86,7 @@ Page({
     this.setData({
       canViewFlow: hasPermission(ctx.permissions || [], 'psi:sales_bill:view'),
       canCreate: hasPermission(ctx.permissions || [], 'psi:sales_bill:create'),
-      canViewAmount: hasPermission(ctx.permissions || [], 'psi:sales_bill:amount'),
+      canViewAmount: hasPermission(ctx.permissions || [], 'psi:sales_bill:amount')
     });
     if (!this._initialized) {
       this.bootstrap();
@@ -140,7 +140,7 @@ Page({
     const docNumber = e.currentTarget.dataset.docNumber;
     if (!docNumber) return;
     wx.navigateTo({
-      url: `/packageBusiness/psi-sales-bill-detail/psi-sales-bill-detail?docNumber=${encodeURIComponent(docNumber)}`,
+      url: `/packageBusiness/psi-sales-bill-detail/psi-sales-bill-detail?docNumber=${encodeURIComponent(docNumber)}`
     });
   },
 
@@ -154,7 +154,7 @@ Page({
         lines: (card.lines || []).map((line) => {
           if (line.lineGroupId !== lineGroupId) return line;
           return { ...line, showProductImage: false };
-        }),
+        })
       };
     });
     this.setData({ cards });
@@ -164,17 +164,17 @@ Page({
     this._initialized = true;
     this.setData({ loading: true });
     try {
-      const [salesBills, products, dictionaries, warehouses, categories] = await Promise.all([
+      const _await$Promise$all = await Promise.all([
         fetchAllPsiRecords(PSI_TYPE),
         fetchProductsAll().catch(() => []),
         fetchDictionaries().catch(() => ({})),
         fetchWarehousesAll().catch(() => []),
-        fetchCategoriesAll().catch(() => []),
-      ]);
+        fetchCategoriesAll().catch(() => [])]
+        ),salesBills = _await$Promise$all[0],products = _await$Promise$all[1],dictionaries = _await$Promise$all[2],warehouses = _await$Promise$all[3],categories = _await$Promise$all[4];
       this._salesBills = salesBills || [];
       this._productMap = buildProductMap(products || []);
       this._categoryMap = buildCategoryMap(categories || []);
-      this._warehouseMap = buildWarehouseMap(Array.isArray(warehouses) ? warehouses : (warehouses.data || []));
+      this._warehouseMap = buildWarehouseMap(Array.isArray(warehouses) ? warehouses : warehouses.data || []);
       this._dictionaries = normalizeAppDictionaries(dictionaries);
       await this.reloadList();
     } catch (err) {
@@ -191,7 +191,7 @@ Page({
       categoryMap: this._categoryMap,
       warehouseMap: this._warehouseMap,
       dictionaries: this._dictionaries,
-      showAmount: this.data.canViewAmount,
+      showAmount: this.data.canViewAmount
     };
     return buildSalesBillListCards(groups, parsed.search, ctx).map(slimSalesBillListCard);
   },
@@ -222,8 +222,8 @@ Page({
       page,
       total: allCards.length,
       hasMore,
-      emptyText: allCards.length ? '' : (this.data.searchKeyword ? '无匹配销售单' : '暂无销售单'),
+      emptyText: allCards.length ? '' : this.data.searchKeyword ? '无匹配销售单' : '暂无销售单'
     });
     return Promise.resolve();
-  },
+  }
 });

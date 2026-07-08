@@ -1,4 +1,6 @@
-const { request } = require('../../utils/request.js');
+const _require = require('../../utils/request.js'),request = _require.request;
+const { parseTenantListResponse } = require('../../utils/session.js');
+const { clearFeaturePluginsCache } = require('../../utils/featurePlugins.js');
 
 function appStatusLabel(status) {
   if (status === 'PENDING') return { label: '审核中', pill: 'pending' };
@@ -6,16 +8,26 @@ function appStatusLabel(status) {
   return { label: '已拒绝', pill: 'rejected' };
 }
 
+function headerTitleForMode(mode) {
+  if (mode === 'create') return '创建企业';
+  if (mode === 'join') return '加入企业';
+  if (mode === 'pending') return '等待审核';
+  if (mode === 'createDone') return '提交成功';
+  return '企业入驻';
+}
+
 Page({
   data: {
     mode: 'choose',
+    headerTitle: '企业入驻',
     fromPage: 'notenant',
     loading: false,
     lookupLoading: false,
     createName: '',
     inviteCode: '',
     lookupResult: null,
-    applications: [],
+    lookupResultIcon: '企',
+    applications: []
   },
 
   pollTimer: null,
@@ -27,8 +39,14 @@ Page({
       return;
     }
     const from = query.from === 'select' ? 'select' : 'notenant';
+    const mode = query.mode === 'create' || query.mode === 'join' ? query.mode : 'choose';
     this.fromPage = from;
-    this.setData({ fromPage: from });
+    this.setData({ fromPage: from, mode, headerTitle: headerTitleForMode(mode) });
+  },
+
+  setMode(mode, extra) {
+    const patch = Object.assign({ mode, headerTitle: headerTitleForMode(mode) }, extra || {});
+    this.setData(patch);
   },
 
   onUnload() {
@@ -52,16 +70,20 @@ Page({
   },
 
   onModeChoose() {
-    this.setData({ mode: 'choose', createName: '', inviteCode: '', lookupResult: null });
+    if (this.fromPage === 'select') {
+      wx.navigateBack({ fail: () => wx.reLaunch({ url: '/pages/tenant-select/tenant-select' }) });
+      return;
+    }
+    this.setMode('choose', { createName: '', inviteCode: '', lookupResult: null, lookupResultIcon: '企' });
     this.clearPoll();
   },
 
   onModeCreate() {
-    this.setData({ mode: 'create', createName: '' });
+    this.setMode('create', { createName: '' });
   },
 
   onModeJoin() {
-    this.setData({ mode: 'join', inviteCode: '', lookupResult: null });
+    this.setMode('join', { inviteCode: '', lookupResult: null, lookupResultIcon: '企' });
   },
 
   onCreateName(e) {
@@ -69,7 +91,7 @@ Page({
   },
 
   onInviteCode(e) {
-    this.setData({ inviteCode: e.detail.value });
+    this.setData({ inviteCode: e.detail.value, lookupResult: null, lookupResultIcon: '企' });
   },
 
   onBackChoose() {
@@ -81,7 +103,7 @@ Page({
   },
 
   onHeaderBack() {
-    const { mode } = this.data;
+    const mode = this.data.mode;
     if (mode === 'create' || mode === 'join') {
       this.onModeChoose();
       return;
@@ -90,26 +112,31 @@ Page({
   },
 
   onJoinBack() {
-    this.setData({ mode: 'choose', inviteCode: '', lookupResult: null });
+    if (this.fromPage === 'select') {
+      wx.navigateBack({ fail: () => wx.reLaunch({ url: '/pages/tenant-select/tenant-select' }) });
+      return;
+    }
+    this.setMode('choose', { inviteCode: '', lookupResult: null, lookupResultIcon: '企' });
   },
 
   onBackPending() {
     this.clearPoll();
-    this.setData({ mode: 'choose', applications: [] });
+    this.setMode('choose', { applications: [] });
   },
 
   async refreshTenantsStorage() {
     try {
-      const list = await request({ path: '/tenants', method: 'GET' });
-      wx.setStorageSync('userTenants', JSON.stringify(Array.isArray(list) ? list : []));
+      const list = await request({ path: '/tenants?all=true', method: 'GET' });
+      wx.setStorageSync('userTenants', JSON.stringify(parseTenantListResponse(list)));
     } catch {
-      /* ignore */
-    }
+
+      /* ignore */}
   },
 
-  applySelectAndEnter(d) {
+  applySelectAndEnter(d) {var _d$expiresAt;
     if (d.accessToken) wx.setStorageSync('accessToken', d.accessToken);
     if (d.refreshToken) wx.setStorageSync('refreshToken', d.refreshToken);
+    clearFeaturePluginsCache();
     wx.setStorageSync(
       'tenantCtx',
       JSON.stringify({
@@ -117,8 +144,8 @@ Page({
         tenantName: d.tenantName,
         tenantRole: d.tenantRole,
         permissions: d.permissions || [],
-        expiresAt: d.expiresAt ?? null,
-      }),
+        expiresAt: (_d$expiresAt = d.expiresAt) != null ? _d$expiresAt : null
+      })
     );
     wx.switchTab({ url: '/pages/home/home' });
   },
@@ -130,15 +157,15 @@ Page({
       return;
     }
     this.setData({ loading: true });
-    request({ path: '/tenants', method: 'POST', data: { name } })
-      .then(() => {
-        this.setData({ mode: 'createDone', loading: false });
-        return this.refreshTenantsStorage();
-      })
-      .catch((err) => {
-        wx.showToast({ title: (err && err.message ? String(err.message) : '创建失败').slice(0, 36), icon: 'none' });
-        this.setData({ loading: false });
-      });
+    request({ path: '/tenants', method: 'POST', data: { name } }).
+    then(() => {
+      this.setMode('createDone', { loading: false });
+      return this.refreshTenantsStorage();
+    }).
+    catch((err) => {
+      wx.showToast({ title: (err && err.message ? String(err.message) : '创建失败').slice(0, 36), icon: 'none' });
+      this.setData({ loading: false });
+    });
   },
 
   onAfterCreate() {
@@ -157,54 +184,59 @@ Page({
     }
     this.setData({ lookupLoading: true, lookupResult: null });
     const q = encodeURIComponent(code);
-    request({ path: `/tenants/lookup?code=${q}`, method: 'GET' })
-      .then((res) => {
-        this.setData({ lookupResult: res, lookupLoading: false });
-      })
-      .catch((err) => {
-        wx.showToast({ title: (err && err.message ? String(err.message) : '未找到企业').slice(0, 36), icon: 'none' });
-        this.setData({ lookupLoading: false });
+    request({ path: `/tenants/lookup?code=${q}`, method: 'GET' }).
+    then((res) => {
+      const name = res && res.name ? String(res.name) : '';
+      this.setData({
+        lookupResult: res,
+        lookupResultIcon: name ? name[0] : '企',
+        lookupLoading: false,
       });
+    }).
+    catch((err) => {
+      wx.showToast({ title: (err && err.message ? String(err.message) : '未找到企业').slice(0, 36), icon: 'none' });
+      this.setData({ lookupLoading: false });
+    });
   },
 
   onApplyJoin() {
     const r = this.data.lookupResult;
     if (!r || !r.id) return;
     this.setData({ loading: true });
-    request({ path: `/tenants/${r.id}/apply`, method: 'POST', data: {} })
-      .then(() => {
-        this.setData({ loading: false, mode: 'pending', applications: [] });
-        this.loadApplications();
-        this.startPoll();
-      })
-      .catch((err) => {
-        wx.showToast({ title: (err && err.message ? String(err.message) : '提交失败').slice(0, 36), icon: 'none' });
-        this.setData({ loading: false });
-      });
+    request({ path: `/tenants/${r.id}/apply`, method: 'POST', data: {} }).
+    then(() => {
+      this.setData({ loading: false, mode: 'pending', headerTitle: headerTitleForMode('pending'), applications: [] });
+      this.loadApplications();
+      this.startPoll();
+    }).
+    catch((err) => {
+      wx.showToast({ title: (err && err.message ? String(err.message) : '提交失败').slice(0, 36), icon: 'none' });
+      this.setData({ loading: false });
+    });
   },
 
   loadApplications() {
-    return request({ path: '/tenants/my-applications', method: 'GET' })
-      .then((apps) => {
-        const list = Array.isArray(apps) ? apps : [];
-        const decorated = list.map((a) => {
-          const s = appStatusLabel(a.status);
-          return { ...a, _label: s.label, _pill: s.pill };
-        });
-        this.setData({ applications: decorated });
+    return request({ path: '/tenants/my-applications', method: 'GET' }).
+    then((apps) => {
+      const list = Array.isArray(apps) ? apps : [];
+      const decorated = list.map((a) => {
+        const s = appStatusLabel(a.status);
+        return { ...a, _label: s.label, _pill: s.pill };
+      });
+      this.setData({ applications: decorated });
 
-        const approved = list.find((a) => a.status === 'APPROVED');
-        if (approved) {
-          this.clearPoll();
-          return request({ path: `/tenants/${approved.tenantId}/select`, method: 'POST', data: {} }).then(
-            (d) => {
-              this.applySelectAndEnter(d);
-            },
-          );
-        }
-        return undefined;
-      })
-      .catch(() => {});
+      const approved = list.find((a) => a.status === 'APPROVED');
+      if (approved) {
+        this.clearPoll();
+        return request({ path: `/tenants/${approved.tenantId}/select`, method: 'POST', data: {} }).then(
+          (d) => {
+            this.applySelectAndEnter(d);
+          }
+        );
+      }
+      return undefined;
+    }).
+    catch(() => {});
   },
 
   onShow() {
@@ -212,5 +244,5 @@ Page({
       this.loadApplications();
       this.startPoll();
     }
-  },
+  }
 });

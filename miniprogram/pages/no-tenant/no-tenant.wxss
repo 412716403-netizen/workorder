@@ -1,1 +1,5 @@
+@import '../../styles/auth-flow.wxss';
 
+page {
+  background: var(--color-primary-gradient-end);
+}

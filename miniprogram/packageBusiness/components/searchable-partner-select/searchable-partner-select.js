@@ -3,6 +3,7 @@ const {
   openBottomSheet,
   closeBottomSheet,
   clearBottomSheetTimers,
+  SHEET_ANIM_MS,
 } = require('../../utils/bottomSheetAnim.js');
 
 Component({
@@ -37,6 +38,10 @@ Component({
   lifetimes: {
     detached() {
       clearBottomSheetTimers(this);
+      if (this._sheetCloseNotifyTimer) {
+        clearTimeout(this._sheetCloseNotifyTimer);
+        this._sheetCloseNotifyTimer = null;
+      }
     },
   },
   methods: {
@@ -58,12 +63,21 @@ Component({
 
     onOpen() {
       if (this.data.disabled) return;
+      this.triggerEvent('sheetopen');
       openBottomSheet(this, { search: '', activeTab: 'all' }, { picker: this.properties.cell });
       this.refreshFiltered();
     },
 
     onClose() {
+      if (!this.data.open) return;
       closeBottomSheet(this, { search: '', activeTab: 'all' });
+      if (this._sheetCloseNotifyTimer) {
+        clearTimeout(this._sheetCloseNotifyTimer);
+      }
+      this._sheetCloseNotifyTimer = setTimeout(() => {
+        this.triggerEvent('sheetclose');
+        this._sheetCloseNotifyTimer = null;
+      }, SHEET_ANIM_MS);
     },
 
     noop() {},

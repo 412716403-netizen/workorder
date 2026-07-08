@@ -46,10 +46,13 @@ function fetchOrder(orderId) {
  * @param {Record<string, string | undefined>} params
  */
 function fetchProductionRecords(params) {
-  const qs = Object.entries(params || {})
-    .filter(([, v]) => v != null && v !== '')
-    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
-    .join('&');
+  const parts = [];
+  Object.keys(params || {}).forEach((k) => {
+    const v = params[k];
+    if (v == null || v === '') return;
+    parts.push(`${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`);
+  });
+  const qs = parts.join('&');
   return request({ path: `/production/records${qs ? `?${qs}` : ''}`, method: 'GET' });
 }
 

@@ -1,24 +1,24 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const { PSI_TYPE } = require('../config/salesOrders.js');
-const {
-  buildPendingShipmentGroups,
-  buildProductMap,
-  buildWarehouseMap,
-} = require('../utils/salesOrders.js');
-const {
-  buildPendingShipDetailViewModel,
-  collectEditQuantitiesFromLineItems,
-  sumEditQuantities,
-  buildPendingShipEditSaveRecords,
-  buildPendingShipDeleteRecords,
-} = require('../utils/salesOrderPendingShip.js');
-const { fetchAllPsiRecords, replacePsiRecords } = require('../utils/psiApi.js');
-const { fetchProductsAll, fetchDictionaries } = require('../utils/planApi.js');
-const { fetchWarehousesAll } = require('../utils/orderApi.js');
-const { normalizeAppDictionaries } = require('../utils/productionPlans.js');
-const { readNavBarMetrics, readWindowMetrics, computePlanCreateHeaderHeight } = require('../../utils/windowMetrics.js');
-const { LIST_ROUTES, afterSaveReturnToList } = require('../utils/saveNavigation.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 = require('../config/salesOrders.js'),PSI_TYPE = _require3.PSI_TYPE;
+const _require4 =
+
+
+
+  require('../utils/salesOrders.js'),buildPendingShipmentGroups = _require4.buildPendingShipmentGroups,buildProductMap = _require4.buildProductMap,buildWarehouseMap = _require4.buildWarehouseMap;
+const _require5 =
+
+
+
+
+
+  require('../utils/salesOrderPendingShip.js'),buildPendingShipDetailViewModel = _require5.buildPendingShipDetailViewModel,collectEditQuantitiesFromLineItems = _require5.collectEditQuantitiesFromLineItems,sumEditQuantities = _require5.sumEditQuantities,buildPendingShipEditSaveRecords = _require5.buildPendingShipEditSaveRecords,buildPendingShipDeleteRecords = _require5.buildPendingShipDeleteRecords;
+const _require6 = require('../utils/psiApi.js'),fetchAllPsiRecords = _require6.fetchAllPsiRecords,replacePsiRecords = _require6.replacePsiRecords;
+const _require7 = require('../utils/planApi.js'),fetchProductsAll = _require7.fetchProductsAll,fetchDictionaries = _require7.fetchDictionaries;
+const _require8 = require('../utils/orderApi.js'),fetchWarehousesAll = _require8.fetchWarehousesAll;
+const _require9 = require('../utils/productionPlans.js'),normalizeAppDictionaries = _require9.normalizeAppDictionaries;
+const _require0 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require0.readNavBarMetrics,readWindowMetrics = _require0.readWindowMetrics,computePlanCreateHeaderHeight = _require0.computePlanCreateHeaderHeight;
+const _require1 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require1.LIST_ROUTES,afterSaveReturnToList = _require1.afterSaveReturnToList;
 
 function computeScrollHeight(nav, hasFooter) {
   const win = readWindowMetrics();
@@ -49,7 +49,7 @@ Page({
     statusBarHeight: 20,
     navBarHeight: 44,
     headerBlockHeight: 88,
-    scrollHeight: 500,
+    scrollHeight: 500
   },
 
   onLoad(options) {
@@ -77,7 +77,7 @@ Page({
       scrollHeight: computeScrollHeight(nav, showFooter),
       canEdit,
       canDelete,
-      showFooter,
+      showFooter
     });
     if (!docNumber || !lineGroupId) {
       wx.showToast({ title: '缺少参数', icon: 'none' });
@@ -101,26 +101,26 @@ Page({
     const detail = buildPendingShipDetailViewModel(group, this._product, this._dictionaries || {});
     this._viewSnapshot = {
       lineItems: detail.lineItems.map((item) => ({ ...item })),
-      warehouseId: detail.warehouseId,
+      warehouseId: detail.warehouseId
     };
     this.setData({
       detail,
       lineItems: detail.lineItems,
       totalPendingText: detail.totalPendingText,
-      warehouseIndex: findWarehouseIndex(this._warehouses, detail.warehouseId),
+      warehouseIndex: findWarehouseIndex(this._warehouses, detail.warehouseId)
     });
   },
 
   async bootstrap() {
     this.setData({ loading: true });
     try {
-      const [records, products, dictionariesRaw, warehousesRaw] = await Promise.all([
+      const _await$Promise$all = await Promise.all([
         fetchAllPsiRecords(PSI_TYPE),
         fetchProductsAll().catch(() => []),
         fetchDictionaries().catch(() => ({})),
-        fetchWarehousesAll().catch(() => []),
-      ]);
-      const whList = Array.isArray(warehousesRaw) ? warehousesRaw : (warehousesRaw.data || []);
+        fetchWarehousesAll().catch(() => [])]
+        ),records = _await$Promise$all[0],products = _await$Promise$all[1],dictionariesRaw = _await$Promise$all[2],warehousesRaw = _await$Promise$all[3];
+      const whList = Array.isArray(warehousesRaw) ? warehousesRaw : warehousesRaw.data || [];
       this._allRecords = records || [];
       this._dictionaries = normalizeAppDictionaries(dictionariesRaw || {});
       this._warehouses = whList.filter((w) => w && w.id);
@@ -128,10 +128,10 @@ Page({
       const groups = buildPendingShipmentGroups(
         this._allRecords,
         this._productMap,
-        buildWarehouseMap(this._warehouses),
+        buildWarehouseMap(this._warehouses)
       );
       const group = groups.find(
-        (g) => g.docNumber === this._docNumber && String(g.lineGroupId) === String(this._lineGroupId),
+        (g) => g.docNumber === this._docNumber && String(g.lineGroupId) === String(this._lineGroupId)
       );
       if (!group) {
         this.setData({ loading: false, detail: null });
@@ -143,7 +143,7 @@ Page({
       this._product = group.productId ? this._productMap.get(group.productId) : null;
       this.setData({
         loading: false,
-        warehouseNames: this._warehouses.map((w) => w.name || w.id),
+        warehouseNames: this._warehouses.map((w) => w.name || w.id)
       });
       this.syncViewModel();
     } catch (err) {
@@ -167,7 +167,7 @@ Page({
       editing: false,
       lineItems: snap.lineItems.map((item) => ({ ...item })),
       totalPendingText: String(snap.lineItems.reduce((s, item) => s + (Number(item.editQty) || 0), 0)),
-      warehouseIndex: findWarehouseIndex(this._warehouses, snap.warehouseId),
+      warehouseIndex: findWarehouseIndex(this._warehouses, snap.warehouseId)
     });
   },
 
@@ -179,9 +179,9 @@ Page({
   onLineQtyInput(e) {
     const id = e.currentTarget.dataset.id;
     const value = e.detail.value;
-    const lineItems = (this.data.lineItems || []).map((item) => (
-      item.id === id ? { ...item, editQty: value } : item
-    ));
+    const lineItems = (this.data.lineItems || []).map((item) =>
+    item.id === id ? { ...item, editQty: value } : item
+    );
     const total = lineItems.reduce((s, item) => s + (Number(item.editQty) || 0), 0);
     this.setData({ lineItems, totalPendingText: String(total) });
   },
@@ -196,7 +196,7 @@ Page({
     }
     const editQuantities = collectEditQuantitiesFromLineItems(
       this.data.lineItems,
-      this.data.detail && this.data.detail.hasVariants,
+      this.data.detail && this.data.detail.hasVariants
     );
     const total = sumEditQuantities(editQuantities, this.data.detail && this.data.detail.hasVariants);
     if (total <= 0) {
@@ -207,13 +207,13 @@ Page({
     wx.showLoading({ title: '保存中…' });
     try {
       const docRecords = (this._allRecords || []).filter(
-        (r) => r.type === PSI_TYPE && r.docNumber === this._docNumber,
+        (r) => r.type === PSI_TYPE && r.docNumber === this._docNumber
       );
       const newRecords = buildPendingShipEditSaveRecords(
         docRecords,
         this._group,
         editQuantities,
-        warehouseId,
+        warehouseId
       );
       const deleteIds = docRecords.map((r) => r.id);
       await replacePsiRecords(deleteIds, newRecords);
@@ -222,7 +222,7 @@ Page({
       afterSaveReturnToList({
         listUrl: LIST_ROUTES.PSI_SALES_ORDER_PENDING_SHIP,
         alsoRefreshListUrls: [LIST_ROUTES.PSI_SALES_ORDERS],
-        toastTitle: '已保存',
+        toastTitle: '已保存'
       });
     } catch (err) {
       wx.hideLoading();
@@ -239,7 +239,7 @@ Page({
       confirmColor: '#ef4444',
       success: (res) => {
         if (res.confirm) this.doDelete();
-      },
+      }
     });
   },
 
@@ -249,7 +249,7 @@ Page({
     wx.showLoading({ title: '删除中…' });
     try {
       const docRecords = (this._allRecords || []).filter(
-        (r) => r.type === PSI_TYPE && r.docNumber === this._docNumber,
+        (r) => r.type === PSI_TYPE && r.docNumber === this._docNumber
       );
       const newRecords = buildPendingShipDeleteRecords(docRecords, this._group);
       const deleteIds = docRecords.map((r) => r.id);
@@ -259,12 +259,12 @@ Page({
       afterSaveReturnToList({
         listUrl: LIST_ROUTES.PSI_SALES_ORDER_PENDING_SHIP,
         alsoRefreshListUrls: [LIST_ROUTES.PSI_SALES_ORDERS],
-        toastTitle: '已取消配货',
+        toastTitle: '已取消配货'
       });
     } catch (err) {
       wx.hideLoading();
       this.setData({ saving: false });
       wx.showToast({ title: '删除失败', icon: 'none' });
     }
-  },
+  }
 });

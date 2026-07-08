@@ -1,0 +1,278 @@
+/** 登录后选企业 / 入驻 / 无企业等流程页共用样式 */
+
+.auth-flow-page {
+  min-height: calc(100vh - 88rpx);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.auth-flow-hero {
+  padding-top: 48rpx;
+  text-align: center;
+}
+
+.auth-flow-hero--compact {
+  padding-top: 8rpx;
+  text-align: left;
+}
+
+.auth-flow-hero__icon-wrap {
+  width: 120rpx;
+  height: 120rpx;
+  margin: 0 auto;
+  border-radius: var(--radius-icon);
+  background: var(--color-primary-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auth-flow-hero__icon-wrap--success {
+  background: var(--color-success-bg);
+}
+
+.auth-flow-hero__icon-wrap--warning {
+  background: var(--color-warning-bg);
+}
+
+.auth-flow-hero__icon-wrap--join {
+  background: #eef2ff;
+}
+
+.auth-flow-hero__icon {
+  width: 64rpx;
+  height: 64rpx;
+}
+
+.auth-flow-hero__title {
+  margin-top: 32rpx;
+  font-size: var(--font-section);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.auth-flow-hero--compact .auth-flow-hero__title {
+  margin-top: 0;
+  font-size: var(--font-title);
+}
+
+.auth-flow-hero__desc {
+  margin-top: 12rpx;
+  padding: 0 32rpx;
+  font-size: var(--font-caption);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+.auth-flow-hero--compact .auth-flow-hero__desc {
+  padding: 0;
+  margin-top: 16rpx;
+}
+
+.auth-flow-actions {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 32rpx;
+  box-sizing: border-box;
+}
+
+.auth-flow-actions button.st-btn-primary,
+.auth-flow-actions button.st-btn-secondary,
+.auth-flow-actions button.st-btn-danger {
+  display: block;
+  width: 100% !important;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+.auth-flow-footer {
+  margin-top: auto;
+  padding-top: 48rpx;
+  padding-bottom: 8rpx;
+  text-align: center;
+}
+
+.auth-flow-footer__logout {
+  display: inline-block;
+  color: var(--color-text-secondary) !important;
+}
+
+.auth-flow-icon--join {
+  background: #eef2ff;
+  color: #4f46e5;
+}
+
+.auth-flow-icon--warning {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.auth-flow-icon--danger {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.auth-flow-hero--inset {
+  padding-top: 8rpx;
+  text-align: center;
+}
+
+.auth-flow-hero--inset .auth-flow-hero__desc {
+  padding: 0 16rpx;
+}
+
+.auth-flow-hero--form .auth-flow-hero__icon-wrap {
+  width: 88rpx;
+  height: 88rpx;
+  margin: 0 0 24rpx;
+}
+
+.auth-flow-hero--form .auth-flow-hero__icon {
+  width: 48rpx;
+  height: 48rpx;
+}
+
+.auth-flow-hero--form .auth-flow-hero__title {
+  margin-top: 0;
+  font-size: var(--font-title);
+}
+
+.auth-flow-hero--form .auth-flow-hero__desc {
+  padding: 0;
+  margin-top: 12rpx;
+}
+
+.auth-flow-form-card {
+  margin-top: 40rpx;
+  padding: 32rpx var(--spacing-card);
+  background: var(--color-bg-card);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  box-sizing: border-box;
+}
+
+.auth-flow-form-card--flat {
+  margin-top: 0;
+}
+
+.auth-flow-field-box {
+  display: flex;
+  align-items: stretch;
+  height: 88rpx;
+  box-sizing: border-box;
+  padding: 0 24rpx;
+  background: var(--color-bg-card);
+  border-radius: var(--radius-icon);
+  border: 1rpx solid var(--color-border);
+  overflow: hidden;
+}
+
+.auth-flow-field-box .st-input {
+  flex: 1;
+  width: 100%;
+  height: 88rpx;
+  min-height: 88rpx;
+  padding: 0;
+  margin: 0;
+  line-height: 88rpx;
+  background: transparent;
+  font-size: var(--font-body);
+  box-sizing: border-box;
+}
+
+.auth-flow-ph {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-body);
+}
+
+.auth-flow-form-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.auth-flow-form-row .auth-flow-field-box--grow {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+}
+
+.auth-flow-btn-lookup {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0 24rpx;
+  width: auto !important;
+  min-width: 0;
+  height: 88rpx;
+  line-height: 88rpx;
+  border-radius: var(--radius-icon);
+  font-size: 28rpx;
+  font-weight: 600;
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  border: none;
+  box-sizing: border-box;
+}
+
+.auth-flow-btn-lookup::after {
+  border: none;
+}
+
+.auth-flow-btn-lookup[disabled] {
+  opacity: 0.45;
+}
+
+.auth-flow-lookup-card {
+  margin-top: 24rpx;
+  padding-top: 24rpx;
+  border-top: 1rpx solid var(--color-border);
+}
+
+.auth-flow-lookup-card__head {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+}
+
+.auth-flow-lookup-card__meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.auth-flow-lookup-card__name {
+  font-size: var(--font-body);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.auth-flow-lookup-card__count {
+  margin-top: 6rpx;
+  font-size: var(--font-caption);
+  color: var(--color-text-secondary);
+}
+
+.auth-flow-status-card {
+  margin-top: 48rpx;
+}
+
+.auth-flow-scroll {
+  height: 100vh;
+  box-sizing: border-box;
+  background: transparent;
+}
+
+.auth-flow-body {
+  margin-top: -24rpx;
+  padding-top: 32rpx;
+  border-radius: 32rpx 32rpx 0 0;
+  background: var(--color-bg-page);
+  min-height: calc(100vh - 160rpx);
+  box-sizing: border-box;
+}
+
+.auth-flow-body--form {
+  padding-top: 40rpx;
+}

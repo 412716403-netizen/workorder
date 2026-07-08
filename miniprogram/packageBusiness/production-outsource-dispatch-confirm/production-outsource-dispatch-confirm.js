@@ -1,34 +1,34 @@
-const { readOperatorDisplayName, readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const { dispatchRowKey } = require('../utils/outsourceDispatchLite.js');
-const {
-  buildDispatchBatchPayload,
-} = require('../utils/outsourceConfirm.js');
-const {
-  buildDefaultDispatchQuantities,
-  buildDispatchVariantMaxMap,
-  buildOutsourceDispatchMatrixLayout,
-  computeOutsourceCellMaxAllowed,
-  resolveDispatchRowMatrixContext,
-  variantQuantityKey,
-  buildDefectiveReworkByOrderMilestone,
-} = require('../utils/outsourceDispatchMatrix.js');
-const { buildOutOfSequenceTemplateIds } = require('../utils/reportVariantMaxQty.js');
-const {
-  activateMatrixKeyboardCell,
-  applyMatrixKeyboardKey,
-  buildMatrixKeyboardPreview,
-  createMatrixKeyboardInputSession,
-  getNextMatrixVariantIdInColumn,
-  getNextMatrixVariantIdInRow,
-} = require('../utils/matrixQtyKeyboard.js');
-const { fetchPartnersAll, fetchPartnerCategoriesAll, fetchDictionaries } = require('../utils/planApi.js');
-const { fetchTenantConfig, createProductionRecordBatch } = require('../utils/orderApi.js');
-const { normalizeMasterList } = require('../utils/productionPlans.js');
-const { fetchAllOrdersPaginated } = require('../utils/pendingStockBadge.js');
-const { readNavBarMetrics, readWindowMetrics, computeSimplePlanHeaderHeight, computeFixedFooterInsetPx } = require('../../utils/windowMetrics.js');
-const { afterMatrixKeyboardOpen } = require('../utils/matrixKeyboardLayout.js');
-const { LIST_ROUTES, afterSaveReturnToList } = require('../utils/saveNavigation.js');
+const _require = require('../../utils/session.js'),readOperatorDisplayName = _require.readOperatorDisplayName,readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 = require('../utils/outsourceDispatchLite.js'),dispatchRowKey = _require3.dispatchRowKey;
+const _require4 =
+
+  require('../utils/outsourceConfirm.js'),buildDispatchBatchPayload = _require4.buildDispatchBatchPayload;
+const _require5 =
+
+
+
+
+
+
+
+  require('../utils/outsourceDispatchMatrix.js'),buildDefaultDispatchQuantities = _require5.buildDefaultDispatchQuantities,buildDispatchVariantMaxMap = _require5.buildDispatchVariantMaxMap,buildOutsourceDispatchMatrixLayout = _require5.buildOutsourceDispatchMatrixLayout,computeOutsourceCellMaxAllowed = _require5.computeOutsourceCellMaxAllowed,resolveDispatchRowMatrixContext = _require5.resolveDispatchRowMatrixContext,variantQuantityKey = _require5.variantQuantityKey,buildDefectiveReworkByOrderMilestone = _require5.buildDefectiveReworkByOrderMilestone;
+const _require6 = require('../utils/reportVariantMaxQty.js'),buildOutOfSequenceTemplateIds = _require6.buildOutOfSequenceTemplateIds;
+const _require7 =
+
+
+
+
+
+
+  require('../utils/matrixQtyKeyboard.js'),activateMatrixKeyboardCell = _require7.activateMatrixKeyboardCell,applyMatrixKeyboardKey = _require7.applyMatrixKeyboardKey,buildMatrixKeyboardPreview = _require7.buildMatrixKeyboardPreview,createMatrixKeyboardInputSession = _require7.createMatrixKeyboardInputSession,getNextMatrixVariantIdInColumn = _require7.getNextMatrixVariantIdInColumn,getNextMatrixVariantIdInRow = _require7.getNextMatrixVariantIdInRow;
+const _require8 = require('../utils/planApi.js'),fetchPartnersAll = _require8.fetchPartnersAll,fetchPartnerCategoriesAll = _require8.fetchPartnerCategoriesAll,fetchDictionaries = _require8.fetchDictionaries;
+const _require9 = require('../utils/orderApi.js'),fetchTenantConfig = _require9.fetchTenantConfig,createProductionRecordBatch = _require9.createProductionRecordBatch;
+const _require0 = require('../utils/productionPlans.js'),normalizeMasterList = _require0.normalizeMasterList;
+const _require1 = require('../utils/pendingStockBadge.js'),fetchAllOrdersPaginated = _require1.fetchAllOrdersPaginated;
+const _require10 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require10.readNavBarMetrics,readWindowMetrics = _require10.readWindowMetrics,computeSimplePlanHeaderHeight = _require10.computeSimplePlanHeaderHeight,computeFixedFooterInsetPx = _require10.computeFixedFooterInsetPx;
+const _require11 = require('../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require11.afterMatrixKeyboardOpen;
+const _require12 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require12.LIST_ROUTES,afterSaveReturnToList = _require12.afterSaveReturnToList;
 
 function computeScrollHeight(nav) {
   const win = readWindowMetrics();
@@ -56,18 +56,18 @@ Page({
     navBarHeight: 44,
     headerBlockHeight: 88,
     scrollHeight: 400,
-    matrixScrollTop: 0,
+    matrixScrollTop: 0
   },
 
   onLoad() {
     const nav = readNavBarMetrics();
     const ctx = readTenantCtx();
-    if (!hasPermission((ctx && ctx.permissions) || [], 'production:outsource_send:allow')) {
+    if (!hasPermission(ctx && ctx.permissions || [], 'production:outsource_send:allow')) {
       wx.showToast({ title: '无权限', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 800);
       return;
     }
-    const detail = (getApp().globalData && getApp().globalData.outsourceDispatchConfirm) || null;
+    const detail = getApp().globalData && getApp().globalData.outsourceDispatchConfirm || null;
     if (!detail || !detail.rows || !detail.rows.length) {
       wx.showToast({ title: '缺少发出数据', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 800);
@@ -80,7 +80,7 @@ Page({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
       headerBlockHeight: computeSimplePlanHeaderHeight(nav),
-      scrollHeight: computeScrollHeight(nav),
+      scrollHeight: computeScrollHeight(nav)
     });
     this.init();
   },
@@ -101,7 +101,7 @@ Page({
       productMilestoneProgresses: detail.productMilestoneProgresses || [],
       processSequenceMode: this._processSequenceMode,
       outOfSequenceTemplateIds: buildOutOfSequenceTemplateIds(nodes),
-      defectiveReworkMap: this._defectiveReworkMap,
+      defectiveReworkMap: this._defectiveReworkMap
     };
   },
 
@@ -117,7 +117,7 @@ Page({
         milestoneName: row.milestoneName,
         maxQty: row.availableQty,
         quantity: this._quantities[rowKey] != null ? String(this._quantities[rowKey]) : '',
-        hasMatrix: matrixCtx.hasMatrix,
+        hasMatrix: matrixCtx.hasMatrix
       };
       if (matrixCtx.hasMatrix) {
         const product = ctx.products.find((p) => p.id === row.productId);
@@ -126,7 +126,7 @@ Page({
           this._dictionaries,
           this._quantities,
           maxMap,
-          rowKey,
+          rowKey
         );
         line.matrixAggregate = matrixCtx.aggregate;
       }
@@ -136,9 +136,9 @@ Page({
     if (this.data.matrixKeyboardVisible && this.data.activeMatrixRowKey && this.data.activeMatrixVariantId) {
       const line = lines.find((l) => l.rowKey === this.data.activeMatrixRowKey);
       const preview = buildMatrixKeyboardPreview(
-        line?.matrixLayout,
-        this.data.activeMatrixVariantId,
-        this._quantitiesForVariant(this.data.activeMatrixRowKey),
+      line == null ? void 0 : line.matrixLayout,
+      this.data.activeMatrixVariantId,
+      this._quantitiesForVariant(this.data.activeMatrixRowKey)
       );
       patch.matrixKeyboardLabel = preview.label;
       patch.matrixKeyboardValue = preview.value;
@@ -149,15 +149,15 @@ Page({
   async init() {
     try {
       const detail = this._detail;
-      const [config, partnersRaw, partnerCategoriesRaw, orders, dictionariesRaw] = await Promise.all([
+      const _await$Promise$all = await Promise.all([
         fetchTenantConfig().catch(() => ({})),
         fetchPartnersAll(),
         fetchPartnerCategoriesAll().catch(() => []),
-        detail.orders && detail.orders.length
-          ? Promise.resolve(detail.orders)
-          : fetchAllOrdersPaginated({}),
-        fetchDictionaries().catch(() => ({})),
-      ]);
+        detail.orders && detail.orders.length ?
+        Promise.resolve(detail.orders) :
+        fetchAllOrdersPaginated({}),
+        fetchDictionaries().catch(() => ({}))]
+        ),config = _await$Promise$all[0],partnersRaw = _await$Promise$all[1],partnerCategoriesRaw = _await$Promise$all[2],orders = _await$Promise$all[3],dictionariesRaw = _await$Promise$all[4];
       this._config = config;
       this._orders = orders || [];
       this._ordersById = new Map(this._orders.map((o) => [o.id, o]));
@@ -168,7 +168,7 @@ Page({
       this._processSequenceMode = detail.processSequenceMode || config.processSequenceMode || 'sequential';
       this._defectiveReworkMap = buildDefectiveReworkByOrderMilestone(
         this._orders,
-        detail.records || [],
+        detail.records || []
       );
 
       const ctx = this.buildMatrixCtx();
@@ -183,15 +183,15 @@ Page({
         partners,
         partnerCategories,
         partnerName: '',
-        showDeliveryDate: (config.outsourceFormSettings || {}).showOutsourceDispatchDeliveryDate === true,
+        showDeliveryDate: (config.outsourceFormSettings || {}).showOutsourceDispatchDeliveryDate === true
       });
     } catch (err) {
-      wx.showToast({ title: (err && err.message) || '初始化失败', icon: 'none' });
+      wx.showToast({ title: err && err.message || '初始化失败', icon: 'none' });
     }
   },
 
   onPartnerChange(e) {
-    const name = (e.detail && e.detail.name) ? String(e.detail.name) : '';
+    const name = e.detail && e.detail.name ? String(e.detail.name) : '';
     this.setData({ partnerName: name });
   },
 
@@ -206,11 +206,11 @@ Page({
   },
 
   onMatrixCellTap(e) {
-    const { rowKey, variantId } = e.currentTarget.dataset;
+    const _e$currentTarget$data = e.currentTarget.dataset,rowKey = _e$currentTarget$data.rowKey,variantId = _e$currentTarget$data.variantId;
     if (!rowKey || !variantId) return;
     activateMatrixKeyboardCell(this._matrixKbInput);
     const line = (this.data.lines || []).find((l) => l.rowKey === rowKey);
-    const preview = buildMatrixKeyboardPreview(line?.matrixLayout, variantId, this._quantitiesForVariant(rowKey));
+    const preview = buildMatrixKeyboardPreview(line == null ? void 0 : line.matrixLayout, variantId, this._quantitiesForVariant(rowKey));
     const nav = { statusBarHeight: this.data.statusBarHeight, navBarHeight: this.data.navBarHeight };
     const win = readWindowMetrics();
     const fullScroll = Math.max(200, win.windowHeight - computeSimplePlanHeaderHeight(nav));
@@ -221,7 +221,7 @@ Page({
       activeMatrixVariantId: variantId,
       matrixKeyboardLabel: preview.label,
       matrixKeyboardValue: preview.value,
-      scrollHeight: fullScroll,
+      scrollHeight: fullScroll
     }, () => {
       afterMatrixKeyboardOpen(this, '.outsource-confirm-scroll');
     });
@@ -245,12 +245,12 @@ Page({
       activeMatrixVariantId: '',
       matrixKeyboardLabel: '',
       matrixKeyboardValue: '',
-      scrollHeight: computeScrollHeight(nav),
+      scrollHeight: computeScrollHeight(nav)
     });
   },
 
   _clampActiveMatrixCell() {
-    const { activeMatrixRowKey, activeMatrixVariantId } = this.data;
+    const _this$data = this.data,activeMatrixRowKey = _this$data.activeMatrixRowKey,activeMatrixVariantId = _this$data.activeMatrixVariantId;
     if (!activeMatrixRowKey || !activeMatrixVariantId) return;
     const row = (this._detail.rows || []).find((r) => dispatchRowKey(r) === activeMatrixRowKey);
     const line = (this.data.lines || []).find((l) => l.rowKey === activeMatrixRowKey);
@@ -263,7 +263,7 @@ Page({
       activeMatrixRowKey,
       this._quantities,
       row.availableQty,
-      line.matrixAggregate,
+      line.matrixAggregate
     );
     const key = variantQuantityKey(activeMatrixRowKey, activeMatrixVariantId);
     const qty = Number(this._quantities[key]) || 0;
@@ -275,7 +275,7 @@ Page({
   },
 
   _moveMatrixFocus(nextVariantId) {
-    const { activeMatrixRowKey } = this.data;
+    const activeMatrixRowKey = this.data.activeMatrixRowKey;
     if (!activeMatrixRowKey) {
       this._dismissMatrixKeyboard();
       return;
@@ -287,44 +287,44 @@ Page({
     activateMatrixKeyboardCell(this._matrixKbInput);
     const line = (this.data.lines || []).find((l) => l.rowKey === activeMatrixRowKey);
     const preview = buildMatrixKeyboardPreview(
-      line?.matrixLayout,
-      nextVariantId,
-      this._quantitiesForVariant(activeMatrixRowKey),
+    line == null ? void 0 : line.matrixLayout,
+    nextVariantId,
+    this._quantitiesForVariant(activeMatrixRowKey)
     );
     this.setData({
       activeMatrixVariantId: nextVariantId,
       matrixInputReplaceAll: true,
       matrixKeyboardLabel: preview.label,
-      matrixKeyboardValue: preview.value,
+      matrixKeyboardValue: preview.value
     }, () => {
       afterMatrixKeyboardOpen(this, '.outsource-confirm-scroll');
     });
   },
 
   onMatrixKeyboardAction(e) {
-    const { action, digit } = e.detail || {};
+    const _ref = e.detail || {},action = _ref.action,digit = _ref.digit;
     if (action === 'confirm') {
       this._clampActiveMatrixCell();
       this._dismissMatrixKeyboard();
       return;
     }
-    const { activeMatrixRowKey, activeMatrixVariantId } = this.data;
+    const _this$data2 = this.data,activeMatrixRowKey = _this$data2.activeMatrixRowKey,activeMatrixVariantId = _this$data2.activeMatrixVariantId;
     const line = (this.data.lines || []).find((l) => l.rowKey === activeMatrixRowKey);
     if (action === 'enter') {
       this._clampActiveMatrixCell();
-      this._moveMatrixFocus(getNextMatrixVariantIdInRow(line?.matrixLayout, activeMatrixVariantId));
+      this._moveMatrixFocus(getNextMatrixVariantIdInRow(line == null ? void 0 : line.matrixLayout, activeMatrixVariantId));
       return;
     }
     if (action === 'next') {
       this._clampActiveMatrixCell();
-      this._moveMatrixFocus(getNextMatrixVariantIdInColumn(line?.matrixLayout, activeMatrixVariantId));
+      this._moveMatrixFocus(getNextMatrixVariantIdInColumn(line == null ? void 0 : line.matrixLayout, activeMatrixVariantId));
       return;
     }
     if (!activeMatrixRowKey || !activeMatrixVariantId) return;
     const key = variantQuantityKey(activeMatrixRowKey, activeMatrixVariantId);
     const variantQtyMap = this._quantitiesForVariant(activeMatrixRowKey);
     const current = variantQtyMap[activeMatrixVariantId] || '';
-    const { value, replaceConsumed } = applyMatrixKeyboardKey(this._matrixKbInput, current, action, digit);
+    const _applyMatrixKeyboardK = applyMatrixKeyboardKey(this._matrixKbInput, current, action, digit),value = _applyMatrixKeyboardK.value,replaceConsumed = _applyMatrixKeyboardK.replaceConsumed;
     this._quantities[key] = value;
     if (replaceConsumed) {
       this.setData({ matrixInputReplaceAll: false });
@@ -363,27 +363,27 @@ Page({
         operator: readOperatorDisplayName(readTenantCtx()),
         productionLinkMode: this._productionLinkMode,
         ordersById: this._ordersById,
-        deliveryDate: this.data.deliveryDate,
+        deliveryDate: this.data.deliveryDate
       });
       if (!batch.length) {
         throw new Error('无有效发出行');
       }
       const resp = await createProductionRecordBatch(batch);
-      const saved = (resp && resp.records) || [];
+      const saved = resp && resp.records || [];
       if (!saved.length) {
         throw new Error('提交成功但未返回记录');
       }
       wx.hideLoading();
       afterSaveReturnToList({
         listUrl: LIST_ROUTES.OUTSOURCE_DISPATCH,
-        toastTitle: '发出成功',
+        toastTitle: '发出成功'
       });
     } catch (err) {
       wx.hideLoading();
       this.setData({ submitting: false });
       // eslint-disable-next-line no-console
       console.error('[outsource-dispatch-confirm]', err);
-      wx.showToast({ title: (err && err.message) || '提交失败', icon: 'none' });
+      wx.showToast({ title: err && err.message || '提交失败', icon: 'none' });
     }
-  },
+  }
 });

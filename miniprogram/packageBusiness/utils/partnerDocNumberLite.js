@@ -18,8 +18,8 @@ function findPartner(partners, partnerId, partnerName) {
   return undefined;
 }
 
-function readPartnerListNoField(p) {
-  const raw = p.partnerListNo ?? p.partner_list_no;
+function readPartnerListNoField(p) {var _p$partnerListNo;
+  const raw = (_p$partnerListNo = p.partnerListNo) != null ? _p$partnerListNo : p.partner_list_no;
   if (raw === undefined || raw === null || raw === '') return null;
   const n = typeof raw === 'number' ? raw : parseInt(String(raw), 10);
   if (!Number.isFinite(n) || n < 1) return null;
@@ -73,5 +73,5 @@ function nextOutsourceDocNumber(kind, partners, records, partnerId, partnerName)
 
 module.exports = {
   nextOutsourceDocNumber,
-  partnerListNoToSegment,
+  partnerListNoToSegment
 };

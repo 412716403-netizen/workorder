@@ -81,13 +81,16 @@ Page({
     this.setData({ loading: true });
 
     try {
-      const [notifications, todos, transfers] = await Promise.all([
+      const results = await Promise.all([
         request({ path: '/dashboard/notifications?limit=50', method: 'GET' }).catch(() => []),
         request({ path: '/todos', method: 'GET' }).catch(() => []),
         request({ path: '/collaboration/subcontract-transfers?all=true', method: 'GET' }).catch(
           () => [],
         ),
       ]);
+      const notifications = results[0];
+      const todos = results[1];
+      const transfers = results[2];
 
       const userId = readCurrentUserId();
       const notifList = normalizeListBody(notifications);

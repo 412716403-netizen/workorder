@@ -3,28 +3,28 @@
  * 点击字段打开弹窗：可选已有批次，或在弹窗内输入新批号。
  */
 
-const { fetchStockBatches } = require('../../utils/orderApi.js');
-const {
-  mergeWarehouseBatchOptions,
-} = require('../../utils/materialIssueBatch.js');
-const { BATCH_NO_UNTAGGED } = require('../../utils/materialStockConfirm.js');
-const {
-  openBottomSheet,
-  closeBottomSheet,
-  clearBottomSheetTimers,
-} = require('../../utils/bottomSheetAnim.js');
+const _require = require('../../utils/orderApi.js'),fetchStockBatches = _require.fetchStockBatches;
+const _require2 =
+
+  require('../../utils/materialIssueBatch.js'),mergeWarehouseBatchOptions = _require2.mergeWarehouseBatchOptions;
+const _require3 = require('../../utils/materialStockConfirm.js'),BATCH_NO_UNTAGGED = _require3.BATCH_NO_UNTAGGED;
+const _require4 =
+
+
+
+  require('../../utils/bottomSheetAnim.js'),openBottomSheet = _require4.openBottomSheet,closeBottomSheet = _require4.closeBottomSheet,clearBottomSheetTimers = _require4.clearBottomSheetTimers;
 
 function filterBatchOptions(options, keyword) {
   const kw = String(keyword || '').trim().toLowerCase();
   if (!kw) return options || [];
   return (options || []).filter((o) =>
-    String(o.batchNo || '').toLowerCase().includes(kw)
-    || String(o.label || '').toLowerCase().includes(kw));
+  String(o.batchNo || '').toLowerCase().includes(kw) ||
+  String(o.label || '').toLowerCase().includes(kw));
 }
 
 Component({
   options: {
-    addGlobalClass: true,
+    addGlobalClass: true
   },
 
   properties: {
@@ -32,7 +32,7 @@ Component({
     productId: { type: String, value: '' },
     warehouseId: { type: String, value: '' },
     placeholder: { type: String, value: '选择批次' },
-    mergeBatches: { type: Array, value: [] },
+    mergeBatches: { type: Array, value: [] }
   },
 
   data: {
@@ -45,7 +45,7 @@ Component({
     open: false,
     sheetShow: false,
     sheetMotion: false,
-    sheetHeightPx: 0,
+    sheetHeightPx: 0
   },
 
   observers: {
@@ -54,7 +54,7 @@ Component({
     },
     value(val) {
       this.refreshDisplay(val);
-    },
+    }
   },
 
   lifetimes: {
@@ -64,7 +64,7 @@ Component({
     },
     detached() {
       clearBottomSheetTimers(this);
-    },
+    }
   },
 
   methods: {
@@ -78,13 +78,13 @@ Component({
       }
       this.setData({
         displayText: text,
-        hasValue: true,
+        hasValue: true
       });
     },
 
     applyFilteredOptions(keyword) {
       this.setData({
-        filteredOptions: filterBatchOptions(this.data.batchOptions, keyword),
+        filteredOptions: filterBatchOptions(this.data.batchOptions, keyword)
       });
     },
 
@@ -97,17 +97,17 @@ Component({
       }
 
       this.setData({ loading: true });
-      fetchStockBatches({ productId, warehouseId })
-        .then((raw) => {
-          const batchOptions = mergeWarehouseBatchOptions(raw, this.properties.mergeBatches);
-          this.setData({ loading: false, batchOptions });
-          this.applyFilteredOptions(this.data.draftInput);
-        })
-        .catch(() => {
-          const batchOptions = mergeWarehouseBatchOptions([], this.properties.mergeBatches);
-          this.setData({ loading: false, batchOptions });
-          this.applyFilteredOptions(this.data.draftInput);
-        });
+      fetchStockBatches({ productId, warehouseId }).
+      then((raw) => {
+        const batchOptions = mergeWarehouseBatchOptions(raw, this.properties.mergeBatches);
+        this.setData({ loading: false, batchOptions });
+        this.applyFilteredOptions(this.data.draftInput);
+      }).
+      catch(() => {
+        const batchOptions = mergeWarehouseBatchOptions([], this.properties.mergeBatches);
+        this.setData({ loading: false, batchOptions });
+        this.applyFilteredOptions(this.data.draftInput);
+      });
     },
 
     onOpenSheet() {
@@ -140,7 +140,7 @@ Component({
     },
 
     commitValue(raw) {
-      const trimmed = String(raw ?? '').trim();
+      const trimmed = String(raw != null ? raw : '').trim();
       const value = trimmed || BATCH_NO_UNTAGGED;
       this.triggerEvent('change', { value });
       closeBottomSheet(this);
@@ -155,6 +155,6 @@ Component({
       const batchNo = e.currentTarget.dataset.batchNo;
       if (!batchNo) return;
       this.commitValue(batchNo);
-    },
-  },
+    }
+  }
 });

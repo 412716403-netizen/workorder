@@ -1,25 +1,25 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const {
-  PSI_TYPE,
-  PSI_BILL_TYPE,
-  PURCHASE_ORDER_FLOW_STATUS_OPTIONS,
-} = require('../config/purchaseOrders.js');
-const {
-  buildPurchaseOrderFlowRows,
-  filterPurchaseOrderFlowRows,
-  computePurchaseOrderFlowStats,
-  buildProductMap,
-} = require('../utils/purchaseOrders.js');
-const { sumReceivedByOrderLine } = require('../utils/psiOpsAggregators.js');
-const { fetchAllPsiRecords } = require('../utils/psiApi.js');
-const { fetchProductsAll } = require('../utils/planApi.js');
-const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
-const { localTodayYmd } = require('../utils/dateYmd.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 =
+
+
+
+  require('../config/purchaseOrders.js'),PSI_TYPE = _require3.PSI_TYPE,PSI_BILL_TYPE = _require3.PSI_BILL_TYPE,PURCHASE_ORDER_FLOW_STATUS_OPTIONS = _require3.PURCHASE_ORDER_FLOW_STATUS_OPTIONS;
+const _require4 =
+
+
+
+
+  require('../utils/purchaseOrders.js'),buildPurchaseOrderFlowRows = _require4.buildPurchaseOrderFlowRows,filterPurchaseOrderFlowRows = _require4.filterPurchaseOrderFlowRows,computePurchaseOrderFlowStats = _require4.computePurchaseOrderFlowStats,buildProductMap = _require4.buildProductMap;
+const _require5 = require('../utils/psiOpsAggregators.js'),sumReceivedByOrderLine = _require5.sumReceivedByOrderLine;
+const _require6 = require('../utils/psiApi.js'),fetchAllPsiRecords = _require6.fetchAllPsiRecords;
+const _require7 = require('../utils/planApi.js'),fetchProductsAll = _require7.fetchProductsAll;
+const _require8 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require8.readNavBarMetrics,readWindowMetrics = _require8.readWindowMetrics;
+const _require9 = require('../utils/dateYmd.js'),localTodayYmd = _require9.localTodayYmd;
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
-  const toolsPx = Math.ceil((win.windowWidth / 750) * 128);
+  const toolsPx = Math.ceil(win.windowWidth / 750 * 128);
   return nav.statusBarHeight + nav.navBarHeight + toolsPx;
 }
 
@@ -40,7 +40,7 @@ Page({
     stats: { count: 0, totalQty: 0, totalReceived: 0 },
     statusBarHeight: 20,
     navBarHeight: 44,
-    headerBlockHeight: 88,
+    headerBlockHeight: 88
   },
 
   onLoad() {
@@ -51,7 +51,7 @@ Page({
       navBarHeight: nav.navBarHeight,
       headerBlockHeight: computeHeaderBlockHeight(nav),
       dateFrom: today,
-      dateTo: today,
+      dateTo: today
     });
   },
 
@@ -71,7 +71,7 @@ Page({
       return;
     }
     this.setData({
-      canViewAmount: hasPermission(ctx.permissions || [], 'psi:purchase_order:amount'),
+      canViewAmount: hasPermission(ctx.permissions || [], 'psi:purchase_order:amount')
     });
     this.bootstrap();
   },
@@ -119,7 +119,7 @@ Page({
       dateFrom: today,
       dateTo: today,
       statusFilter: 'all',
-      showFilterPanel: false,
+      showFilterPanel: false
     });
     this.applyClientFilter();
   },
@@ -149,7 +149,7 @@ Page({
     const docNumber = e.currentTarget.dataset.docNumber;
     if (!docNumber) return;
     wx.navigateTo({
-      url: `/packageBusiness/psi-purchase-order-detail/psi-purchase-order-detail?docNumber=${encodeURIComponent(docNumber)}`,
+      url: `/packageBusiness/psi-purchase-order-detail/psi-purchase-order-detail?docNumber=${encodeURIComponent(docNumber)}`
     });
   },
 
@@ -165,11 +165,11 @@ Page({
   async bootstrap() {
     this.setData({ loading: true });
     try {
-      const [purchaseOrders, purchaseBills, products] = await Promise.all([
+      const _await$Promise$all = await Promise.all([
         fetchAllPsiRecords(PSI_TYPE),
         fetchAllPsiRecords(PSI_BILL_TYPE),
-        fetchProductsAll().catch(() => []),
-      ]);
+        fetchProductsAll().catch(() => [])]
+        ),purchaseOrders = _await$Promise$all[0],purchaseBills = _await$Promise$all[1],products = _await$Promise$all[2];
       const productMap = buildProductMap(products || []);
       const receivedByOrderLine = sumReceivedByOrderLine(purchaseBills || []);
       this._allRows = buildPurchaseOrderFlowRows(purchaseOrders || [], receivedByOrderLine, productMap);
@@ -185,24 +185,24 @@ Page({
       search: this.data.searchKeyword,
       status: this.data.statusFilter,
       dateFrom: this.data.dateFrom,
-      dateTo: this.data.dateTo,
+      dateTo: this.data.dateTo
     });
     const canViewAmount = Boolean(this.data.canViewAmount);
     const rows = filtered.map((row) => ({
       ...row,
-      showAmount: Boolean(canViewAmount && row.totalAmountText),
+      showAmount: Boolean(canViewAmount && row.totalAmountText)
     }));
     const stats = computePurchaseOrderFlowStats(rows);
     const today = localTodayYmd();
-    const filterActive = this.data.statusFilter !== 'all'
-      || this.data.dateFrom !== today
-      || this.data.dateTo !== today;
+    const filterActive = this.data.statusFilter !== 'all' ||
+    this.data.dateFrom !== today ||
+    this.data.dateTo !== today;
     this.setData({
       loading: false,
       rows,
       stats,
       filterActive,
-      emptyText: rows.length ? '' : '所选条件下暂无流水',
+      emptyText: rows.length ? '' : '所选条件下暂无流水'
     });
-  },
+  }
 });

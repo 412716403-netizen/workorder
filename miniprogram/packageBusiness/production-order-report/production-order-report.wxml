@@ -1,3 +1,4 @@
+<page-meta page-style="{{scanBatchOpen ? 'overflow:hidden;height:100vh;' : ''}}" />
 <view class="plan-create-shell">
   <view class="plan-create-header" style="padding-top: {{statusBarHeight}}px;">
     <view class="plan-create-header__bar" style="height: {{navBarHeight}}px;">
@@ -11,7 +12,7 @@
 
   <scroll-view
     class="plan-create-scroll"
-    scroll-y
+    scroll-y="{{!scanBatchOpen}}"
     scroll-top="{{matrixScrollTop}}"
     scroll-with-animation
     show-scrollbar="{{false}}"
@@ -30,9 +31,9 @@
             </view>
             <text wx:if="{{qtyHint}}" class="report-context-card__hint">{{qtyHint}}</text>
           </view>
-          <view class="report-context-card__scan" bindtap="onGoScan">
+          <view wx:if="{{scanEnabled}}" class="report-context-card__scan" bindtap="onGoScan">
             <image class="report-context-card__scan-icon" src="/assets/tab/scan.png" mode="aspectFit" />
-            <text class="report-context-card__scan-text">扫码</text>
+            <text class="report-context-card__scan-text">扫码报工</text>
           </view>
         </view>
       </view>
@@ -252,5 +253,21 @@
   <matrix-qty-keyboard
     visible="{{matrixKeyboardVisible}}"
     bind:action="onMatrixKeyboardAction"
+  />
+
+  <scan-batch-modal
+    wx:if="{{scanEnabled}}"
+    open="{{scanBatchOpen}}"
+    rows="{{scanBatchRows}}"
+    title="{{scanBatchTitle}}"
+    hint="{{scanBatchHint}}"
+    processing="{{scanBatchProcessing}}"
+    show-intent-toggle="{{scanBatchShowIntentToggle}}"
+    scan-intent="{{scanBatchIntent}}"
+    bind:close="onScanBatchClose"
+    bind:scan="onScanBatchScan"
+    bind:confirm="onScanBatchConfirm"
+    bind:remove="onScanBatchRemove"
+    bind:intentchange="onScanBatchIntentChange"
   />
 </view>

@@ -2,6 +2,7 @@
   "navigationStyle": "custom",
   "enablePullDownRefresh": true,
   "usingComponents": {
-    "empty-state": "/components/empty-state/empty-state"
+    "empty-state": "/components/empty-state/empty-state",
+    "scan-batch-modal": "/packageBusiness/components/scan-batch-modal/scan-batch-modal"
   }
 }

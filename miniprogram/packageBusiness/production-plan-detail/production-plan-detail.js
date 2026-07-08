@@ -1,28 +1,28 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const { PlanDispatchStatus } = require('../config/productionPlans.js');
-const {
-  mapPlanDetailView,
-  planNumbersWithAncestors,
-  canConvertPlan,
-  normalizeMasterList,
-  normalizeAppDictionaries,
-} = require('../utils/productionPlans.js');
-const {
-  getPlan,
-  getProduct,
-  convertPlan,
-  fetchPlanRelated,
-  fetchTenantConfig,
-  fetchProductsAll,
-  fetchCategoriesAll,
-  fetchNodesAll,
-  fetchEquipmentAll,
-  fetchBomsAll,
-  fetchStockMap,
-  fetchDictionaries,
-} = require('../utils/planApi.js');
-const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 = require('../config/productionPlans.js'),PlanDispatchStatus = _require3.PlanDispatchStatus;
+const _require4 =
+
+
+
+
+
+  require('../utils/productionPlans.js'),mapPlanDetailView = _require4.mapPlanDetailView,planNumbersWithAncestors = _require4.planNumbersWithAncestors,canConvertPlan = _require4.canConvertPlan,normalizeMasterList = _require4.normalizeMasterList,normalizeAppDictionaries = _require4.normalizeAppDictionaries;
+const _require5 =
+
+
+
+
+
+
+
+
+
+
+
+
+  require('../utils/planApi.js'),getPlan = _require5.getPlan,getProduct = _require5.getProduct,convertPlan = _require5.convertPlan,fetchPlanRelated = _require5.fetchPlanRelated,fetchTenantConfig = _require5.fetchTenantConfig,fetchProductsAll = _require5.fetchProductsAll,fetchCategoriesAll = _require5.fetchCategoriesAll,fetchNodesAll = _require5.fetchNodesAll,fetchEquipmentAll = _require5.fetchEquipmentAll,fetchBomsAll = _require5.fetchBomsAll,fetchStockMap = _require5.fetchStockMap,fetchDictionaries = _require5.fetchDictionaries;
+const _require6 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require6.readNavBarMetrics,readWindowMetrics = _require6.readWindowMetrics;
 
 /** 当前计划 + 子计划（getPlan 已含 childPlans，不再拉全量计划列表） */
 function collectPlanTreePlans(plan) {
@@ -61,7 +61,7 @@ function patchMaterialSection(sections, materialSection) {
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
-  const tailPx = Math.ceil((win.windowWidth / 750) * 16);
+  const tailPx = Math.ceil(win.windowWidth / 750 * 16);
   return nav.statusBarHeight + nav.navBarHeight + tailPx;
 }
 
@@ -86,7 +86,7 @@ Page({
     statusBarHeight: 20,
     navBarHeight: 44,
     headerBlockHeight: 88,
-    scrollHeight: 500,
+    scrollHeight: 500
   },
 
   onLoad(options) {
@@ -95,7 +95,7 @@ Page({
     this.setData({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
-      headerBlockHeight: computeHeaderBlockHeight(nav),
+      headerBlockHeight: computeHeaderBlockHeight(nav)
     });
 
     this._planId = options.id ? decodeURIComponent(options.id) : '';
@@ -121,7 +121,7 @@ Page({
   updateScrollHeight(hasFooter) {
     const nav = this._nav || readNavBarMetrics();
     this.setData({
-      scrollHeight: computeScrollHeight(nav, hasFooter),
+      scrollHeight: computeScrollHeight(nav, hasFooter)
     });
   },
 
@@ -142,35 +142,35 @@ Page({
     const canEdit = hasPermission(ctx.permissions || [], 'production:plans:edit');
 
     try {
-      const [plan, config] = await Promise.all([
+      const _await$Promise$all = await Promise.all([
         getPlan(this._planId),
-        fetchTenantConfig(),
-      ]);
+        fetchTenantConfig()]
+        ),plan = _await$Promise$all[0],config = _await$Promise$all[1];
 
       if (!plan || !plan.id) {
         throw new Error('计划不存在');
       }
 
-      const planFormSettings = (config && config.planFormSettings) || {};
+      const planFormSettings = config && config.planFormSettings || {};
       const listDisplay = planFormSettings.listDisplay || {};
-      const productionLinkMode = (config && config.productionLinkMode) || 'order';
+      const productionLinkMode = config && config.productionLinkMode || 'order';
       const showDeliveryDate = listDisplay.showDeliveryDate === true;
-      const planWorkOrdersDispatched = (plan.derivedStatus || PlanDispatchStatus.NOT_DISPATCHED)
-        !== PlanDispatchStatus.NOT_DISPATCHED;
+      const planWorkOrdersDispatched = (plan.derivedStatus || PlanDispatchStatus.NOT_DISPATCHED) !==
+      PlanDispatchStatus.NOT_DISPATCHED;
 
-      const [
-        product,
-        categories,
-        nodes,
-        equipment,
-        dictionariesRaw,
-      ] = await Promise.all([
+      const _await$Promise$all2 =
+
+
+
+
+
+        await Promise.all([
         plan.productId ? getProduct(plan.productId).catch(() => null) : Promise.resolve(null),
         fetchCategoriesAll().then(normalizeMasterList),
         fetchNodesAll().then(normalizeMasterList),
         fetchEquipmentAll().then(normalizeMasterList),
-        fetchDictionaries(),
-      ]);
+        fetchDictionaries()]
+        ),product = _await$Promise$all2[0],categories = _await$Promise$all2[1],nodes = _await$Promise$all2[2],equipment = _await$Promise$all2[3],dictionariesRaw = _await$Promise$all2[4];
 
       const category = product ? categories.find((c) => c.id === product.categoryId) : null;
       const dictionaries = normalizeAppDictionaries(dictionariesRaw);
@@ -198,7 +198,7 @@ Page({
         showDeliveryDate,
         planFormSettings,
         planWorkOrdersDispatched,
-        materialLoading: true,
+        materialLoading: true
       });
 
       const showConvertBtn = canEdit && canConvertPlan(plan);
@@ -218,7 +218,7 @@ Page({
         productionLinkMode,
         showDeliveryDate,
         planFormSettings,
-        planWorkOrdersDispatched,
+        planWorkOrdersDispatched
       };
 
       this.setData({
@@ -228,7 +228,7 @@ Page({
         productHero: view.productHero,
         sections: view.sections,
         canConvert: showConvertBtn,
-        showConvertBtn,
+        showConvertBtn
       });
       this.updateScrollHeight(showConvertBtn);
       wx.setNavigationBarTitle({ title: plan.planNumber || '计划详情' });
@@ -238,8 +238,8 @@ Page({
       this.setData({ loading: false, sections: [], productHero: null });
       this.updateScrollHeight(false);
       wx.showToast({
-        title: (err && err.message) || '加载失败',
-        icon: 'none',
+        title: err && err.message || '加载失败',
+        icon: 'none'
       });
       setTimeout(() => wx.navigateBack(), 1000);
     }
@@ -253,38 +253,38 @@ Page({
     this._materialLoadToken = loadToken;
 
     try {
-      const {
-        plan,
-        product: cachedProduct,
-        category,
-        dictionaries,
-        nodes,
-        equipment,
-        categories,
-        allPlans,
-        planNumbersForPO,
-        workers,
-        productionLinkMode,
-        showDeliveryDate,
-        planFormSettings,
-        planWorkOrdersDispatched,
-      } = ctx;
+      const
+        plan =
 
-      const [products, boms, stockMap, planRelated] = await Promise.all([
+
+
+
+
+
+
+
+
+
+
+
+
+        ctx.plan,cachedProduct = ctx.product,category = ctx.category,dictionaries = ctx.dictionaries,nodes = ctx.nodes,equipment = ctx.equipment,categories = ctx.categories,allPlans = ctx.allPlans,planNumbersForPO = ctx.planNumbersForPO,workers = ctx.workers,productionLinkMode = ctx.productionLinkMode,showDeliveryDate = ctx.showDeliveryDate,planFormSettings = ctx.planFormSettings,planWorkOrdersDispatched = ctx.planWorkOrdersDispatched;
+
+      const _await$Promise$all3 = await Promise.all([
         fetchProductsAll().then(normalizeMasterList),
-        fetchBomsAll().then((body) => (Array.isArray(body) ? body : normalizeMasterList(body))),
+        fetchBomsAll().then((body) => Array.isArray(body) ? body : normalizeMasterList(body)),
         fetchStockMap(),
-        fetchPlanRelated(plan.id, planNumbersForPO),
-      ]);
+        fetchPlanRelated(plan.id, planNumbersForPO)]
+        ),products = _await$Promise$all3[0],boms = _await$Promise$all3[1],stockMap = _await$Promise$all3[2],planRelated = _await$Promise$all3[3];
 
       if (this._materialLoadToken !== loadToken) return;
 
       const product = products.find((p) => p.id === plan.productId) || cachedProduct;
       const view = mapPlanDetailView(plan, {
         product,
-        category: product
-          ? (categories.find((c) => c.id === product.categoryId) || category)
-          : category,
+        category: product ?
+        categories.find((c) => c.id === product.categoryId) || category :
+        category,
         dictionaries,
         nodes,
         equipment,
@@ -300,27 +300,27 @@ Page({
         productionLinkMode,
         showDeliveryDate,
         planFormSettings,
-        planWorkOrdersDispatched,
+        planWorkOrdersDispatched
       });
 
       const materialSection = view.sections.find((s) => s.id === 'material');
       this.setData({
-        sections: patchMaterialSection(this.data.sections, materialSection),
+        sections: patchMaterialSection(this.data.sections, materialSection)
       });
     } catch (err) {
       if (this._materialLoadToken !== loadToken) return;
-      const loadError = (err && err.message) || '用料加载失败，请稍后重试';
-      const sections = this.data.sections.map((s) => (
-        s.id === 'material'
-          ? {
-            ...s,
-            loading: false,
-            loadError,
-            materials: [],
-            emptyText: '',
-          }
-          : s
-      ));
+      const loadError = err && err.message || '用料加载失败，请稍后重试';
+      const sections = this.data.sections.map((s) =>
+      s.id === 'material' ?
+      {
+        ...s,
+        loading: false,
+        loadError,
+        materials: [],
+        emptyText: ''
+      } :
+      s
+      );
       this.setData({ sections });
       wx.showToast({ title: loadError, icon: 'none' });
     }
@@ -334,7 +334,7 @@ Page({
       confirmText: '下达',
       success: (res) => {
         if (res.confirm) this.doConvert();
-      },
+      }
     });
   },
 
@@ -346,18 +346,18 @@ Page({
       const firstOrderId = result && result.orderIds && result.orderIds[0];
       if (firstOrderId) {
         wx.redirectTo({
-          url: `/packageBusiness/production-order-detail/production-order-detail?id=${encodeURIComponent(firstOrderId)}`,
+          url: `/packageBusiness/production-order-detail/production-order-detail?id=${encodeURIComponent(firstOrderId)}`
         });
         return;
       }
       await this.loadDetail();
     } catch (err) {
       wx.showToast({
-        title: (err && err.message) || '下达失败',
-        icon: 'none',
+        title: err && err.message || '下达失败',
+        icon: 'none'
       });
     } finally {
       this.setData({ converting: false });
     }
-  },
+  }
 });

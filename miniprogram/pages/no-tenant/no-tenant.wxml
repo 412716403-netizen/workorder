@@ -1,13 +1,24 @@
-<page-header title="企业入驻" />
+<page-header title="企业入驻" theme="primary" />
 
-<view class="st-page st-page--flow st-page--center">
-  <view style="width: 100%">
-    <view class="st-title-page st-text-center">尚未加入企业</view>
-    <view class="st-text-caption st-text-center st-mt-md">
-      可创建新企业或通过邀请码加入；也可稍后在「选择企业」中处理。
+<scroll-view class="st-scroll auth-flow-scroll" scroll-y show-scrollbar="{{false}}">
+  <view class="auth-flow-body st-page st-page--flow auth-flow-page">
+    <view class="auth-flow-hero auth-flow-hero--inset">
+      <view class="auth-flow-hero__icon-wrap">
+        <image class="auth-flow-hero__icon" src="/assets/icons/building-2.png" mode="aspectFit" />
+      </view>
+      <view class="auth-flow-hero__title">尚未加入企业</view>
+      <view class="auth-flow-hero__desc">
+        可创建新企业或通过邀请码加入；也可稍后在「选择企业」中处理。
+      </view>
     </view>
 
-    <button class="st-btn-primary st-mt-lg" bindtap="onOnboarding">创建或加入企业</button>
-    <button class="st-btn-secondary st-mt-md" bindtap="onLogout">退出登录</button>
+    <view class="auth-flow-actions st-mt-lg">
+      <button class="st-btn-primary" bindtap="onOnboardingCreate">创建新企业</button>
+      <button class="st-btn-secondary" bindtap="onOnboardingJoin">加入企业</button>
+    </view>
+
+    <view class="auth-flow-footer">
+      <button class="st-btn-text auth-flow-footer__logout" bindtap="onLogout">退出登录</button>
+    </view>
   </view>
-</view>
+</scroll-view>

@@ -2,14 +2,14 @@
  * 销售单表单状态与保存（对齐 Web OrderBillFormPage SALES_BILL 分支）
  */
 
-const { PSI_TYPE } = require('../config/salesBills.js');
-const { groupDocItemsByLineGroup, formatPsiQtyDisplay } = require('./psiOpsAggregators.js');
-const { productHasColorSizeMatrix } = require('./productionPlans.js');
-const { buildVariantMatrixUiModel } = require('./variantQtyMatrix.js');
-const { localTodayYmd } = require('./dateYmd.js');
-const { categoryUsesBatchManagement } = require('./materialIssueBatch.js');
-const { BATCH_NO_UNTAGGED } = require('./materialStockConfirm.js');
-const { listLocalAvailableBatches } = require('./purchaseBillBatch.js');
+const _require = require('../config/salesBills.js'),PSI_TYPE = _require.PSI_TYPE;
+const _require2 = require('./psiOpsAggregators.js'),groupDocItemsByLineGroup = _require2.groupDocItemsByLineGroup,formatPsiQtyDisplay = _require2.formatPsiQtyDisplay;
+const _require3 = require('./productionPlans.js'),productHasColorSizeMatrix = _require3.productHasColorSizeMatrix;
+const _require4 = require('./variantQtyMatrix.js'),buildVariantMatrixUiModel = _require4.buildVariantMatrixUiModel;
+const _require5 = require('./dateYmd.js'),localTodayYmd = _require5.localTodayYmd;
+const _require6 = require('./materialIssueBatch.js'),categoryUsesBatchManagement = _require6.categoryUsesBatchManagement;
+const _require7 = require('./materialStockConfirm.js'),BATCH_NO_UNTAGGED = _require7.BATCH_NO_UNTAGGED;
+const _require8 = require('./purchaseBillBatch.js'),listLocalAvailableBatches = _require8.listLocalAvailableBatches;
 
 const WAREHOUSE_PREF_KEY = 'PSI_SALES_BILL_WAREHOUSE';
 
@@ -29,8 +29,8 @@ function writeWarehousePreference(warehouseId) {
   try {
     if (warehouseId) wx.setStorageSync(WAREHOUSE_PREF_KEY, warehouseId);
   } catch {
-    /* ignore */
-  }
+
+    /* ignore */}
 }
 
 function resolvePreferredWarehouse(warehouses) {
@@ -66,7 +66,7 @@ function createEmptyLine() {
     unitName: 'PCS',
     lineTotalQty: 0,
     lineAmountText: '',
-    showAmount: false,
+    showAmount: false
   };
 }
 
@@ -78,13 +78,13 @@ function buildInitialForm() {
     warehouseName: '',
     docNumber: '',
     operator: '',
-    note: '',
+    note: ''
   };
 }
 
 function recordsToLineItems(records) {
   const lineMap = groupDocItemsByLineGroup(records || []);
-  return Object.entries(lineMap).map(([lgId, recs]) => {
+  return Object.entries(lineMap).map(([lgId, recs]) => {var _first$salesPrice;
     const first = recs[0] || {};
     const hasVar = recs.some((r) => r.variantId);
     const vq = {};
@@ -99,21 +99,21 @@ function recordsToLineItems(records) {
       productId: first.productId || '',
       productName: first.productName || '',
       quantity: hasVar ? '' : String(lineQtyNoVar || ''),
-      salesPrice: String(first.salesPrice ?? ''),
+      salesPrice: String((_first$salesPrice = first.salesPrice) != null ? _first$salesPrice : ''),
       variantQuantities: hasVar ? vq : {},
       batch: first.batchNo || first.batch || '',
-      sourceRecordIds: recs.map((r) => r.id),
+      sourceRecordIds: recs.map((r) => r.id)
     };
   });
 }
 
 function enrichLineForUi(line, ctx) {
-  const { productMap, categoryMap, dictionaries, showAmount } = ctx;
+  const productMap = ctx.productMap,categoryMap = ctx.categoryMap,dictionaries = ctx.dictionaries,showAmount = ctx.showAmount;
   const product = line.productId && productMap ? productMap.get(line.productId) : null;
   const category = product && categoryMap ? categoryMap.get(product.categoryId) : null;
   const useMatrix = Boolean(product && productHasColorSizeMatrix(product, category));
   const showBatch = Boolean(product && categoryUsesBatchManagement(category) && !useMatrix);
-  const unitName = (product && product.unit) || 'PCS';
+  const unitName = product && product.unit || 'PCS';
   let matrixLayout = null;
   if (useMatrix && product) {
     matrixLayout = buildVariantMatrixUiModel(product, dictionaries, line.variantQuantities || {});
@@ -123,7 +123,7 @@ function enrichLineForUi(line, ctx) {
   const amount = qty * price;
   return {
     ...line,
-    productName: (product && product.name) || line.productName || '',
+    productName: product && product.name || line.productName || '',
     useMatrix,
     showBatch,
     matrixLayout,
@@ -133,7 +133,7 @@ function enrichLineForUi(line, ctx) {
     showAmount: Boolean(showAmount),
     quantity: line.quantity != null ? String(line.quantity) : '',
     salesPrice: line.salesPrice != null ? String(line.salesPrice) : '',
-    batch: line.batch != null ? String(line.batch) : '',
+    batch: line.batch != null ? String(line.batch) : ''
   };
 }
 
@@ -152,7 +152,7 @@ function computeFormTotals(lines, showAmount) {
     totalQtyText: `${totalQty} PCS`,
     totalAmountText: showAmount ? `¥${totalAmount.toFixed(2)}` : '',
     showAmount: Boolean(showAmount),
-    canSubmit: hasLine,
+    canSubmit: hasLine
   };
 }
 
@@ -169,7 +169,7 @@ function resolveBatchForSave(item) {
 }
 
 function validateSalesBillSave(form, lines, opts) {
-  const { psiRecordsForBatch } = opts || {};
+  const _ref = opts || {},psiRecordsForBatch = _ref.psiRecordsForBatch;
   if (!form || !String(form.partner || '').trim()) {
     wx.showToast({ title: '请选择客户', icon: 'none' });
     return false;
@@ -219,7 +219,7 @@ function localCalendarYmdStartToIso(ymd) {
 function psiDocTimestampIsoForSave(existingRecords, editingDocNumber) {
   if (!editingDocNumber) return new Date().toISOString();
   const lines = (existingRecords || []).filter(
-    (r) => r.type === PSI_TYPE && String(r.docNumber) === String(editingDocNumber),
+    (r) => r.type === PSI_TYPE && String(r.docNumber) === String(editingDocNumber)
   );
   let min = 0;
   lines.forEach((r) => {
@@ -233,7 +233,7 @@ function psiDocTimestampIsoForSave(existingRecords, editingDocNumber) {
 function sbCreatedAtIsoForSave(existingRecords, editingDocNumber) {
   if (!editingDocNumber) return localCalendarYmdStartToIso(localTodayYmd());
   const row = (existingRecords || []).find(
-    (r) => r.type === PSI_TYPE && String(r.docNumber) === String(editingDocNumber),
+    (r) => r.type === PSI_TYPE && String(r.docNumber) === String(editingDocNumber)
   );
   if (!row || row.createdAt == null || row.createdAt === '') {
     return localCalendarYmdStartToIso(localTodayYmd());
@@ -244,22 +244,22 @@ function sbCreatedAtIsoForSave(existingRecords, editingDocNumber) {
 }
 
 function buildSalesBillSaveRecords(opts) {
-  const {
-    form,
-    lines,
-    docNumber,
-    editingDocNumber,
-    existingRecords,
-    operator,
-  } = opts;
+  const
+    form =
+
+
+
+
+
+    opts.form,lines = opts.lines,docNumber = opts.docNumber,editingDocNumber = opts.editingDocNumber,existingRecords = opts.existingRecords,operator = opts.operator;
   const timestamp = psiDocTimestampIsoForSave(existingRecords, editingDocNumber);
   const sbCreatedAtIso = sbCreatedAtIsoForSave(existingRecords, editingDocNumber);
-  const head = editingDocNumber
-    ? (existingRecords || []).find(
-      (r) => r.type === PSI_TYPE && r.docNumber === editingDocNumber,
-    )
-    : null;
-  const notePreserve = head && editingDocNumber ? (head.note != null ? String(head.note) : '') : '';
+  const head = editingDocNumber ?
+  (existingRecords || []).find(
+    (r) => r.type === PSI_TYPE && r.docNumber === editingDocNumber
+  ) :
+  null;
+  const notePreserve = head && editingDocNumber ? head.note != null ? String(head.note) : '' : '';
   const newRecords = [];
   let recIdx = 0;
 
@@ -290,7 +290,7 @@ function buildSalesBillSaveRecords(opts) {
           note: notePreserve,
           operator: operator || '',
           lineGroupId: item.id,
-          createdAt: sbCreatedAtIso,
+          createdAt: sbCreatedAtIso
         });
       });
     } else {
@@ -314,7 +314,7 @@ function buildSalesBillSaveRecords(opts) {
         operator: operator || '',
         lineGroupId: item.id,
         createdAt: sbCreatedAtIso,
-        ...(batchVal ? { batch: batchVal } : {}),
+        ...(batchVal ? { batch: batchVal } : {})
       });
     }
   });
@@ -336,5 +336,5 @@ module.exports = {
   computeFormTotals,
   resolveBatchForSave,
   validateSalesBillSave,
-  buildSalesBillSaveRecords,
+  buildSalesBillSaveRecords
 };

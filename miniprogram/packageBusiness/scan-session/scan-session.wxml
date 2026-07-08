@@ -10,6 +10,8 @@
       placeholder="请选择工序"
       empty-text="暂无工序，请先在设置中维护"
       bind:change="onReportNodeChange"
+      bind:sheetopen="onConditionSheetOpen"
+      bind:sheetclose="onConditionSheetClose"
     />
   </view>
 
@@ -22,6 +24,8 @@
       placeholder="请选择返工工序"
       empty-text="当前无待返工工序"
       bind:change="onReworkNodeChange"
+      bind:sheetopen="onConditionSheetOpen"
+      bind:sheetclose="onConditionSheetClose"
     />
   </view>
 
@@ -33,13 +37,15 @@
       value="{{partnerName}}"
       placeholder="搜索加工厂名称"
       bind:change="onPartnerChange"
+      bind:sheetopen="onConditionSheetOpen"
+      bind:sheetclose="onConditionSheetClose"
     />
     <text class="scan-session-conditions__hint">选择加工厂后即可扫码收货</text>
   </view>
 
   <view class="scan-camera-wrap scan-camera-wrap--session">
     <camera
-      wx:if="{{useCamera}}"
+      wx:if="{{useCamera && !conditionSheetOpen}}"
       class="scan-camera"
       mode="scanCode"
       frame-size="medium"
@@ -48,6 +54,9 @@
       bindscancode="onCameraScan"
       binderror="onCameraError"
     />
+    <view wx:elif="{{useCamera && conditionSheetOpen}}" class="scan-camera-fallback scan-camera-fallback--paused">
+      <text class="scan-camera-fallback__text">请先完成上方选择</text>
+    </view>
     <view wx:else class="scan-camera-fallback">
       <image class="scan-camera-fallback__icon" src="/assets/icons/scan-line.png" mode="aspectFit" />
       <text wx:if="{{isDevtools}}" class="scan-camera-fallback__text">开发者工具无摄像头，请使用系统扫码</text>
@@ -57,7 +66,7 @@
       <button class="scan-fallback-btn scan-fallback-btn--primary" loading="{{scanning}}" bindtap="onFallbackScan">系统扫码</button>
     </view>
 
-    <cover-view wx:if="{{useCamera}}" class="scan-overlay">
+    <cover-view wx:if="{{useCamera && !conditionSheetOpen}}" class="scan-overlay">
       <cover-view class="scan-overlay__dim scan-overlay__dim--top"></cover-view>
       <cover-view class="scan-overlay__dim scan-overlay__dim--bottom"></cover-view>
       <cover-view class="scan-overlay__dim scan-overlay__dim--left"></cover-view>

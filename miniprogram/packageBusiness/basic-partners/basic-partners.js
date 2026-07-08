@@ -1,17 +1,17 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const { PARTNER_ARCHIVE_ALL, DEFAULT_PAGE_SIZE } = require('../config/partners.js');
-const { buildPartnerListRows } = require('../utils/partners.js');
-const { fetchPartnersAll } = require('../utils/partnerApi.js');
-const { fetchPartnerCategoriesAll } = require('../utils/planApi.js');
-const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
-const { shouldHubListRefetch, trackHubListHidden, LIST_ROUTES } = require('../utils/saveNavigation.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 = require('../config/partners.js'),PARTNER_ARCHIVE_ALL = _require3.PARTNER_ARCHIVE_ALL,DEFAULT_PAGE_SIZE = _require3.DEFAULT_PAGE_SIZE;
+const _require4 = require('../utils/partners.js'),buildPartnerListRows = _require4.buildPartnerListRows;
+const _require5 = require('../utils/partnerApi.js'),fetchPartnersAll = _require5.fetchPartnersAll;
+const _require6 = require('../utils/planApi.js'),fetchPartnerCategoriesAll = _require6.fetchPartnerCategoriesAll;
+const _require7 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require7.readNavBarMetrics,readWindowMetrics = _require7.readWindowMetrics;
+const _require8 = require('../utils/saveNavigation.js'),shouldHubListRefetch = _require8.shouldHubListRefetch,trackHubListHidden = _require8.trackHubListHidden,LIST_ROUTES = _require8.LIST_ROUTES;
 
 const HUB_LIST_ROUTE = LIST_ROUTES.BASIC_PARTNERS.replace(/^\//, '');
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
-  const toolsPx = Math.ceil((win.windowWidth / 750) * 128);
+  const toolsPx = Math.ceil(win.windowWidth / 750 * 128);
   return nav.statusBarHeight + nav.navBarHeight + toolsPx;
 }
 
@@ -44,7 +44,7 @@ Page({
     canEdit: false,
     statusBarHeight: 20,
     navBarHeight: 44,
-    headerBlockHeight: 88,
+    headerBlockHeight: 88
   },
 
   onLoad(options) {
@@ -52,13 +52,13 @@ Page({
     this.setData({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
-      headerBlockHeight: computeHeaderBlockHeight(nav),
+      headerBlockHeight: computeHeaderBlockHeight(nav)
     });
 
     const partnerId = options.partnerId ? decodeURIComponent(options.partnerId) : '';
     if (partnerId) {
       wx.redirectTo({
-        url: `/packageBusiness/basic-partner-edit/basic-partner-edit?id=${encodeURIComponent(partnerId)}`,
+        url: `/packageBusiness/basic-partner-edit/basic-partner-edit?id=${encodeURIComponent(partnerId)}`
       });
       return;
     }
@@ -91,7 +91,7 @@ Page({
     this._tenantCtx = ctx;
     this.setData({
       canCreate: hasPermission(ctx.permissions || [], 'basic:partners:create'),
-      canEdit: hasPermission(ctx.permissions || [], 'basic:partners:edit'),
+      canEdit: hasPermission(ctx.permissions || [], 'basic:partners:edit')
     });
 
     if (!this._initialized) {
@@ -119,9 +119,9 @@ Page({
       return;
     }
     const categoryId = this.data.activeCategoryId;
-    const qs = categoryId && categoryId !== PARTNER_ARCHIVE_ALL
-      ? `?categoryId=${encodeURIComponent(categoryId)}`
-      : '';
+    const qs = categoryId && categoryId !== PARTNER_ARCHIVE_ALL ?
+    `?categoryId=${encodeURIComponent(categoryId)}` :
+    '';
     this.openPartnerEdit(`/packageBusiness/basic-partner-edit/basic-partner-edit${qs}`);
   },
 
@@ -152,7 +152,7 @@ Page({
       return;
     }
     this.openPartnerEdit(
-      `/packageBusiness/basic-partner-edit/basic-partner-edit?id=${encodeURIComponent(id)}`,
+      `/packageBusiness/basic-partner-edit/basic-partner-edit?id=${encodeURIComponent(id)}`
     );
   },
 
@@ -162,8 +162,8 @@ Page({
       events: {
         hubListChanged: () => {
           this.bootstrap({ resetView: true });
-        },
-      },
+        }
+      }
     });
   },
 
@@ -191,16 +191,16 @@ Page({
         page: 1,
         searchKeyword: '',
         activeCategoryId: PARTNER_ARCHIVE_ALL,
-        loading: true,
+        loading: true
       });
     } else {
       this.setData({ loading: true });
     }
     try {
-      const [partners, categories] = await Promise.all([
+      const _await$Promise$all = await Promise.all([
         fetchPartnersAll(),
-        fetchPartnerCategoriesAll(),
-      ]);
+        fetchPartnerCategoriesAll()]
+        ),partners = _await$Promise$all[0],categories = _await$Promise$all[1];
       this._partners = partners || [];
       this._categories = categories || [];
       this.reloadList();
@@ -208,15 +208,15 @@ Page({
       this.setData({
         loading: false,
         rows: [],
-        emptyText: (err && err.message) || '加载失败',
+        emptyText: err && err.message || '加载失败'
       });
     }
   },
 
   reloadList() {
-    const inCategoryCount = this.data.activeCategoryId === PARTNER_ARCHIVE_ALL
-      ? (this._partners || []).length
-      : (this._partners || []).filter((p) => p.categoryId === this.data.activeCategoryId).length;
+    const inCategoryCount = this.data.activeCategoryId === PARTNER_ARCHIVE_ALL ?
+    (this._partners || []).length :
+    (this._partners || []).filter((p) => p.categoryId === this.data.activeCategoryId).length;
 
     const result = buildPartnerListRows(
       this._partners,
@@ -224,13 +224,13 @@ Page({
       this.data.activeCategoryId,
       this.data.searchKeyword,
       this.data.page,
-      this.data.pageSize,
+      this.data.pageSize
     );
 
     const hasSearch = String(this.data.searchKeyword || '').trim();
-    const emptyText = inCategoryCount === 0
-      ? '该分类下暂无单位数据'
-      : (hasSearch ? '未找到匹配的单位' : '该分类下暂无单位数据');
+    const emptyText = inCategoryCount === 0 ?
+    '该分类下暂无单位数据' :
+    hasSearch ? '未找到匹配的单位' : '该分类下暂无单位数据';
 
     this.setData({
       loading: false,
@@ -244,9 +244,9 @@ Page({
         inCategoryCount,
         this.data.searchKeyword,
         result.page,
-        result.totalPages,
+        result.totalPages
       ),
-      emptyText,
+      emptyText
     });
-  },
+  }
 });

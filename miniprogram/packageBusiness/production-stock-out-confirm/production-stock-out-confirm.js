@@ -1,36 +1,36 @@
-const { readOperatorDisplayName } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const { readTenantCtx } = require('../../utils/session.js');
-const {
-  fetchWarehousesAll,
-  fetchCategoriesAll,
-  createProductionRecordBatch,
-  fetchStockBatches,
-} = require('../utils/orderApi.js');
-const { normalizeMasterList } = require('../utils/productionPlans.js');
-const { fetchDictionaries } = require('../utils/planApi.js');
-const {
-  buildConfirmRows,
-  attachConfirmRowUnits,
-  validateConfirmRows,
-  buildProductionRecordBatchPayload,
-  buildReturnDispatchedBatchesByProduct,
-  parseBatchErrorMessage,
-} = require('../utils/materialStockConfirm.js');
-const {
-  decorateConfirmRowsWithBatchFlags,
-  attachBatchOptionsToConfirmRows,
-  attachReturnBatchOptionsToConfirmRows,
-  confirmRowsNeedBatchColumn,
-  applyBatchSelection,
-} = require('../utils/materialIssueBatch.js');
-const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
-const { LIST_ROUTES, afterSaveReturnToList } = require('../utils/saveNavigation.js');
-const { INTERNAL_PARTNER_KEY } = require('../utils/materialStatsLite.js');
+const _require = require('../../utils/session.js'),readOperatorDisplayName = _require.readOperatorDisplayName;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 = require('../../utils/session.js'),readTenantCtx = _require3.readTenantCtx;
+const _require4 =
+
+
+
+
+  require('../utils/orderApi.js'),fetchWarehousesAll = _require4.fetchWarehousesAll,fetchCategoriesAll = _require4.fetchCategoriesAll,createProductionRecordBatch = _require4.createProductionRecordBatch,fetchStockBatches = _require4.fetchStockBatches;
+const _require5 = require('../utils/productionPlans.js'),normalizeMasterList = _require5.normalizeMasterList;
+const _require6 = require('../utils/planApi.js'),fetchDictionaries = _require6.fetchDictionaries;
+const _require7 =
+
+
+
+
+
+
+  require('../utils/materialStockConfirm.js'),buildConfirmRows = _require7.buildConfirmRows,attachConfirmRowUnits = _require7.attachConfirmRowUnits,validateConfirmRows = _require7.validateConfirmRows,buildProductionRecordBatchPayload = _require7.buildProductionRecordBatchPayload,buildReturnDispatchedBatchesByProduct = _require7.buildReturnDispatchedBatchesByProduct,parseBatchErrorMessage = _require7.parseBatchErrorMessage;
+const _require8 =
+
+
+
+
+
+  require('../utils/materialIssueBatch.js'),decorateConfirmRowsWithBatchFlags = _require8.decorateConfirmRowsWithBatchFlags,attachBatchOptionsToConfirmRows = _require8.attachBatchOptionsToConfirmRows,attachReturnBatchOptionsToConfirmRows = _require8.attachReturnBatchOptionsToConfirmRows,confirmRowsNeedBatchColumn = _require8.confirmRowsNeedBatchColumn,applyBatchSelection = _require8.applyBatchSelection;
+const _require9 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require9.readNavBarMetrics,readWindowMetrics = _require9.readWindowMetrics;
+const _require0 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require0.LIST_ROUTES,afterSaveReturnToList = _require0.afterSaveReturnToList;
+const _require1 = require('../utils/materialStatsLite.js'),INTERNAL_PARTNER_KEY = _require1.INTERNAL_PARTNER_KEY;
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
-  const tailPx = Math.ceil((win.windowWidth / 750) * 16);
+  const tailPx = Math.ceil(win.windowWidth / 750 * 16);
   return nav.statusBarHeight + nav.navBarHeight + tailPx;
 }
 
@@ -50,13 +50,13 @@ Page({
     warehouseIndex: 0,
     statusBarHeight: 20,
     navBarHeight: 44,
-    headerBlockHeight: 88,
+    headerBlockHeight: 88
   },
 
   onLoad(options) {
     const nav = readNavBarMetrics();
     const ctx = readTenantCtx();
-    const perms = (ctx && ctx.permissions) || [];
+    const perms = ctx && ctx.permissions || [];
     const mode = options.mode ? decodeURIComponent(options.mode) : 'stock_out';
     const source = options.source ? decodeURIComponent(options.source) : '';
     this._source = source;
@@ -77,7 +77,7 @@ Page({
       return;
     }
 
-    const detail = (getApp().globalData && getApp().globalData.materialStockConfirm) || null;
+    const detail = getApp().globalData && getApp().globalData.materialStockConfirm || null;
     if (!detail || !detail.materials || !detail.materials.length) {
       wx.showToast({ title: '缺少领退料数据', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 800);
@@ -91,19 +91,19 @@ Page({
     this._stockRecords = detail.stockRecords || [];
     this._partnerKey = detail.partnerKey || INTERNAL_PARTNER_KEY;
     this._productsById = new Map(this._products.map((p) => [p.id, p]));
-    this._returnDispatchedByProduct = mode === 'stock_return'
-      ? buildReturnDispatchedBatchesByProduct({
-        records: this._stockRecords,
-        orderId: detail.orderId || '',
-        sourceProductId: detail.sourceProductId || '',
-        orders: this._orders,
-        partnerKey: this._partnerKey,
-      })
-      : null;
+    this._returnDispatchedByProduct = mode === 'stock_return' ?
+    buildReturnDispatchedBatchesByProduct({
+      records: this._stockRecords,
+      orderId: detail.orderId || '',
+      sourceProductId: detail.sourceProductId || '',
+      orders: this._orders,
+      partnerKey: this._partnerKey
+    }) :
+    null;
 
-    const modeLabel = isOutsourceMaterial
-      ? (mode === 'stock_return' ? '外协物料退回' : '外协物料外发')
-      : (mode === 'stock_return' ? '退料' : '领料');
+    const modeLabel = isOutsourceMaterial ?
+    mode === 'stock_return' ? '外协物料退回' : '外协物料外发' :
+    mode === 'stock_return' ? '退料' : '领料';
     this.setData({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
@@ -113,9 +113,9 @@ Page({
       pageTitle: isOutsourceMaterial ? modeLabel : `确认${modeLabel}`,
       orderNumber: detail.orderNumber || '',
       productName: detail.productName || '',
-      partnerLabel: (this._partnerKey !== INTERNAL_PARTNER_KEY && detail.partnerLabel)
-        ? detail.partnerLabel
-        : '',
+      partnerLabel: this._partnerKey !== INTERNAL_PARTNER_KEY && detail.partnerLabel ?
+      detail.partnerLabel :
+      ''
     });
     this.initRows(mode).then(() => this.loadWarehouses());
   },
@@ -124,10 +124,10 @@ Page({
     let rows = buildConfirmRows(this._detail.materials, mode);
     let dictionaries = {};
     try {
-      const [categoriesRaw, dictRaw] = await Promise.all([
+      const _await$Promise$all = await Promise.all([
         fetchCategoriesAll(),
-        fetchDictionaries().catch(() => ({})),
-      ]);
+        fetchDictionaries().catch(() => ({}))]
+        ),categoriesRaw = _await$Promise$all[0],dictRaw = _await$Promise$all[1];
       const categories = normalizeMasterList(categoriesRaw);
       this._categoryById = new Map(categories.map((c) => [c.id, c]));
       dictionaries = dictRaw || {};
@@ -139,7 +139,7 @@ Page({
     this._rows = rows;
     this.setData({
       showBatchCol: confirmRowsNeedBatchColumn(rows),
-      rows,
+      rows
     });
   },
 
@@ -150,7 +150,7 @@ Page({
   async loadWarehouses() {
     try {
       const raw = await fetchWarehousesAll();
-      const list = Array.isArray(raw) ? raw : (raw && raw.data) || [];
+      const list = Array.isArray(raw) ? raw : raw && raw.data || [];
       if (!list.length) {
         this.setData({ loading: false });
         wx.showToast({ title: '暂无可用仓库', icon: 'none' });
@@ -160,7 +160,7 @@ Page({
       this.setData({
         loading: false,
         warehouseNames: list.map((w) => w.name || w.code || w.id),
-        warehouseIndex: 0,
+        warehouseIndex: 0
       });
       await this.refreshBatchOptions();
     } catch {
@@ -181,13 +181,13 @@ Page({
       nextRows = await attachBatchOptionsToConfirmRows(
         rows,
         wh ? wh.id : '',
-        fetchStockBatches,
+        fetchStockBatches
       );
     }
     this._rows = nextRows;
     this.setData({
       rows: nextRows,
-      showBatchCol: confirmRowsNeedBatchColumn(nextRows),
+      showBatchCol: confirmRowsNeedBatchColumn(nextRows)
     });
   },
 
@@ -199,17 +199,17 @@ Page({
   },
 
   onQtyInput(e) {
-    const { id } = e.currentTarget.dataset;
+    const id = e.currentTarget.dataset.id;
     const val = e.detail.value || '';
-    const rows = (this.data.rows || []).map((r) => (
-      r.productId === id ? { ...r, quantity: val } : r
-    ));
+    const rows = (this.data.rows || []).map((r) =>
+    r.productId === id ? { ...r, quantity: val } : r
+    );
     this._rows = rows;
     this.setData({ rows });
   },
 
   onBatchChange(e) {
-    const { id } = e.currentTarget.dataset;
+    const id = e.currentTarget.dataset.id;
     const idx = Number(e.detail.value);
     const rows = (this.data.rows || []).map((r) => {
       if (r.productId !== id) return r;
@@ -239,7 +239,7 @@ Page({
       sourceProductId: this._detail.sourceProductId || undefined,
       warehouse: wh,
       operator: readOperatorDisplayName(),
-      partner: this._partnerKey !== INTERNAL_PARTNER_KEY ? this._partnerKey : undefined,
+      partner: this._partnerKey !== INTERNAL_PARTNER_KEY ? this._partnerKey : undefined
     });
 
     this.setData({ submitting: true });
@@ -249,7 +249,7 @@ Page({
       wx.hideLoading();
       afterSaveReturnToList({
         listUrl: this._source === 'outsource' ? LIST_ROUTES.OUTSOURCE_HUB : LIST_ROUTES.STOCK_OUT,
-        toastTitle: `${this.data.modeLabel}成功`,
+        toastTitle: `${this.data.modeLabel}成功`
       });
     } catch (err) {
       wx.showToast({ title: parseBatchErrorMessage(err), icon: 'none', duration: 2500 });
@@ -257,5 +257,5 @@ Page({
     } finally {
       wx.hideLoading();
     }
-  },
+  }
 });

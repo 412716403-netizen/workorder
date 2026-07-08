@@ -1,27 +1,27 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const { DEFAULT_PAGE_SIZE, FINANCE_TYPE } = require('../config/financeReceipts.js');
-const {
-  mapReceiptListCard,
-  buildCategoryMap,
-  buildWorkerMap,
-} = require('../utils/financeReceipts.js');
-const {
-  listFinanceRecordsPaginated,
-  fetchFinanceCategoriesAll,
-  normalizeMasterList,
-} = require('../../utils/financeApi.js');
-const { fetchProductsAll } = require('../utils/planApi.js');
-const { fetchWorkersAll } = require('../utils/orderApi.js');
-const { buildProductMap } = require('../utils/purchaseOrders.js');
-const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
-const { shouldHubListRefetch, trackHubListHidden, LIST_ROUTES } = require('../utils/saveNavigation.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 = require('../config/financeReceipts.js'),DEFAULT_PAGE_SIZE = _require3.DEFAULT_PAGE_SIZE,FINANCE_TYPE = _require3.FINANCE_TYPE;
+const _require4 =
+
+
+
+  require('../utils/financeReceipts.js'),mapReceiptListCard = _require4.mapReceiptListCard,buildCategoryMap = _require4.buildCategoryMap,buildWorkerMap = _require4.buildWorkerMap;
+const _require5 =
+
+
+
+  require('../../utils/financeApi.js'),listFinanceRecordsPaginated = _require5.listFinanceRecordsPaginated,fetchFinanceCategoriesAll = _require5.fetchFinanceCategoriesAll,normalizeMasterList = _require5.normalizeMasterList;
+const _require6 = require('../utils/planApi.js'),fetchProductsAll = _require6.fetchProductsAll;
+const _require7 = require('../utils/orderApi.js'),fetchWorkersAll = _require7.fetchWorkersAll;
+const _require8 = require('../utils/purchaseOrders.js'),buildProductMap = _require8.buildProductMap;
+const _require9 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require9.readNavBarMetrics,readWindowMetrics = _require9.readWindowMetrics;
+const _require0 = require('../utils/saveNavigation.js'),shouldHubListRefetch = _require0.shouldHubListRefetch,trackHubListHidden = _require0.trackHubListHidden,LIST_ROUTES = _require0.LIST_ROUTES;
 
 const HUB_LIST_ROUTE = LIST_ROUTES.FINANCE_RECEIPTS.replace(/^\//, '');
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
-  const toolsPx = Math.ceil((win.windowWidth / 750) * 128);
+  const toolsPx = Math.ceil(win.windowWidth / 750 * 128);
   return nav.statusBarHeight + nav.navBarHeight + toolsPx;
 }
 
@@ -40,7 +40,7 @@ Page({
     hasMore: false,
     statusBarHeight: 20,
     navBarHeight: 44,
-    headerBlockHeight: 88,
+    headerBlockHeight: 88
   },
 
   onLoad(options) {
@@ -48,13 +48,13 @@ Page({
     this.setData({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
-      headerBlockHeight: computeHeaderBlockHeight(nav),
+      headerBlockHeight: computeHeaderBlockHeight(nav)
     });
 
     const id = options.id ? decodeURIComponent(options.id) : '';
     if (id) {
       wx.redirectTo({
-        url: `/packageBusiness/finance-receipt-detail/finance-receipt-detail?id=${encodeURIComponent(id)}`,
+        url: `/packageBusiness/finance-receipt-detail/finance-receipt-detail?id=${encodeURIComponent(id)}`
       });
       return;
     }
@@ -78,7 +78,7 @@ Page({
     }
     this.setData({
       canViewFlow: hasPermission(ctx.permissions || [], 'finance:receipt:view'),
-      canCreate: hasPermission(ctx.permissions || [], 'finance:receipt:create'),
+      canCreate: hasPermission(ctx.permissions || [], 'finance:receipt:create')
     });
     if (!this._initialized) {
       this.bootstrap();
@@ -132,7 +132,7 @@ Page({
     const id = e.currentTarget.dataset.id;
     if (!id) return;
     wx.navigateTo({
-      url: `/packageBusiness/finance-receipt-detail/finance-receipt-detail?id=${encodeURIComponent(id)}`,
+      url: `/packageBusiness/finance-receipt-detail/finance-receipt-detail?id=${encodeURIComponent(id)}`
     });
   },
 
@@ -149,11 +149,11 @@ Page({
     this._initialized = true;
     this.setData({ loading: true });
     try {
-      const [categories, workers, products] = await Promise.all([
+      const _await$Promise$all = await Promise.all([
         fetchFinanceCategoriesAll(),
         fetchWorkersAll().catch(() => []),
-        fetchProductsAll().catch(() => []),
-      ]);
+        fetchProductsAll().catch(() => [])]
+        ),categories = _await$Promise$all[0],workers = _await$Promise$all[1],products = _await$Promise$all[2];
       this._categoryMap = buildCategoryMap(normalizeMasterList(categories));
       this._workerMap = buildWorkerMap(normalizeMasterList(workers));
       this._productMap = buildProductMap(products || []);
@@ -178,12 +178,12 @@ Page({
         type: FINANCE_TYPE,
         ...(search ? { search } : {}),
         page,
-        pageSize,
+        pageSize
       });
       const ctx = {
         categoryMap: this._categoryMap,
         workerMap: this._workerMap,
-        productMap: this._productMap,
+        productMap: this._productMap
       };
       const nextCards = (result.data || []).map((rec) => mapReceiptListCard(rec, ctx));
       const cards = replace ? nextCards : (this.data.cards || []).concat(nextCards);
@@ -195,11 +195,11 @@ Page({
         page,
         total,
         hasMore: cards.length < total,
-        emptyText: total ? '' : (search ? '无匹配收款单' : '暂无收款单'),
+        emptyText: total ? '' : search ? '无匹配收款单' : '暂无收款单'
       });
     } catch (err) {
       this.setData({ loading: false, loadingMore: false });
       wx.showToast({ title: '加载失败', icon: 'none' });
     }
-  },
+  }
 });

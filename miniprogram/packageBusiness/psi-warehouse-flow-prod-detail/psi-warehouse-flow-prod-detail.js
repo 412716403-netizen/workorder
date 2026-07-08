@@ -1,15 +1,15 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const { fetchProductionRecords, fetchProductsAll, fetchWarehousesAll } = require('../utils/orderApi.js');
-const { normalizeMasterList } = require('../utils/productionPlans.js');
-const { listProductNameSkuFields } = require('../utils/listProductThumb.js');
-const { formatFlowDateTime, formatWarehouseFlowQty } = require('../utils/warehouseFlow.js');
-const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 = require('../utils/orderApi.js'),fetchProductionRecords = _require3.fetchProductionRecords,fetchProductsAll = _require3.fetchProductsAll,fetchWarehousesAll = _require3.fetchWarehousesAll;
+const _require4 = require('../utils/productionPlans.js'),normalizeMasterList = _require4.normalizeMasterList;
+const _require5 = require('../utils/listProductThumb.js'),listProductNameSkuFields = _require5.listProductNameSkuFields;
+const _require6 = require('../utils/warehouseFlow.js'),formatFlowDateTime = _require6.formatFlowDateTime,formatWarehouseFlowQty = _require6.formatWarehouseFlowQty;
+const _require7 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require7.readNavBarMetrics,readWindowMetrics = _require7.readWindowMetrics;
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
   const headerPx = nav.statusBarHeight + nav.navBarHeight;
-  return headerPx + Math.ceil((win.windowWidth / 750) * 24);
+  return headerPx + Math.ceil(win.windowWidth / 750 * 24);
 }
 
 Page({
@@ -18,7 +18,7 @@ Page({
     detail: null,
     statusBarHeight: 20,
     navBarHeight: 44,
-    headerBlockHeight: 88,
+    headerBlockHeight: 88
   },
 
   onLoad(options) {
@@ -28,7 +28,7 @@ Page({
     this.setData({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
-      headerBlockHeight: computeHeaderBlockHeight(nav),
+      headerBlockHeight: computeHeaderBlockHeight(nav)
     });
   },
 
@@ -61,19 +61,19 @@ Page({
 
   async bootstrap() {
     this.setData({ loading: true });
-    try {
-      const [productsRaw, warehousesRaw, recordsRaw] = await Promise.all([
+    try {var _record$quantity;
+      const _await$Promise$all = await Promise.all([
         fetchProductsAll().catch(() => []),
         fetchWarehousesAll().catch(() => []),
         fetchProductionRecords({
           types: this._type || 'STOCK_RETURN',
-          all: 'true',
-        }).catch(() => []),
-      ]);
+          all: 'true'
+        }).catch(() => [])]
+        ),productsRaw = _await$Promise$all[0],warehousesRaw = _await$Promise$all[1],recordsRaw = _await$Promise$all[2];
 
       const products = normalizeMasterList(productsRaw);
       const productMap = new Map(products.map((p) => [p.id, p]));
-      const warehouses = Array.isArray(warehousesRaw) ? warehousesRaw : (warehousesRaw.data || []);
+      const warehouses = Array.isArray(warehousesRaw) ? warehousesRaw : warehousesRaw.data || [];
       const warehouseMap = new Map(warehouses.map((w) => [w.id, w]));
       const records = Array.isArray(recordsRaw) ? recordsRaw : [];
       const record = records.find((r) => r.id === this._id);
@@ -87,24 +87,24 @@ Page({
       const product = productMap.get(record.productId);
       const nameFields = listProductNameSkuFields(product);
       const warehouse = warehouseMap.get(record.warehouseId);
-      const qty = record.quantity ?? 0;
+      const qty = (_record$quantity = record.quantity) != null ? _record$quantity : 0;
 
       this.setData({
         loading: false,
         detail: {
-          typeLabel: this._type === 'STOCK_RETURN' ? '生产退料' : (record.type || this._type),
+          typeLabel: this._type === 'STOCK_RETURN' ? '生产退料' : record.type || this._type,
           productName: nameFields.productName,
           productSku: nameFields.productSku,
           showProductSku: nameFields.showProductSku,
           qtyText: formatWarehouseFlowQty(qty),
-          warehouseName: (warehouse && warehouse.name) || '—',
+          warehouseName: warehouse && warehouse.name || '—',
           timeLabel: formatFlowDateTime(record.timestamp || ''),
-          docNo: record.docNo || record.id || '—',
-        },
+          docNo: record.docNo || record.id || '—'
+        }
       });
     } catch {
       this.setData({ loading: false, detail: null });
       wx.showToast({ title: '加载失败', icon: 'none' });
     }
-  },
+  }
 });

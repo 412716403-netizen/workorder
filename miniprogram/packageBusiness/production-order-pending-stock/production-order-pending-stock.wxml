@@ -1,3 +1,4 @@
+<page-meta page-style="{{scanBatchOpen ? 'overflow:hidden;height:100vh;' : ''}}" />
 <view class="plan-shell">
   <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
     <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
@@ -85,7 +86,7 @@
         <text class="pending-stock-footer__flow-text">入库流水</text>
       </view>
       <view
-        wx:if="{{canCreate}}"
+        wx:if="{{canCreate && scanEnabled}}"
         class="pending-stock-footer__scan"
         bindtap="onGoScan"
       >
@@ -96,4 +97,20 @@
       </view>
     </view>
   </view>
+
+  <scan-batch-modal
+    wx:if="{{scanEnabled}}"
+    open="{{scanBatchOpen}}"
+    rows="{{scanBatchRows}}"
+    title="{{scanBatchTitle}}"
+    hint="{{scanBatchHint}}"
+    processing="{{scanBatchProcessing}}"
+    show-intent-toggle="{{scanBatchShowIntentToggle}}"
+    scan-intent="{{scanBatchIntent}}"
+    bind:close="onScanBatchClose"
+    bind:scan="onScanBatchScan"
+    bind:confirm="onScanBatchConfirm"
+    bind:remove="onScanBatchRemove"
+    bind:intentchange="onScanBatchIntentChange"
+  />
 </view>

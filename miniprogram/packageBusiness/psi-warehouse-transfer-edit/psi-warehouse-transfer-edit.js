@@ -1,38 +1,38 @@
-const { readOperatorDisplayName } = require('../../utils/session.js');
-const { PSI_TRANSFER_TYPE } = require('../config/warehouses.js');
-const {
-  buildInitialForm,
-  createEmptyLine,
-  recordsToLineItems,
-  enrichLineForUi,
-  lineTotalQty,
-  validateTransferSave,
-  validateTransferBatchStock,
-  buildTransferSaveRecords,
-  generateTRDocNumber,
-  resolvePreferredTransferWarehouses,
-  writeTransferPreference,
-} = require('../utils/warehouseTransferForm.js');
-const { attachMergeBatchesToLine } = require('../utils/purchaseBillBatch.js');
-const { buildProductMap, buildCategoryMap } = require('../utils/purchaseOrders.js');
-const { groupRecordsByDocNumber } = require('../utils/psiOpsAggregators.js');
-const {
-  fetchAllPsiRecords,
-  createPsiRecordsBatch,
-  replacePsiRecords,
-} = require('../utils/psiApi.js');
-const { fetchProductsAll, fetchCategoriesAll, fetchDictionaries } = require('../utils/planApi.js');
-const { fetchWarehousesAll, fetchStockBatches, fetchStockSnapshot } = require('../utils/orderApi.js');
-const { buildStockSnapshotIndex } = require('../utils/warehouseStock.js');
-const { normalizeAppDictionaries, normalizeMasterList } = require('../utils/productionPlans.js');
-const { createMatrixKeyboardInputSession } = require('../utils/matrixQtyKeyboard.js');
-const {
-  emptyMatrixKeyboardState,
-  handleMatrixCellTap,
-  handleMatrixKeyboardAction,
-} = require('../utils/psiFormMatrixKeyboard.js');
-const { readNavBarMetrics, readWindowMetrics, computePlanCreateHeaderHeight } = require('../../utils/windowMetrics.js');
-const { LIST_ROUTES, afterSaveReturnToList } = require('../utils/saveNavigation.js');
+const _require = require('../../utils/session.js'),readOperatorDisplayName = _require.readOperatorDisplayName;
+const _require2 = require('../config/warehouses.js'),PSI_TRANSFER_TYPE = _require2.PSI_TRANSFER_TYPE;
+const _require3 =
+
+
+
+
+
+
+
+
+
+
+
+  require('../utils/warehouseTransferForm.js'),buildInitialForm = _require3.buildInitialForm,createEmptyLine = _require3.createEmptyLine,recordsToLineItems = _require3.recordsToLineItems,enrichLineForUi = _require3.enrichLineForUi,lineTotalQty = _require3.lineTotalQty,validateTransferSave = _require3.validateTransferSave,validateTransferBatchStock = _require3.validateTransferBatchStock,buildTransferSaveRecords = _require3.buildTransferSaveRecords,generateTRDocNumber = _require3.generateTRDocNumber,resolvePreferredTransferWarehouses = _require3.resolvePreferredTransferWarehouses,writeTransferPreference = _require3.writeTransferPreference;
+const _require4 = require('../utils/purchaseBillBatch.js'),attachMergeBatchesToLine = _require4.attachMergeBatchesToLine;
+const _require5 = require('../utils/purchaseOrders.js'),buildProductMap = _require5.buildProductMap,buildCategoryMap = _require5.buildCategoryMap;
+const _require6 = require('../utils/psiOpsAggregators.js'),groupRecordsByDocNumber = _require6.groupRecordsByDocNumber;
+const _require7 =
+
+
+
+  require('../utils/psiApi.js'),fetchAllPsiRecords = _require7.fetchAllPsiRecords,createPsiRecordsBatch = _require7.createPsiRecordsBatch,replacePsiRecords = _require7.replacePsiRecords;
+const _require8 = require('../utils/planApi.js'),fetchProductsAll = _require8.fetchProductsAll,fetchCategoriesAll = _require8.fetchCategoriesAll,fetchDictionaries = _require8.fetchDictionaries;
+const _require9 = require('../utils/orderApi.js'),fetchWarehousesAll = _require9.fetchWarehousesAll,fetchStockBatches = _require9.fetchStockBatches,fetchStockSnapshot = _require9.fetchStockSnapshot;
+const _require0 = require('../utils/warehouseStock.js'),buildStockSnapshotIndex = _require0.buildStockSnapshotIndex;
+const _require1 = require('../utils/productionPlans.js'),normalizeAppDictionaries = _require1.normalizeAppDictionaries,normalizeMasterList = _require1.normalizeMasterList;
+const _require10 = require('../utils/matrixQtyKeyboard.js'),createMatrixKeyboardInputSession = _require10.createMatrixKeyboardInputSession;
+const _require11 =
+
+
+
+  require('../utils/psiFormMatrixKeyboard.js'),emptyMatrixKeyboardState = _require11.emptyMatrixKeyboardState,handleMatrixCellTap = _require11.handleMatrixCellTap,handleMatrixKeyboardAction = _require11.handleMatrixKeyboardAction;
+const _require12 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require12.readNavBarMetrics,readWindowMetrics = _require12.readWindowMetrics,computePlanCreateHeaderHeight = _require12.computePlanCreateHeaderHeight;
+const _require13 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require13.LIST_ROUTES,afterSaveReturnToList = _require13.afterSaveReturnToList;
 
 Page({
   data: {
@@ -55,7 +55,7 @@ Page({
     headerBlockHeight: 88,
     scrollHeight: 500,
     matrixScrollTop: 0,
-    ...emptyMatrixKeyboardState(),
+    ...emptyMatrixKeyboardState()
   },
 
   onLoad(options) {
@@ -72,7 +72,7 @@ Page({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
       headerBlockHeight: computePlanCreateHeaderHeight(nav),
-      scrollHeight: Math.max(200, (win.windowHeight || 667) - computePlanCreateHeaderHeight(nav) - Math.ceil(128 * rpx) - (win.safeAreaBottom || 0)),
+      scrollHeight: Math.max(200, (win.windowHeight || 667) - computePlanCreateHeaderHeight(nav) - Math.ceil(128 * rpx) - (win.safeAreaBottom || 0))
     });
     this.bootstrap();
   },
@@ -89,13 +89,13 @@ Page({
   async bootstrap() {
     this.setData({ loading: true });
     try {
-      const [products, categories, dictionaries, warehouses, records] = await Promise.all([
+      const _await$Promise$all = await Promise.all([
         fetchProductsAll(),
         fetchCategoriesAll(),
         fetchDictionaries().catch(() => ({})),
         fetchWarehousesAll().catch(() => []),
-        fetchAllPsiRecords(PSI_TRANSFER_TYPE).catch(() => []),
-      ]);
+        fetchAllPsiRecords(PSI_TRANSFER_TYPE).catch(() => [])]
+        ),products = _await$Promise$all[0],categories = _await$Promise$all[1],dictionaries = _await$Promise$all[2],warehouses = _await$Promise$all[3],records = _await$Promise$all[4];
       await this.loadStockIndex();
       this._products = normalizeMasterList(products);
       this._categories = normalizeMasterList(categories);
@@ -103,7 +103,7 @@ Page({
       this._categoryMap = buildCategoryMap(this._categories);
       this._dictionaries = normalizeAppDictionaries(dictionaries);
       this._allRecords = records || [];
-      const whList = Array.isArray(warehouses) ? warehouses : (warehouses.data || []);
+      const whList = Array.isArray(warehouses) ? warehouses : warehouses.data || [];
       this._warehouses = whList;
       const warehouseNames = whList.map((w) => w.name || w.id);
       const preferred = resolvePreferredTransferWarehouses(whList);
@@ -124,13 +124,13 @@ Page({
         form = {
           ...form,
           fromWarehouseId: first.fromWarehouseId || '',
-          fromWarehouseName: (whList[fromIdx] && whList[fromIdx].name) || '',
+          fromWarehouseName: whList[fromIdx] && whList[fromIdx].name || '',
           toWarehouseId: first.toWarehouseId || '',
-          toWarehouseName: (whList[toIdx] && whList[toIdx].name) || '',
+          toWarehouseName: whList[toIdx] && whList[toIdx].name || '',
           docNumber: this._editingDocNumber,
           note: first.note || '',
           operator: first.operator || '',
-          transferDate: first.createdAt || form.transferDate,
+          transferDate: first.createdAt || form.transferDate
         };
         lines = recordsToLineItems(items, this._productMap, this._categoryMap, this._dictionaries);
         this._deleteIds = items.map((r) => r.id);
@@ -140,10 +140,10 @@ Page({
         const toWh = whList[toIdx];
         form = {
           ...form,
-          fromWarehouseId: (fromWh && fromWh.id) || '',
-          fromWarehouseName: (fromWh && fromWh.name) || '',
-          toWarehouseId: (toWh && toWh.id) || '',
-          toWarehouseName: (toWh && toWh.name) || '',
+          fromWarehouseId: fromWh && fromWh.id || '',
+          fromWarehouseName: fromWh && fromWh.name || '',
+          toWarehouseId: toWh && toWh.id || '',
+          toWarehouseName: toWh && toWh.name || ''
         };
       }
       this._form = form;
@@ -156,7 +156,7 @@ Page({
         fromWarehouseIndex: fromIdx,
         toWarehouseIndex: toIdx,
         products: this._products,
-        categories: this._categories,
+        categories: this._categories
       });
       this.refreshLinesUi();
     } catch (err) {
@@ -166,7 +166,7 @@ Page({
   },
 
   refreshLinesUi() {
-    const fromId = (this._form && this._form.fromWarehouseId) || '';
+    const fromId = this._form && this._form.fromWarehouseId || '';
     const lines = (this._lines || []).map((l) => {
       const enriched = enrichLineForUi(
         l,
@@ -174,7 +174,7 @@ Page({
         this._categoryMap,
         this._dictionaries,
         this._stockIndex,
-        fromId,
+        fromId
       );
       return attachMergeBatchesToLine(enriched, this._allRecords, fromId);
     });
@@ -184,7 +184,7 @@ Page({
       lines,
       form: this._form,
       totalQtyText: String(totalQty),
-      canSubmit,
+      canSubmit
     });
   },
 
@@ -224,25 +224,25 @@ Page({
 
   onLineProductChange(e) {
     const lineId = e.currentTarget.dataset.lineId;
-    const { id, name } = e.detail || {};
-    this._lines = (this._lines || []).map((l) => (
-      l.id === lineId
-        ? { ...l, productId: id || '', productName: name || '', variantQuantities: {}, quantity: '', batch: '' }
-        : l
-    ));
+    const _ref = e.detail || {},id = _ref.id,name = _ref.name;
+    this._lines = (this._lines || []).map((l) =>
+    l.id === lineId ?
+    { ...l, productId: id || '', productName: name || '', variantQuantities: {}, quantity: '', batch: '' } :
+    l
+    );
     this.refreshLinesUi();
   },
 
   onLineQtyInput(e) {
     const lineId = e.currentTarget.dataset.lineId;
-    this._lines = (this._lines || []).map((l) => (l.id === lineId ? { ...l, quantity: e.detail.value } : l));
+    this._lines = (this._lines || []).map((l) => l.id === lineId ? { ...l, quantity: e.detail.value } : l);
     this.refreshLinesUi();
   },
 
   onLineBatchChange(e) {
     const lineId = e.currentTarget.dataset.lineId;
     const value = e.detail && e.detail.value != null ? String(e.detail.value) : '';
-    this._lines = (this._lines || []).map((l) => (l.id === lineId ? { ...l, batch: value } : l));
+    this._lines = (this._lines || []).map((l) => l.id === lineId ? { ...l, batch: value } : l);
     this.refreshLinesUi();
   },
 
@@ -266,15 +266,15 @@ Page({
       this._form.fromWarehouseId,
       this._productMap,
       this._categoryMap,
-      fetchStockBatches,
+      fetchStockBatches
     );
     if (batchErr) {
       wx.showToast({ title: batchErr, icon: 'none' });
       return;
     }
-    const docNumber = this._form.docNumber
-      || this._editingDocNumber
-      || generateTRDocNumber(this._allRecords || []);
+    const docNumber = this._form.docNumber ||
+    this._editingDocNumber ||
+    generateTRDocNumber(this._allRecords || []);
     if (!docNumber) {
       wx.showToast({ title: '生成单号失败', icon: 'none' });
       return;
@@ -289,7 +289,7 @@ Page({
       this._categoryMap,
       docNumber,
       timestamp,
-      operator,
+      operator
     );
     if (!newRecords.length) {
       wx.showToast({ title: '请填写调拨数量', icon: 'none' });
@@ -309,17 +309,17 @@ Page({
       afterSaveReturnToList({
         listUrl: LIST_ROUTES.PSI_WAREHOUSE_TRANSFER,
         toastTitle: '保存成功',
-        alsoRefreshListUrls: [LIST_ROUTES.PSI_WAREHOUSES, LIST_ROUTES.PSI_WAREHOUSE_FLOW],
+        alsoRefreshListUrls: [LIST_ROUTES.PSI_WAREHOUSES, LIST_ROUTES.PSI_WAREHOUSE_FLOW]
       });
     } catch (submitErr) {
       wx.hideLoading();
       this.setData({ submitting: false });
-      const msg = (submitErr && submitErr.message) || '保存失败';
+      const msg = submitErr && submitErr.message || '保存失败';
       wx.showToast({
         title: msg.length > 40 ? `${msg.slice(0, 40)}…` : msg,
         icon: 'none',
-        duration: 3500,
+        duration: 3500
       });
     }
-  },
+  }
 });

@@ -4,7 +4,7 @@
  * 设备管理仅 Web 端维护（小程序不提供档案入口，故不含 basic-equipment）。
  */
 
-const { filterByPermission } = require('../utils/permissions.js');
+const { filterShortcutsByAccess } = require('../utils/accessControl.js');
 
 const ICON = (name) => `/assets/icons/${name}.png`;
 
@@ -36,9 +36,9 @@ const LUCIDE_ICON_FILES = {
 
 /** 与 shared/workbenchShortcuts.ts WORKBENCH_SHORTCUT_CATALOG 一致 */
 const WORKBENCH_SHORTCUT_CATALOG = [
-  { id: 'production-plans', label: '生产计划', group: '生产管理', icon: 'CalendarRange', module: 'production', perm: 'production:plans:view', path: '/packageBusiness/production-plans/production-plans' },
-  { id: 'production-orders', label: '工单中心', group: '生产管理', icon: 'ClipboardList', module: 'production', perm: 'production:orders_list:allow', path: '/packageBusiness/production-orders/production-orders' },
-  { id: 'production-stock-out', label: '生产物料', group: '生产管理', icon: 'ArrowUpFromLine', module: 'production', perm: 'production:material_list', path: '/packageBusiness/production-stock-out/production-stock-out' },
+  { id: 'production-plans', label: '生产计划', group: '生产管理', icon: 'CalendarRange', module: 'production', path: '/packageBusiness/production-plans/production-plans' },
+  { id: 'production-orders', label: '工单中心', group: '生产管理', icon: 'ClipboardList', module: 'production', path: '/packageBusiness/production-orders/production-orders' },
+  { id: 'production-stock-out', label: '生产物料', group: '生产管理', icon: 'ArrowUpFromLine', module: 'production', perm: 'production:material_list:allow', path: '/packageBusiness/production-stock-out/production-stock-out' },
   { id: 'production-outsource', label: '外协管理', group: '生产管理', icon: 'Truck', module: 'production', perm: 'production:outsource:view', path: '/packageBusiness/production-outsource/production-outsource' },
   { id: 'production-rework', label: '返工管理', group: '生产管理', icon: 'RotateCcw', module: 'production', perm: 'production:rework:view', path: '/packageBusiness/production-rework/production-rework' },
 
@@ -59,7 +59,7 @@ const WORKBENCH_SHORTCUT_CATALOG = [
   { id: 'settings', label: '系统设置', group: '基础信息', icon: 'Settings', module: 'settings', perm: 'settings:categories:view', path: '/pages/settings/settings' },
 
   { id: 'collaboration-inbox', label: '协作管理', group: '插件中心', icon: 'Inbox', module: 'collaboration', pluginId: 'collaboration', path: '/pages/messages/messages' },
-  { id: 'trace-scan', label: '扫码追溯', group: '插件中心', icon: 'ScanLine', pluginId: 'traceability', path: '/pages/scan/scan' },
+  { id: 'trace-scan', label: '追溯查询', group: '插件中心', icon: 'ScanLine', pluginId: 'traceability', path: '/packageBusiness/product-trace/product-trace' },
   { id: 'knowledge-base', label: '资料库', group: '插件中心', icon: 'BookOpen', module: 'knowledge_base', pluginId: 'knowledge_base' },
   { id: 'development', label: '开发管理', group: '插件中心', icon: 'FlaskConical', module: 'development', pluginId: 'development' },
 ];
@@ -176,14 +176,24 @@ const HOME_QUICK_LIMIT = 8;
 const APP_ENTRIES = APP_CATEGORIES.flatMap((c) => c.items);
 
 /**
- * 按权限与关键词生成分组应用列表
+ * 按权限、插件与关键词生成分组应用列表
  * @param {string[]} permissions
  * @param {string} keyword
+ * @param {Record<string, boolean>} [plugins]
  */
-function buildAppCategories(permissions, keyword) {
+function buildAppCategories(permissions, keyword, plugins, tenantRole) {
   const kw = (keyword || '').trim().toLowerCase();
+  const catalogByKey = WORKBENCH_SHORTCUT_CATALOG.reduce((acc, item) => {
+    acc[item.id] = item;
+    return acc;
+  }, {});
+
   return APP_CATEGORIES.map((cat) => {
-    let items = filterByPermission(cat.items, permissions);
+    const catalogItems = cat.items
+      .map((menuItem) => catalogByKey[menuItem.key])
+      .filter(Boolean);
+    let items = filterShortcutsByAccess(catalogItems, plugins, tenantRole, permissions)
+      .map(catalogItemToMenuItem);
     if (kw) {
       items = items.filter((it) => it.label.toLowerCase().includes(kw));
     }

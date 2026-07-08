@@ -8,8 +8,12 @@ Page({
     }
   },
 
-  onOnboarding() {
-    wx.navigateTo({ url: '/pages/onboarding/onboarding?from=notenant' });
+  onOnboardingCreate() {
+    wx.navigateTo({ url: '/pages/onboarding/onboarding?from=notenant&mode=create' });
+  },
+
+  onOnboardingJoin() {
+    wx.navigateTo({ url: '/pages/onboarding/onboarding?from=notenant&mode=join' });
   },
 
   onLogout() {

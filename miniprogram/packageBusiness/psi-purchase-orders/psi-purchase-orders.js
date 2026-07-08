@@ -1,28 +1,28 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const {
-  DEFAULT_PAGE_SIZE,
-  PSI_TYPE,
-  PSI_BILL_TYPE,
-} = require('../config/purchaseOrders.js');
-const {
-  parsePurchaseOrderSearch,
-  buildPurchaseOrderListCards,
-  slimPurchaseOrderListCard,
-  buildProductMap,
-} = require('../utils/purchaseOrders.js');
-const { groupRecordsByDocNumber, sumReceivedByOrderLine } = require('../utils/psiOpsAggregators.js');
-const { fetchAllPsiRecords } = require('../utils/psiApi.js');
-const { fetchProductsAll, fetchDictionaries } = require('../utils/planApi.js');
-const { normalizeAppDictionaries } = require('../utils/productionPlans.js');
-const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
-const { shouldHubListRefetch, trackHubListHidden, LIST_ROUTES } = require('../utils/saveNavigation.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 =
+
+
+
+  require('../config/purchaseOrders.js'),DEFAULT_PAGE_SIZE = _require3.DEFAULT_PAGE_SIZE,PSI_TYPE = _require3.PSI_TYPE,PSI_BILL_TYPE = _require3.PSI_BILL_TYPE;
+const _require4 =
+
+
+
+
+  require('../utils/purchaseOrders.js'),parsePurchaseOrderSearch = _require4.parsePurchaseOrderSearch,buildPurchaseOrderListCards = _require4.buildPurchaseOrderListCards,slimPurchaseOrderListCard = _require4.slimPurchaseOrderListCard,buildProductMap = _require4.buildProductMap;
+const _require5 = require('../utils/psiOpsAggregators.js'),groupRecordsByDocNumber = _require5.groupRecordsByDocNumber,sumReceivedByOrderLine = _require5.sumReceivedByOrderLine;
+const _require6 = require('../utils/psiApi.js'),fetchAllPsiRecords = _require6.fetchAllPsiRecords;
+const _require7 = require('../utils/planApi.js'),fetchProductsAll = _require7.fetchProductsAll,fetchDictionaries = _require7.fetchDictionaries;
+const _require8 = require('../utils/productionPlans.js'),normalizeAppDictionaries = _require8.normalizeAppDictionaries;
+const _require9 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require9.readNavBarMetrics,readWindowMetrics = _require9.readWindowMetrics;
+const _require0 = require('../utils/saveNavigation.js'),shouldHubListRefetch = _require0.shouldHubListRefetch,trackHubListHidden = _require0.trackHubListHidden,LIST_ROUTES = _require0.LIST_ROUTES;
 
 const HUB_LIST_ROUTE = LIST_ROUTES.PSI_PURCHASE_ORDERS.replace(/^\//, '');
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
-  const toolsPx = Math.ceil((win.windowWidth / 750) * 128);
+  const toolsPx = Math.ceil(win.windowWidth / 750 * 128);
   return nav.statusBarHeight + nav.navBarHeight + toolsPx;
 }
 
@@ -46,7 +46,7 @@ Page({
     hasMore: false,
     statusBarHeight: 20,
     navBarHeight: 44,
-    headerBlockHeight: 88,
+    headerBlockHeight: 88
   },
 
   onLoad(options) {
@@ -54,13 +54,13 @@ Page({
     this.setData({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
-      headerBlockHeight: computeHeaderBlockHeight(nav),
+      headerBlockHeight: computeHeaderBlockHeight(nav)
     });
 
     const docNumber = options.docNumber ? decodeURIComponent(options.docNumber) : '';
     if (docNumber) {
       wx.redirectTo({
-        url: `/packageBusiness/psi-purchase-order-detail/psi-purchase-order-detail?docNumber=${encodeURIComponent(docNumber)}`,
+        url: `/packageBusiness/psi-purchase-order-detail/psi-purchase-order-detail?docNumber=${encodeURIComponent(docNumber)}`
       });
       return;
     }
@@ -86,7 +86,7 @@ Page({
     this.setData({
       canViewFlow: hasPermission(ctx.permissions || [], 'psi:purchase_order:view'),
       canCreate: hasPermission(ctx.permissions || [], 'psi:purchase_order:create'),
-      canViewAmount: hasPermission(ctx.permissions || [], 'psi:purchase_order:amount'),
+      canViewAmount: hasPermission(ctx.permissions || [], 'psi:purchase_order:amount')
     });
     if (!this._initialized) {
       this.bootstrap();
@@ -138,14 +138,14 @@ Page({
     this._filterOpenedAt = Date.now();
     this.setData({
       showFilterPanel: true,
-      draftOnlyShowUnsettled: this.data.onlyShowUnsettled,
+      draftOnlyShowUnsettled: this.data.onlyShowUnsettled
     });
   },
 
   closeFilterPanel() {
     this.setData({
       showFilterPanel: false,
-      filterActive: this.data.onlyShowUnsettled,
+      filterActive: this.data.onlyShowUnsettled
     });
   },
 
@@ -173,7 +173,7 @@ Page({
     const docNumber = e.currentTarget.dataset.docNumber;
     if (!docNumber) return;
     wx.navigateTo({
-      url: `/packageBusiness/psi-purchase-order-detail/psi-purchase-order-detail?docNumber=${encodeURIComponent(docNumber)}`,
+      url: `/packageBusiness/psi-purchase-order-detail/psi-purchase-order-detail?docNumber=${encodeURIComponent(docNumber)}`
     });
   },
 
@@ -187,7 +187,7 @@ Page({
         lines: (card.lines || []).map((line) => {
           if (line.lineGroupId !== lineGroupId) return line;
           return { ...line, showProductImage: false };
-        }),
+        })
       };
     });
     this.setData({ cards });
@@ -197,12 +197,12 @@ Page({
     this._initialized = true;
     this.setData({ loading: true });
     try {
-      const [purchaseOrders, purchaseBills, products, dictionaries] = await Promise.all([
+      const _await$Promise$all = await Promise.all([
         fetchAllPsiRecords(PSI_TYPE),
         fetchAllPsiRecords(PSI_BILL_TYPE),
         fetchProductsAll().catch(() => []),
-        fetchDictionaries().catch(() => ({})),
-      ]);
+        fetchDictionaries().catch(() => ({}))]
+        ),purchaseOrders = _await$Promise$all[0],purchaseBills = _await$Promise$all[1],products = _await$Promise$all[2],dictionaries = _await$Promise$all[3];
       this._purchaseOrders = purchaseOrders || [];
       this._purchaseBills = purchaseBills || [];
       this._productMap = buildProductMap(products || []);
@@ -221,13 +221,13 @@ Page({
       receivedByOrderLine: sumReceivedByOrderLine(this._purchaseBills || []),
       productMap: this._productMap,
       dictionaries: this._dictionaries,
-      showAmount: this.data.canViewAmount,
+      showAmount: this.data.canViewAmount
     };
     return buildPurchaseOrderListCards(
       groups,
       parsed.search,
       this.data.onlyShowUnsettled,
-      ctx,
+      ctx
     ).map(slimPurchaseOrderListCard);
   },
 
@@ -237,10 +237,10 @@ Page({
     }
     this.setData({ loading: true, page: 1 });
     try {
-      const [purchaseOrders, purchaseBills] = await Promise.all([
+      const _await$Promise$all2 = await Promise.all([
         fetchAllPsiRecords(PSI_TYPE),
-        fetchAllPsiRecords(PSI_BILL_TYPE),
-      ]);
+        fetchAllPsiRecords(PSI_BILL_TYPE)]
+        ),purchaseOrders = _await$Promise$all2[0],purchaseBills = _await$Promise$all2[1];
       this._purchaseOrders = purchaseOrders || [];
       this._purchaseBills = purchaseBills || [];
       return this.loadPage(1);
@@ -262,11 +262,11 @@ Page({
       page,
       total: allCards.length,
       hasMore,
-      emptyText: allCards.length ? '' : (this.data.searchKeyword || this.data.onlyShowUnsettled
-        ? '无匹配采购订单'
-        : '暂无采购订单'),
-      filterActive: this.data.onlyShowUnsettled,
+      emptyText: allCards.length ? '' : this.data.searchKeyword || this.data.onlyShowUnsettled ?
+      '无匹配采购订单' :
+      '暂无采购订单',
+      filterActive: this.data.onlyShowUnsettled
     });
     return Promise.resolve();
-  },
+  }
 });

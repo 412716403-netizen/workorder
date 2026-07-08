@@ -1,25 +1,25 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const {
-  buildReworkPendingRows,
-  filterPendingRows,
-  buildPendingMilestoneOptions,
-} = require('../utils/reworkPendingLite.js');
-const { fetchReworkRecordsForPanel } = require('../utils/reworkRecordsLoad.js');
-const { fetchAllOrdersPaginated } = require('../utils/pendingStockBadge.js');
-const {
-  fetchTenantConfig,
-  fetchProductsAll,
-  fetchNodesAll,
-  listProductProgressAll,
-} = require('../utils/orderApi.js');
-const { normalizeMasterList } = require('../utils/productionOrders.js');
-const { listProductThumbFromProduct } = require('../utils/listProductThumb.js');
-const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 =
+
+
+
+  require('../utils/reworkPendingLite.js'),buildReworkPendingRows = _require3.buildReworkPendingRows,filterPendingRows = _require3.filterPendingRows,buildPendingMilestoneOptions = _require3.buildPendingMilestoneOptions;
+const _require4 = require('../utils/reworkRecordsLoad.js'),fetchReworkRecordsForPanel = _require4.fetchReworkRecordsForPanel;
+const _require5 = require('../utils/pendingStockBadge.js'),fetchAllOrdersPaginated = _require5.fetchAllOrdersPaginated;
+const _require6 =
+
+
+
+
+  require('../utils/orderApi.js'),fetchTenantConfig = _require6.fetchTenantConfig,fetchProductsAll = _require6.fetchProductsAll,fetchNodesAll = _require6.fetchNodesAll,listProductProgressAll = _require6.listProductProgressAll;
+const _require7 = require('../utils/productionOrders.js'),normalizeMasterList = _require7.normalizeMasterList;
+const _require8 = require('../utils/listProductThumb.js'),listProductThumbFromProduct = _require8.listProductThumbFromProduct;
+const _require9 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require9.readNavBarMetrics,readWindowMetrics = _require9.readWindowMetrics;
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
-  const toolsPx = Math.ceil((win.windowWidth / 750) * 128);
+  const toolsPx = Math.ceil(win.windowWidth / 750 * 128);
   return nav.statusBarHeight + nav.navBarHeight + toolsPx;
 }
 
@@ -34,14 +34,14 @@ function decodeOpt(value) {
 
 function buildDefectActionUrl(row) {
   const q = [
-    `scope=${encodeURIComponent(row.scope || 'order')}`,
-    `productId=${encodeURIComponent(row.productId || '')}`,
-    `nodeId=${encodeURIComponent(row.nodeId || '')}`,
-    `pendingQty=${encodeURIComponent(String(row.pendingQty || 0))}`,
-    `defectiveTotal=${encodeURIComponent(String(row.defectiveTotal || 0))}`,
-    `reworkTotal=${encodeURIComponent(String(row.reworkTotal || 0))}`,
-    `scrapTotal=${encodeURIComponent(String(row.scrapTotal || 0))}`,
-  ];
+  `scope=${encodeURIComponent(row.scope || 'order')}`,
+  `productId=${encodeURIComponent(row.productId || '')}`,
+  `nodeId=${encodeURIComponent(row.nodeId || '')}`,
+  `pendingQty=${encodeURIComponent(String(row.pendingQty || 0))}`,
+  `defectiveTotal=${encodeURIComponent(String(row.defectiveTotal || 0))}`,
+  `reworkTotal=${encodeURIComponent(String(row.reworkTotal || 0))}`,
+  `scrapTotal=${encodeURIComponent(String(row.scrapTotal || 0))}`];
+
   if (row.orderId) q.push(`orderId=${encodeURIComponent(row.orderId)}`);
   if (row.orderNumber) q.push(`orderNumber=${encodeURIComponent(row.orderNumber)}`);
   if (row.productName) q.push(`productName=${encodeURIComponent(row.productName)}`);
@@ -63,18 +63,18 @@ function milestoneOptionAt(options, index) {
 function mapPendingRowForUi(row, productionLinkMode, productsById) {
   const product = productsById && row.productId ? productsById.get(row.productId) : null;
   const thumb = listProductThumbFromProduct(product);
-  const productLabel = row.showProductSku
-    ? `${row.productName} ${row.productSku}`
-    : row.productName;
-  const subtitleLine = productionLinkMode === 'product'
-    ? (row.productOrdersLine || productLabel || '—')
-    : `${row.orderNumber || '—'} · ${productLabel || '—'}`;
+  const productLabel = row.showProductSku ?
+  `${row.productName} ${row.productSku}` :
+  row.productName;
+  const subtitleLine = productionLinkMode === 'product' ?
+  row.productOrdersLine || productLabel || '—' :
+  `${row.orderNumber || '—'} · ${productLabel || '—'}`;
   return {
     ...row,
     ...thumb,
     subtitleLine,
     milestoneName: row.milestoneName || '—',
-    pendingQtyText: row.pendingQtyText || `${row.pendingQty || 0} 件`,
+    pendingQtyText: row.pendingQtyText || `${row.pendingQty || 0} 件`
   };
 }
 
@@ -94,13 +94,13 @@ Page({
     emptyText: '暂无待处理不良',
     statusBarHeight: 20,
     navBarHeight: 44,
-    headerBlockHeight: 88,
+    headerBlockHeight: 88
   },
 
   onLoad(options) {
     const nav = readNavBarMetrics();
     const ctx = readTenantCtx();
-    if (!hasPermission((ctx && ctx.permissions) || [], 'production:rework_defective:allow')) {
+    if (!hasPermission(ctx && ctx.permissions || [], 'production:rework_defective:allow')) {
       wx.showToast({ title: '无权限', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 800);
       return;
@@ -108,7 +108,7 @@ Page({
     this.setData({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
-      headerBlockHeight: computeHeaderBlockHeight(nav),
+      headerBlockHeight: computeHeaderBlockHeight(nav)
     });
     this.bootstrap();
   },
@@ -141,7 +141,7 @@ Page({
   patchFilterActive(extra) {
     this.setData({
       ...extra,
-      filterActive: computeFilterActive({ ...this.data, ...extra }),
+      filterActive: computeFilterActive({ ...this.data, ...extra })
     });
   },
 
@@ -153,7 +153,7 @@ Page({
     this.patchFilterActive({
       showFilterPanel: true,
       draftMilestoneFilterIndex: this.data.milestoneFilterIndex,
-      draftMilestoneFilterLabel: this.data.milestoneFilterLabel,
+      draftMilestoneFilterLabel: this.data.milestoneFilterLabel
     });
   },
 
@@ -162,7 +162,7 @@ Page({
     const opt = milestoneOptionAt(this.data.milestoneOptions, idx);
     this.setData({
       draftMilestoneFilterIndex: idx,
-      draftMilestoneFilterLabel: opt.name || '全部工序',
+      draftMilestoneFilterLabel: opt.name || '全部工序'
     });
   },
 
@@ -174,7 +174,7 @@ Page({
       draftMilestoneFilterIndex: 0,
       draftMilestoneFilterLabel: '全部工序',
       showFilterPanel: false,
-      searchKeyword: '',
+      searchKeyword: ''
     });
     this.applyRows();
   },
@@ -186,7 +186,7 @@ Page({
       milestoneNodeId: opt.id || '',
       milestoneFilterIndex: idx,
       milestoneFilterLabel: opt.name || '全部工序',
-      showFilterPanel: false,
+      showFilterPanel: false
     });
     this.applyRows();
   },
@@ -200,7 +200,7 @@ Page({
       milestoneOptions,
       milestoneFilterIndex,
       milestoneNodeId: milestoneOpt.id || '',
-      milestoneFilterLabel: milestoneOpt.name || '全部工序',
+      milestoneFilterLabel: milestoneOpt.name || '全部工序'
     });
   },
 
@@ -215,11 +215,11 @@ Page({
   },
 
   onProductImageError(e) {
-    const { key } = e.currentTarget.dataset;
+    const key = e.currentTarget.dataset.key;
     if (!key) return;
-    const rows = (this.data.rows || []).map((row) => (
-      row.rowKey === key ? { ...row, showProductImage: false } : row
-    ));
+    const rows = (this.data.rows || []).map((row) =>
+    row.rowKey === key ? { ...row, showProductImage: false } : row
+    );
     this.setData({ rows });
   },
 
@@ -228,24 +228,24 @@ Page({
     const row = (this._allRows || []).find((r) => r.rowKey === key);
     if (!row || row.pendingQty <= 0) return;
     wx.navigateTo({
-      url: buildDefectActionUrl(row),
+      url: buildDefectActionUrl(row)
     });
   },
 
   applyRows() {
     const filtered = filterPendingRows(this._allRows || [], {
       searchKeyword: this.data.searchKeyword,
-      milestoneNodeId: this.data.milestoneNodeId,
+      milestoneNodeId: this.data.milestoneNodeId
     });
     const rows = filtered.map((r) => mapPendingRowForUi(
       r,
       this._productionLinkMode,
-      this._productsById,
+      this._productsById
     ));
     const hasFilter = !!(this.data.searchKeyword || this.data.milestoneNodeId);
     this.setData({
       rows,
-      emptyText: hasFilter ? '无匹配项，请调整筛选' : '暂无待处理不良',
+      emptyText: hasFilter ? '无匹配项，请调整筛选' : '暂无待处理不良'
     });
   },
 
@@ -258,12 +258,12 @@ Page({
       const settings = config.reworkFormSettings || {};
       const onlyIncomplete = settings.onlyShowNotCompletedOrder === true;
 
-      const [orders, productsRaw, nodesRaw, pmpRaw] = await Promise.all([
+      const _await$Promise$all = await Promise.all([
         fetchAllOrdersPaginated(onlyIncomplete ? { excludeCompleted: 'true' } : {}),
         fetchProductsAll(),
         fetchNodesAll(),
-        listProductProgressAll(),
-      ]);
+        listProductProgressAll()]
+        ),orders = _await$Promise$all[0],productsRaw = _await$Promise$all[1],nodesRaw = _await$Promise$all[2],pmpRaw = _await$Promise$all[3];
 
       const products = normalizeMasterList(productsRaw);
       this._products = products;
@@ -275,7 +275,7 @@ Page({
       this._records = await fetchReworkRecordsForPanel({
         productionLinkMode: this._productionLinkMode,
         orders: this._orders,
-        products,
+        products
       });
 
       this._allRows = buildReworkPendingRows({
@@ -285,7 +285,7 @@ Page({
         products,
         nodes: this._nodes,
         productMilestoneProgresses: this._pmp,
-        onlyShowIncompleteOrders: onlyIncomplete,
+        onlyShowIncompleteOrders: onlyIncomplete
       });
 
       this.syncMilestoneOptions();
@@ -294,10 +294,10 @@ Page({
     } catch (err) {
       this.setData({ loading: false });
       if (err && err.statusCode === 401) return;
-      wx.showToast({ title: (err && err.message) || '加载失败', icon: 'none' });
+      wx.showToast({ title: err && err.message || '加载失败', icon: 'none' });
     } finally {
       this._bootstrapping = false;
       this._loadedOnce = true;
     }
-  },
+  }
 });

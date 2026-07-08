@@ -1,5 +1,6 @@
-const { request } = require('../../utils/request.js');
-const { clearSession, readTenants } = require('../../utils/session.js');
+const _require = require('../../utils/request.js'),request = _require.request;
+const _require2 = require('../../utils/session.js'),clearSession = _require2.clearSession,readTenants = _require2.readTenants,parseTenantListResponse = _require2.parseTenantListResponse;
+const { clearFeaturePluginsCache } = require('../../utils/featurePlugins.js');
 
 function roleLabel(role) {
   if (role === 'owner') return '创建者';
@@ -11,11 +12,32 @@ function decorateTenant(t) {
   const pending = t.status === 'pending';
   const rejected = t.status === 'rejected';
   const expired = t.expiresAt && new Date(t.expiresAt) < new Date();
+  const disabled = pending || rejected || expired;
+  let _pill = '';
+  let _statusLabel = '';
+  let _iconClass = '';
+  if (pending) {
+    _pill = 'pending';
+    _statusLabel = '审核中';
+    _iconClass = 'auth-flow-icon--warning';
+  } else if (rejected) {
+    _pill = 'rejected';
+    _statusLabel = '已拒绝';
+    _iconClass = 'auth-flow-icon--danger';
+  } else if (expired) {
+    _pill = 'rejected';
+    _statusLabel = '已到期';
+    _iconClass = 'auth-flow-icon--danger';
+  }
   return {
     ...t,
     _roleLabel: roleLabel(t.role),
-    _statusLabel: pending ? '审核中' : rejected ? '已拒绝' : expired ? '已到期' : '正常',
-    _disabled: pending || rejected || expired,
+    _statusLabel,
+    _pill,
+    _showPill: pending || rejected || expired,
+    _disabled: disabled,
+    _iconClass,
+    _iconChar: t.name ? t.name[0] : '企'
   };
 }
 
@@ -27,6 +49,8 @@ Page({
   data: {
     tenants: [],
     loadingId: '',
+    loading: false,
+    refreshing: false
   },
 
   onShow() {
@@ -35,19 +59,41 @@ Page({
       return;
     }
     const local = readTenants();
-    this.setData({ tenants: decorateList(local) });
-
-    request({ path: '/tenants', method: 'GET' })
-      .then((list) => {
-        const arr = Array.isArray(list) ? list : [];
-        wx.setStorageSync('userTenants', JSON.stringify(arr));
-        this.setData({ tenants: decorateList(arr) });
-      })
-      .catch(() => {});
+    this.setData({
+      tenants: decorateList(local),
+      loading: !local.length
+    });
+    this.loadTenants({ silent: !!local.length });
   },
 
-  onOnboarding() {
-    wx.navigateTo({ url: '/pages/onboarding/onboarding?from=select' });
+  loadTenants(options = {}) {
+    const silent = options.silent === true;
+    if (!silent) {
+      this.setData({ loading: true });
+    }
+    return request({ path: '/tenants?all=true', method: 'GET' }).
+    then((list) => {
+      const arr = parseTenantListResponse(list);
+      wx.setStorageSync('userTenants', JSON.stringify(arr));
+      this.setData({ tenants: decorateList(arr) });
+    }).
+    catch(() => {}).
+    finally(() => {
+      this.setData({ loading: false, refreshing: false });
+    });
+  },
+
+  onRefresh() {
+    this.setData({ refreshing: true });
+    this.loadTenants({ silent: true });
+  },
+
+  onOnboardingCreate() {
+    wx.navigateTo({ url: '/pages/onboarding/onboarding?from=select&mode=create' });
+  },
+
+  onOnboardingJoin() {
+    wx.navigateTo({ url: '/pages/onboarding/onboarding?from=select&mode=join' });
   },
 
   onTapTenant(e) {
@@ -57,35 +103,36 @@ Page({
     if (this.data.loadingId) return;
 
     this.setData({ loadingId: id });
-    request({ path: `/tenants/${id}/select`, method: 'POST', data: {} })
-      .then((d) => {
-        if (d.accessToken) wx.setStorageSync('accessToken', d.accessToken);
-        if (d.refreshToken) wx.setStorageSync('refreshToken', d.refreshToken);
-        wx.setStorageSync(
-          'tenantCtx',
-          JSON.stringify({
-            tenantId: d.tenantId,
-            tenantName: d.tenantName,
-            tenantRole: d.tenantRole,
-            permissions: d.permissions || [],
-            expiresAt: d.expiresAt ?? null,
-            industryKind: d.industryKind || 'generic',
-            equipmentFeaturesEnabled: d.equipmentFeaturesEnabled !== false,
-          }),
-        );
-        wx.switchTab({ url: '/pages/home/home' });
-      })
-      .catch((err) => {
-        const msg = err && err.message ? err.message : '切换企业失败';
-        wx.showToast({ title: String(msg).slice(0, 36), icon: 'none' });
-      })
-      .finally(() => {
-        this.setData({ loadingId: '' });
-      });
+    request({ path: `/tenants/${id}/select`, method: 'POST', data: {} }).
+    then((d) => {var _d$expiresAt;
+      if (d.accessToken) wx.setStorageSync('accessToken', d.accessToken);
+      if (d.refreshToken) wx.setStorageSync('refreshToken', d.refreshToken);
+      clearFeaturePluginsCache();
+      wx.setStorageSync(
+        'tenantCtx',
+        JSON.stringify({
+          tenantId: d.tenantId,
+          tenantName: d.tenantName,
+          tenantRole: d.tenantRole,
+          permissions: d.permissions || [],
+          expiresAt: (_d$expiresAt = d.expiresAt) != null ? _d$expiresAt : null,
+          industryKind: d.industryKind || 'generic',
+          equipmentFeaturesEnabled: d.equipmentFeaturesEnabled !== false
+        })
+      );
+      wx.switchTab({ url: '/pages/home/home' });
+    }).
+    catch((err) => {
+      const msg = err && err.message ? err.message : '切换企业失败';
+      wx.showToast({ title: String(msg).slice(0, 36), icon: 'none' });
+    }).
+    finally(() => {
+      this.setData({ loadingId: '' });
+    });
   },
 
   onLogout() {
-    const { API_BASE } = require('../../config.js');
+    const _require3 = require('../../config.js'),API_BASE = _require3.API_BASE;
     const refresh = wx.getStorageSync('refreshToken');
     wx.request({
       url: `${API_BASE}/auth/logout`,
@@ -95,7 +142,7 @@ Page({
       complete: () => {
         clearSession();
         wx.reLaunch({ url: '/pages/login/login' });
-      },
+      }
     });
-  },
+  }
 });

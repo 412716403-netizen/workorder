@@ -6,13 +6,13 @@ function sortedVariantColorEntries(grouped, colorIds, sizeIds) {
   const entries = Object.entries(grouped || {});
   if (colorIds && colorIds.length) {
     const colorOrder = new Map(colorIds.map((id, i) => [id, i]));
-    entries.sort(([a], [b]) => (colorOrder.get(a) ?? Infinity) - (colorOrder.get(b) ?? Infinity));
+    entries.sort(([a], [b]) => {var _colorOrder$get, _colorOrder$get2;return ((_colorOrder$get = colorOrder.get(a)) != null ? _colorOrder$get : Infinity) - ((_colorOrder$get2 = colorOrder.get(b)) != null ? _colorOrder$get2 : Infinity);});
   }
   if (sizeIds && sizeIds.length) {
     const sizeOrder = new Map(sizeIds.map((id, i) => [id, i]));
     entries.forEach(([, variants]) => {
       variants.sort(
-        (a, b) => (sizeOrder.get(a.sizeId) ?? Infinity) - (sizeOrder.get(b.sizeId) ?? Infinity),
+        (a, b) => {var _sizeOrder$get, _sizeOrder$get2;return ((_sizeOrder$get = sizeOrder.get(a.sizeId)) != null ? _sizeOrder$get : Infinity) - ((_sizeOrder$get2 = sizeOrder.get(b.sizeId)) != null ? _sizeOrder$get2 : Infinity);}
       );
     });
   }
@@ -32,8 +32,8 @@ function buildVariantQtyMatrixLayout(product, dict) {
   const sizes = dict.sizes || [];
 
   const fullGrid =
-    Boolean(product.colorIds && product.colorIds.length && product.sizeIds && product.sizeIds.length
-      && colors.length && sizes.length);
+  Boolean(product.colorIds && product.colorIds.length && product.sizeIds && product.sizeIds.length &&
+  colors.length && sizes.length);
 
   if (fullGrid) {
     const colorRows = [];
@@ -41,13 +41,13 @@ function buildVariantQtyMatrixLayout(product, dict) {
       const color = colors.find((c) => c.id === colorId);
       if (!color) return;
       const variantAtSize = product.sizeIds.map(
-        (sizeId) => variants.find((v) => v.colorId === colorId && v.sizeId === sizeId) || null,
+        (sizeId) => variants.find((v) => v.colorId === colorId && v.sizeId === sizeId) || null
       );
       colorRows.push({
         key: colorId,
         colorLabel: color.name,
         colorSwatch: color.value || '',
-        variantAtSize,
+        variantAtSize
       });
     });
     const sizeColumns = product.sizeIds.map((sizeId) => {
@@ -73,7 +73,7 @@ function buildVariantQtyMatrixLayout(product, dict) {
   let sizeIdsOrdered = [...allSizeIds];
   if (product.sizeIds && product.sizeIds.length) {
     const order = new Map(product.sizeIds.map((id, i) => [id, i]));
-    sizeIdsOrdered.sort((a, b) => (order.get(a) ?? 999) - (order.get(b) ?? 999));
+    sizeIdsOrdered.sort((a, b) => {var _order$get, _order$get2;return ((_order$get = order.get(a)) != null ? _order$get : 999) - ((_order$get2 = order.get(b)) != null ? _order$get2 : 999);});
   } else {
     sizeIdsOrdered.sort((a, b) => {
       const na = (sizes.find((s) => s.id === a) || {}).name || a;
@@ -91,9 +91,9 @@ function buildVariantQtyMatrixLayout(product, dict) {
   const colorRows = entries.map(([colorId, colorVariants]) => {
     const color = colorId !== '_' ? colors.find((c) => c.id === colorId) : undefined;
     const colorLabel = color ? color.name : colorId === '_' ? '规格' : colorId;
-    const colorSwatch = (color && color.value) || '';
+    const colorSwatch = color && color.value || '';
     const variantAtSize = sizeIdsOrdered.map(
-      (sid) => colorVariants.find((v) => v.sizeId === sid) || null,
+      (sid) => colorVariants.find((v) => v.sizeId === sid) || null
     );
     return { key: String(colorId), colorLabel, colorSwatch, variantAtSize };
   });
@@ -128,26 +128,26 @@ function buildVariantMatrixUiModel(product, dict, quantities, options) {
         quantity: qtyMap[v.id] != null ? String(qtyMap[v.id]) : '',
         disabled: false,
         hasSystemQty,
-        systemQty: hasSystemQty ? String(sysMap[v.id]) : '',
+        systemQty: hasSystemQty ? String(sysMap[v.id]) : ''
       };
-    }),
+    })
   }));
 
   return {
     sizeColumns: layout.sizeColumns,
-    colorRows,
+    colorRows
   };
 }
 
 function sortVariantsByColorThenSize(variants, colorIds, sizeIds) {
   const colorOrder = new Map((colorIds || []).map((id, i) => [id, i]));
   const sizeOrder = new Map((sizeIds || []).map((id, i) => [id, i]));
-  return [...(variants || [])].sort((a, b) => {
-    const ca = colorOrder.get(a.colorId) ?? Infinity;
-    const cb = colorOrder.get(b.colorId) ?? Infinity;
+  return [...(variants || [])].sort((a, b) => {var _colorOrder$get3, _colorOrder$get4, _sizeOrder$get3, _sizeOrder$get4;
+    const ca = (_colorOrder$get3 = colorOrder.get(a.colorId)) != null ? _colorOrder$get3 : Infinity;
+    const cb = (_colorOrder$get4 = colorOrder.get(b.colorId)) != null ? _colorOrder$get4 : Infinity;
     if (ca !== cb) return ca - cb;
-    const sa = sizeOrder.get(a.sizeId) ?? Infinity;
-    const sb = sizeOrder.get(b.sizeId) ?? Infinity;
+    const sa = (_sizeOrder$get3 = sizeOrder.get(a.sizeId)) != null ? _sizeOrder$get3 : Infinity;
+    const sb = (_sizeOrder$get4 = sizeOrder.get(b.sizeId)) != null ? _sizeOrder$get4 : Infinity;
     if (sa !== sb) return sa - sb;
     return String(a.id || '').localeCompare(String(b.id || ''), 'zh-CN');
   });
@@ -157,5 +157,5 @@ module.exports = {
   sortedVariantColorEntries,
   buildVariantQtyMatrixLayout,
   buildVariantMatrixUiModel,
-  sortVariantsByColorThenSize,
+  sortVariantsByColorThenSize
 };

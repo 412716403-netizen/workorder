@@ -1,37 +1,37 @@
-const { readTenantCtx, readOperatorDisplayName } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const {
-  emptyPaymentForm,
-  formFromRecord,
-  formVisibility,
-  validatePaymentForm,
-  buildPaymentSavePayload,
-  buildCategoryPickerOptions,
-  buildAccountPickerOptions,
-  buildWorkerPickerOptions,
-  initialCustomDataForCategory,
-  categoriesForPayment,
-} = require('../utils/financePayments.js');
-const {
-  getFinanceRecord,
-  createFinanceRecord,
-  updateFinanceRecord,
-  fetchFinanceCategoriesAll,
-  fetchFinanceAccountTypesAll,
-  fetchFeaturePlugins,
-  isFundsAccountEnabled,
-  normalizeMasterList,
-} = require('../../utils/financeApi.js');
-const {
-  fetchPartnersAll,
-  fetchPartnerCategoriesAll,
-  fetchProductsAll,
-  fetchCategoriesAll,
-} = require('../utils/planApi.js');
-const { fetchWorkersAll } = require('../utils/orderApi.js');
-const { normalizeMasterList: normalizeList } = require('../utils/productionPlans.js');
-const { readNavBarMetrics, readWindowMetrics, computePlanCreateHeaderHeight } = require('../../utils/windowMetrics.js');
-const { LIST_ROUTES, afterSaveReturnToList } = require('../utils/saveNavigation.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx,readOperatorDisplayName = _require.readOperatorDisplayName;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 =
+
+
+
+
+
+
+
+
+
+
+  require('../utils/financePayments.js'),emptyPaymentForm = _require3.emptyPaymentForm,formFromRecord = _require3.formFromRecord,formVisibility = _require3.formVisibility,validatePaymentForm = _require3.validatePaymentForm,buildPaymentSavePayload = _require3.buildPaymentSavePayload,buildCategoryPickerOptions = _require3.buildCategoryPickerOptions,buildAccountPickerOptions = _require3.buildAccountPickerOptions,buildWorkerPickerOptions = _require3.buildWorkerPickerOptions,initialCustomDataForCategory = _require3.initialCustomDataForCategory,categoriesForPayment = _require3.categoriesForPayment;
+const _require4 =
+
+
+
+
+
+
+
+
+  require('../../utils/financeApi.js'),getFinanceRecord = _require4.getFinanceRecord,createFinanceRecord = _require4.createFinanceRecord,updateFinanceRecord = _require4.updateFinanceRecord,fetchFinanceCategoriesAll = _require4.fetchFinanceCategoriesAll,fetchFinanceAccountTypesAll = _require4.fetchFinanceAccountTypesAll,fetchFeaturePlugins = _require4.fetchFeaturePlugins,isFundsAccountEnabled = _require4.isFundsAccountEnabled,normalizeMasterList = _require4.normalizeMasterList;
+const _require5 =
+
+
+
+
+  require('../utils/planApi.js'),fetchPartnersAll = _require5.fetchPartnersAll,fetchPartnerCategoriesAll = _require5.fetchPartnerCategoriesAll,fetchProductsAll = _require5.fetchProductsAll,fetchCategoriesAll = _require5.fetchCategoriesAll;
+const _require6 = require('../utils/orderApi.js'),fetchWorkersAll = _require6.fetchWorkersAll;
+const _require7 = require('../utils/productionPlans.js'),normalizeList = _require7.normalizeMasterList;
+const _require8 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require8.readNavBarMetrics,readWindowMetrics = _require8.readWindowMetrics,computePlanCreateHeaderHeight = _require8.computePlanCreateHeaderHeight;
+const _require9 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require9.LIST_ROUTES,afterSaveReturnToList = _require9.afterSaveReturnToList;
 
 function findIndexById(ids, id) {
   if (!id) return 0;
@@ -67,7 +67,7 @@ Page({
     statusBarHeight: 20,
     navBarHeight: 44,
     headerBlockHeight: 88,
-    scrollHeight: 500,
+    scrollHeight: 500
   },
 
   onLoad(options) {
@@ -75,7 +75,7 @@ Page({
     const id = options.id ? decodeURIComponent(options.id) : '';
     const editing = Boolean(id);
     const perm = editing ? 'finance:payment:edit' : 'finance:payment:create';
-    if (!hasPermission((ctx && ctx.permissions) || [], perm)) {
+    if (!hasPermission(ctx && ctx.permissions || [], perm)) {
       wx.showToast({ title: '无权限', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 800);
       return;
@@ -92,11 +92,11 @@ Page({
       headerBlockHeight: computePlanCreateHeaderHeight(nav),
       scrollHeight: Math.max(
         200,
-        (win.windowHeight || 667)
-          - computePlanCreateHeaderHeight(nav)
-          - Math.ceil(128 * rpx)
-          - (win.safeAreaBottom || 0),
-      ),
+        (win.windowHeight || 667) -
+        computePlanCreateHeaderHeight(nav) -
+        Math.ceil(128 * rpx) - (
+        win.safeAreaBottom || 0)
+      )
     });
     this.bootstrap();
   },
@@ -108,17 +108,17 @@ Page({
   async bootstrap() {
     this.setData({ loading: true });
     try {
-      const [
-        categoriesRaw,
-        accountTypesRaw,
-        plugins,
-        partners,
-        partnerCategories,
-        products,
-        productCategories,
-        workersRaw,
-        existing,
-      ] = await Promise.all([
+      const _await$Promise$all =
+
+
+
+
+
+
+
+
+
+        await Promise.all([
         fetchFinanceCategoriesAll(),
         fetchFinanceAccountTypesAll(),
         fetchFeaturePlugins(),
@@ -127,8 +127,8 @@ Page({
         fetchProductsAll(),
         fetchCategoriesAll(),
         fetchWorkersAll().catch(() => []),
-        this._editingId ? getFinanceRecord(this._editingId) : Promise.resolve(null),
-      ]);
+        this._editingId ? getFinanceRecord(this._editingId) : Promise.resolve(null)]
+        ),categoriesRaw = _await$Promise$all[0],accountTypesRaw = _await$Promise$all[1],plugins = _await$Promise$all[2],partners = _await$Promise$all[3],partnerCategories = _await$Promise$all[4],products = _await$Promise$all[5],productCategories = _await$Promise$all[6],workersRaw = _await$Promise$all[7],existing = _await$Promise$all[8];
 
       const categories = categoriesForPayment(normalizeMasterList(categoriesRaw));
       const accountTypes = normalizeMasterList(accountTypesRaw);
@@ -172,9 +172,9 @@ Page({
         categoryIndex: findIndexById(catOpts.ids, form.categoryId),
         accountIndex: findIndexById(
           accOpts.ids,
-          (accountTypes.find((a) => a.name === form.paymentAccount) || {}).id,
+          (accountTypes.find((a) => a.name === form.paymentAccount) || {}).id
         ),
-        workerIndex: findIndexById(workerOpts.ids, form.workerId),
+        workerIndex: findIndexById(workerOpts.ids, form.workerId)
       });
       this.applyVisibility(form);
     } catch (err) {
@@ -195,7 +195,7 @@ Page({
       showProduct: visibility.showProduct,
       showPaymentAccount: visibility.showPaymentAccount,
       customFields: visibility.customFields,
-      canSubmit,
+      canSubmit
     });
   },
 
@@ -214,7 +214,7 @@ Page({
       categoryId,
       customData: initialCustomDataForCategory(cat),
       workerId: '',
-      productId: '',
+      productId: ''
     });
   },
 
@@ -244,7 +244,7 @@ Page({
   },
 
   onCustomDataChange(e) {
-    const customData = (e.detail && e.detail.customData) || {};
+    const customData = e.detail && e.detail.customData || {};
     this.patchForm({ customData });
   },
 
@@ -270,22 +270,22 @@ Page({
     const body = buildPaymentSavePayload(form, visibility, operator, this._existing);
     this.setData({ submitting: true });
 
-    const req = this._existing
-      ? updateFinanceRecord(this._existing.id, body)
-      : createFinanceRecord(body);
+    const req = this._existing ?
+    updateFinanceRecord(this._existing.id, body) :
+    createFinanceRecord(body);
 
-    req
-      .then(() => {
-        this.setData({ submitting: false });
-        afterSaveReturnToList({
-          listUrl: LIST_ROUTES.FINANCE_PAYMENTS,
-          toastTitle: this._existing ? '已保存' : '登记成功',
-          alsoRefreshListUrls: [LIST_ROUTES.FINANCE_PAYMENT_FLOW],
-        });
-      })
-      .catch((e) => {
-        this.setData({ submitting: false });
-        wx.showToast({ title: (e && e.message) || '保存失败', icon: 'none' });
+    req.
+    then(() => {
+      this.setData({ submitting: false });
+      afterSaveReturnToList({
+        listUrl: LIST_ROUTES.FINANCE_PAYMENTS,
+        toastTitle: this._existing ? '已保存' : '登记成功',
+        alsoRefreshListUrls: [LIST_ROUTES.FINANCE_PAYMENT_FLOW]
       });
-  },
+    }).
+    catch((e) => {
+      this.setData({ submitting: false });
+      wx.showToast({ title: e && e.message || '保存失败', icon: 'none' });
+    });
+  }
 });

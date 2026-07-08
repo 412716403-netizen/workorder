@@ -1,5 +1,7 @@
 const { readTenantCtx } = require('../../utils/session.js');
 const { buildAppCategories } = require('../../config/menus.js');
+const { loadFeaturePlugins } = require('../../utils/featurePlugins.js');
+const { syncTenantCtx } = require('../../utils/tenantCtxSync.js');
 
 Page({
   data: {
@@ -11,13 +13,22 @@ Page({
       wx.reLaunch({ url: '/pages/login/login' });
       return;
     }
-    const ctx = readTenantCtx();
-    if (!ctx || !ctx.tenantId) {
-      wx.reLaunch({ url: '/pages/tenant-select/tenant-select' });
-      return;
-    }
-    const categories = buildAppCategories(ctx.permissions || [], '');
-    this.setData({ categories });
+    syncTenantCtx().then((ctx) => {
+      const activeCtx = ctx || readTenantCtx();
+      if (!activeCtx || !activeCtx.tenantId) {
+        wx.reLaunch({ url: '/pages/tenant-select/tenant-select' });
+        return;
+      }
+      loadFeaturePlugins(true).then((plugins) => {
+        const categories = buildAppCategories(
+          activeCtx.permissions || [],
+          '',
+          plugins,
+          activeCtx.tenantRole || '',
+        );
+        this.setData({ categories });
+      });
+    });
   },
 
   onGridTap() {

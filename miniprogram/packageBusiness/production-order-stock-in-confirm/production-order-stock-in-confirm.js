@@ -1,47 +1,47 @@
-const { readTenantCtx, readOperatorDisplayName } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const {
-  fetchTenantConfig,
-  fetchWarehousesAll,
-  fetchProductsAll,
-  fetchCategoriesAll,
-  createProductionRecordBatch,
-} = require('../utils/orderApi.js');
-const { fetchDictionaries } = require('../utils/planApi.js');
-const {
-  loadPendingStockRows,
-  fetchAllOrdersPaginated,
-  fetchStockInRecordsForScope,
-} = require('../utils/pendingStockBadge.js');
-const {
-  normalizeMasterList,
-  normalizeAppDictionaries,
-} = require('../utils/productionPlans.js');
-const { getProductUnitName } = require('../utils/planFormCustomField.js');
-const { buildSingleStockInRecords } = require('../utils/stockInRecordBuilders.js');
-const {
-  resolvePreferredWarehouse,
-  writeWarehousePreference,
-  buildStockInMatrixLayout,
-  patchStockInMatrixLayout,
-  resolveStockInFormMode,
-  sumVariantQtyMap,
-  validateStockInQty,
-  buildBatchLineViewModels,
-  buildStockInFormDefaultsForPending,
-  buildPendingStockItem,
-  expandPendingByVariantForMatrix,
-} = require('../utils/stockInForm.js');
-const {
-  activateMatrixKeyboardCell,
-  applyMatrixKeyboardKey,
-  buildMatrixKeyboardPreview,
-  createMatrixKeyboardInputSession,
-  getNextMatrixVariantIdInRow,
-} = require('../utils/matrixQtyKeyboard.js');
-const { readNavBarMetrics, readWindowMetrics, computePlanCreateHeaderHeight } = require('../../utils/windowMetrics.js');
-const { LIST_ROUTES, afterSaveReturnToList } = require('../utils/saveNavigation.js');
-const { afterMatrixKeyboardOpen } = require('../utils/matrixKeyboardLayout.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx,readOperatorDisplayName = _require.readOperatorDisplayName;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 =
+
+
+
+
+
+  require('../utils/orderApi.js'),fetchTenantConfig = _require3.fetchTenantConfig,fetchWarehousesAll = _require3.fetchWarehousesAll,fetchProductsAll = _require3.fetchProductsAll,fetchCategoriesAll = _require3.fetchCategoriesAll,createProductionRecordBatch = _require3.createProductionRecordBatch;
+const _require4 = require('../utils/planApi.js'),fetchDictionaries = _require4.fetchDictionaries;
+const _require5 =
+
+
+
+  require('../utils/pendingStockBadge.js'),loadPendingStockRows = _require5.loadPendingStockRows,fetchAllOrdersPaginated = _require5.fetchAllOrdersPaginated,fetchStockInRecordsForScope = _require5.fetchStockInRecordsForScope;
+const _require6 =
+
+
+  require('../utils/productionPlans.js'),normalizeMasterList = _require6.normalizeMasterList,normalizeAppDictionaries = _require6.normalizeAppDictionaries;
+const _require7 = require('../utils/planFormCustomField.js'),getProductUnitName = _require7.getProductUnitName;
+const _require8 = require('../utils/stockInRecordBuilders.js'),buildSingleStockInRecords = _require8.buildSingleStockInRecords;
+const _require9 =
+
+
+
+
+
+
+
+
+
+
+
+  require('../utils/stockInForm.js'),resolvePreferredWarehouse = _require9.resolvePreferredWarehouse,writeWarehousePreference = _require9.writeWarehousePreference,buildStockInMatrixLayout = _require9.buildStockInMatrixLayout,patchStockInMatrixLayout = _require9.patchStockInMatrixLayout,resolveStockInFormMode = _require9.resolveStockInFormMode,sumVariantQtyMap = _require9.sumVariantQtyMap,validateStockInQty = _require9.validateStockInQty,buildBatchLineViewModels = _require9.buildBatchLineViewModels,buildStockInFormDefaultsForPending = _require9.buildStockInFormDefaultsForPending,buildPendingStockItem = _require9.buildPendingStockItem,expandPendingByVariantForMatrix = _require9.expandPendingByVariantForMatrix;
+const _require0 =
+
+
+
+
+
+  require('../utils/matrixQtyKeyboard.js'),activateMatrixKeyboardCell = _require0.activateMatrixKeyboardCell,applyMatrixKeyboardKey = _require0.applyMatrixKeyboardKey,buildMatrixKeyboardPreview = _require0.buildMatrixKeyboardPreview,createMatrixKeyboardInputSession = _require0.createMatrixKeyboardInputSession,getNextMatrixVariantIdInRow = _require0.getNextMatrixVariantIdInRow;
+const _require1 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require1.readNavBarMetrics,readWindowMetrics = _require1.readWindowMetrics,computePlanCreateHeaderHeight = _require1.computePlanCreateHeaderHeight;
+const _require10 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require10.LIST_ROUTES,afterSaveReturnToList = _require10.afterSaveReturnToList;
+const _require11 = require('../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require11.afterMatrixKeyboardOpen;
 
 function computeHeaderBlockHeight(nav) {
   return computePlanCreateHeaderHeight(nav);
@@ -87,7 +87,7 @@ Page({
     statusBarHeight: 20,
     navBarHeight: 44,
     headerBlockHeight: 88,
-    scrollHeight: 500,
+    scrollHeight: 500
   },
 
   _quantities: {},
@@ -100,7 +100,7 @@ Page({
     this._activeRowKey = mode === 'single' && this._rowKeys[0] ? this._rowKeys[0] : '';
 
     const ctx = readTenantCtx();
-    if (!hasPermission((ctx && ctx.permissions) || [], 'production:orders_pending_stock_in:create')) {
+    if (!hasPermission(ctx && ctx.permissions || [], 'production:orders_pending_stock_in:create')) {
       wx.showToast({ title: '无入库权限', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 800);
       return;
@@ -114,7 +114,7 @@ Page({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
       headerBlockHeight: computeHeaderBlockHeight(nav),
-      scrollHeight: computeScrollHeight(nav),
+      scrollHeight: computeScrollHeight(nav)
     });
 
     if (!this._rowKeys.length) {
@@ -132,32 +132,32 @@ Page({
   async bootstrap() {
     this.setData({ loading: true });
     try {
-      const [
-        config,
-        warehousesRaw,
-        productsRaw,
-        categoriesRaw,
-        dictionariesRaw,
-        pendingRows,
-        allOrders,
-      ] = await Promise.all([
+      const _await$Promise$all =
+
+
+
+
+
+
+
+        await Promise.all([
         fetchTenantConfig(),
         fetchWarehousesAll(),
         fetchProductsAll(),
         fetchCategoriesAll(),
         fetchDictionaries(),
         loadPendingStockRows(),
-        fetchAllOrdersPaginated({}),
-      ]);
+        fetchAllOrdersPaginated({})]
+        ),config = _await$Promise$all[0],warehousesRaw = _await$Promise$all[1],productsRaw = _await$Promise$all[2],categoriesRaw = _await$Promise$all[3],dictionariesRaw = _await$Promise$all[4],pendingRows = _await$Promise$all[5],allOrders = _await$Promise$all[6];
 
-      const productionLinkMode = (config && config.productionLinkMode) || 'order';
+      const productionLinkMode = config && config.productionLinkMode || 'order';
       const allowExceedMaxStockInQty = !!(config && config.allowExceedMaxStockInQty);
       const products = normalizeMasterList(productsRaw);
       const categories = normalizeMasterList(categoriesRaw);
       const dictionaries = normalizeAppDictionaries(dictionariesRaw);
-      const warehouses = Array.isArray(warehousesRaw) ? warehousesRaw : (warehousesRaw.data || []);
+      const warehouses = Array.isArray(warehousesRaw) ? warehousesRaw : warehousesRaw.data || [];
       const selectedRows = pendingRows.filter((r) =>
-        this._rowKeys.includes(r.rowKey) || this._rowKeys.includes(r.orderId),
+      this._rowKeys.includes(r.rowKey) || this._rowKeys.includes(r.orderId)
       );
       if (!selectedRows.length) {
         wx.showToast({ title: '待入库项已变化', icon: 'none' });
@@ -189,18 +189,18 @@ Page({
       if (this.data.mode === 'batch') {
         selectedRows.forEach((row) => {
           const order = allOrders.find((o) => o.id === row.orderId);
-          const ordersInRow = productionLinkMode === 'product'
-            ? allOrders.filter((o) => o.productId === row.rowKey)
-            : (order ? [order] : []);
+          const ordersInRow = productionLinkMode === 'product' ?
+          allOrders.filter((o) => o.productId === row.rowKey) :
+          order ? [order] : [];
           const product = products.find((p) => p.id === (order && order.productId));
-          const category = product && product.categoryId
-            ? categories.find((c) => c.id === product.categoryId)
-            : null;
+          const category = product && product.categoryId ?
+          categories.find((c) => c.id === product.categoryId) :
+          null;
           const pendingItem = buildPendingStockItem(row, order, ordersInRow);
           const defaults = buildStockInFormDefaultsForPending(pendingItem, product, category);
           this._batchLineForms[row.rowKey] = {
             singleQuantity: defaults.singleQuantity || row.pendingTotal || 0,
-            variantQuantities: defaults.variantQuantities,
+            variantQuantities: defaults.variantQuantities
           };
         });
         const batchLines = buildBatchLineViewModels(selectedRows, this._batchLineForms, '件');
@@ -210,10 +210,10 @@ Page({
           warehouseNames,
           warehousePickerIndex: Math.max(0, warehouses.findIndex((w) => w.id === (wh && wh.id))),
           warehouseId: wh ? wh.id : '',
-          warehouseName: wh ? (wh.name || '') : '',
+          warehouseName: wh ? wh.name || '' : '',
           pendingTotal: selectedRows.reduce((s, r) => s + (r.pendingTotal || 0), 0),
           summaryTitle: `共 ${selectedRows.length} 项`,
-          summaryMeta: `合计待入库 ${selectedRows.reduce((s, r) => s + (r.pendingTotal || 0), 0)} 件`,
+          summaryMeta: `合计待入库 ${selectedRows.reduce((s, r) => s + (r.pendingTotal || 0), 0)} 件`
         });
         return;
       }
@@ -221,13 +221,13 @@ Page({
       const row = selectedRows[0];
       const order = allOrders.find((o) => o.id === row.orderId) || allOrders.find((o) => o.id === row.rowKey);
       const product = products.find((p) => p.id === (order && order.productId));
-      const category = product && product.categoryId
-        ? categories.find((c) => c.id === product.categoryId)
-        : null;
+      const category = product && product.categoryId ?
+      categories.find((c) => c.id === product.categoryId) :
+      null;
       const unitName = getProductUnitName(product, dictionaries);
-      const ordersInRow = productionLinkMode === 'product'
-        ? allOrders.filter((o) => o.productId === row.rowKey)
-        : (order ? [order] : []);
+      const ordersInRow = productionLinkMode === 'product' ?
+      allOrders.filter((o) => o.productId === row.rowKey) :
+      order ? [order] : [];
 
       this._activeRow = row;
       this._order = order || ordersInRow[0];
@@ -243,6 +243,19 @@ Page({
         if ((Number(qty) || 0) > 0) this._quantities[vid] = String(qty);
       });
 
+      const app = getApp();
+      const prefill = app.globalData && app.globalData.pendingStockScanPrefill;
+      if (prefill) {
+        app.globalData.pendingStockScanPrefill = null;
+        if (prefill.variantQuantities && Object.keys(prefill.variantQuantities).length) {
+          Object.entries(prefill.variantQuantities).forEach(([vid, qty]) => {
+            if ((Number(qty) || 0) > 0) this._quantities[vid] = String(qty);
+          });
+        } else if ((Number(prefill.singleQuantity) || 0) > 0) {
+          defaults.singleQuantity = prefill.singleQuantity;
+        }
+      }
+
       const formMode = resolveStockInFormMode(product, category, row.pendingByVariant);
       let matrixLayout = null;
       if (formMode === 'matrix' && product) {
@@ -251,13 +264,15 @@ Page({
           dictionaries,
           this._quantities,
           this._pendingCaps,
-          allowExceedMaxStockInQty,
+          allowExceedMaxStockInQty
         );
       }
 
-      const singleQuantity = defaults.singleQuantity > 0
-        ? String(defaults.singleQuantity)
-        : (row.pendingTotal > 0 ? String(row.pendingTotal) : '0');
+      const singleQuantity = prefill && (Number(prefill.singleQuantity) || 0) > 0 ?
+      String(prefill.singleQuantity) :
+      defaults.singleQuantity > 0 ?
+      String(defaults.singleQuantity) :
+      row.pendingTotal > 0 ? String(row.pendingTotal) : '0';
       this.setData({
         loading: false,
         formMode,
@@ -267,14 +282,14 @@ Page({
         warehouseNames,
         warehousePickerIndex: Math.max(0, warehouses.findIndex((w) => w.id === (wh && wh.id))),
         warehouseId: wh ? wh.id : '',
-        warehouseName: wh ? (wh.name || '') : '',
+        warehouseName: wh ? wh.name || '' : '',
         pendingTotal: row.pendingTotal || 0,
-        summaryTitle: productionLinkMode === 'product' ? (row.productName || '') : (row.orderNumber || ''),
-        summaryMeta: `待入库 ${row.pendingTotal || 0} ${unitName} · 已入库 ${row.alreadyIn || 0}`,
+        summaryTitle: productionLinkMode === 'product' ? row.productName || '' : row.orderNumber || '',
+        summaryMeta: `待入库 ${row.pendingTotal || 0} ${unitName} · 已入库 ${row.alreadyIn || 0}`
       });
     } catch (err) {
       this.setData({ loading: false });
-      wx.showToast({ title: (err && err.message) || '加载失败', icon: 'none' });
+      wx.showToast({ title: err && err.message || '加载失败', icon: 'none' });
     }
   },
 
@@ -285,7 +300,7 @@ Page({
     this.setData({
       warehousePickerIndex: idx,
       warehouseId: wh.id,
-      warehouseName: wh.name || wh.code || '',
+      warehouseName: wh.name || wh.code || ''
     });
   },
 
@@ -294,7 +309,7 @@ Page({
   },
 
   onBatchLineInput(e) {
-    const { rowKey } = e.currentTarget.dataset;
+    const rowKey = e.currentTarget.dataset.rowKey;
     if (!rowKey) return;
     const val = e.detail.value || '';
     if (!this._batchLineForms[rowKey]) {
@@ -302,7 +317,7 @@ Page({
     }
     this._batchLineForms[rowKey].singleQuantity = val;
     this.setData({
-      batchLines: buildBatchLineViewModels(this._selectedRows, this._batchLineForms, this.data.unitName),
+      batchLines: buildBatchLineViewModels(this._selectedRows, this._batchLineForms, this.data.unitName)
     });
   },
 
@@ -313,13 +328,13 @@ Page({
       this.data.matrixLayout,
       this._quantities,
       pendingCaps,
-      this._allowExceed,
+      this._allowExceed
     ) || buildStockInMatrixLayout(
       this._product,
       this._dictionaries,
       this._quantities,
       pendingCaps,
-      this._allowExceed,
+      this._allowExceed
     );
     const patch = { matrixLayout };
     if (this.data.activeMatrixVariantId) {
@@ -331,7 +346,7 @@ Page({
   },
 
   onMatrixCellTap(e) {
-    const { variantId } = e.currentTarget.dataset;
+    const variantId = e.currentTarget.dataset.variantId;
     if (!variantId) return;
     activateMatrixKeyboardCell(this._matrixKbInput);
     const preview = buildMatrixKeyboardPreview(this.data.matrixLayout, variantId, this._quantities);
@@ -340,25 +355,25 @@ Page({
       matrixInputReplaceAll: true,
       activeMatrixVariantId: variantId,
       matrixKeyboardLabel: preview.label,
-      matrixKeyboardValue: preview.value,
+      matrixKeyboardValue: preview.value
     }, () => {
       afterMatrixKeyboardOpen(this, '.plan-create-scroll');
     });
   },
 
   onMatrixKeyboardAction(e) {
-    const { action, digit } = e.detail || {};
+    const _ref = e.detail || {},action = _ref.action,digit = _ref.digit;
     if (action === 'confirm') {
       this.setData({
         matrixKeyboardVisible: false,
         matrixInputReplaceAll: false,
         activeMatrixVariantId: '',
         matrixKeyboardLabel: '',
-        matrixKeyboardValue: '',
+        matrixKeyboardValue: ''
       });
       return;
     }
-    const { activeMatrixVariantId, matrixLayout } = this.data;
+    const _this$data = this.data,activeMatrixVariantId = _this$data.activeMatrixVariantId,matrixLayout = _this$data.matrixLayout;
     if (action === 'enter') {
       const nextId = getNextMatrixVariantIdInRow(matrixLayout, activeMatrixVariantId);
       if (nextId) {
@@ -368,7 +383,7 @@ Page({
           activeMatrixVariantId: nextId,
           matrixInputReplaceAll: true,
           matrixKeyboardLabel: preview.label,
-          matrixKeyboardValue: preview.value,
+          matrixKeyboardValue: preview.value
         }, () => {
           afterMatrixKeyboardOpen(this, '.plan-create-scroll');
         });
@@ -378,14 +393,14 @@ Page({
           matrixInputReplaceAll: false,
           activeMatrixVariantId: '',
           matrixKeyboardLabel: '',
-          matrixKeyboardValue: '',
+          matrixKeyboardValue: ''
         });
       }
       return;
     }
     if (!activeMatrixVariantId) return;
     const current = this._quantities[activeMatrixVariantId] || '';
-    const { value, replaceConsumed } = applyMatrixKeyboardKey(this._matrixKbInput, current, action, digit);
+    const _applyMatrixKeyboardK = applyMatrixKeyboardKey(this._matrixKbInput, current, action, digit),value = _applyMatrixKeyboardK.value,replaceConsumed = _applyMatrixKeyboardK.replaceConsumed;
     this._quantities[activeMatrixVariantId] = value;
     if (replaceConsumed) {
       this.setData({ matrixInputReplaceAll: false });
@@ -420,9 +435,9 @@ Page({
           return;
         }
         const order = this._allOrders.find((o) => o.id === row.orderId);
-        const ordersInRow = this._productionLinkMode === 'product'
-          ? this._allOrders.filter((o) => o.productId === row.rowKey)
-          : (order ? [order] : []);
+        const ordersInRow = this._productionLinkMode === 'product' ?
+        this._allOrders.filter((o) => o.productId === row.rowKey) :
+        order ? [order] : [];
         const product = this._products.find((p) => p.id === (order && order.productId));
         const recs = buildSingleStockInRecords({
           order: order || ordersInRow[0],
@@ -436,7 +451,7 @@ Page({
           customData: {},
           operator,
           timestamp,
-          prodRecords: this._prodRecords,
+          prodRecords: this._prodRecords
         });
         allRecords.push(...recs);
       }
@@ -454,7 +469,7 @@ Page({
         row.pendingTotal,
         pendingCaps,
         this._allowExceed,
-        this.data.unitName,
+        this.data.unitName
       );
       if (err) {
         wx.showToast({ title: err, icon: 'none' });
@@ -474,7 +489,7 @@ Page({
         customData: {},
         operator,
         timestamp,
-        prodRecords: this._prodRecords,
+        prodRecords: this._prodRecords
       });
       allRecords.push(...recs);
       if (!allRecords.length) {
@@ -490,13 +505,13 @@ Page({
       wx.hideLoading();
       afterSaveReturnToList({
         listUrl: LIST_ROUTES.PENDING_STOCK,
-        toastTitle: '入库成功',
+        toastTitle: '入库成功'
       });
     } catch (err) {
-      wx.showToast({ title: (err && err.message) || '入库失败', icon: 'none' });
+      wx.showToast({ title: err && err.message || '入库失败', icon: 'none' });
     } finally {
       wx.hideLoading();
       this.setData({ submitting: false });
     }
-  },
+  }
 });

@@ -2,15 +2,15 @@
  * 盘点单表单（对齐 Web WarehousePanel handleSaveStocktake）
  */
 
-const { PSI_STOCKTAKE_TYPE } = require('../config/warehouses.js');
-const { categoryUsesBatchManagement } = require('./materialIssueBatch.js');
-const { productHasColorSizeMatrix } = require('./productionPlans.js');
-const { buildVariantMatrixUiModel } = require('./variantQtyMatrix.js');
-const { formatPsiQtyDisplay } = require('./psiOpsAggregators.js');
-const { localTodayYmd, localCalendarYmdStartToIso } = require('./dateYmd.js');
-const { getProductUnitName } = require('./planFormCustomField.js');
-const { BATCH_NO_UNTAGGED } = require('./materialStockConfirm.js');
-const { buildStockSnapshotIndex } = require('./warehouseStock.js');
+const _require = require('../config/warehouses.js'),PSI_STOCKTAKE_TYPE = _require.PSI_STOCKTAKE_TYPE;
+const _require2 = require('./materialIssueBatch.js'),categoryUsesBatchManagement = _require2.categoryUsesBatchManagement;
+const _require3 = require('./productionPlans.js'),productHasColorSizeMatrix = _require3.productHasColorSizeMatrix;
+const _require4 = require('./variantQtyMatrix.js'),buildVariantMatrixUiModel = _require4.buildVariantMatrixUiModel;
+const _require5 = require('./psiOpsAggregators.js'),formatPsiQtyDisplay = _require5.formatPsiQtyDisplay;
+const _require6 = require('./dateYmd.js'),localTodayYmd = _require6.localTodayYmd,localCalendarYmdStartToIso = _require6.localCalendarYmdStartToIso;
+const _require7 = require('./planFormCustomField.js'),getProductUnitName = _require7.getProductUnitName;
+const _require8 = require('./materialStockConfirm.js'),BATCH_NO_UNTAGGED = _require8.BATCH_NO_UNTAGGED;
+const _require9 = require('./warehouseStock.js'),buildStockSnapshotIndex = _require9.buildStockSnapshotIndex;
 
 const WAREHOUSE_PREF_KEY = 'PSI_STOCKTAKE_WAREHOUSE';
 /** PsiRecord.lineGroupId @db.VarChar(50) */
@@ -39,8 +39,8 @@ function generateSTDocNumber(existingRecords) {
   const today = localTodayYmd().replace(/-/g, '');
   const prefix = `ST-${today}`;
   const existing = (existingRecords || []).filter(
-    (r) => r.type === PSI_STOCKTAKE_TYPE
-      && String(r.docNumber || '').toLowerCase().startsWith(prefix.toLowerCase()),
+    (r) => r.type === PSI_STOCKTAKE_TYPE &&
+    String(r.docNumber || '').toLowerCase().startsWith(prefix.toLowerCase())
   );
   const seqNums = existing.map((r) => {
     const m = String(r.docNumber || '').match(new RegExp(`${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d+)$`, 'i'));
@@ -68,8 +68,8 @@ function writeStocktakePreference(warehouseId) {
   try {
     if (warehouseId) wx.setStorageSync(WAREHOUSE_PREF_KEY, warehouseId);
   } catch {
-    /* ignore */
-  }
+
+    /* ignore */}
 }
 
 function resolvePreferredStocktakeWarehouse(warehouses) {
@@ -96,7 +96,7 @@ function createEmptyLine() {
     showBatch: false,
     unitName: 'PCS',
     lineTotalQty: 0,
-    hasEnteredQty: false,
+    hasEnteredQty: false
   };
 }
 
@@ -107,7 +107,7 @@ function buildInitialForm() {
     docNumber: '',
     stocktakeDate: localTodayYmd(),
     note: '',
-    operator: '',
+    operator: ''
   };
 }
 
@@ -148,14 +148,14 @@ function recordsToLineItems(items, productMap, categoryMap, dictionaries) {
     const variantQuantities = {};
     let quantity = '';
     grp.forEach((item) => {
-      if (item.variantId) variantQuantities[item.variantId] = formatPsiQtyDisplay(item.quantity);
-      else quantity = String((Number(quantity) || 0) + formatPsiQtyDisplay(item.quantity));
+      if (item.variantId) variantQuantities[item.variantId] = formatPsiQtyDisplay(item.quantity);else
+      quantity = String((Number(quantity) || 0) + formatPsiQtyDisplay(item.quantity));
     });
     const useMatrix = product && productHasColorSizeMatrix(product, category);
     const line = {
       id: rowId,
       productId: firstItem.productId,
-      productName: (product && product.name) || '',
+      productName: product && product.name || '',
       quantity: useMatrix ? '' : quantity,
       systemQtyText: String(firstItem.systemQuantity != null ? firstItem.systemQuantity : '—'),
       variantQuantities: useMatrix ? variantQuantities : {},
@@ -165,7 +165,7 @@ function recordsToLineItems(items, productMap, categoryMap, dictionaries) {
       showBatch: categoryUsesBatchManagement(category),
       unitName: getProductUnitName(product, dictionaries),
       lineTotalQty: 0,
-      hasEnteredQty: true,
+      hasEnteredQty: true
     };
     line.lineTotalQty = lineTotalQty(line);
     return line;
@@ -184,7 +184,7 @@ function enrichLineForUi(line, productMap, categoryMap, dictionaries, stockIndex
     } else if (useMatrix) {
       const total = (product.variants || []).reduce(
         (s, v) => s + stockIndex.getVariantDisplayQty(line.productId, warehouseId, v.id),
-        0,
+        0
       );
       systemQtyText = String(total);
     } else {
@@ -200,16 +200,16 @@ function enrichLineForUi(line, productMap, categoryMap, dictionaries, stockIndex
   }
   const next = {
     ...line,
-    productName: (product && product.name) || line.productName || '',
+    productName: product && product.name || line.productName || '',
     useMatrix,
     showBatch: categoryUsesBatchManagement(category),
     unitName: getProductUnitName(product, dictionaries),
     systemQtyText,
-    matrixLayout: useMatrix
-      ? buildVariantMatrixUiModel(product, dictionaries, line.variantQuantities || {}, {
-        systemQtyByVariantId,
-      })
-      : null,
+    matrixLayout: useMatrix ?
+    buildVariantMatrixUiModel(product, dictionaries, line.variantQuantities || {}, {
+      systemQtyByVariantId
+    }) :
+    null
   };
   next.lineTotalQty = lineTotalQty(next);
   return next;
@@ -231,12 +231,12 @@ function validateStocktakeSave(form, lines, productMap, categoryMap) {
     if (usesBatch && bn) {
       const key = `${item.productId}::${bn}`;
       if (seenBatchKeys.has(key)) {
-        return `产品「${(product && product.name) || item.productId}」批次「${bn}」在本次盘点中重复，请合并为一行`;
+        return `产品「${product && product.name || item.productId}」批次「${bn}」在本次盘点中重复，请合并为一行`;
       }
       seenBatchKeys.add(key);
     } else if (!usesBatch) {
       if (seenPlainProductIds.has(item.productId)) {
-        return `产品「${(product && product.name) || item.productId}」在本次盘点中重复，同一产品不能录入两次`;
+        return `产品「${product && product.name || item.productId}」在本次盘点中重复，同一产品不能录入两次`;
       }
       seenPlainProductIds.add(item.productId);
     }
@@ -249,7 +249,7 @@ function validateStocktakeSave(form, lines, productMap, categoryMap) {
     if (!categoryUsesBatchManagement(cat)) continue;
     const q = lineTotalQty(item);
     if (q > 0 && !String(item.batch || '').trim()) {
-      return `盘点产品「${(product && product.name) || item.productId}」启用批次管理，请选择批次`;
+      return `盘点产品「${product && product.name || item.productId}」启用批次管理，请选择批次`;
     }
   }
   return '';
@@ -259,15 +259,15 @@ function buildStocktakeSaveRecords(form, lines, productMap, categoryMap, stockIn
   const warehouseId = form.warehouseId;
   const ymd = String(form.stocktakeDate || '').trim().slice(0, 10) || localTodayYmd();
   const createdAt = localCalendarYmdStartToIso(ymd);
-  const ts = timestamp && String(timestamp).includes('T')
-    ? timestamp
-    : (timestamp ? new Date(timestamp) : new Date());
-  const timestampIso = ts instanceof Date
-    ? (Number.isNaN(ts.getTime()) ? new Date().toISOString() : ts.toISOString())
-    : (Number.isNaN(new Date(ts).getTime()) ? new Date().toISOString() : new Date(ts).toISOString());
-  const stock = stockIndex && typeof stockIndex.getStock === 'function'
-    ? stockIndex
-    : emptyStockIndex();
+  const ts = timestamp && String(timestamp).includes('T') ?
+  timestamp :
+  timestamp ? new Date(timestamp) : new Date();
+  const timestampIso = ts instanceof Date ?
+  Number.isNaN(ts.getTime()) ? new Date().toISOString() : ts.toISOString() :
+  Number.isNaN(new Date(ts).getTime()) ? new Date().toISOString() : new Date(ts).toISOString();
+  const stock = stockIndex && typeof stockIndex.getStock === 'function' ?
+  stockIndex :
+  emptyStockIndex();
   const records = [];
   let idx = 0;
   const baseId = Date.now();
@@ -307,18 +307,18 @@ function buildStocktakeSaveRecords(form, lines, productMap, categoryMap, stockIn
           note,
           lineGroupId,
           createdAt,
-          operator: op,
+          operator: op
         };
         if (writeBn) rec.batchNo = writeBn;
         if (isBatchLine) batchLineKeys.add(rec.id);
         records.push(rec);
       });
-    } else if (item.quantity !== '' && item.quantity != null) {
+    } else if (item.quantity !== '' && item.quantity != null) {var _batchSysByProductBat;
       const n = finiteQty(item.quantity);
-      const sysQtyAtSave = isBatchLine
-        ? (batchSysByProductBatch.get(`${item.productId}::${bn}`)
-          ?? finiteQty(stock.getBatchStock(item.productId, warehouseId, bn)))
-        : finiteQty(stock.getStock(item.productId, warehouseId, editingDocNumber));
+      const sysQtyAtSave = isBatchLine ? (_batchSysByProductBat =
+      batchSysByProductBatch.get(`${item.productId}::${bn}`)) != null ? _batchSysByProductBat :
+      finiteQty(stock.getBatchStock(item.productId, warehouseId, bn)) :
+      finiteQty(stock.getStock(item.productId, warehouseId, editingDocNumber));
       if (isBatchLine) batchSysByProductBatch.set(`${item.productId}::${bn}`, sysQtyAtSave);
       const rec = {
         id: `psi-st-${baseId}-${idx++}`,
@@ -332,7 +332,7 @@ function buildStocktakeSaveRecords(form, lines, productMap, categoryMap, stockIn
         note,
         lineGroupId,
         createdAt,
-        operator: op,
+        operator: op
       };
       if (writeBn) rec.batchNo = writeBn;
       if (isBatchLine) batchLineKeys.add(rec.id);
@@ -349,7 +349,7 @@ function buildStocktakeSaveRecords(form, lines, productMap, categoryMap, stockIn
   });
 
   const productIdsWithBatchLine = new Set(
-    records.filter((r) => batchLineKeys.has(r.id) || r.batchNo).map((r) => r.productId),
+    records.filter((r) => batchLineKeys.has(r.id) || r.batchNo).map((r) => r.productId)
   );
   const byProductId = new Map();
   records.forEach((r) => {
@@ -364,12 +364,12 @@ function buildStocktakeSaveRecords(form, lines, productMap, categoryMap, stockIn
     if (productIdsWithBatchLine.has(productId)) return;
     const product = productMap.get(productId);
     const hasVariants = (product && product.variants && product.variants.length) > 0;
-    const systemQty = hasVariants
-      ? (product.variants || []).reduce(
-        (s, v) => s + finiteQty(stock.getVariantDisplayQty(productId, warehouseId, v.id)),
-        0,
-      )
-      : finiteQty(stock.getStock(productId, warehouseId, editingDocNumber));
+    const systemQty = hasVariants ?
+    (product.variants || []).reduce(
+      (s, v) => s + finiteQty(stock.getVariantDisplayQty(productId, warehouseId, v.id)),
+      0
+    ) :
+    finiteQty(stock.getStock(productId, warehouseId, editingDocNumber));
     const diff = actualTotal - systemQty;
     const firstIdx = firstRecordIndexByProductId.get(productId);
     if (firstIdx !== undefined) records[firstIdx].diffQuantity = diff;
@@ -392,5 +392,5 @@ module.exports = {
   recordsToLineItems,
   enrichLineForUi,
   validateStocktakeSave,
-  buildStocktakeSaveRecords,
+  buildStocktakeSaveRecords
 };

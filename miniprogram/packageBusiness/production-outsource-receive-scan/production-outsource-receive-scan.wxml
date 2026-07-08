@@ -1,0 +1,60 @@
+<page-meta page-style="{{scanBatchOpen ? 'overflow:hidden;height:100vh;' : ''}}" />
+<view class="plan-shell">
+  <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-header__title">扫码收货</text>
+      <view class="plan-header__back plan-header__back--placeholder"></view>
+    </view>
+  </view>
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <view class="outsource-scan-page" style="padding-bottom: {{footerInsetPx}}px;">
+    <view wx:if="{{loading}}" class="plan-list-empty">加载中…</view>
+
+    <block wx:else>
+      <view class="outsource-scan-partner">
+        <searchable-partner-select
+          label="加工厂"
+          partners="{{partnerOptions}}"
+          categories="{{partnerCategories}}"
+          value="{{scanPartnerName}}"
+          placeholder="请选择加工厂"
+          bind:change="onScanPartnerChange"
+        />
+      </view>
+
+      <view wx:if="{{scanPartnerName}}" class="outsource-scan-summary">
+        <text class="outsource-scan-summary__title">{{scanPartnerName}}</text>
+        <text class="outsource-scan-summary__meta">待收回 {{pendingCount}} 条 · 扫码后确认应用，再核对数量提交</text>
+      </view>
+
+      <view wx:else class="outsource-scan-empty">请先选择加工厂，再点击下方按钮扫码收货</view>
+    </block>
+  </view>
+
+  <view wx:if="{{scanEnabled}}" class="outsource-scan-footer">
+    <view
+      class="outsource-scan-footer__btn {{scanPartnerName && !loading ? '' : 'outsource-scan-footer__btn--disabled'}}"
+      bindtap="onOpenScanTap"
+    >扫码录入</view>
+  </view>
+
+  <scan-batch-modal
+    wx:if="{{scanEnabled}}"
+    open="{{scanBatchOpen}}"
+    rows="{{scanBatchRows}}"
+    title="{{scanBatchTitle}}"
+    hint="{{scanBatchHint}}"
+    processing="{{scanBatchProcessing}}"
+    show-intent-toggle="{{scanBatchShowIntentToggle}}"
+    scan-intent="{{scanBatchIntent}}"
+    scan-disabled="{{!scanPartnerName}}"
+    scan-disabled-hint="请先选择加工厂"
+    bind:close="onScanBatchClose"
+    bind:scan="onScanBatchScan"
+    bind:confirm="onScanBatchConfirm"
+    bind:remove="onScanBatchRemove"
+    bind:intentchange="onScanBatchIntentChange"
+  />
+</view>

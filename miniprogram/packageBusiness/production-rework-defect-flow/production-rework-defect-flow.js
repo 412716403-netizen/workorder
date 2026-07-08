@@ -1,31 +1,31 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const {
-  TYPE_FILTER_LABELS,
-  TYPE_FILTER_VALUES,
-  buildDefectFlowSummaryRows,
-  buildFlowMilestoneOptions,
-  filterDefectFlowRows,
-  computeDefectFlowStats,
-} = require('../utils/reworkDefectFlow.js');
-const { fetchAllOrdersPaginated } = require('../utils/pendingStockBadge.js');
-const {
-  fetchTenantConfig,
-  fetchProductsAll,
-  fetchNodesAll,
-  fetchProductionRecords,
-} = require('../utils/orderApi.js');
-const {
-  localTodayYmd,
-  dateInputToIsoStart,
-  dateInputToIsoEndExclusive,
-} = require('../utils/orderReportHistory.js');
-const { normalizeMasterList } = require('../utils/productionPlans.js');
-const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 =
+
+
+
+
+
+
+  require('../utils/reworkDefectFlow.js'),TYPE_FILTER_LABELS = _require3.TYPE_FILTER_LABELS,TYPE_FILTER_VALUES = _require3.TYPE_FILTER_VALUES,buildDefectFlowSummaryRows = _require3.buildDefectFlowSummaryRows,buildFlowMilestoneOptions = _require3.buildFlowMilestoneOptions,filterDefectFlowRows = _require3.filterDefectFlowRows,computeDefectFlowStats = _require3.computeDefectFlowStats;
+const _require4 = require('../utils/pendingStockBadge.js'),fetchAllOrdersPaginated = _require4.fetchAllOrdersPaginated;
+const _require5 =
+
+
+
+
+  require('../utils/orderApi.js'),fetchTenantConfig = _require5.fetchTenantConfig,fetchProductsAll = _require5.fetchProductsAll,fetchNodesAll = _require5.fetchNodesAll,fetchProductionRecords = _require5.fetchProductionRecords;
+const _require6 =
+
+
+
+  require('../utils/orderReportHistory.js'),localTodayYmd = _require6.localTodayYmd,dateInputToIsoStart = _require6.dateInputToIsoStart,dateInputToIsoEndExclusive = _require6.dateInputToIsoEndExclusive;
+const _require7 = require('../utils/productionPlans.js'),normalizeMasterList = _require7.normalizeMasterList;
+const _require8 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require8.readNavBarMetrics,readWindowMetrics = _require8.readWindowMetrics;
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
-  const toolsPx = Math.ceil((win.windowWidth / 750) * 128);
+  const toolsPx = Math.ceil(win.windowWidth / 750 * 128);
   return nav.statusBarHeight + nav.navBarHeight + toolsPx;
 }
 
@@ -67,13 +67,13 @@ Page({
     stats: { footerText: '共 0 条' },
     statusBarHeight: 20,
     navBarHeight: 44,
-    headerBlockHeight: 88,
+    headerBlockHeight: 88
   },
 
   onLoad(options) {
     const nav = readNavBarMetrics();
     const ctx = readTenantCtx();
-    if (!hasPermission((ctx && ctx.permissions) || [], 'production:rework_records:view')) {
+    if (!hasPermission(ctx && ctx.permissions || [], 'production:rework_records:view')) {
       wx.showToast({ title: '无查看权限', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 800);
       return;
@@ -83,7 +83,7 @@ Page({
     this._flowSeed = {
       orderKeyword: options.orderKeyword ? decodeURIComponent(options.orderKeyword) : '',
       productKeyword: options.productKeyword ? decodeURIComponent(options.productKeyword) : '',
-      milestoneNodeId: options.milestoneNodeId ? decodeURIComponent(options.milestoneNodeId) : '',
+      milestoneNodeId: options.milestoneNodeId ? decodeURIComponent(options.milestoneNodeId) : ''
     };
     if (this._flowSeed.orderKeyword || this._flowSeed.productKeyword) {
       this._flowSeedActive = true;
@@ -99,7 +99,7 @@ Page({
       dateTo: today,
       draftDateFrom: today,
       draftDateTo: today,
-      searchKeyword: this._flowSeed.orderKeyword || this._flowSeed.productKeyword || '',
+      searchKeyword: this._flowSeed.orderKeyword || this._flowSeed.productKeyword || ''
     });
     this.loadRows();
   },
@@ -127,7 +127,7 @@ Page({
     const today = this._today || localTodayYmd();
     this.setData({
       ...extra,
-      filterActive: computeFilterActive({ ...this.data, ...extra }, today),
+      filterActive: computeFilterActive({ ...this.data, ...extra }, today)
     });
   },
 
@@ -142,7 +142,7 @@ Page({
       draftDateTo: this.data.dateTo,
       draftTypeIndex: this.data.typeFilterIndex,
       draftMilestoneFilterIndex: this.data.milestoneFilterIndex,
-      draftMilestoneFilterLabel: this.data.milestoneFilterLabel,
+      draftMilestoneFilterLabel: this.data.milestoneFilterLabel
     });
   },
 
@@ -170,7 +170,7 @@ Page({
       draftMilestoneFilterIndex: 0,
       draftMilestoneFilterLabel: '全部工序',
       showFilterPanel: false,
-      searchKeyword: '',
+      searchKeyword: ''
     });
     this.loadRows();
   },
@@ -192,7 +192,7 @@ Page({
       milestoneNodeId: milestoneOpt.id || '',
       milestoneFilterIndex: milestoneIdx,
       milestoneFilterLabel: milestoneOpt.name || '全部工序',
-      showFilterPanel: false,
+      showFilterPanel: false
     });
     if (datesChanged) {
       this.loadRows();
@@ -218,7 +218,7 @@ Page({
     const opt = milestoneOptionAt(this.data.milestoneOptions, idx);
     this.setData({
       draftMilestoneFilterIndex: idx,
-      draftMilestoneFilterLabel: opt.name || '全部工序',
+      draftMilestoneFilterLabel: opt.name || '全部工序'
     });
   },
 
@@ -234,20 +234,20 @@ Page({
   },
 
   onProductImageError(e) {
-    const { key } = e.currentTarget.dataset;
+    const key = e.currentTarget.dataset.key;
     if (!key) return;
     const rows = (this.data.rows || []).map((row) =>
-      row.batchKey === key ? { ...row, showProductImage: false } : row,
+    row.batchKey === key ? { ...row, showProductImage: false } : row
     );
     this.setData({ rows });
   },
 
   onRowTap(e) {
-    const { batchKey } = e.currentTarget.dataset;
+    const batchKey = e.currentTarget.dataset.batchKey;
     const row = (this._allRows || []).find((r) => r.batchKey === batchKey);
     if (!row || !row.docNo) return;
     wx.navigateTo({
-      url: `/packageBusiness/production-rework-defect-flow-detail/production-rework-defect-flow-detail?docNo=${encodeURIComponent(row.docNo)}`,
+      url: `/packageBusiness/production-rework-defect-flow-detail/production-rework-defect-flow-detail?docNo=${encodeURIComponent(row.docNo)}`
     });
   },
 
@@ -256,11 +256,11 @@ Page({
       searchKeyword: this.data.searchKeyword,
       typeFilter: this.data.typeFilter,
       milestoneNodeId: this.data.milestoneNodeId,
-      ...(this._flowSeedActive ? this._flowSeed : {}),
+      ...(this._flowSeedActive ? this._flowSeed : {})
     });
     this.setData({
       rows: filtered,
-      stats: computeDefectFlowStats(filtered),
+      stats: computeDefectFlowStats(filtered)
     });
   },
 
@@ -280,7 +280,7 @@ Page({
       milestoneOptions,
       milestoneFilterIndex,
       milestoneNodeId: milestoneOpt.id || '',
-      milestoneFilterLabel: milestoneOpt.name || '全部工序',
+      milestoneFilterLabel: milestoneOpt.name || '全部工序'
     });
   },
 
@@ -288,13 +288,13 @@ Page({
     this._bootstrapping = true;
     this.setData({ loading: true });
     try {
-      const [config, orders, productsRaw, nodesRaw] = await Promise.all([
+      const _await$Promise$all = await Promise.all([
         fetchTenantConfig(),
         fetchAllOrdersPaginated({}),
         fetchProductsAll().catch(() => []),
-        fetchNodesAll().catch(() => []),
-      ]);
-      const productionLinkMode = (config && config.productionLinkMode) || 'order';
+        fetchNodesAll().catch(() => [])]
+        ),config = _await$Promise$all[0],orders = _await$Promise$all[1],productsRaw = _await$Promise$all[2],nodesRaw = _await$Promise$all[3];
+      const productionLinkMode = config && config.productionLinkMode || 'order';
       const ordersById = new Map((orders || []).map((o) => [o.id, o]));
       const productsById = new Map(normalizeMasterList(productsRaw).map((p) => [p.id, p]));
       const nodesById = new Map(normalizeMasterList(nodesRaw).map((n) => [n.id, n]));
@@ -303,7 +303,7 @@ Page({
       const to = this.data.dateTo;
       const params = {
         types: 'REWORK,SCRAP',
-        all: 'true',
+        all: 'true'
       };
       if (from) params.startDate = dateInputToIsoStart(from);
       if (to) params.endDate = dateInputToIsoEndExclusive(to);
@@ -313,17 +313,17 @@ Page({
         productionLinkMode,
         ordersById,
         productsById,
-        nodesById,
+        nodesById
       });
       this.syncMilestoneOptions(nodesById);
       this.setData({ loading: false });
       this.applyFilter();
     } catch (err) {
       this.setData({ loading: false });
-      wx.showToast({ title: (err && err.message) || '加载失败', icon: 'none' });
+      wx.showToast({ title: err && err.message || '加载失败', icon: 'none' });
     } finally {
       this._bootstrapping = false;
       this._loadedOnce = true;
     }
-  },
+  }
 });

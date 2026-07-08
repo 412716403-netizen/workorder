@@ -1,29 +1,29 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const { WAREHOUSE_FLOW_TYPE_OPTIONS } = require('../config/warehouses.js');
-const {
-  computeWarehouseFlowRows,
-  filterProductFlowRows,
-  filterWarehouseFlowRows,
-  computeWarehouseFlowTotals,
-  formatWarehouseFlowQty,
-  buildFlowDetailUrl,
-} = require('../utils/warehouseFlow.js');
-const { buildProductMap } = require('../utils/purchaseOrders.js');
-const { buildWarehouseMap } = require('../utils/warehouseInventory.js');
-const { fetchAllPsiRecords } = require('../utils/psiApi.js');
-const { fetchProductionRecords, listOrdersPaginated } = require('../utils/orderApi.js');
-const { fetchProductsAll } = require('../utils/planApi.js');
-const { fetchWarehousesAll } = require('../utils/orderApi.js');
-const { listProductNameSkuFromMap } = require('../utils/listProductThumb.js');
-const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 = require('../config/warehouses.js'),WAREHOUSE_FLOW_TYPE_OPTIONS = _require3.WAREHOUSE_FLOW_TYPE_OPTIONS;
+const _require4 =
+
+
+
+
+
+
+  require('../utils/warehouseFlow.js'),computeWarehouseFlowRows = _require4.computeWarehouseFlowRows,filterProductFlowRows = _require4.filterProductFlowRows,filterWarehouseFlowRows = _require4.filterWarehouseFlowRows,computeWarehouseFlowTotals = _require4.computeWarehouseFlowTotals,formatWarehouseFlowQty = _require4.formatWarehouseFlowQty,buildFlowDetailUrl = _require4.buildFlowDetailUrl;
+const _require5 = require('../utils/purchaseOrders.js'),buildProductMap = _require5.buildProductMap;
+const _require6 = require('../utils/warehouseInventory.js'),buildWarehouseMap = _require6.buildWarehouseMap;
+const _require7 = require('../utils/psiApi.js'),fetchAllPsiRecords = _require7.fetchAllPsiRecords;
+const _require8 = require('../utils/orderApi.js'),fetchProductionRecords = _require8.fetchProductionRecords,listOrdersPaginated = _require8.listOrdersPaginated;
+const _require9 = require('../utils/planApi.js'),fetchProductsAll = _require9.fetchProductsAll;
+const _require0 = require('../utils/orderApi.js'),fetchWarehousesAll = _require0.fetchWarehousesAll;
+const _require1 = require('../utils/listProductThumb.js'),listProductNameSkuFromMap = _require1.listProductNameSkuFromMap;
+const _require10 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require10.readNavBarMetrics,readWindowMetrics = _require10.readWindowMetrics;
 
 const TYPE_FILTER_LABELS = WAREHOUSE_FLOW_TYPE_OPTIONS.map((o) => o.label);
 const TYPE_FILTER_VALUES = WAREHOUSE_FLOW_TYPE_OPTIONS.map((o) => o.value);
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
-  const toolsPx = Math.ceil((win.windowWidth / 750) * 128);
+  const toolsPx = Math.ceil(win.windowWidth / 750 * 128);
   return nav.statusBarHeight + nav.navBarHeight + toolsPx;
 }
 
@@ -68,7 +68,7 @@ function enrichFlowRow(row) {
   return {
     ...row,
     qtyText: formatWarehouseFlowQty(row.quantity),
-    qtyClass: row.isOutbound ? 'wh-flow-row__qty--out' : 'wh-flow-row__qty--in',
+    qtyClass: row.isOutbound ? 'wh-flow-row__qty--out' : 'wh-flow-row__qty--in'
   };
 }
 
@@ -101,7 +101,7 @@ Page({
     stats: { inboundText: '0', outboundText: '0', netText: '0', count: 0 },
     statusBarHeight: 20,
     navBarHeight: 44,
-    headerBlockHeight: 88,
+    headerBlockHeight: 88
   },
 
   onLoad(options) {
@@ -114,7 +114,7 @@ Page({
       headerBlockHeight: computeHeaderBlockHeight(nav),
       scopedWarehouseId: this._scopedWarehouseId,
       showWarehouseFilter: !this._scopedWarehouseId,
-      filterWarehouseId: this._scopedWarehouseId,
+      filterWarehouseId: this._scopedWarehouseId
     });
   },
 
@@ -124,7 +124,7 @@ Page({
       return;
     }
     const ctx = readTenantCtx();
-    if (!hasPermission((ctx && ctx.permissions) || [], 'psi:warehouse_list:view')) {
+    if (!hasPermission(ctx && ctx.permissions || [], 'psi:warehouse_list:view')) {
       wx.showToast({ title: '无权限', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 800);
       return;
@@ -151,7 +151,7 @@ Page({
   patchFilterActive(extra) {
     this.setData({
       ...extra,
-      filterActive: computeFilterActive({ ...this.data, ...extra }),
+      filterActive: computeFilterActive({ ...this.data, ...extra })
     });
   },
 
@@ -160,7 +160,7 @@ Page({
       draftDateFrom: this.data.dateFrom,
       draftDateTo: this.data.dateTo,
       draftTypeIndex: this.data.typeFilterIndex,
-      draftWarehouseIndex: this.data.filterWarehouseIndex,
+      draftWarehouseIndex: this.data.filterWarehouseIndex
     });
   },
 
@@ -199,13 +199,13 @@ Page({
       typeFilterIndex: 0,
       draftTypeIndex: 0,
       filterWarehouseId: this._scopedWarehouseId || '',
-      filterWarehouseIndex: this._scopedWarehouseId
-        ? (this._warehouseFilterIds || []).indexOf(this._scopedWarehouseId)
-        : 0,
-      draftWarehouseIndex: this._scopedWarehouseId
-        ? (this._warehouseFilterIds || []).indexOf(this._scopedWarehouseId)
-        : 0,
-      showFilterPanel: false,
+      filterWarehouseIndex: this._scopedWarehouseId ?
+      (this._warehouseFilterIds || []).indexOf(this._scopedWarehouseId) :
+      0,
+      draftWarehouseIndex: this._scopedWarehouseId ?
+      (this._warehouseFilterIds || []).indexOf(this._scopedWarehouseId) :
+      0,
+      showFilterPanel: false
     });
     this.bootstrap();
   },
@@ -231,7 +231,7 @@ Page({
       typeFilterIndex: typeIdx,
       filterWarehouseId,
       filterWarehouseIndex,
-      showFilterPanel: false,
+      showFilterPanel: false
     });
 
     if (datesChanged) {
@@ -269,14 +269,14 @@ Page({
   async bootstrap() {
     this.setData({ loading: true });
     try {
-      const { dateFrom, dateTo } = this.data;
+      const _this$data = this.data,dateFrom = _this$data.dateFrom,dateTo = _this$data.dateTo;
       const startDate = dateInputToIsoStart(dateFrom);
       const endDate = dateInputToIsoEndExclusive(dateTo);
       const prodParams = { types: 'STOCK_IN,STOCK_OUT,STOCK_RETURN' };
       if (startDate) prodParams.startDate = startDate;
       if (endDate) prodParams.endDate = endDate;
 
-      const [products, warehouses, purchaseBills, salesBills, transfers, stocktakes, prodRecords, ordersPage] = await Promise.all([
+      const _await$Promise$all = await Promise.all([
         fetchProductsAll().catch(() => []),
         fetchWarehousesAll().catch(() => []),
         fetchAllPsiRecords('PURCHASE_BILL').catch(() => []),
@@ -284,10 +284,10 @@ Page({
         fetchAllPsiRecords('TRANSFER').catch(() => []),
         fetchAllPsiRecords('STOCKTAKE').catch(() => []),
         fetchProductionRecords(prodParams).catch(() => []),
-        listOrdersPaginated({ page: 1, pageSize: 500 }).catch(() => ({ data: [] })),
-      ]);
+        listOrdersPaginated({ page: 1, pageSize: 500 }).catch(() => ({ data: [] }))]
+        ),products = _await$Promise$all[0],warehouses = _await$Promise$all[1],purchaseBills = _await$Promise$all[2],salesBills = _await$Promise$all[3],transfers = _await$Promise$all[4],stocktakes = _await$Promise$all[5],prodRecords = _await$Promise$all[6],ordersPage = _await$Promise$all[7];
 
-      const warehouseList = Array.isArray(warehouses) ? warehouses : (warehouses.data || []);
+      const warehouseList = Array.isArray(warehouses) ? warehouses : warehouses.data || [];
       this._warehouseFilterIds = buildWarehouseFilterIds(warehouseList);
       const productMap = buildProductMap(Array.isArray(products) ? products : []);
       const warehouseMap = buildWarehouseMap(warehouseList);
@@ -299,21 +299,21 @@ Page({
         scopedWhIndex = Math.max(0, (this._warehouseFilterIds || []).indexOf(this._scopedWarehouseId));
       }
 
-      const psiRecords = []
-        .concat(purchaseBills, salesBills, transfers, stocktakes)
-        .filter((r) => {
-          const ds = (r.createdAt || r.timestamp || '').toString().slice(0, 10);
-          if (dateFrom && ds < dateFrom) return false;
-          if (dateTo && ds > dateTo) return false;
-          return true;
-        });
+      const psiRecords = [].
+      concat(purchaseBills, salesBills, transfers, stocktakes).
+      filter((r) => {
+        const ds = (r.createdAt || r.timestamp || '').toString().slice(0, 10);
+        if (dateFrom && ds < dateFrom) return false;
+        if (dateTo && ds > dateTo) return false;
+        return true;
+      });
 
       this._allRows = computeWarehouseFlowRows({
         recordsList: psiRecords,
         prodRecords,
         productMap,
         warehouseMap,
-        ordersList: ordersPage.data || [],
+        ordersList: ordersPage.data || []
       });
 
       this.setData({
@@ -323,7 +323,7 @@ Page({
         warehouseName: wh ? wh.name : '',
         warehouseFilterLabels: buildWarehouseFilterLabels(warehouseList),
         filterWarehouseIndex: scopedWhIndex,
-        draftWarehouseIndex: scopedWhIndex,
+        draftWarehouseIndex: scopedWhIndex
       });
       this.applyClientFilter();
     } catch {
@@ -341,7 +341,7 @@ Page({
       searchKeyword: this.data.searchKeyword,
       dateFrom: this.data.dateFrom,
       dateTo: this.data.dateTo,
-      typeFilter: this.data.typeFilter,
+      typeFilter: this.data.typeFilter
     });
     this._filteredRows = filtered.map(enrichFlowRow);
     const totals = computeWarehouseFlowTotals(filtered);
@@ -352,9 +352,9 @@ Page({
         inboundText: formatWarehouseFlowQty(totals.inboundTotal),
         outboundText: formatWarehouseFlowQty(totals.outboundTotal),
         netText: formatWarehouseFlowQty(totals.netChange),
-        count: filtered.length,
+        count: filtered.length
       },
-      emptyText: filtered.length ? '' : '所选条件下暂无流水',
+      emptyText: filtered.length ? '' : '所选条件下暂无流水'
     });
-  },
+  }
 });

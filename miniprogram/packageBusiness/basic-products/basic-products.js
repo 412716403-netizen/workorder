@@ -1,20 +1,20 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const { PRODUCT_ARCHIVE_ALL, DEFAULT_PAGE_SIZE } = require('../config/products.js');
-const { buildProductListRows } = require('../utils/products.js');
-const { fetchProductsAll, updateProduct } = require('../utils/productApi.js');
-const {
-  fetchCategoriesAll,
-} = require('../utils/planApi.js');
-const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
-const { shouldHubListRefetch, trackHubListHidden, LIST_ROUTES } = require('../utils/saveNavigation.js');
-const { isProductEnabled } = require('../utils/productEnabled.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 = require('../config/products.js'),PRODUCT_ARCHIVE_ALL = _require3.PRODUCT_ARCHIVE_ALL,DEFAULT_PAGE_SIZE = _require3.DEFAULT_PAGE_SIZE;
+const _require4 = require('../utils/products.js'),buildProductListRows = _require4.buildProductListRows;
+const _require5 = require('../utils/productApi.js'),fetchProductsAll = _require5.fetchProductsAll,updateProduct = _require5.updateProduct;
+const _require6 =
+
+  require('../utils/planApi.js'),fetchCategoriesAll = _require6.fetchCategoriesAll;
+const _require7 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require7.readNavBarMetrics,readWindowMetrics = _require7.readWindowMetrics;
+const _require8 = require('../utils/saveNavigation.js'),shouldHubListRefetch = _require8.shouldHubListRefetch,trackHubListHidden = _require8.trackHubListHidden,LIST_ROUTES = _require8.LIST_ROUTES;
+const _require9 = require('../utils/productEnabled.js'),isProductEnabled = _require9.isProductEnabled;
 
 const HUB_LIST_ROUTE = LIST_ROUTES.BASIC_PRODUCTS.replace(/^\//, '');
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
-  const toolsPx = Math.ceil((win.windowWidth / 750) * 128);
+  const toolsPx = Math.ceil(win.windowWidth / 750 * 128);
   return nav.statusBarHeight + nav.navBarHeight + toolsPx;
 }
 
@@ -48,7 +48,7 @@ Page({
     togglingId: '',
     statusBarHeight: 20,
     navBarHeight: 44,
-    headerBlockHeight: 88,
+    headerBlockHeight: 88
   },
 
   onLoad(options) {
@@ -56,13 +56,13 @@ Page({
     this.setData({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
-      headerBlockHeight: computeHeaderBlockHeight(nav),
+      headerBlockHeight: computeHeaderBlockHeight(nav)
     });
 
     const productId = options.productId ? decodeURIComponent(options.productId) : '';
     if (productId) {
       wx.redirectTo({
-        url: `/packageBusiness/basic-product-edit/basic-product-edit?id=${encodeURIComponent(productId)}`,
+        url: `/packageBusiness/basic-product-edit/basic-product-edit?id=${encodeURIComponent(productId)}`
       });
       return;
     }
@@ -89,7 +89,7 @@ Page({
     this._tenantCtx = ctx;
     this.setData({
       canCreate: hasPermission(ctx.permissions || [], 'basic:products:create'),
-      canEdit: hasPermission(ctx.permissions || [], 'basic:products:edit'),
+      canEdit: hasPermission(ctx.permissions || [], 'basic:products:edit')
     });
     if (!this._initialized) {
       this.bootstrap();
@@ -145,7 +145,7 @@ Page({
       return;
     }
     this.openProductEdit(
-      `/packageBusiness/basic-product-edit/basic-product-edit?id=${encodeURIComponent(id)}`,
+      `/packageBusiness/basic-product-edit/basic-product-edit?id=${encodeURIComponent(id)}`
     );
   },
 
@@ -155,8 +155,8 @@ Page({
       events: {
         hubListChanged: () => {
           this.bootstrap();
-        },
-      },
+        }
+      }
     });
   },
 
@@ -190,13 +190,13 @@ Page({
     this.setData({ togglingId: id });
     try {
       await updateProduct(id, { enabled: nextEnabled });
-      this._products = (this._products || []).map((p) => (
-        p.id === id ? { ...p, enabled: nextEnabled } : p
-      ));
+      this._products = (this._products || []).map((p) =>
+      p.id === id ? { ...p, enabled: nextEnabled } : p
+      );
       wx.showToast({ title: nextEnabled ? '已启用' : '已禁用', icon: 'success' });
       this.reloadList();
     } catch (err) {
-      wx.showToast({ title: (err && err.message) || '操作失败', icon: 'none' });
+      wx.showToast({ title: err && err.message || '操作失败', icon: 'none' });
     } finally {
       this.setData({ togglingId: '' });
     }
@@ -206,10 +206,10 @@ Page({
     this._initialized = true;
     this.setData({ loading: true });
     try {
-      const [products, categories] = await Promise.all([
+      const _await$Promise$all = await Promise.all([
         fetchProductsAll(),
-        fetchCategoriesAll(),
-      ]);
+        fetchCategoriesAll()]
+        ),products = _await$Promise$all[0],categories = _await$Promise$all[1];
       this._products = products || [];
       this._categories = categories || [];
       this.reloadList();
@@ -219,9 +219,9 @@ Page({
   },
 
   reloadList() {
-    const inCategoryCount = this.data.activeCategoryId === PRODUCT_ARCHIVE_ALL
-      ? (this._products || []).length
-      : (this._products || []).filter((p) => p.categoryId === this.data.activeCategoryId).length;
+    const inCategoryCount = this.data.activeCategoryId === PRODUCT_ARCHIVE_ALL ?
+    (this._products || []).length :
+    (this._products || []).filter((p) => p.categoryId === this.data.activeCategoryId).length;
 
     const result = buildProductListRows(
       this._products,
@@ -229,12 +229,12 @@ Page({
       this.data.activeCategoryId,
       this.data.searchKeyword,
       this.data.page,
-      this.data.pageSize,
+      this.data.pageSize
     );
 
-    const emptyText = inCategoryCount === 0
-      ? '该分类下暂无产品'
-      : (String(this.data.searchKeyword || '').trim() ? '未找到匹配的产品' : '该分类下暂无产品');
+    const emptyText = inCategoryCount === 0 ?
+    '该分类下暂无产品' :
+    String(this.data.searchKeyword || '').trim() ? '未找到匹配的产品' : '该分类下暂无产品';
 
     this.setData({
       loading: false,
@@ -248,9 +248,9 @@ Page({
         inCategoryCount,
         this.data.searchKeyword,
         result.page,
-        result.totalPages,
+        result.totalPages
       ),
-      emptyText,
+      emptyText
     });
-  },
+  }
 });

@@ -1,24 +1,24 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const {
-  fetchPartnersAll,
-  createPartner,
-  updatePartner,
-  deletePartner,
-} = require('../utils/partnerApi.js');
-const { fetchPartnerCategoriesAll } = require('../utils/planApi.js');
-const {
-  readNavBarMetrics,
-  readWindowMetrics,
-  computePlanCreateHeaderHeight,
-} = require('../../utils/windowMetrics.js');
-const { LIST_ROUTES, afterSaveReturnToList } = require('../utils/saveNavigation.js');
-const {
-  buildEmptyPartner,
-  buildPartnerCustomFieldsForForm,
-  preparePartnerForSave,
-  formatPartnerListNo,
-} = require('../utils/partnerForm.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 =
+
+
+
+
+  require('../utils/partnerApi.js'),fetchPartnersAll = _require3.fetchPartnersAll,createPartner = _require3.createPartner,updatePartner = _require3.updatePartner,deletePartner = _require3.deletePartner;
+const _require4 = require('../utils/planApi.js'),fetchPartnerCategoriesAll = _require4.fetchPartnerCategoriesAll;
+const _require5 =
+
+
+
+  require('../../utils/windowMetrics.js'),readNavBarMetrics = _require5.readNavBarMetrics,readWindowMetrics = _require5.readWindowMetrics,computePlanCreateHeaderHeight = _require5.computePlanCreateHeaderHeight;
+const _require6 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require6.LIST_ROUTES,afterSaveReturnToList = _require6.afterSaveReturnToList;
+const _require7 =
+
+
+
+
+  require('../utils/partnerForm.js'),buildEmptyPartner = _require7.buildEmptyPartner,buildPartnerCustomFieldsForForm = _require7.buildPartnerCustomFieldsForForm,preparePartnerForSave = _require7.preparePartnerForSave,formatPartnerListNo = _require7.formatPartnerListNo;
 
 function computeScrollHeight(nav) {
   const win = readWindowMetrics();
@@ -37,7 +37,7 @@ Page({
     canDelete: false,
     form: {
       name: '',
-      customData: {},
+      customData: {}
     },
     categoryNames: [],
     categoryPickerIndex: 0,
@@ -49,7 +49,7 @@ Page({
     statusBarHeight: 20,
     navBarHeight: 44,
     headerBlockHeight: 88,
-    scrollHeight: 500,
+    scrollHeight: 500
   },
 
   onLoad(options) {
@@ -58,7 +58,7 @@ Page({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
       headerBlockHeight: computePlanCreateHeaderHeight(nav),
-      scrollHeight: computeScrollHeight(nav),
+      scrollHeight: computeScrollHeight(nav)
     });
     this._partnerId = options.id ? decodeURIComponent(options.id) : '';
     this._defaultCategoryId = options.categoryId ? decodeURIComponent(options.categoryId) : '';
@@ -82,7 +82,7 @@ Page({
     }
     this._tenantCtx = ctx;
     this.setData({
-      canDelete: hasPermission(ctx.permissions || [], 'basic:partners:delete'),
+      canDelete: hasPermission(ctx.permissions || [], 'basic:partners:delete')
     });
     if (!this._initialized) {
       this.bootstrap();
@@ -97,10 +97,10 @@ Page({
     this._initialized = true;
     this.setData({ loading: true });
     try {
-      const [partners, categories] = await Promise.all([
+      const _await$Promise$all = await Promise.all([
         fetchPartnersAll(),
-        fetchPartnerCategoriesAll(),
-      ]);
+        fetchPartnerCategoriesAll()]
+        ),partners = _await$Promise$all[0],categories = _await$Promise$all[1];
       this._partners = partners || [];
       this._categories = categories || [];
 
@@ -113,15 +113,15 @@ Page({
           return;
         }
       } else {
-        const defaultCategoryId = this._defaultCategoryId
-          || ((categories[0] && categories[0].id) || '');
+        const defaultCategoryId = this._defaultCategoryId ||
+        categories[0] && categories[0].id || '';
         partner = buildEmptyPartner(defaultCategoryId);
       }
 
       this._workingPartner = JSON.parse(JSON.stringify(partner));
       this.applyUiFromWorking();
     } catch (err) {
-      wx.showToast({ title: (err && err.message) || '加载失败', icon: 'none' });
+      wx.showToast({ title: err && err.message || '加载失败', icon: 'none' });
       this.setData({ loading: false });
     }
   },
@@ -144,9 +144,9 @@ Page({
       isPersisted: !!this._partnerId,
       form: {
         name: partner.name || '',
-        customData: partner.customData && typeof partner.customData === 'object'
-          ? { ...partner.customData }
-          : {},
+        customData: partner.customData && typeof partner.customData === 'object' ?
+        { ...partner.customData } :
+        {}
       },
       categoryNames,
       categoryPickerIndex,
@@ -154,7 +154,7 @@ Page({
       customFields,
       listNoText: formatPartnerListNo(partner.partnerListNo),
       showListNo: partner.partnerListNo != null,
-      showCollab: Boolean(partner.collaborationTenantId),
+      showCollab: Boolean(partner.collaborationTenantId)
     });
   },
 
@@ -170,20 +170,20 @@ Page({
     this._workingPartner = {
       ...this._workingPartner,
       categoryId: cat.id,
-      customData: {},
+      customData: {}
     };
     this.applyUiFromWorking();
   },
 
   onCustomFieldsChange(e) {
-    const customData = (e.detail && e.detail.customData) || {};
+    const customData = e.detail && e.detail.customData || {};
     this._workingPartner.customData = { ...customData };
     this.setData({ 'form.customData': { ...customData } });
   },
 
   async onSaveTap() {
     if (this.data.submitting) return;
-    const perms = (this._tenantCtx && this._tenantCtx.permissions) || [];
+    const perms = this._tenantCtx && this._tenantCtx.permissions || [];
     const canCreate = hasPermission(perms, 'basic:partners:create');
     const canEdit = hasPermission(perms, 'basic:partners:edit');
     if (this._partnerId && !canEdit) {
@@ -201,7 +201,7 @@ Page({
       this._workingPartner,
       this._partners,
       category,
-      isNew,
+      isNew
     );
     if (prepared.error) {
       wx.showToast({ title: prepared.error, icon: 'none' });
@@ -217,10 +217,10 @@ Page({
       }
       afterSaveReturnToList({
         listUrl: LIST_ROUTES.BASIC_PARTNERS,
-        toastTitle: '保存成功',
+        toastTitle: '保存成功'
       });
     } catch (err) {
-      wx.showToast({ title: (err && err.message) || '保存失败', icon: 'none' });
+      wx.showToast({ title: err && err.message || '保存失败', icon: 'none' });
       this.setData({ submitting: false });
     }
   },
@@ -238,13 +238,13 @@ Page({
           await deletePartner(this._partnerId);
           afterSaveReturnToList({
             listUrl: LIST_ROUTES.BASIC_PARTNERS,
-            toastTitle: '已删除',
+            toastTitle: '已删除'
           });
         } catch (err) {
-          wx.showToast({ title: (err && err.message) || '删除失败', icon: 'none' });
+          wx.showToast({ title: err && err.message || '删除失败', icon: 'none' });
           this.setData({ submitting: false });
         }
-      },
+      }
     });
-  },
+  }
 });

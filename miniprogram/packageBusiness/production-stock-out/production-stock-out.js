@@ -1,36 +1,36 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const {
-  fetchTenantConfig,
-  fetchProductsAll,
-  fetchBomsAll,
-  fetchNodesAll,
-  fetchProductionRecords,
-  listProductProgressAll,
-} = require('../utils/orderApi.js');
-const { fetchAllOrdersPaginated } = require('../utils/pendingStockBadge.js');
-const { normalizeMasterList } = require('../utils/productionPlans.js');
-const {
-  buildMaterialPanelCards,
-  paginateCards,
-  paginatePartnerGroups,
-  decorateCards,
-  decoratePartnerGroups,
-  findCardInPartnerGroups,
-  DEFAULT_PAGE_SIZE,
-  PARTNER_PAGE_SIZE,
-  INTERNAL_PARTNER_KEY,
-  hasMaterialModuleAccess,
-} = require('../utils/materialStockPanel.js');
-const {
-  getActiveOrderIdsCsv,
-  getActiveSourceProductIdsCsv,
-} = require('../utils/materialStatsLite.js');
-const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 =
+
+
+
+
+
+
+  require('../utils/orderApi.js'),fetchTenantConfig = _require3.fetchTenantConfig,fetchProductsAll = _require3.fetchProductsAll,fetchBomsAll = _require3.fetchBomsAll,fetchNodesAll = _require3.fetchNodesAll,fetchProductionRecords = _require3.fetchProductionRecords,listProductProgressAll = _require3.listProductProgressAll;
+const _require4 = require('../utils/pendingStockBadge.js'),fetchAllOrdersPaginated = _require4.fetchAllOrdersPaginated;
+const _require5 = require('../utils/productionPlans.js'),normalizeMasterList = _require5.normalizeMasterList;
+const _require6 =
+
+
+
+
+
+
+
+
+
+
+  require('../utils/materialStockPanel.js'),buildMaterialPanelCards = _require6.buildMaterialPanelCards,paginateCards = _require6.paginateCards,paginatePartnerGroups = _require6.paginatePartnerGroups,decorateCards = _require6.decorateCards,decoratePartnerGroups = _require6.decoratePartnerGroups,findCardInPartnerGroups = _require6.findCardInPartnerGroups,DEFAULT_PAGE_SIZE = _require6.DEFAULT_PAGE_SIZE,PARTNER_PAGE_SIZE = _require6.PARTNER_PAGE_SIZE,INTERNAL_PARTNER_KEY = _require6.INTERNAL_PARTNER_KEY,hasMaterialModuleAccess = _require6.hasMaterialModuleAccess;
+const _require7 =
+
+
+  require('../utils/materialStatsLite.js'),getActiveOrderIdsCsv = _require7.getActiveOrderIdsCsv,getActiveSourceProductIdsCsv = _require7.getActiveSourceProductIdsCsv;
+const _require8 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require8.readNavBarMetrics,readWindowMetrics = _require8.readWindowMetrics;
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
-  const toolsPx = Math.ceil((win.windowWidth / 750) * 128);
+  const toolsPx = Math.ceil(win.windowWidth / 750 * 128);
   return nav.statusBarHeight + nav.navBarHeight + toolsPx;
 }
 
@@ -50,7 +50,7 @@ Page({
     totalCards: 0,
     statusBarHeight: 20,
     navBarHeight: 44,
-    headerBlockHeight: 88,
+    headerBlockHeight: 88
   },
 
   onLoad() {
@@ -79,7 +79,7 @@ Page({
       canViewList: hasPermission(perms, 'production:material_list:allow'),
       canIssue: hasPermission(perms, 'production:material_issue:allow'),
       canReturn: hasPermission(perms, 'production:material_return:allow'),
-      canViewFlow: hasPermission(perms, 'production:material_records:view'),
+      canViewFlow: hasPermission(perms, 'production:material_records:view')
     });
     this.bootstrap(true);
   },
@@ -131,14 +131,14 @@ Page({
   },
 
   onStartSelectTap(e) {
-    const { scopeKey, mode, partnerKey } = e.currentTarget.dataset;
+    const _e$currentTarget$data = e.currentTarget.dataset,scopeKey = _e$currentTarget$data.scopeKey,mode = _e$currentTarget$data.mode,partnerKey = _e$currentTarget$data.partnerKey;
     if (mode === 'stock_out' && !this.data.canIssue) return;
     if (mode === 'stock_return' && !this.data.canReturn) return;
     this._selectState = {
       partnerKey: partnerKey || INTERNAL_PARTNER_KEY,
       scopeKey,
       mode,
-      selectedIds: new Set(),
+      selectedIds: new Set()
     };
     this.applyPagination();
   },
@@ -150,29 +150,29 @@ Page({
 
   onMaterialRowTap(e) {
     if (!this._selectState.mode) return;
-    const { scopeKey, productId, partnerKey } = e.currentTarget.dataset;
+    const _e$currentTarget$data2 = e.currentTarget.dataset,scopeKey = _e$currentTarget$data2.scopeKey,productId = _e$currentTarget$data2.productId,partnerKey = _e$currentTarget$data2.partnerKey;
     if (this._selectState.scopeKey !== scopeKey) return;
     if ((this._selectState.partnerKey || INTERNAL_PARTNER_KEY) !== (partnerKey || INTERNAL_PARTNER_KEY)) {
       return;
     }
     const ids = new Set(this._selectState.selectedIds);
-    if (ids.has(productId)) ids.delete(productId);
-    else ids.add(productId);
+    if (ids.has(productId)) ids.delete(productId);else
+    ids.add(productId);
     this._selectState = { ...this._selectState, selectedIds: ids };
     this.applyPagination();
   },
 
   onConfirmSelectTap(e) {
-    const { scopeKey, partnerKey } = e.currentTarget.dataset;
-    const card = this._groupByPartner
-      ? findCardInPartnerGroups(this._allPartnerGroups, scopeKey, partnerKey)
-      : (this._allCards || []).find((c) => c.scopeKey === scopeKey);
+    const _e$currentTarget$data3 = e.currentTarget.dataset,scopeKey = _e$currentTarget$data3.scopeKey,partnerKey = _e$currentTarget$data3.partnerKey;
+    const card = this._groupByPartner ?
+    findCardInPartnerGroups(this._allPartnerGroups, scopeKey, partnerKey) :
+    (this._allCards || []).find((c) => c.scopeKey === scopeKey);
     if (!card || !this._selectState.selectedIds.size) {
       wx.showToast({ title: '请选择物料', icon: 'none' });
       return;
     }
     const selected = (card.materialRows || []).filter(
-      (m) => this._selectState.selectedIds.has(m.productId),
+      (m) => this._selectState.selectedIds.has(m.productId)
     );
     if (!selected.length) {
       wx.showToast({ title: '请选择物料', icon: 'none' });
@@ -194,7 +194,7 @@ Page({
           materialRows: card.materialRows || [],
           products: this._products || [],
           orders: this._orders || [],
-          stockRecords: this._stockRecords || [],
+          stockRecords: this._stockRecords || []
         };
       }
       const q = ['mode=return', 'source=material_center'];
@@ -207,7 +207,7 @@ Page({
         q.push(`partner=${encodeURIComponent(pk)}`);
       }
       wx.navigateTo({
-        url: `/packageBusiness/production-order-material/production-order-material?${q.join('&')}`,
+        url: `/packageBusiness/production-order-material/production-order-material?${q.join('&')}`
       });
       return;
     }
@@ -227,11 +227,11 @@ Page({
         materials: selected,
         products: this._products || [],
         orders: this._orders || [],
-        stockRecords: this._stockRecords || [],
+        stockRecords: this._stockRecords || []
       };
     }
     wx.navigateTo({
-      url: `/packageBusiness/production-stock-out-confirm/production-stock-out-confirm?mode=${encodeURIComponent(this._selectState.mode)}`,
+      url: `/packageBusiness/production-stock-out-confirm/production-stock-out-confirm?mode=${encodeURIComponent(this._selectState.mode)}`
     });
   },
 
@@ -242,17 +242,17 @@ Page({
       this.setData({ loading: true });
     }
     try {
-      const [config, orders, productsRaw, bomsRaw, nodesRaw, pmpRaw] = await Promise.all([
+      const _await$Promise$all = await Promise.all([
         fetchTenantConfig(),
         fetchAllOrdersPaginated({}),
         fetchProductsAll().catch(() => []),
         fetchBomsAll().catch(() => []),
         fetchNodesAll().catch(() => []),
-        listProductProgressAll().catch(() => []),
-      ]);
+        listProductProgressAll().catch(() => [])]
+        ),config = _await$Promise$all[0],orders = _await$Promise$all[1],productsRaw = _await$Promise$all[2],bomsRaw = _await$Promise$all[3],nodesRaw = _await$Promise$all[4],pmpRaw = _await$Promise$all[5];
 
-      const productionLinkMode = (config && config.productionLinkMode) || 'order';
-      const materialPanelSettings = (config && config.materialPanelSettings) || {};
+      const productionLinkMode = config && config.productionLinkMode || 'order';
+      const materialPanelSettings = config && config.materialPanelSettings || {};
       const products = normalizeMasterList(productsRaw);
       const boms = Array.isArray(bomsRaw) ? bomsRaw : normalizeMasterList(bomsRaw);
       const globalNodes = Array.isArray(nodesRaw) ? nodesRaw : [];
@@ -268,7 +268,7 @@ Page({
         if (orderIdsCsv) params.orderIds = orderIdsCsv;
         if (sourceProductIdsCsv) params.sourceProductIds = sourceProductIdsCsv;
         const raw = await fetchProductionRecords(params);
-        stockRecords = Array.isArray(raw) ? raw : (raw && raw.data) || [];
+        stockRecords = Array.isArray(raw) ? raw : raw && raw.data || [];
       }
 
       this._productionLinkMode = productionLinkMode;
@@ -291,7 +291,7 @@ Page({
         cards: [],
         partnerGroups: [],
         groupByPartner: false,
-        emptyText: '加载失败',
+        emptyText: '加载失败'
       });
       wx.showToast({ title: '加载失败', icon: 'none' });
     } finally {
@@ -300,8 +300,8 @@ Page({
   },
 
   rebuildCards() {
-    const groupByPartner = !!(this._materialPanelSettings
-      && this._materialPanelSettings.groupByOutsourcePartner);
+    const groupByPartner = !!(this._materialPanelSettings &&
+    this._materialPanelSettings.groupByOutsourcePartner);
     const result = buildMaterialPanelCards({
       orders: this._orders || [],
       products: this._products || [],
@@ -313,7 +313,7 @@ Page({
       productionLinkMode: this._productionLinkMode || 'order',
       materialPanelSettings: this._materialPanelSettings || {},
       searchKeyword: this.data.searchKeyword,
-      materialKw: '',
+      materialKw: ''
     });
     this._groupByPartner = groupByPartner && result.groupByPartner;
     this._allCards = result.cards;
@@ -333,7 +333,7 @@ Page({
         cards: [],
         hasMore: paginated.hasMore,
         totalCards: paginated.total,
-        emptyText,
+        emptyText
       });
       return;
     }
@@ -346,7 +346,7 @@ Page({
       cards,
       hasMore: paginated.hasMore,
       totalCards: paginated.total,
-      emptyText,
+      emptyText
     });
-  },
+  }
 });

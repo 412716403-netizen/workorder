@@ -1,36 +1,36 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const { buildReworkReportFlowDetailView } = require('../utils/reworkReportFlowDetail.js');
-const { buildReworkByIdMap } = require('../utils/reworkReportOperator.js');
-const {
-  buildReportFlowEditMatrixLayout,
-  buildReportFlowEditSavePlan,
-} = require('../utils/reworkReportFlowDetailEdit.js');
-const {
-  fetchProductionRecords,
-  fetchProductsAll,
-  fetchNodesAll,
-  fetchTenantConfig,
-  fetchCategoriesAll,
-  fetchWorkersForReport,
-  updateProductionRecord,
-  deleteProductionRecord,
-} = require('../utils/orderApi.js');
-const { fetchDictionaries, fetchEquipmentAll } = require('../utils/planApi.js');
-const { fetchAllOrdersPaginated } = require('../utils/pendingStockBadge.js');
-const { normalizeMasterList } = require('../utils/productionPlans.js');
-const { normalizeWorkersList, filterEntitiesForNode } = require('../utils/orderReportForm.js');
-const {
-  activateMatrixKeyboardCell,
-  applyMatrixKeyboardKey,
-  buildMatrixKeyboardPreview,
-  createMatrixKeyboardInputSession,
-  getNextMatrixVariantIdInColumn,
-  getNextMatrixVariantIdInRow,
-} = require('../utils/matrixQtyKeyboard.js');
-const { readNavBarMetrics, readWindowMetrics, computePlanCreateHeaderHeight } = require('../../utils/windowMetrics.js');
-const { afterMatrixKeyboardOpen } = require('../utils/matrixKeyboardLayout.js');
-const { LIST_ROUTES, afterSaveReturnToList } = require('../utils/saveNavigation.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 = require('../utils/reworkReportFlowDetail.js'),buildReworkReportFlowDetailView = _require3.buildReworkReportFlowDetailView;
+const _require4 = require('../utils/reworkReportOperator.js'),buildReworkByIdMap = _require4.buildReworkByIdMap;
+const _require5 =
+
+
+  require('../utils/reworkReportFlowDetailEdit.js'),buildReportFlowEditMatrixLayout = _require5.buildReportFlowEditMatrixLayout,buildReportFlowEditSavePlan = _require5.buildReportFlowEditSavePlan;
+const _require6 =
+
+
+
+
+
+
+
+
+  require('../utils/orderApi.js'),fetchProductionRecords = _require6.fetchProductionRecords,fetchProductsAll = _require6.fetchProductsAll,fetchNodesAll = _require6.fetchNodesAll,fetchTenantConfig = _require6.fetchTenantConfig,fetchCategoriesAll = _require6.fetchCategoriesAll,fetchWorkersForReport = _require6.fetchWorkersForReport,updateProductionRecord = _require6.updateProductionRecord,deleteProductionRecord = _require6.deleteProductionRecord;
+const _require7 = require('../utils/planApi.js'),fetchDictionaries = _require7.fetchDictionaries,fetchEquipmentAll = _require7.fetchEquipmentAll;
+const _require8 = require('../utils/pendingStockBadge.js'),fetchAllOrdersPaginated = _require8.fetchAllOrdersPaginated;
+const _require9 = require('../utils/productionPlans.js'),normalizeMasterList = _require9.normalizeMasterList;
+const _require0 = require('../utils/orderReportForm.js'),normalizeWorkersList = _require0.normalizeWorkersList,filterEntitiesForNode = _require0.filterEntitiesForNode;
+const _require1 =
+
+
+
+
+
+
+  require('../utils/matrixQtyKeyboard.js'),activateMatrixKeyboardCell = _require1.activateMatrixKeyboardCell,applyMatrixKeyboardKey = _require1.applyMatrixKeyboardKey,buildMatrixKeyboardPreview = _require1.buildMatrixKeyboardPreview,createMatrixKeyboardInputSession = _require1.createMatrixKeyboardInputSession,getNextMatrixVariantIdInColumn = _require1.getNextMatrixVariantIdInColumn,getNextMatrixVariantIdInRow = _require1.getNextMatrixVariantIdInRow;
+const _require10 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require10.readNavBarMetrics,readWindowMetrics = _require10.readWindowMetrics,computePlanCreateHeaderHeight = _require10.computePlanCreateHeaderHeight;
+const _require11 = require('../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require11.afterMatrixKeyboardOpen;
+const _require12 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require12.LIST_ROUTES,afterSaveReturnToList = _require12.afterSaveReturnToList;
 
 function computeHeaderBlockHeight(nav) {
   return computePlanCreateHeaderHeight(nav);
@@ -42,7 +42,7 @@ function emptyMatrixKeyboardState() {
     matrixInputReplaceAll: false,
     activeMatrixVariantId: '',
     matrixKeyboardLabel: '',
-    matrixKeyboardValue: '',
+    matrixKeyboardValue: ''
   };
 }
 
@@ -94,7 +94,7 @@ Page({
     statusBarHeight: 20,
     navBarHeight: 44,
     headerBlockHeight: 88,
-    scrollHeight: 400,
+    scrollHeight: 400
   },
 
   _records: [],
@@ -135,7 +135,7 @@ Page({
       canEdit: this._canEdit,
       canDelete: this._canDelete,
       showFooter,
-      scrollHeight: computeScrollHeight(nav, showFooter),
+      scrollHeight: computeScrollHeight(nav, showFooter)
     });
 
     if (!this._docNo) {
@@ -169,25 +169,25 @@ Page({
       equipmentById: this._equipmentById,
       canViewAmount: this.data.canViewAmount,
       allRecords: this._allRecords,
-      reworkById: this._reworkById,
+      reworkById: this._reworkById
     });
     const showFooter = (this._canEdit || this._canDelete) && !this.data.editing;
     if (detail) {
-      detail.editOperator = !detail.isOutsourceReworkReport && detail.operatorsLabel && detail.operatorsLabel !== '—'
-        ? detail.operatorsLabel
-        : '';
+      detail.editOperator = !detail.isOutsourceReworkReport && detail.operatorsLabel && detail.operatorsLabel !== '—' ?
+      detail.operatorsLabel :
+      '';
     }
     this.setData({
       detail,
       showFooter,
-      scrollHeight: computeScrollHeight(readNavBarMetrics(), showFooter || this.data.editing),
+      scrollHeight: computeScrollHeight(readNavBarMetrics(), showFooter || this.data.editing)
     });
   },
 
   rebuildEditMatrixLayout() {
-    const editMatrixLayout = this._product && this.data.detail && this.data.detail.showMatrix
-      ? buildReportFlowEditMatrixLayout(this._product, this._dictionaries, this._editLineItems)
-      : null;
+    const editMatrixLayout = this._product && this.data.detail && this.data.detail.showMatrix ?
+    buildReportFlowEditMatrixLayout(this._product, this._dictionaries, this._editLineItems) :
+    null;
     this.setData({ editMatrixLayout });
     this.syncMatrixKeyboardPreview();
   },
@@ -197,11 +197,11 @@ Page({
     const preview = buildMatrixKeyboardPreview(
       this.data.editMatrixLayout,
       id,
-      this.buildMatrixQtyMap(),
+      this.buildMatrixQtyMap()
     );
     this.setData({
       matrixKeyboardLabel: preview.label,
-      matrixKeyboardValue: preview.value,
+      matrixKeyboardValue: preview.value
     });
   },
 
@@ -222,7 +222,7 @@ Page({
       equipmentNames: list.map((e) => e.name || e.code || e.id),
       equipmentPickerIndex: idx,
       equipmentId: eq ? eq.id : '',
-      equipmentName: eq ? (eq.name || eq.code || '') : '',
+      equipmentName: eq ? eq.name || eq.code || '' : ''
     });
   },
 
@@ -230,17 +230,17 @@ Page({
     this.setData({ loading: true });
     try {
       const ctx = readTenantCtx() || {};
-      const [
-        config,
-        orders,
-        productsRaw,
-        nodesRaw,
-        categoriesRaw,
-        dictionariesRaw,
-        workersRaw,
-        equipmentRaw,
-        recordsRaw,
-      ] = await Promise.all([
+      const _await$Promise$all =
+
+
+
+
+
+
+
+
+
+        await Promise.all([
         fetchTenantConfig().catch(() => ({})),
         fetchAllOrdersPaginated({}),
         fetchProductsAll(),
@@ -249,8 +249,8 @@ Page({
         fetchDictionaries().catch(() => ({})),
         fetchWorkersForReport(ctx.tenantId).catch(() => []),
         fetchEquipmentAll().catch(() => []),
-        fetchProductionRecords({ docNo: this._docNo, type: 'REWORK_REPORT', all: 'true' }),
-      ]);
+        fetchProductionRecords({ docNo: this._docNo, type: 'REWORK_REPORT', all: 'true' })]
+        ),config = _await$Promise$all[0],orders = _await$Promise$all[1],productsRaw = _await$Promise$all[2],nodesRaw = _await$Promise$all[3],categoriesRaw = _await$Promise$all[4],dictionariesRaw = _await$Promise$all[5],workersRaw = _await$Promise$all[6],equipmentRaw = _await$Promise$all[7],recordsRaw = _await$Promise$all[8];
 
       this._records = recordsRaw || [];
       if (!this._records.length) {
@@ -268,7 +268,7 @@ Page({
       this._allRecords = [...this._records, ...(reworkRaw || [])];
       this._reworkById = buildReworkByIdMap(this._allRecords);
 
-      this._productionLinkMode = (config && config.productionLinkMode) || 'order';
+      this._productionLinkMode = config && config.productionLinkMode || 'order';
       this._ordersById = new Map((orders || []).map((o) => [o.id, o]));
       this._productsById = new Map(normalizeMasterList(productsRaw).map((p) => [p.id, p]));
       this._nodesById = new Map(normalizeMasterList(nodesRaw).map((n) => [n.id, n]));
@@ -276,30 +276,30 @@ Page({
       this._dictionaries = dictionariesRaw || {};
 
       const workers = normalizeWorkersList(workersRaw).filter(
-        (w) => !w.status || w.status === 'ACTIVE',
+        (w) => !w.status || w.status === 'ACTIVE'
       );
       this._workersById = new Map(workers.map((w) => [w.id, w]));
 
       const first = this._records[0] || {};
       const order = first.orderId ? this._ordersById.get(first.orderId) : null;
-      this._product = this._productsById.get(first.productId || (order && order.productId)) || null;
+      this._product = this._productsById.get(first.productId || order && order.productId) || null;
       this._node = this._nodesById.get(first.nodeId) || null;
 
       const equipmentFeaturesEnabled = ctx.equipmentFeaturesEnabled !== false;
-      this._equipment = equipmentFeaturesEnabled
-        ? filterEntitiesForNode(equipmentRaw, this._node && this._node.templateId)
-        : [];
+      this._equipment = equipmentFeaturesEnabled ?
+      filterEntitiesForNode(equipmentRaw, this._node && this._node.templateId) :
+      [];
       this._equipmentById = new Map(this._equipment.map((e) => [e.id, e]));
 
       this.setData({
         loading: false,
         workers,
-        showEquipmentField: equipmentFeaturesEnabled && this._equipment.length > 0,
+        showEquipmentField: equipmentFeaturesEnabled && this._equipment.length > 0
       });
       this.refreshViewModel();
     } catch (err) {
       this.setData({ loading: false });
-      wx.showToast({ title: (err && err.message) || '加载失败', icon: 'none' });
+      wx.showToast({ title: err && err.message || '加载失败', icon: 'none' });
     }
   },
 
@@ -309,7 +309,7 @@ Page({
       editing: false,
       editLineItems: [],
       editMatrixLayout: null,
-      ...emptyMatrixKeyboardState(),
+      ...emptyMatrixKeyboardState()
     });
     this.refreshViewModel();
   },
@@ -323,12 +323,12 @@ Page({
       id: item.id,
       quantity: item.quantity,
       variantId: item.variantId || '',
-      editQty: String(item.quantity || 0),
+      editQty: String(item.quantity || 0)
     }));
 
-    const editMatrixLayout = detail.showMatrix
-      ? buildReportFlowEditMatrixLayout(this._product, this._dictionaries, this._editLineItems)
-      : null;
+    const editMatrixLayout = detail.showMatrix ?
+    buildReportFlowEditMatrixLayout(this._product, this._dictionaries, this._editLineItems) :
+    null;
 
     this.initEquipmentPicker(detail.equipmentId || '');
 
@@ -341,7 +341,7 @@ Page({
       workerId: detail.workerId || '',
       workerName: detail.workerName || '',
       scrollHeight: computeScrollHeight(readNavBarMetrics(), true),
-      ...emptyMatrixKeyboardState(),
+      ...emptyMatrixKeyboardState()
     });
   },
 
@@ -358,8 +358,8 @@ Page({
   },
 
   onWorkerChange(e) {
-    const workerId = (e.detail && e.detail.valueId) || '';
-    const workerName = (e.detail && e.detail.valueName) || '';
+    const workerId = e.detail && e.detail.valueId || '';
+    const workerName = e.detail && e.detail.valueName || '';
     this.setData({ workerId, workerName });
   },
 
@@ -370,7 +370,7 @@ Page({
     this.setData({
       equipmentPickerIndex: idx,
       equipmentId: eq.id,
-      equipmentName: eq.name || eq.code || '',
+      equipmentName: eq.name || eq.code || ''
     });
   },
 
@@ -379,7 +379,7 @@ Page({
   },
 
   onLineQtyInput(e) {
-    const { index } = e.currentTarget.dataset;
+    const index = e.currentTarget.dataset.index;
     const qty = Number(e.detail.value) || 0;
     if (this._editLineItems[index]) {
       this._editLineItems[index].quantity = qty;
@@ -388,32 +388,32 @@ Page({
   },
 
   onMatrixCellTap(e) {
-    const { variantId } = e.currentTarget.dataset;
+    const variantId = e.currentTarget.dataset.variantId;
     if (!variantId) return;
     activateMatrixKeyboardCell(this._matrixKbInput);
     const preview = buildMatrixKeyboardPreview(
       this.data.editMatrixLayout,
       variantId,
-      this.buildMatrixQtyMap(),
+      this.buildMatrixQtyMap()
     );
     this.setData({
       matrixKeyboardVisible: true,
       matrixInputReplaceAll: true,
       activeMatrixVariantId: variantId,
       matrixKeyboardLabel: preview.label,
-      matrixKeyboardValue: preview.value,
+      matrixKeyboardValue: preview.value
     }, () => {
       afterMatrixKeyboardOpen(this, '.plan-detail-scroll');
     });
   },
 
   onMatrixKeyboardAction(e) {
-    const { action, digit } = e.detail || {};
+    const _ref = e.detail || {},action = _ref.action,digit = _ref.digit;
     if (action === 'confirm') {
       this.setData(emptyMatrixKeyboardState());
       return;
     }
-    const { activeMatrixVariantId, editMatrixLayout } = this.data;
+    const _this$data = this.data,activeMatrixVariantId = _this$data.activeMatrixVariantId,editMatrixLayout = _this$data.editMatrixLayout;
     const qtyMap = this.buildMatrixQtyMap();
 
     if (action === 'enter') {
@@ -425,7 +425,7 @@ Page({
           activeMatrixVariantId: nextId,
           matrixInputReplaceAll: true,
           matrixKeyboardLabel: preview.label,
-          matrixKeyboardValue: preview.value,
+          matrixKeyboardValue: preview.value
         }, () => {
           afterMatrixKeyboardOpen(this, '.plan-detail-scroll');
         });
@@ -444,7 +444,7 @@ Page({
           activeMatrixVariantId: nextId,
           matrixInputReplaceAll: true,
           matrixKeyboardLabel: preview.label,
-          matrixKeyboardValue: preview.value,
+          matrixKeyboardValue: preview.value
         }, () => {
           afterMatrixKeyboardOpen(this, '.plan-detail-scroll');
         });
@@ -456,7 +456,7 @@ Page({
 
     if (!activeMatrixVariantId) return;
     const current = qtyMap[activeMatrixVariantId] || '';
-    const { value, replaceConsumed } = applyMatrixKeyboardKey(this._matrixKbInput, current, action, digit);
+    const _applyMatrixKeyboardK = applyMatrixKeyboardKey(this._matrixKbInput, current, action, digit),value = _applyMatrixKeyboardK.value,replaceConsumed = _applyMatrixKeyboardK.replaceConsumed;
     syncVariantQtyToLineItems(this._editLineItems, activeMatrixVariantId, value);
     if (replaceConsumed) {
       this.setData({ matrixInputReplaceAll: false });
@@ -478,12 +478,12 @@ Page({
       lineItems: this._editLineItems,
       editDate: detail.editDate,
       editTime: detail.editTime,
-      operator: detail.isOutsourceReworkReport
-        ? ''
-        : (detail.editOperator || detail.operatorsLabel || '').trim(),
+      operator: detail.isOutsourceReworkReport ?
+      '' :
+      (detail.editOperator || detail.operatorsLabel || '').trim(),
       workerId: this.data.workerId,
       equipmentId: this.data.equipmentId,
-      unitPrice: this.data.editUnitPrice,
+      unitPrice: this.data.editUnitPrice
     });
 
     if (plan.error) {
@@ -506,18 +506,18 @@ Page({
           workerId: u.workerId,
           equipmentId: u.equipmentId,
           unitPrice: u.unitPrice,
-          amount: u.amount,
+          amount: u.amount
         });
       }
       wx.hideLoading();
       afterSaveReturnToList({
         listUrl: LIST_ROUTES.REWORK_REPORT_FLOW,
-        toastTitle: '已保存',
+        toastTitle: '已保存'
       });
     } catch (err) {
       wx.hideLoading();
       this.setData({ saving: false });
-      wx.showToast({ title: (err && err.message) || '保存失败', icon: 'none' });
+      wx.showToast({ title: err && err.message || '保存失败', icon: 'none' });
     }
   },
 
@@ -529,7 +529,7 @@ Page({
       confirmColor: '#ff4d4f',
       success: (res) => {
         if (res.confirm) this.deleteDoc();
-      },
+      }
     });
   },
 
@@ -542,11 +542,11 @@ Page({
       wx.hideLoading();
       afterSaveReturnToList({
         listUrl: LIST_ROUTES.REWORK_REPORT_FLOW,
-        toastTitle: '已删除',
+        toastTitle: '已删除'
       });
     } catch (err) {
       wx.hideLoading();
-      wx.showToast({ title: (err && err.message) || '删除失败', icon: 'none' });
+      wx.showToast({ title: err && err.message || '删除失败', icon: 'none' });
     }
-  },
+  }
 });

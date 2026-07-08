@@ -2,21 +2,21 @@
  * 生产物料主列表面板 UI 模型（对齐 Web StockMaterialPanel）
  */
 
-const { OrderDispatchStatus } = require('../config/productionOrders.js');
-const { listProductNameSkuFields } = require('./listProductThumb.js');
-const {
-  computeAllParentMaterialStats,
-  computeAllProductMaterialStats,
-  visibleMaterialRowsForList,
-  displayMaterialsForKeyword,
-  filterMaterialRowsWithActivity,
-  matRowReportCost,
-  matRowNetIssue,
-  matRowSurplus,
-  roundQty,
-  INTERNAL_PARTNER_KEY,
-  computePartnerMaterialGroups,
-} = require('./materialStatsLite.js');
+const _require = require('../config/productionOrders.js'),OrderDispatchStatus = _require.OrderDispatchStatus;
+const _require2 = require('./listProductThumb.js'),listProductNameSkuFields = _require2.listProductNameSkuFields;
+const _require3 =
+
+
+
+
+
+
+
+
+
+
+
+  require('./materialStatsLite.js'),computeAllParentMaterialStats = _require3.computeAllParentMaterialStats,computeAllProductMaterialStats = _require3.computeAllProductMaterialStats,visibleMaterialRowsForList = _require3.visibleMaterialRowsForList,displayMaterialsForKeyword = _require3.displayMaterialsForKeyword,filterMaterialRowsWithActivity = _require3.filterMaterialRowsWithActivity,matRowReportCost = _require3.matRowReportCost,matRowNetIssue = _require3.matRowNetIssue,matRowSurplus = _require3.matRowSurplus,roundQty = _require3.roundQty,INTERNAL_PARTNER_KEY = _require3.INTERNAL_PARTNER_KEY,computePartnerMaterialGroups = _require3.computePartnerMaterialGroups;
 
 const DEFAULT_PAGE_SIZE = 10;
 const PARTNER_PAGE_SIZE = 5;
@@ -59,7 +59,7 @@ function buildMaterialIndexes(products, boms, orders) {
     childrenByParentId,
     ordersById,
     ordersByProductId,
-    rootOrdersByProductId,
+    rootOrdersByProductId
   };
 }
 
@@ -72,8 +72,8 @@ function matRowToUiRow(row, productsById) {
   const surplus = matRowSurplus(row);
   return {
     productId: row.productId,
-    name: (p && p.name) || row.productId,
-    sku: (p && p.sku) || '',
+    name: p && p.name || row.productId,
+    sku: p && p.sku || '',
     issue,
     returnQty,
     net,
@@ -84,19 +84,19 @@ function matRowToUiRow(row, productsById) {
     netText: String(net),
     reportCostText: String(reportCost),
     surplusText: String(surplus),
-    selected: false,
+    selected: false
   };
 }
 
 function filterOrdersForPanel(orders, opts) {
-  const {
-    productionLinkMode,
-    onlyShowIncomplete,
-  } = opts || {};
+  const _ref =
+
+
+    opts || {},productionLinkMode = _ref.productionLinkMode,onlyShowIncomplete = _ref.onlyShowIncomplete;
   let list = (orders || []).filter((o) => !o.parentOrderId);
   if (productionLinkMode === 'order' && onlyShowIncomplete) {
     list = list.filter(
-      (o) => (o.dispatchStatus || OrderDispatchStatus.IN_PROGRESS) !== OrderDispatchStatus.COMPLETED,
+      (o) => (o.dispatchStatus || OrderDispatchStatus.IN_PROGRESS) !== OrderDispatchStatus.COMPLETED
     );
   }
   return list;
@@ -118,7 +118,7 @@ function buildOrderScopeCard(scopeKey, materials, idx, partnerKey) {
     productSku: nameSku.productSku,
     showProductSku: nameSku.showProductSku,
     customerName: order.customerName || '',
-    materialRows: materials.map((m) => matRowToUiRow(m, idx.productsById)),
+    materialRows: materials.map((m) => matRowToUiRow(m, idx.productsById))
   };
 }
 
@@ -136,25 +136,25 @@ function buildProductScopeCard(scopeKey, materials, idx, partnerKey) {
     productSku: nameSku.productSku,
     showProductSku: nameSku.showProductSku,
     customerName: '',
-    materialRows: materials.map((m) => matRowToUiRow(m, idx.productsById)),
+    materialRows: materials.map((m) => matRowToUiRow(m, idx.productsById))
   };
 }
 
 function buildPartnerGroupCards(partnerGroup, params) {
-  const {
-    idx,
-    productionLinkMode,
-    materialKw,
-    onlyShowIncomplete,
-  } = params;
-  const { partnerKey, data } = partnerGroup;
+  const
+    idx =
+
+
+
+    params.idx,productionLinkMode = params.productionLinkMode,materialKw = params.materialKw,onlyShowIncomplete = params.onlyShowIncomplete;
+  const partnerKey = partnerGroup.partnerKey,data = partnerGroup.data;
   const cards = [];
 
   data.forEach((materials, scopeKey) => {
     const searched = displayMaterialsForKeyword(materials, materialKw, idx.productsById);
-    const displayMaterials = partnerKey === INTERNAL_PARTNER_KEY
-      ? filterMaterialRowsWithActivity(searched)
-      : searched;
+    const displayMaterials = partnerKey === INTERNAL_PARTNER_KEY ?
+    filterMaterialRowsWithActivity(searched) :
+    searched;
     if (!displayMaterials.length) return;
 
     if (productionLinkMode === 'product') {
@@ -162,8 +162,8 @@ function buildPartnerGroupCards(partnerGroup, params) {
     } else {
       const order = idx.ordersById.get(scopeKey);
       if (!order) return;
-      if (onlyShowIncomplete
-        && (order.dispatchStatus || OrderDispatchStatus.IN_PROGRESS) === OrderDispatchStatus.COMPLETED) {
+      if (onlyShowIncomplete &&
+      (order.dispatchStatus || OrderDispatchStatus.IN_PROGRESS) === OrderDispatchStatus.COMPLETED) {
         return;
       }
       const card = buildOrderScopeCard(scopeKey, displayMaterials, idx, partnerKey);
@@ -178,60 +178,60 @@ function buildPartnerGroupCards(partnerGroup, params) {
 }
 
 function filterPartnerGroupsBySearch(partnerGroups, params) {
-  const {
-    searchKeyword,
-    materialKw,
-    idx,
-    productionLinkMode,
-    onlyShowIncomplete,
-  } = params;
+  const
+    searchKeyword =
+
+
+
+
+    params.searchKeyword,materialKw = params.materialKw,idx = params.idx,productionLinkMode = params.productionLinkMode,onlyShowIncomplete = params.onlyShowIncomplete;
   const kw = String(searchKeyword || materialKw || '').trim().toLowerCase();
   if (!kw) return partnerGroups;
 
   return (partnerGroups || []).map((pg) => {
-    const partnerHit = (pg.partnerLabel || '').toLowerCase().includes(kw)
-      || (pg.partnerKey !== INTERNAL_PARTNER_KEY && (pg.partnerKey || '').toLowerCase().includes(kw));
+    const partnerHit = (pg.partnerLabel || '').toLowerCase().includes(kw) ||
+    pg.partnerKey !== INTERNAL_PARTNER_KEY && (pg.partnerKey || '').toLowerCase().includes(kw);
     if (partnerHit) return pg;
 
     const nextData = new Map();
     pg.data.forEach((materials, scopeKey) => {
       const searched = displayMaterialsForKeyword(materials, materialKw, idx.productsById);
-      const visible = pg.partnerKey === INTERNAL_PARTNER_KEY
-        ? filterMaterialRowsWithActivity(searched)
-        : searched;
+      const visible = pg.partnerKey === INTERNAL_PARTNER_KEY ?
+      filterMaterialRowsWithActivity(searched) :
+      searched;
       if (!visible.length) return;
 
       if (productionLinkMode === 'product') {
         const fp = idx.productsById.get(scopeKey);
         const hay = [
-          fp?.name,
-          fp?.sku,
-          ...(idx.ordersByProductId.get(scopeKey) || []).map((o) => `${o.orderNumber} ${o.customerName}`),
-        ].join(' ').toLowerCase();
+        fp == null ? void 0 : fp.name,
+        fp == null ? void 0 : fp.sku,
+        ...(idx.ordersByProductId.get(scopeKey) || []).map((o) => `${o.orderNumber} ${o.customerName}`)].
+        join(' ').toLowerCase();
         if (hay.includes(kw) || visible.some((m) => {
           const p = idx.productsById.get(m.productId);
-          return (p?.name || '').toLowerCase().includes(kw) || (p?.sku || '').toLowerCase().includes(kw);
+          return ((p == null ? void 0 : p.name) || '').toLowerCase().includes(kw) || ((p == null ? void 0 : p.sku) || '').toLowerCase().includes(kw);
         })) {
           nextData.set(scopeKey, materials);
         }
       } else {
         const order = idx.ordersById.get(scopeKey);
         if (!order) return;
-        if (onlyShowIncomplete
-          && (order.dispatchStatus || OrderDispatchStatus.IN_PROGRESS) === OrderDispatchStatus.COMPLETED) {
+        if (onlyShowIncomplete &&
+        (order.dispatchStatus || OrderDispatchStatus.IN_PROGRESS) === OrderDispatchStatus.COMPLETED) {
           return;
         }
         const prod = idx.productsById.get(order.productId);
         const hay = [
-          order.orderNumber,
-          order.customerName,
-          order.productName,
-          prod?.name,
-          prod?.sku,
-        ].join(' ').toLowerCase();
+        order.orderNumber,
+        order.customerName,
+        order.productName,
+        prod == null ? void 0 : prod.name,
+        prod == null ? void 0 : prod.sku].
+        join(' ').toLowerCase();
         if (hay.includes(kw) || visible.some((m) => {
           const p = idx.productsById.get(m.productId);
-          return (p?.name || '').toLowerCase().includes(kw) || (p?.sku || '').toLowerCase().includes(kw);
+          return ((p == null ? void 0 : p.name) || '').toLowerCase().includes(kw) || ((p == null ? void 0 : p.sku) || '').toLowerCase().includes(kw);
         })) {
           nextData.set(scopeKey, materials);
         }
@@ -242,36 +242,36 @@ function filterPartnerGroupsBySearch(partnerGroups, params) {
 }
 
 function buildPartnerModeGroups(params) {
-  const {
+  const
+    orders =
+
+
+
+
+
+
+
+
+
+    params.orders,idx = params.idx,stockRecords = params.stockRecords,outsourceRecords = params.outsourceRecords,nodeWeightEnabledMap = params.nodeWeightEnabledMap,productMilestoneProgresses = params.productMilestoneProgresses,productionLinkMode = params.productionLinkMode,materialPanelSettings = params.materialPanelSettings,searchKeyword = params.searchKeyword,materialKw = params.materialKw;
+
+  const onlyShowIncomplete = productionLinkMode === 'order' &&
+  materialPanelSettings &&
+  materialPanelSettings.onlyShowNotCompletedOrder === true;
+  const kw = materialKw !== undefined ? materialKw : '';
+
+  const parentMaterialStats = productionLinkMode === 'product' ?
+  null :
+  computeAllParentMaterialStats({ orders, idx, stockRecords, nodeWeightEnabledMap });
+  const productMaterialStatsByProduct = productionLinkMode === 'product' ?
+  computeAllProductMaterialStats({
     orders,
     idx,
     stockRecords,
-    outsourceRecords,
-    nodeWeightEnabledMap,
     productMilestoneProgresses,
-    productionLinkMode,
-    materialPanelSettings,
-    searchKeyword,
-    materialKw,
-  } = params;
-
-  const onlyShowIncomplete = productionLinkMode === 'order'
-    && materialPanelSettings
-    && materialPanelSettings.onlyShowNotCompletedOrder === true;
-  const kw = materialKw !== undefined ? materialKw : '';
-
-  const parentMaterialStats = productionLinkMode === 'product'
-    ? null
-    : computeAllParentMaterialStats({ orders, idx, stockRecords, nodeWeightEnabledMap });
-  const productMaterialStatsByProduct = productionLinkMode === 'product'
-    ? computeAllProductMaterialStats({
-      orders,
-      idx,
-      stockRecords,
-      productMilestoneProgresses,
-      nodeWeightEnabledMap,
-    })
-    : null;
+    nodeWeightEnabledMap
+  }) :
+  null;
 
   let partnerGroups = computePartnerMaterialGroups({
     productionLinkMode,
@@ -280,7 +280,7 @@ function buildPartnerModeGroups(params) {
     outsourceRecords,
     nodeWeightEnabledMap,
     parentMaterialStats,
-    productMaterialStatsByProduct,
+    productMaterialStatsByProduct
   });
 
   partnerGroups = filterPartnerGroupsBySearch(partnerGroups, {
@@ -288,7 +288,7 @@ function buildPartnerModeGroups(params) {
     materialKw: kw,
     idx,
     productionLinkMode,
-    onlyShowIncomplete,
+    onlyShowIncomplete
   });
 
   return partnerGroups.map((pg) => {
@@ -296,14 +296,14 @@ function buildPartnerModeGroups(params) {
       idx,
       productionLinkMode,
       materialKw: kw,
-      onlyShowIncomplete,
+      onlyShowIncomplete
     });
     return {
       partnerKey: pg.partnerKey,
       partnerLabel: pg.partnerLabel,
       isInternal: pg.partnerKey === INTERNAL_PARTNER_KEY,
       cardCount: cards.length,
-      cards,
+      cards
     };
   }).filter((pg) => pg.cards.length > 0);
 }
@@ -318,14 +318,14 @@ function paginatePartnerGroups(groups, page, pageSize) {
     total: list.length,
     page: p,
     pageSize: size,
-    hasMore: start + size < list.length,
+    hasMore: start + size < list.length
   };
 }
 
 function decoratePartnerGroups(groups, selectState) {
   return (groups || []).map((group) => ({
     ...group,
-    cards: decorateCards(group.cards, selectState),
+    cards: decorateCards(group.cards, selectState)
   }));
 }
 
@@ -333,13 +333,13 @@ function decorateCards(cards, selectState) {
   const state = selectState || {};
   return (cards || []).map((card) => {
     const partnerKey = card.partnerKey || INTERNAL_PARTNER_KEY;
-    const selecting = state.partnerKey === partnerKey
-      && state.scopeKey === card.scopeKey
-      && !!state.mode;
-    const selectedIds = selecting ? (state.selectedIds || new Set()) : new Set();
+    const selecting = state.partnerKey === partnerKey &&
+    state.scopeKey === card.scopeKey &&
+    !!state.mode;
+    const selectedIds = selecting ? state.selectedIds || new Set() : new Set();
     const materialRows = (card.materialRows || []).map((m) => ({
       ...m,
-      selected: selectedIds.has(m.productId),
+      selected: selectedIds.has(m.productId)
     }));
     const selectedCount = materialRows.filter((m) => m.selected).length;
     return {
@@ -347,7 +347,7 @@ function decorateCards(cards, selectState) {
       partnerKey,
       selecting,
       selectedCount,
-      materialRows,
+      materialRows
     };
   });
 }
@@ -371,21 +371,21 @@ function findCardInPartnerGroups(groups, scopeKey, partnerKey) {
 }
 
 function buildOrderModeCards(params) {
-  const {
-    orders,
-    idx,
-    stockRecords,
-    nodeWeightEnabledMap,
-    materialKw,
-    productionLinkMode,
-    onlyShowIncomplete,
-  } = params;
+  const
+    orders =
+
+
+
+
+
+
+    params.orders,idx = params.idx,stockRecords = params.stockRecords,nodeWeightEnabledMap = params.nodeWeightEnabledMap,materialKw = params.materialKw,productionLinkMode = params.productionLinkMode,onlyShowIncomplete = params.onlyShowIncomplete;
 
   const statsMap = computeAllParentMaterialStats({
     orders,
     idx,
     stockRecords,
-    nodeWeightEnabledMap,
+    nodeWeightEnabledMap
   });
 
   const parentOrders = filterOrdersForPanel(orders, { productionLinkMode, onlyShowIncomplete });
@@ -404,10 +404,10 @@ function buildOrderModeCards(params) {
       orderId: order.id,
       sourceProductId: order.productId || '',
       orderNumber: order.orderNumber || '',
-      productName: (product && product.name) || order.productName || '—',
-      productSku: (product && product.sku) || order.sku || '',
+      productName: product && product.name || order.productName || '—',
+      productSku: product && product.sku || order.sku || '',
       customerName: order.customerName || '',
-      materialRows: visible.map((m) => matRowToUiRow(m, idx.productsById)),
+      materialRows: visible.map((m) => matRowToUiRow(m, idx.productsById))
     });
   });
 
@@ -415,21 +415,21 @@ function buildOrderModeCards(params) {
 }
 
 function buildProductModeCards(params) {
-  const {
-    orders,
-    idx,
-    stockRecords,
-    nodeWeightEnabledMap,
-    productMilestoneProgresses,
-    materialKw,
-  } = params;
+  const
+    orders =
+
+
+
+
+
+    params.orders,idx = params.idx,stockRecords = params.stockRecords,nodeWeightEnabledMap = params.nodeWeightEnabledMap,productMilestoneProgresses = params.productMilestoneProgresses,materialKw = params.materialKw;
 
   const statsMap = computeAllProductMaterialStats({
     orders,
     idx,
     stockRecords,
     productMilestoneProgresses: productMilestoneProgresses || [],
-    nodeWeightEnabledMap,
+    nodeWeightEnabledMap
   });
 
   const cards = [];
@@ -444,10 +444,10 @@ function buildProductModeCards(params) {
       orderId: '',
       sourceProductId: productId,
       orderNumber: '',
-      productName: (product && product.name) || productId,
-      productSku: (product && product.sku) || '',
+      productName: product && product.name || productId,
+      productSku: product && product.sku || '',
       customerName: '',
-      materialRows: visible.map((m) => matRowToUiRow(m, idx.productsById)),
+      materialRows: visible.map((m) => matRowToUiRow(m, idx.productsById))
     });
   });
 
@@ -460,13 +460,13 @@ function filterCardsBySearchKeyword(cards, keyword) {
   if (!kw) return cards;
   return (cards || []).filter((card) => {
     const hay = [
-      card.orderNumber,
-      card.productName,
-      card.productSku,
-      card.customerName,
-      card.partnerKey !== INTERNAL_PARTNER_KEY ? card.partnerKey : '',
-      ...(card.materialRows || []).map((r) => `${r.name} ${r.sku}`),
-    ].join(' ').toLowerCase();
+    card.orderNumber,
+    card.productName,
+    card.productSku,
+    card.customerName,
+    card.partnerKey !== INTERNAL_PARTNER_KEY ? card.partnerKey : '',
+    ...(card.materialRows || []).map((r) => `${r.name} ${r.sku}`)].
+    join(' ').toLowerCase();
     return hay.includes(kw);
   });
 }
@@ -480,24 +480,24 @@ function paginateCards(cards, page, pageSize) {
     total: (cards || []).length,
     page: p,
     pageSize: size,
-    hasMore: start + size < (cards || []).length,
+    hasMore: start + size < (cards || []).length
   };
 }
 
 function buildMaterialPanelCards(params) {
-  const {
-    orders,
-    products,
-    boms,
-    stockRecords,
-    outsourceRecords,
-    globalNodes,
-    productMilestoneProgresses,
-    productionLinkMode,
-    materialPanelSettings,
-    searchKeyword,
-    materialKw,
-  } = params;
+  const
+    orders =
+
+
+
+
+
+
+
+
+
+
+    params.orders,products = params.products,boms = params.boms,stockRecords = params.stockRecords,outsourceRecords = params.outsourceRecords,globalNodes = params.globalNodes,productMilestoneProgresses = params.productMilestoneProgresses,productionLinkMode = params.productionLinkMode,materialPanelSettings = params.materialPanelSettings,searchKeyword = params.searchKeyword,materialKw = params.materialKw;
 
   const idx = buildMaterialIndexes(products, boms, orders);
   const nodeWeightEnabledMap = require('./materialStatsLite.js').buildNodeWeightEnabledMap(globalNodes);
@@ -514,7 +514,7 @@ function buildMaterialPanelCards(params) {
       productionLinkMode,
       materialPanelSettings,
       searchKeyword,
-      materialKw,
+      materialKw
     });
     const cards = flattenPartnerGroups(partnerGroups);
     return {
@@ -522,13 +522,13 @@ function buildMaterialPanelCards(params) {
       partnerGroups,
       groupByPartner: true,
       idx,
-      nodeWeightEnabledMap,
+      nodeWeightEnabledMap
     };
   }
 
-  const onlyShowIncomplete = productionLinkMode === 'order'
-    && materialPanelSettings
-    && materialPanelSettings.onlyShowNotCompletedOrder === true;
+  const onlyShowIncomplete = productionLinkMode === 'order' &&
+  materialPanelSettings &&
+  materialPanelSettings.onlyShowNotCompletedOrder === true;
 
   const kw = materialKw !== undefined ? materialKw : '';
   let cards;
@@ -539,7 +539,7 @@ function buildMaterialPanelCards(params) {
       stockRecords,
       nodeWeightEnabledMap,
       productMilestoneProgresses,
-      materialKw: kw,
+      materialKw: kw
     });
   } else {
     cards = buildOrderModeCards({
@@ -549,7 +549,7 @@ function buildMaterialPanelCards(params) {
       nodeWeightEnabledMap,
       materialKw: kw,
       productionLinkMode,
-      onlyShowIncomplete,
+      onlyShowIncomplete
     });
   }
 
@@ -559,18 +559,18 @@ function buildMaterialPanelCards(params) {
     partnerGroups: [],
     groupByPartner: false,
     idx,
-    nodeWeightEnabledMap,
+    nodeWeightEnabledMap
   };
 }
 
 function hasMaterialModuleAccess(permissions) {
-  const { hasPermission } = require('../../utils/permissions.js');
+  const _require4 = require('../../utils/permissions.js'),hasPermission = _require4.hasPermission;
   const keys = [
-    'production:material_list:allow',
-    'production:material_issue:allow',
-    'production:material_return:allow',
-    'production:material_records:view',
-  ];
+  'production:material_list:allow',
+  'production:material_issue:allow',
+  'production:material_return:allow',
+  'production:material_records:view'];
+
   return keys.some((k) => hasPermission(permissions, k));
 }
 
@@ -588,5 +588,5 @@ module.exports = {
   flattenPartnerGroups,
   findCardInPartnerGroups,
   matRowToUiRow,
-  hasMaterialModuleAccess,
+  hasMaterialModuleAccess
 };

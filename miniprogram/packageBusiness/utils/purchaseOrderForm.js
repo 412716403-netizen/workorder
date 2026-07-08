@@ -2,11 +2,11 @@
  * 采购订单表单状态与保存（对齐 Web OrderBillFormPage PURCHASE_ORDER 分支）
  */
 
-const { PSI_PO_CUSTOM_DATA_SOURCE_PLAN_ID, PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER } = require('../config/purchaseOrders.js');
-const { groupDocItemsByLineGroup, formatPsiQtyDisplay } = require('./psiOpsAggregators.js');
-const { productHasColorSizeMatrix } = require('./productionPlans.js');
-const { buildVariantMatrixUiModel } = require('./variantQtyMatrix.js');
-const { localTodayYmd } = require('./dateYmd.js');
+const _require = require('../config/purchaseOrders.js'),PSI_PO_CUSTOM_DATA_SOURCE_PLAN_ID = _require.PSI_PO_CUSTOM_DATA_SOURCE_PLAN_ID,PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER = _require.PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER;
+const _require2 = require('./psiOpsAggregators.js'),groupDocItemsByLineGroup = _require2.groupDocItemsByLineGroup,formatPsiQtyDisplay = _require2.formatPsiQtyDisplay;
+const _require3 = require('./productionPlans.js'),productHasColorSizeMatrix = _require3.productHasColorSizeMatrix;
+const _require4 = require('./variantQtyMatrix.js'),buildVariantMatrixUiModel = _require4.buildVariantMatrixUiModel;
+const _require5 = require('./dateYmd.js'),localTodayYmd = _require5.localTodayYmd;
 
 function newLineId() {
   return `po-line-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -32,7 +32,7 @@ function createEmptyLine() {
     unitName: 'PCS',
     lineTotalQty: 0,
     lineAmountText: '',
-    showAmount: false,
+    showAmount: false
   };
 }
 
@@ -41,13 +41,13 @@ function buildInitialForm() {
     partner: '',
     partnerId: '',
     docNumber: '',
-    operator: '',
+    operator: ''
   };
 }
 
 function recordsToLineItems(records) {
   const lineMap = groupDocItemsByLineGroup(records || []);
-  return Object.entries(lineMap).map(([lgId, recs]) => {
+  return Object.entries(lineMap).map(([lgId, recs]) => {var _first$purchasePrice;
     const first = recs[0] || {};
     const hasVar = recs.some((r) => r.variantId);
     const vq = {};
@@ -62,19 +62,19 @@ function recordsToLineItems(records) {
       productId: first.productId || '',
       productName: first.productName || '',
       quantity: hasVar ? '' : String(lineQtyNoVar || ''),
-      purchasePrice: String(first.purchasePrice ?? ''),
+      purchasePrice: String((_first$purchasePrice = first.purchasePrice) != null ? _first$purchasePrice : ''),
       variantQuantities: hasVar ? vq : {},
-      sourceRecordIds: recs.map((r) => r.id),
+      sourceRecordIds: recs.map((r) => r.id)
     };
   });
 }
 
 function enrichLineForUi(line, ctx) {
-  const { productMap, categoryMap, dictionaries, showAmount } = ctx;
+  const productMap = ctx.productMap,categoryMap = ctx.categoryMap,dictionaries = ctx.dictionaries,showAmount = ctx.showAmount;
   const product = line.productId && productMap ? productMap.get(line.productId) : null;
   const category = product && categoryMap ? categoryMap.get(product.categoryId) : null;
   const useMatrix = Boolean(product && productHasColorSizeMatrix(product, category));
-  const unitName = (product && product.unit) || 'PCS';
+  const unitName = product && product.unit || 'PCS';
   let matrixLayout = null;
   if (useMatrix && product) {
     matrixLayout = buildVariantMatrixUiModel(product, dictionaries, line.variantQuantities || {});
@@ -84,7 +84,7 @@ function enrichLineForUi(line, ctx) {
   const amount = qty * price;
   return {
     ...line,
-    productName: (product && product.name) || line.productName || '',
+    productName: product && product.name || line.productName || '',
     useMatrix,
     matrixLayout,
     unitName,
@@ -92,7 +92,7 @@ function enrichLineForUi(line, ctx) {
     lineAmountText: showAmount && amount > 0 ? `¥${amount.toFixed(2)}` : '',
     showAmount: Boolean(showAmount),
     quantity: line.quantity != null ? String(line.quantity) : '',
-    purchasePrice: line.purchasePrice != null ? String(line.purchasePrice) : '',
+    purchasePrice: line.purchasePrice != null ? String(line.purchasePrice) : ''
   };
 }
 
@@ -110,7 +110,7 @@ function computeFormTotals(lines, showAmount) {
     totalQtyText: `${totalQty} PCS`,
     totalAmountText: showAmount ? `¥${totalAmount.toFixed(2)}` : '',
     showAmount: Boolean(showAmount),
-    canSubmit: (lines || []).some((l) => l.productId && psiOrderLineTotalQty(l) > 0),
+    canSubmit: (lines || []).some((l) => l.productId && psiOrderLineTotalQty(l) > 0)
   };
 }
 
@@ -141,7 +141,7 @@ function localCalendarYmdStartToIso(ymd) {
 function psiDocTimestampIsoForSave(existingRecords, editingDocNumber) {
   if (!editingDocNumber) return new Date().toISOString();
   const lines = (existingRecords || []).filter(
-    (r) => r.type === 'PURCHASE_ORDER' && String(r.docNumber) === String(editingDocNumber),
+    (r) => r.type === 'PURCHASE_ORDER' && String(r.docNumber) === String(editingDocNumber)
   );
   let min = 0;
   lines.forEach((r) => {
@@ -155,7 +155,7 @@ function psiDocTimestampIsoForSave(existingRecords, editingDocNumber) {
 function poCreatedAtIsoForSave(existingRecords, editingDocNumber) {
   if (!editingDocNumber) return localCalendarYmdStartToIso(localTodayYmd());
   const row = (existingRecords || []).find(
-    (r) => r.type === 'PURCHASE_ORDER' && String(r.docNumber) === String(editingDocNumber),
+    (r) => r.type === 'PURCHASE_ORDER' && String(r.docNumber) === String(editingDocNumber)
   );
   if (!row || row.createdAt == null || row.createdAt === '') {
     return localCalendarYmdStartToIso(localTodayYmd());
@@ -168,7 +168,7 @@ function poCreatedAtIsoForSave(existingRecords, editingDocNumber) {
 function buildHeaderCustomData(existingRecords, editingDocNumber) {
   if (!editingDocNumber) return null;
   const first = (existingRecords || []).find(
-    (r) => r.type === 'PURCHASE_ORDER' && String(r.docNumber) === String(editingDocNumber),
+    (r) => r.type === 'PURCHASE_ORDER' && String(r.docNumber) === String(editingDocNumber)
   );
   if (!first || !first.customData || typeof first.customData !== 'object') return null;
   const raw = { ...first.customData };
@@ -182,14 +182,14 @@ function buildHeaderCustomData(existingRecords, editingDocNumber) {
 }
 
 function buildPurchaseOrderSaveRecords(opts) {
-  const {
-    form,
-    lines,
-    docNumber,
-    editingDocNumber,
-    existingRecords,
-    operator,
-  } = opts;
+  const
+    form =
+
+
+
+
+
+    opts.form,lines = opts.lines,docNumber = opts.docNumber,editingDocNumber = opts.editingDocNumber,existingRecords = opts.existingRecords,operator = opts.operator;
   const timestamp = psiDocTimestampIsoForSave(existingRecords, editingDocNumber);
   const poCreatedAtIso = poCreatedAtIsoForSave(existingRecords, editingDocNumber);
   const headerCustomData = buildHeaderCustomData(existingRecords, editingDocNumber);
@@ -220,7 +220,7 @@ function buildPurchaseOrderSaveRecords(opts) {
           operator: operator || '',
           lineGroupId: item.id,
           createdAt: poCreatedAtIso,
-          ...(headerCustomData ? { customData: headerCustomData } : {}),
+          ...(headerCustomData ? { customData: headerCustomData } : {})
         });
       });
     } else {
@@ -242,7 +242,7 @@ function buildPurchaseOrderSaveRecords(opts) {
         operator: operator || '',
         lineGroupId: item.id,
         createdAt: poCreatedAtIso,
-        ...(headerCustomData ? { customData: headerCustomData } : {}),
+        ...(headerCustomData ? { customData: headerCustomData } : {})
       });
     }
   });
@@ -253,9 +253,9 @@ function buildPurchaseOrderSaveRecords(opts) {
 function applyLastPurchasePrices(lines, prices, productIndexByLine) {
   const next = (lines || []).map((line, idx) => {
     const pIdx = productIndexByLine ? productIndexByLine[idx] : idx;
-    const price = prices && prices[pIdx] && prices[pIdx].price != null
-      ? Number(prices[pIdx].price)
-      : null;
+    const price = prices && prices[pIdx] && prices[pIdx].price != null ?
+    Number(prices[pIdx].price) :
+    null;
     if (price == null || !line.productId) return line;
     return { ...line, purchasePrice: String(price) };
   });
@@ -272,5 +272,5 @@ module.exports = {
   computeFormTotals,
   validatePurchaseOrderSave,
   buildPurchaseOrderSaveRecords,
-  applyLastPurchasePrices,
+  applyLastPurchasePrices
 };

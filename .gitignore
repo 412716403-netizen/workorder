@@ -13,6 +13,11 @@ dist
 dist-ssr
 *.local
 
+# 小程序本地构建 / 真机调试产物（勿打进代码包）
+miniprogram/node_modules/
+miniprogram/miniprogram_npm/
+miniprogram/packageBusiness/__debug__/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

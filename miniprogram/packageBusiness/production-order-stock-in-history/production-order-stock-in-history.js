@@ -1,28 +1,28 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const {
-  fetchProductionRecords,
-  fetchTenantConfig,
-  fetchProductsAll,
-  fetchWarehousesAll,
-} = require('../utils/orderApi.js');
-const { normalizeMasterList } = require('../utils/productionPlans.js');
-const { fetchAllOrdersPaginated } = require('../utils/pendingStockBadge.js');
-const {
-  dateInputToIsoStart,
-  dateInputToIsoEndExclusive,
-  localTodayYmd,
-} = require('../utils/orderReportHistory.js');
-const {
-  buildStockInFlowListRows,
-  filterStockInFlowRows,
-  sumStockInFlowQty,
-} = require('../utils/stockInFlow.js');
-const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 =
+
+
+
+
+  require('../utils/orderApi.js'),fetchProductionRecords = _require3.fetchProductionRecords,fetchTenantConfig = _require3.fetchTenantConfig,fetchProductsAll = _require3.fetchProductsAll,fetchWarehousesAll = _require3.fetchWarehousesAll;
+const _require4 = require('../utils/productionPlans.js'),normalizeMasterList = _require4.normalizeMasterList;
+const _require5 = require('../utils/pendingStockBadge.js'),fetchAllOrdersPaginated = _require5.fetchAllOrdersPaginated;
+const _require6 =
+
+
+
+  require('../utils/orderReportHistory.js'),dateInputToIsoStart = _require6.dateInputToIsoStart,dateInputToIsoEndExclusive = _require6.dateInputToIsoEndExclusive,localTodayYmd = _require6.localTodayYmd;
+const _require7 =
+
+
+
+  require('../utils/stockInFlow.js'),buildStockInFlowListRows = _require7.buildStockInFlowListRows,filterStockInFlowRows = _require7.filterStockInFlowRows,sumStockInFlowQty = _require7.sumStockInFlowQty;
+const _require8 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require8.readNavBarMetrics,readWindowMetrics = _require8.readWindowMetrics;
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
-  const toolsPx = Math.ceil((win.windowWidth / 750) * 128);
+  const toolsPx = Math.ceil(win.windowWidth / 750 * 128);
   return nav.statusBarHeight + nav.navBarHeight + toolsPx;
 }
 
@@ -73,13 +73,13 @@ Page({
     stats: { batchCount: 0, totalQty: 0 },
     statusBarHeight: 20,
     navBarHeight: 44,
-    headerBlockHeight: 88,
+    headerBlockHeight: 88
   },
 
   onLoad() {
     const nav = readNavBarMetrics();
     const ctx = readTenantCtx();
-    if (!hasPermission((ctx && ctx.permissions) || [], 'production:orders_pending_stock_in:view')) {
+    if (!hasPermission(ctx && ctx.permissions || [], 'production:orders_pending_stock_in:view')) {
       wx.showToast({ title: '无查看权限', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 800);
       return;
@@ -93,7 +93,7 @@ Page({
       dateFrom: today,
       dateTo: today,
       draftDateFrom: today,
-      draftDateTo: today,
+      draftDateTo: today
     });
     this.loadRows();
   },
@@ -116,7 +116,7 @@ Page({
     this.setData({
       draftDateFrom: this.data.dateFrom,
       draftDateTo: this.data.dateTo,
-      draftWarehouseIndex: this.data.filterWarehouseIndex,
+      draftWarehouseIndex: this.data.filterWarehouseIndex
     });
   },
 
@@ -124,7 +124,7 @@ Page({
     const today = this._today || localTodayYmd();
     this.setData({
       ...extra,
-      filterActive: computeFilterActive({ ...this.data, ...extra }, today),
+      filterActive: computeFilterActive({ ...this.data, ...extra }, today)
     });
   },
 
@@ -157,7 +157,7 @@ Page({
       filterWarehouseId: '',
       filterWarehouseIndex: 0,
       draftWarehouseIndex: 0,
-      showFilterPanel: false,
+      showFilterPanel: false
     });
     this.loadRows();
   },
@@ -174,7 +174,7 @@ Page({
       dateTo,
       filterWarehouseId: warehouseId,
       filterWarehouseIndex: idx,
-      showFilterPanel: false,
+      showFilterPanel: false
     });
 
     if (datesChanged) {
@@ -209,16 +209,16 @@ Page({
   },
 
   onProductImageError(e) {
-    const { id } = e.currentTarget.dataset;
+    const id = e.currentTarget.dataset.id;
     if (!id) return;
-    const patch = (row) => (row.id === id ? { ...row, showProductImage: false } : row);
+    const patch = (row) => row.id === id ? { ...row, showProductImage: false } : row;
     this._allRows = (this._allRows || []).map(patch);
     this.setData({ rows: (this.data.rows || []).map(patch) });
   },
 
   onRowTap(e) {
     this.closeFilterPanel();
-    const { batchKey } = e.currentTarget.dataset;
+    const batchKey = e.currentTarget.dataset.batchKey;
     if (!batchKey) return;
     const row = (this._allRows || []).find((r) => r.batchKey === batchKey);
     if (!row) return;
@@ -226,25 +226,25 @@ Page({
     if (app.globalData) {
       app.globalData.stockInFlowDetail = {
         docNo: row.docNo,
-        rows: row.rows,
+        rows: row.rows
       };
     }
     wx.navigateTo({
-      url: `/packageBusiness/production-order-stock-in-detail/production-order-stock-in-detail?docNo=${encodeURIComponent(row.docNo)}`,
+      url: `/packageBusiness/production-order-stock-in-detail/production-order-stock-in-detail?docNo=${encodeURIComponent(row.docNo)}`
     });
   },
 
   applyFilter() {
     const filtered = filterStockInFlowRows(this._allRows || [], {
       keyword: this.data.searchKeyword,
-      warehouseId: this.data.filterWarehouseId,
+      warehouseId: this.data.filterWarehouseId
     });
     this.setData({
       rows: filtered,
       stats: {
         batchCount: filtered.length,
-        totalQty: sumStockInFlowQty(filtered),
-      },
+        totalQty: sumStockInFlowQty(filtered)
+      }
     });
   },
 
@@ -252,17 +252,17 @@ Page({
     this._bootstrapping = true;
     this.setData({ loading: true });
     try {
-      const [config, orders, productsRaw, warehousesRaw] = await Promise.all([
+      const _await$Promise$all = await Promise.all([
         fetchTenantConfig(),
         fetchAllOrdersPaginated({}),
         fetchProductsAll().catch(() => []),
-        fetchWarehousesAll().catch(() => []),
-      ]);
-      const productionLinkMode = (config && config.productionLinkMode) || 'order';
+        fetchWarehousesAll().catch(() => [])]
+        ),config = _await$Promise$all[0],orders = _await$Promise$all[1],productsRaw = _await$Promise$all[2],warehousesRaw = _await$Promise$all[3];
+      const productionLinkMode = config && config.productionLinkMode || 'order';
       const orderMap = new Map((orders || []).map((o) => [o.id, o]));
       const products = normalizeMasterList(productsRaw);
       const productMap = new Map(products.map((p) => [p.id, p]));
-      const warehouses = Array.isArray(warehousesRaw) ? warehousesRaw : (warehousesRaw.data || []);
+      const warehouses = Array.isArray(warehousesRaw) ? warehousesRaw : warehousesRaw.data || [];
       const warehouseMap = new Map(warehouses.map((w) => [w.id, w]));
       this._warehouses = warehouses;
       this._warehouseFilterIds = buildWarehouseFilterIds(warehouses);
@@ -271,14 +271,14 @@ Page({
         type: 'STOCK_IN',
         all: 'true',
         startDate: dateInputToIsoStart(this.data.dateFrom),
-        endDate: dateInputToIsoEndExclusive(this.data.dateTo),
+        endDate: dateInputToIsoEndExclusive(this.data.dateTo)
       });
-      const list = Array.isArray(records) ? records : (records.data || []);
+      const list = Array.isArray(records) ? records : records.data || [];
       const allRows = buildStockInFlowListRows(list, {
         productionLinkMode,
         orderMap,
         productMap,
-        warehouseMap,
+        warehouseMap
       });
       this._allRows = allRows;
       this.applyFilter();
@@ -286,7 +286,7 @@ Page({
       const warehouseFilterLabels = buildWarehouseFilterLabels(warehouses);
       const filterWarehouseIndex = warehouseIndexForId(
         this._warehouseFilterIds,
-        this.data.filterWarehouseId,
+        this.data.filterWarehouseId
       );
       const today = this._today || localTodayYmd();
       this.setData({
@@ -296,8 +296,8 @@ Page({
         draftWarehouseIndex: filterWarehouseIndex,
         filterActive: computeFilterActive({
           ...this.data,
-          filterWarehouseIndex,
-        }, today),
+          filterWarehouseIndex
+        }, today)
       });
     } catch {
       this._allRows = [];
@@ -307,5 +307,5 @@ Page({
       this._bootstrapping = false;
       this._loadedOnce = true;
     }
-  },
+  }
 });

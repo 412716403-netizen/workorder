@@ -15,12 +15,12 @@ function groupRecordsByDocNumber(records, type) {
 
 function sumReceivedByOrderLine(records) {
   const map = {};
-  (records || [])
-    .filter((r) => r.type === 'PURCHASE_BILL' && r.sourceOrderNumber && r.sourceLineId)
-    .forEach((r) => {
-      const key = `${r.sourceOrderNumber}::${r.sourceLineId}`;
-      map[key] = (map[key] || 0) + (Number(r.quantity) || 0);
-    });
+  (records || []).
+  filter((r) => r.type === 'PURCHASE_BILL' && r.sourceOrderNumber && r.sourceLineId).
+  forEach((r) => {
+    const key = `${r.sourceOrderNumber}::${r.sourceLineId}`;
+    map[key] = (map[key] || 0) + (Number(r.quantity) || 0);
+  });
   return map;
 }
 
@@ -32,7 +32,7 @@ function formatPsiQtyDisplay(q) {
 
 function purchaseOrderDocHasUnsettled(docNumber, docItems, receivedByOrderLine) {
   return (docItems || []).some(
-    (item) => (Number(item.quantity) || 0) > (receivedByOrderLine[`${docNumber}::${item.id}`] ?? 0),
+    (item) => {var _receivedByOrderLine;return (Number(item.quantity) || 0) > ((_receivedByOrderLine = receivedByOrderLine[`${docNumber}::${item.id}`]) != null ? _receivedByOrderLine : 0);}
   );
 }
 
@@ -64,5 +64,5 @@ module.exports = {
   purchaseOrderDocHasUnsettled,
   groupDocItemsByLineGroup,
   lineGroupTotalQty,
-  lineGroupTotalAmount,
+  lineGroupTotalAmount
 };

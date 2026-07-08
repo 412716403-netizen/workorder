@@ -2,13 +2,13 @@
  * 计划详情 BOM 用料清单（对齐 Web PlanDetailPanel materialRequirements useMemo）
  */
 
-const { getMaterialLossRates, applyLoss } = require('./materialLoss.js');
-const { mapProductCustomTags } = require('./reportCustomDocField.js');
-const {
-  buildReceivedByOrderLine,
-  buildRelatedPOsByMaterial,
-  getInboundProgress,
-} = require('./planDetailHelpers.js');
+const _require = require('./materialLoss.js'),getMaterialLossRates = _require.getMaterialLossRates,applyLoss = _require.applyLoss;
+const _require2 = require('./reportCustomDocField.js'),mapProductCustomTags = _require2.mapProductCustomTags;
+const _require3 =
+
+
+
+  require('./planDetailHelpers.js'),buildReceivedByOrderLine = _require3.buildReceivedByOrderLine,buildRelatedPOsByMaterial = _require3.buildRelatedPOsByMaterial,getInboundProgress = _require3.getInboundProgress;
 
 function purchaseProgressMeta(purchaseProgress, pct) {
   if (pct == null || !purchaseProgress) {
@@ -17,7 +17,7 @@ function purchaseProgressMeta(purchaseProgress, pct) {
       progressComplete: false,
       progressOverReceived: false,
       progressOrderedBarPct: 0,
-      progressOverBarPct: 0,
+      progressOverBarPct: 0
     };
   }
   const ordered = Number(purchaseProgress.ordered) || 0;
@@ -25,14 +25,14 @@ function purchaseProgressMeta(purchaseProgress, pct) {
   const progressOverReceived = ordered > 0 && received > ordered;
   const progressComplete = pct >= 100 && !progressOverReceived;
   let progressLabel;
-  if (progressOverReceived) progressLabel = '采购已超收';
-  else if (progressComplete) progressLabel = '采购已完成';
-  else progressLabel = `采购 ${pct}%`;
+  if (progressOverReceived) progressLabel = '采购已超收';else
+  if (progressComplete) progressLabel = '采购已完成';else
+  progressLabel = `采购 ${pct}%`;
 
   let progressOrderedBarPct = pct;
   let progressOverBarPct = 0;
   if (progressOverReceived && received > 0) {
-    progressOrderedBarPct = Math.round((ordered / received) * 100);
+    progressOrderedBarPct = Math.round(ordered / received * 100);
     progressOverBarPct = 100 - progressOrderedBarPct;
   }
 
@@ -41,7 +41,7 @@ function purchaseProgressMeta(purchaseProgress, pct) {
     progressComplete,
     progressOverReceived,
     progressOrderedBarPct,
-    progressOverBarPct,
+    progressOverBarPct
   };
 }
 
@@ -50,9 +50,9 @@ function findSubPlanForMaterial(materialId, nodeId, rootPlanId, plans) {
   while (queue.length > 0) {
     const pid = queue.shift();
     const child = (plans || []).find(
-      (p) => p.parentPlanId === pid
-        && p.productId === materialId
-        && String(p.bomNodeId || '') === String(nodeId || ''),
+      (p) => p.parentPlanId === pid &&
+      p.productId === materialId &&
+      String(p.bomNodeId || '') === String(nodeId || '')
     );
     if (child) return child;
     (plans || []).filter((p) => p.parentPlanId === pid).forEach((p) => queue.push(p.id));
@@ -62,9 +62,9 @@ function findSubPlanForMaterial(materialId, nodeId, rootPlanId, plans) {
 
 function getEffectiveQty(materialId, nodeId, rootPlanId, plans, fallback) {
   const subPlan = findSubPlanForMaterial(materialId, nodeId, rootPlanId, plans);
-  const subQty = (subPlan && subPlan.items)
-    ? subPlan.items.reduce((s, i) => s + (Number(i.quantity) || 0), 0)
-    : 0;
+  const subQty = subPlan && subPlan.items ?
+  subPlan.items.reduce((s, i) => s + (Number(i.quantity) || 0), 0) :
+  0;
   if (subPlan && subQty > 0) return subQty;
   return fallback;
 }
@@ -85,25 +85,25 @@ function formatQty(n) {
 }
 
 function buildMaterialStatusMeta(req, ctx) {
-  const {
-    products,
-    viewPlan,
-    plans,
-    relatedPOsByMaterial,
-    receivedByOrderLine,
-    getUnitName,
-  } = ctx;
+  const
+    products =
+
+
+
+
+
+    ctx.products,viewPlan = ctx.viewPlan,plans = ctx.plans,relatedPOsByMaterial = ctx.relatedPOsByMaterial,receivedByOrderLine = ctx.receivedByOrderLine,getUnitName = ctx.getUnitName;
 
   const materialProduct = products.find((p) => p.id === req.materialId);
   const isProducible = Boolean(
-    materialProduct && materialProduct.milestoneNodeIds && materialProduct.milestoneNodeIds.length,
+    materialProduct && materialProduct.milestoneNodeIds && materialProduct.milestoneNodeIds.length
   );
-  const subPlan = viewPlan
-    ? findSubPlanForMaterial(req.materialId, req.nodeId, viewPlan.id, plans)
-    : null;
-  const subPlanQty = (subPlan && subPlan.items)
-    ? subPlan.items.reduce((s, i) => s + (Number(i.quantity) || 0), 0)
-    : 0;
+  const subPlan = viewPlan ?
+  findSubPlanForMaterial(req.materialId, req.nodeId, viewPlan.id, plans) :
+  null;
+  const subPlanQty = subPlan && subPlan.items ?
+  subPlan.items.reduce((s, i) => s + (Number(i.quantity) || 0), 0) :
+  0;
   const hasSubPlan = Boolean(subPlan && subPlanQty > 0);
 
   if (isProducible) {
@@ -118,10 +118,10 @@ function buildMaterialStatusMeta(req, ctx) {
   const progress = getInboundProgress(req.materialId, relatedPOsByMaterial, receivedByOrderLine);
 
   if (progress && progress.ordered > 0) {
-    const pct = Math.min(100, Math.round((progress.received / progress.ordered) * 100));
+    const pct = Math.min(100, Math.round(progress.received / progress.ordered * 100));
     const meta = purchaseProgressMeta(
       { received: progress.received, ordered: progress.ordered },
-      pct,
+      pct
     );
     return {
       kind: 'progress',
@@ -130,7 +130,7 @@ function buildMaterialStatusMeta(req, ctx) {
       progressComplete: meta.progressComplete,
       progressOverReceived: meta.progressOverReceived,
       progressOrderedBarPct: meta.progressOrderedBarPct,
-      progressOverBarPct: meta.progressOverBarPct,
+      progressOverBarPct: meta.progressOverBarPct
     };
   }
 
@@ -138,7 +138,7 @@ function buildMaterialStatusMeta(req, ctx) {
     return {
       kind: 'text',
       text: `已下采购 ${formatQty(poQty)} ${getUnitName(req.materialId)}`,
-      tone: 'info',
+      tone: 'info'
     };
   }
 
@@ -146,14 +146,14 @@ function buildMaterialStatusMeta(req, ctx) {
 }
 
 function resolvePlannedQtyDisplay(req, ctx) {
-  const { viewPlan, plans, relatedPOsByMaterial, getUnitName } = ctx;
+  const viewPlan = ctx.viewPlan,plans = ctx.plans,relatedPOsByMaterial = ctx.relatedPOsByMaterial,getUnitName = ctx.getUnitName;
   const unit = getUnitName(req.materialId);
-  const subPlan = viewPlan
-    ? findSubPlanForMaterial(req.materialId, req.nodeId, viewPlan.id, plans)
-    : null;
-  const subPlanQty = (subPlan && subPlan.items)
-    ? subPlan.items.reduce((s, i) => s + (Number(i.quantity) || 0), 0)
-    : 0;
+  const subPlan = viewPlan ?
+  findSubPlanForMaterial(req.materialId, req.nodeId, viewPlan.id, plans) :
+  null;
+  const subPlanQty = subPlan && subPlan.items ?
+  subPlan.items.reduce((s, i) => s + (Number(i.quantity) || 0), 0) :
+  0;
   if (subPlan && subPlanQty > 0) {
     return `${formatQty(subPlanQty)} ${unit}`;
   }
@@ -185,7 +185,7 @@ function computePlanMaterialRequirements({
   materialLossEnabled = false,
   customData = {},
   plannedQtyByKey = {},
-  getUnitName,
+  getUnitName
 }) {
   if (!plan || !product || !items || !items.length) return [];
 
@@ -193,12 +193,12 @@ function computePlanMaterialRequirements({
   const viewPlan = plan;
   const viewProduct = product;
 
-  const getServerStockQty = (materialId) => (stockReady ? (stockMap[materialId] ?? 0) : null);
+  const getServerStockQty = (materialId) => {var _stockMap$materialId;return stockReady ? (_stockMap$materialId = stockMap[materialId]) != null ? _stockMap$materialId : 0 : null;};
 
   const relatedPOsByMaterial = buildRelatedPOsByMaterial(
     planRelated.purchaseOrders,
     planNumbersForPO,
-    viewPlan,
+    viewPlan
   );
   const receivedByOrderLine = buildReceivedByOrderLine(planRelated.purchaseBills);
 
@@ -208,7 +208,7 @@ function computePlanMaterialRequirements({
     plans,
     relatedPOsByMaterial,
     receivedByOrderLine,
-    getUnitName,
+    getUnitName
   };
 
   const reqMap = {};
@@ -220,7 +220,7 @@ function computePlanMaterialRequirements({
     const key = `${productId}-${nodeId}`;
     if (!reqMap[key]) {
       reqMap[key] = {
-        materialId: productId, nodeId, quantity: 0, level, parentProductId,
+        materialId: productId, nodeId, quantity: 0, level, parentProductId
       };
     }
     reqMap[key].quantity += quantity;
@@ -235,7 +235,7 @@ function computePlanMaterialRequirements({
         productId: bomItem.productId,
         nodeId,
         parentProductId: productId,
-        unitPerParent: Number(bomItem.quantity) || 0,
+        unitPerParent: Number(bomItem.quantity) || 0
       });
     });
     visited.delete(productId);
@@ -246,7 +246,7 @@ function computePlanMaterialRequirements({
     if (planQty <= 0) return;
     const variantId = item.variantId || `single-${viewProduct.id}`;
     const variantBoms = boms.filter(
-      (b) => b.parentProductId === viewProduct.id && b.variantId === variantId && b.nodeId,
+      (b) => b.parentProductId === viewProduct.id && b.variantId === variantId && b.nodeId
     );
     variantBoms.forEach((bom) => {
       if (bom.nodeId) {
@@ -256,7 +256,7 @@ function computePlanMaterialRequirements({
             Number(bomItem.quantity) * planQty,
             bom.nodeId,
             new Set(),
-            1,
+            1
           );
         });
       }
@@ -264,26 +264,26 @@ function computePlanMaterialRequirements({
   });
 
   const list = [];
-  Object.values(reqMap).forEach((req) => {
+  Object.values(reqMap).forEach((req) => {var _plannedQtyByKey$rowK;
     const material = products.find((p) => p.id === req.materialId);
     const node = globalNodes.find((n) => n.id === req.nodeId);
     const stockQty = getServerStockQty(req.materialId);
-    const stock = stockQty ?? 0;
+    const stock = stockQty != null ? stockQty : 0;
     const parentId = req.parentProductId || viewProduct.id;
     const rowKey = `${req.materialId}-${req.nodeId}-${parentId}`;
-    const totalNeeded = materialLossEnabled
-      ? applyLoss(req.quantity, lossRates[rowKey])
-      : req.quantity;
+    const totalNeeded = materialLossEnabled ?
+    applyLoss(req.quantity, lossRates[rowKey]) :
+    req.quantity;
     const shortage = stockQty === null ? 0 : Math.max(0, totalNeeded - stockQty);
-    const plannedFallback = plannedQtyByKey[rowKey] !== undefined
-      ? (plannedQtyByKey[rowKey] ?? 0)
-      : shortage;
+    const plannedFallback = plannedQtyByKey[rowKey] !== undefined ? (_plannedQtyByKey$rowK =
+    plannedQtyByKey[rowKey]) != null ? _plannedQtyByKey$rowK : 0 :
+    shortage;
     const plannedQty = getEffectiveQty(
       req.materialId,
       req.nodeId,
       viewPlan.id,
       plans,
-      plannedFallback,
+      plannedFallback
     );
     list.push({
       rowKey,
@@ -298,7 +298,7 @@ function computePlanMaterialRequirements({
       level: req.level,
       parentProductId: req.parentProductId,
       plannedQty,
-      stockReady,
+      stockReady
     });
   });
 
@@ -306,31 +306,31 @@ function computePlanMaterialRequirements({
   let currentLevel = 2;
   while (pending.length > 0) {
     const nextPending = [];
-    pending.forEach(({ productId, nodeId, parentProductId, unitPerParent }) => {
+    pending.forEach(({ productId, nodeId, parentProductId, unitPerParent }) => {var _plannedQtyByKey$pare, _plannedQtyByKey$rowK2;
       const parentRow = list.find(
-        (r) => r.materialId === parentProductId && r.nodeId === nodeId,
+        (r) => r.materialId === parentProductId && r.nodeId === nodeId
       );
-      const parentFallback = parentRow
-        ? (plannedQtyByKey[parentRow.rowKey] !== undefined
-          ? (plannedQtyByKey[parentRow.rowKey] ?? 0)
-          : parentRow.shortage)
-        : 0;
-      const parentPlannedQty = parentRow
-        ? getEffectiveQty(parentProductId, nodeId, viewPlan.id, plans, parentFallback)
-        : 0;
+      const parentFallback = parentRow ?
+      plannedQtyByKey[parentRow.rowKey] !== undefined ? (_plannedQtyByKey$pare =
+      plannedQtyByKey[parentRow.rowKey]) != null ? _plannedQtyByKey$pare : 0 :
+      parentRow.shortage :
+      0;
+      const parentPlannedQty = parentRow ?
+      getEffectiveQty(parentProductId, nodeId, viewPlan.id, plans, parentFallback) :
+      0;
       const rowKey = `${productId}-${nodeId}-${parentProductId}`;
       const baseNeeded = parentPlannedQty * unitPerParent;
-      const totalNeeded = materialLossEnabled
-        ? applyLoss(baseNeeded, lossRates[rowKey])
-        : baseNeeded;
+      const totalNeeded = materialLossEnabled ?
+      applyLoss(baseNeeded, lossRates[rowKey]) :
+      baseNeeded;
       const material = products.find((p) => p.id === productId);
       const node = globalNodes.find((n) => n.id === nodeId);
       const stockQty = getServerStockQty(productId);
-      const stock = stockQty ?? 0;
+      const stock = stockQty != null ? stockQty : 0;
       const shortage = stockQty === null ? 0 : Math.max(0, totalNeeded - stockQty);
-      const plannedQty = plannedQtyByKey[rowKey] !== undefined
-        ? (plannedQtyByKey[rowKey] ?? 0)
-        : shortage;
+      const plannedQty = plannedQtyByKey[rowKey] !== undefined ? (_plannedQtyByKey$rowK2 =
+      plannedQtyByKey[rowKey]) != null ? _plannedQtyByKey$rowK2 : 0 :
+      shortage;
       list.push({
         rowKey,
         materialId: productId,
@@ -344,7 +344,7 @@ function computePlanMaterialRequirements({
         level: currentLevel,
         parentProductId,
         plannedQty,
-        stockReady,
+        stockReady
       });
       const subBom = boms.find((b) => b.parentProductId === productId);
       if (subBom && subBom.items && subBom.items.length) {
@@ -353,7 +353,7 @@ function computePlanMaterialRequirements({
             productId: bomItem.productId,
             nodeId,
             parentProductId: productId,
-            unitPerParent: Number(bomItem.quantity) || 0,
+            unitPerParent: Number(bomItem.quantity) || 0
           });
         });
       }
@@ -364,12 +364,12 @@ function computePlanMaterialRequirements({
 
   const level1Rows = list.filter((r) => r.level === 1);
   const appendSubtree = (out, parentId, nid) => {
-    list
-      .filter((r) => r.parentProductId === parentId && r.nodeId === nid)
-      .forEach((c) => {
-        out.push(c);
-        appendSubtree(out, c.materialId, c.nodeId);
-      });
+    list.
+    filter((r) => r.parentProductId === parentId && r.nodeId === nid).
+    forEach((c) => {
+      out.push(c);
+      appendSubtree(out, c.materialId, c.nodeId);
+    });
   };
   const sorted = [];
   level1Rows.forEach((p) => {
@@ -380,9 +380,9 @@ function computePlanMaterialRequirements({
 
   return sorted.map((req) => {
     const material = products.find((p) => p.id === req.materialId);
-    const category = material
-      ? categories.find((c) => c.id === material.categoryId)
-      : null;
+    const category = material ?
+    categories.find((c) => c.id === material.categoryId) :
+    null;
     const customTags = mapProductCustomTags(material, category, { includeFile: false });
     const unit = getUnitName(req.materialId);
     const lossPct = lossRates[req.rowKey];
@@ -390,9 +390,9 @@ function computePlanMaterialRequirements({
 
     let shortageText = '…';
     if (req.stockReady) {
-      shortageText = req.shortage > 0
-        ? `${formatQty(req.shortage)} ${unit}`
-        : '库存充沛';
+      shortageText = req.shortage > 0 ?
+      `${formatQty(req.shortage)} ${unit}` :
+      '库存充沛';
     } else if (!stockReady) {
       shortageText = '…';
     }
@@ -411,9 +411,9 @@ function computePlanMaterialRequirements({
       showLoss: materialLossEnabled,
       lossText: lossPct != null && lossPct > 0 ? `${lossPct}%` : '—',
       totalNeededText: `${formatQty(req.totalNeeded)} ${unit}`,
-      stockText: req.stockReady
-        ? `${formatQty(req.stock)} ${unit}`
-        : '…',
+      stockText: req.stockReady ?
+      `${formatQty(req.stock)} ${unit}` :
+      '…',
       stockLow: req.stockReady && req.stock < req.totalNeeded,
       shortageText,
       shortageHighlight: req.stockReady && req.shortage > 0,
@@ -422,13 +422,13 @@ function computePlanMaterialRequirements({
       showSku: Boolean(req.materialSku && req.materialSku !== '-'),
       plannedQtyText: resolvePlannedQtyDisplay(req, ctx),
       status,
-      statusTone: status.kind === 'progress'
-        ? 'progress'
-        : (status.tone || 'muted'),
+      statusTone: status.kind === 'progress' ?
+      'progress' :
+      status.tone || 'muted'
     };
   });
 }
 
 module.exports = {
-  computePlanMaterialRequirements,
+  computePlanMaterialRequirements
 };

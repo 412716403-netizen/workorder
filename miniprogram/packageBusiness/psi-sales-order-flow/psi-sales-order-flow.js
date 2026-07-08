@@ -1,23 +1,23 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const {
-  PSI_TYPE,
-  SALES_ORDER_FLOW_STATUS_OPTIONS,
-} = require('../config/salesOrders.js');
-const {
-  buildSalesOrderFlowRows,
-  filterSalesOrderFlowRows,
-  computeSalesOrderFlowStats,
-  buildProductMap,
-} = require('../utils/salesOrders.js');
-const { fetchAllPsiRecords } = require('../utils/psiApi.js');
-const { fetchProductsAll } = require('../utils/planApi.js');
-const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
-const { localTodayYmd } = require('../utils/dateYmd.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 =
+
+
+  require('../config/salesOrders.js'),PSI_TYPE = _require3.PSI_TYPE,SALES_ORDER_FLOW_STATUS_OPTIONS = _require3.SALES_ORDER_FLOW_STATUS_OPTIONS;
+const _require4 =
+
+
+
+
+  require('../utils/salesOrders.js'),buildSalesOrderFlowRows = _require4.buildSalesOrderFlowRows,filterSalesOrderFlowRows = _require4.filterSalesOrderFlowRows,computeSalesOrderFlowStats = _require4.computeSalesOrderFlowStats,buildProductMap = _require4.buildProductMap;
+const _require5 = require('../utils/psiApi.js'),fetchAllPsiRecords = _require5.fetchAllPsiRecords;
+const _require6 = require('../utils/planApi.js'),fetchProductsAll = _require6.fetchProductsAll;
+const _require7 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require7.readNavBarMetrics,readWindowMetrics = _require7.readWindowMetrics;
+const _require8 = require('../utils/dateYmd.js'),localTodayYmd = _require8.localTodayYmd;
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
-  const toolsPx = Math.ceil((win.windowWidth / 750) * 128);
+  const toolsPx = Math.ceil(win.windowWidth / 750 * 128);
   return nav.statusBarHeight + nav.navBarHeight + toolsPx;
 }
 
@@ -37,7 +37,7 @@ Page({
     stats: { count: 0, totalQty: 0, totalShipped: 0 },
     statusBarHeight: 20,
     navBarHeight: 44,
-    headerBlockHeight: 88,
+    headerBlockHeight: 88
   },
 
   onLoad() {
@@ -48,7 +48,7 @@ Page({
       navBarHeight: nav.navBarHeight,
       headerBlockHeight: computeHeaderBlockHeight(nav),
       dateFrom: today,
-      dateTo: today,
+      dateTo: today
     });
   },
 
@@ -68,7 +68,7 @@ Page({
       return;
     }
     this.setData({
-      canViewAmount: hasPermission(ctx.permissions || [], 'psi:sales_order:amount'),
+      canViewAmount: hasPermission(ctx.permissions || [], 'psi:sales_order:amount')
     });
     this.bootstrap();
   },
@@ -140,7 +140,7 @@ Page({
     const docNumber = e.currentTarget.dataset.docNumber;
     if (!docNumber) return;
     wx.navigateTo({
-      url: `/packageBusiness/psi-sales-order-detail/psi-sales-order-detail?docNumber=${encodeURIComponent(docNumber)}`,
+      url: `/packageBusiness/psi-sales-order-detail/psi-sales-order-detail?docNumber=${encodeURIComponent(docNumber)}`
     });
   },
 
@@ -156,10 +156,10 @@ Page({
   async bootstrap() {
     this.setData({ loading: true });
     try {
-      const [salesOrders, products] = await Promise.all([
+      const _await$Promise$all = await Promise.all([
         fetchAllPsiRecords(PSI_TYPE),
-        fetchProductsAll().catch(() => []),
-      ]);
+        fetchProductsAll().catch(() => [])]
+        ),salesOrders = _await$Promise$all[0],products = _await$Promise$all[1];
       const productMap = buildProductMap(products || []);
       this._allRows = buildSalesOrderFlowRows(salesOrders || [], productMap);
       this.applyClientFilter();
@@ -174,24 +174,24 @@ Page({
       search: this.data.searchKeyword,
       status: this.data.statusFilter,
       dateFrom: this.data.dateFrom,
-      dateTo: this.data.dateTo,
+      dateTo: this.data.dateTo
     });
     const canViewAmount = Boolean(this.data.canViewAmount);
     const rows = filtered.map((row) => ({
       ...row,
-      showAmount: Boolean(canViewAmount && row.totalAmountText),
+      showAmount: Boolean(canViewAmount && row.totalAmountText)
     }));
     const stats = computeSalesOrderFlowStats(rows);
     const today = localTodayYmd();
-    const filterActive = this.data.statusFilter !== 'all'
-      || this.data.dateFrom !== today
-      || this.data.dateTo !== today;
+    const filterActive = this.data.statusFilter !== 'all' ||
+    this.data.dateFrom !== today ||
+    this.data.dateTo !== today;
     this.setData({
       loading: false,
       rows,
       stats,
       filterActive,
-      emptyText: rows.length ? '' : '所选条件下暂无流水',
+      emptyText: rows.length ? '' : '所选条件下暂无流水'
     });
-  },
+  }
 });

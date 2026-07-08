@@ -1,27 +1,27 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const {
-  buildOutsourceDispatchRows,
-  buildDispatchMilestoneOptions,
-  mapDispatchRowForUi,
-  filterDispatchRows,
-  dispatchRowKey,
-} = require('../utils/outsourceDispatchLite.js');
-const { fetchAllOrdersPaginated } = require('../utils/pendingStockBadge.js');
-const { fetchOutsourceRecordsForPanel } = require('../utils/outsourceRecordsLoad.js');
-const {
-  fetchTenantConfig,
-  fetchProductsAll,
-  fetchNodesAll,
-  fetchCategoriesAll,
-  listProductProgressAll,
-} = require('../utils/orderApi.js');
-const { normalizeMasterList } = require('../utils/productionPlans.js');
-const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 =
+
+
+
+
+
+  require('../utils/outsourceDispatchLite.js'),buildOutsourceDispatchRows = _require3.buildOutsourceDispatchRows,buildDispatchMilestoneOptions = _require3.buildDispatchMilestoneOptions,mapDispatchRowForUi = _require3.mapDispatchRowForUi,filterDispatchRows = _require3.filterDispatchRows,dispatchRowKey = _require3.dispatchRowKey;
+const _require4 = require('../utils/pendingStockBadge.js'),fetchAllOrdersPaginated = _require4.fetchAllOrdersPaginated;
+const _require5 = require('../utils/outsourceRecordsLoad.js'),fetchOutsourceRecordsForPanel = _require5.fetchOutsourceRecordsForPanel;
+const _require6 =
+
+
+
+
+
+  require('../utils/orderApi.js'),fetchTenantConfig = _require6.fetchTenantConfig,fetchProductsAll = _require6.fetchProductsAll,fetchNodesAll = _require6.fetchNodesAll,fetchCategoriesAll = _require6.fetchCategoriesAll,listProductProgressAll = _require6.listProductProgressAll;
+const _require7 = require('../utils/productionPlans.js'),normalizeMasterList = _require7.normalizeMasterList;
+const _require8 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require8.readNavBarMetrics,readWindowMetrics = _require8.readWindowMetrics;
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
-  const toolsPx = Math.ceil((win.windowWidth / 750) * 128);
+  const toolsPx = Math.ceil(win.windowWidth / 750 * 128);
   return nav.statusBarHeight + nav.navBarHeight + toolsPx;
 }
 
@@ -53,13 +53,13 @@ Page({
     emptyText: '暂无可外协项',
     statusBarHeight: 20,
     navBarHeight: 44,
-    headerBlockHeight: 88,
+    headerBlockHeight: 88
   },
 
   onLoad() {
     const nav = readNavBarMetrics();
     const ctx = readTenantCtx();
-    if (!hasPermission((ctx && ctx.permissions) || [], 'production:outsource_send:allow')) {
+    if (!hasPermission(ctx && ctx.permissions || [], 'production:outsource_send:allow')) {
       wx.showToast({ title: '无权限', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 800);
       return;
@@ -68,7 +68,7 @@ Page({
     this.setData({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
-      headerBlockHeight: computeHeaderBlockHeight(nav),
+      headerBlockHeight: computeHeaderBlockHeight(nav)
     });
     this.bootstrap();
   },
@@ -98,7 +98,7 @@ Page({
   patchFilterActive(extra) {
     this.setData({
       ...extra,
-      filterActive: computeFilterActive({ ...this.data, ...extra }),
+      filterActive: computeFilterActive({ ...this.data, ...extra })
     });
   },
 
@@ -110,7 +110,7 @@ Page({
     this.patchFilterActive({
       showFilterPanel: true,
       draftMilestoneFilterIndex: this.data.milestoneFilterIndex,
-      draftMilestoneFilterLabel: this.data.milestoneFilterLabel,
+      draftMilestoneFilterLabel: this.data.milestoneFilterLabel
     });
   },
 
@@ -119,7 +119,7 @@ Page({
     const opt = milestoneOptionAt(this.data.milestoneOptions, idx);
     this.setData({
       draftMilestoneFilterIndex: idx,
-      draftMilestoneFilterLabel: opt.name || '全部工序',
+      draftMilestoneFilterLabel: opt.name || '全部工序'
     });
   },
 
@@ -131,7 +131,7 @@ Page({
       draftMilestoneFilterIndex: 0,
       draftMilestoneFilterLabel: '全部工序',
       showFilterPanel: false,
-      searchKeyword: '',
+      searchKeyword: ''
     });
     this.applyRows();
   },
@@ -143,7 +143,7 @@ Page({
       milestoneNodeId: opt.id || '',
       milestoneFilterIndex: idx,
       milestoneFilterLabel: opt.name || '全部工序',
-      showFilterPanel: false,
+      showFilterPanel: false
     });
     this.applyRows();
   },
@@ -157,7 +157,7 @@ Page({
       milestoneOptions,
       milestoneFilterIndex,
       milestoneNodeId: milestoneOpt.id || '',
-      milestoneFilterLabel: milestoneOpt.name || '全部工序',
+      milestoneFilterLabel: milestoneOpt.name || '全部工序'
     });
   },
 
@@ -172,10 +172,10 @@ Page({
   },
 
   onProductImageError(e) {
-    const { key } = e.currentTarget.dataset;
+    const key = e.currentTarget.dataset.key;
     if (!key) return;
     const rows = (this.data.rows || []).map((row) =>
-      (row.rowKey === key ? { ...row, showProductImage: false } : row),
+    row.rowKey === key ? { ...row, showProductImage: false } : row
     );
     this.setData({ rows });
   },
@@ -184,8 +184,8 @@ Page({
     const key = e.currentTarget.dataset.key;
     const row = (this._allRows || []).find((r) => dispatchRowKey(r) === key);
     if (!row) return;
-    if (this._selectedKeys.has(key)) this._selectedKeys.delete(key);
-    else this._selectedKeys.add(key);
+    if (this._selectedKeys.has(key)) this._selectedKeys.delete(key);else
+    this._selectedKeys.add(key);
     this.applyRows();
   },
 
@@ -203,29 +203,29 @@ Page({
         categories: this._categories || [],
         productMilestoneProgresses: this._pmp || [],
         processSequenceMode: this._processSequenceMode || 'sequential',
-        nodes: this._nodes || [],
+        nodes: this._nodes || []
       };
     }
     wx.navigateTo({
-      url: '/packageBusiness/production-outsource-dispatch-confirm/production-outsource-dispatch-confirm',
+      url: '/packageBusiness/production-outsource-dispatch-confirm/production-outsource-dispatch-confirm'
     });
   },
 
   applyRows() {
     const filtered = filterDispatchRows(this._allRows || [], this.data.searchKeyword, {
-      milestoneNodeId: this.data.milestoneNodeId,
+      milestoneNodeId: this.data.milestoneNodeId
     });
     const rows = filtered.map((r) => mapDispatchRowForUi(
       r,
       this._productionLinkMode,
       this._selectedKeys,
-      this._productsById,
+      this._productsById
     ));
     const hasFilter = !!(this.data.searchKeyword || this.data.milestoneNodeId);
     this.setData({
       rows,
       selectedCount: this._selectedKeys.size,
-      emptyText: hasFilter ? '所选条件下暂无可外协项' : '暂无可外协项',
+      emptyText: hasFilter ? '所选条件下暂无可外协项' : '暂无可外协项'
     });
   },
 
@@ -238,13 +238,13 @@ Page({
       const settings = config.outsourceFormSettings || {};
       const onlyIncomplete = settings.onlyShowNotCompletedOrder === true;
 
-      const [orders, productsRaw, nodesRaw, categoriesRaw, pmpRaw] = await Promise.all([
+      const _await$Promise$all = await Promise.all([
         fetchAllOrdersPaginated(onlyIncomplete ? { excludeCompleted: 'true' } : {}),
         fetchProductsAll(),
         fetchNodesAll(),
         fetchCategoriesAll(),
-        listProductProgressAll(),
-      ]);
+        listProductProgressAll()]
+        ),orders = _await$Promise$all[0],productsRaw = _await$Promise$all[1],nodesRaw = _await$Promise$all[2],categoriesRaw = _await$Promise$all[3],pmpRaw = _await$Promise$all[4];
 
       const products = normalizeMasterList(productsRaw);
       this._products = products;
@@ -258,7 +258,7 @@ Page({
       this._records = await fetchOutsourceRecordsForPanel({
         productionLinkMode: this._productionLinkMode,
         orders: this._orders,
-        products,
+        products
       });
       this._allRows = buildOutsourceDispatchRows({
         productionLinkMode: this._productionLinkMode,
@@ -269,7 +269,7 @@ Page({
         categories: this._categories,
         productMilestoneProgresses: this._pmp,
         processSequenceMode: this._processSequenceMode,
-        onlyShowIncompleteOrders: onlyIncomplete,
+        onlyShowIncompleteOrders: onlyIncomplete
       });
 
       this.setData({ loading: false });
@@ -277,10 +277,10 @@ Page({
       this.applyRows();
     } catch (err) {
       this.setData({ loading: false });
-      wx.showToast({ title: (err && err.message) || '加载失败', icon: 'none' });
+      wx.showToast({ title: err && err.message || '加载失败', icon: 'none' });
     } finally {
       this._bootstrapping = false;
       this._loadedOnce = true;
     }
-  },
+  }
 });

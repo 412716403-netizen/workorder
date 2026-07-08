@@ -1,5 +1,6 @@
 const { request } = require('../../utils/request.js');
 const { readTenantCtx, readCurrentUserId, readCurrentUser } = require('../../utils/session.js');
+const { syncTenantCtx } = require('../../utils/tenantCtxSync.js');
 const { readTabShellInsets } = require('../../utils/tabShell.js');
 const { navigateMenuPath } = require('../../utils/navigateMenuPath.js');
 
@@ -128,15 +129,22 @@ Page({
 
     this.setData(buildUserProfile(ctx));
     this.refreshUserProfile();
-    this.loadHome(ctx);
+    syncTenantCtx().then((freshCtx) => {
+      const activeCtx = freshCtx || ctx;
+      this.setData(buildUserProfile(activeCtx));
+      this.loadHome(activeCtx);
+    });
   },
 
   onPullDownRefresh() {
     const ctx = readTenantCtx();
     if (ctx && ctx.tenantId && this._deps && !this.data.bootError) {
-      this.setData(buildUserProfile(ctx));
-      this.refreshUserProfile();
-      this.loadHome(ctx).then(
+      syncTenantCtx().then((freshCtx) => {
+        const activeCtx = freshCtx || ctx;
+        this.setData(buildUserProfile(activeCtx));
+        this.refreshUserProfile();
+        return this.loadHome(activeCtx);
+      }).then(
         () => wx.stopPullDownRefresh(),
         () => wx.stopPullDownRefresh(),
       );
@@ -229,8 +237,12 @@ Page({
     return Promise.all([
       request({ path: '/dashboard/workbench', method: 'GET' }).catch(() => null),
       request({ path: '/dashboard/shortcuts', method: 'GET' }).catch(() => null),
+      request({ path: '/dashboard/feature-plugins', method: 'GET' }).catch(() => ({})),
     ])
-      .then(([workbench, shortcutsResp]) => {
+      .then((results) => {
+        const workbench = results[0];
+        const shortcutsResp = results[1];
+        const featurePlugins = results[2];
         this._workbenchEffective = (workbench && workbench.effective) || null;
         const dashboardView = this.buildDashboardViewState(
           this._workbenchEffective,
@@ -241,6 +253,8 @@ Page({
         const shortcuts = deps.buildHomeShortcuts(
           shortcutsResp && shortcutsResp.selected,
           ctx.permissions || [],
+          featurePlugins,
+          ctx.tenantRole || '',
         );
 
         if (this.data.queryEnabled) {
@@ -361,7 +375,9 @@ Page({
         () => [],
       ),
     ])
-      .then(([notifications, transfers]) => {
+      .then((results) => {
+        const notifications = results[0];
+        const transfers = results[1];
         const notifList = Array.isArray(notifications) ? notifications : [];
         const unreadNotifCount = deps.countUnread(ctx.tenantId, readCurrentUserId(), notifList);
         const collabTotal = deps.buildCollabPendingSections(

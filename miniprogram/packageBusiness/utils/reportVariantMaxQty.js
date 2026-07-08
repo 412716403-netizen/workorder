@@ -27,23 +27,23 @@ function buildOutOfSequenceTemplateIds(nodes) {
 
 function sumDefectiveForVariantAtMilestone(milestone, variantId) {
   const vid = variantId || '';
-  return (milestone.reports || [])
-    .filter((r) => (r.variantId || '') === vid)
-    .reduce((s, r) => s + (Number(r.defectiveQuantity) || 0), 0);
+  return (milestone.reports || []).
+  filter((r) => (r.variantId || '') === vid).
+  reduce((s, r) => s + (Number(r.defectiveQuantity) || 0), 0);
 }
 
 /**
  * 顺序工序约束下，某规格在本工序的可报余量（已减前序/本序已报，未减不良）
  */
-function getSeqRemainingForVariant(order, milestoneTemplateId, variantId, opts) {
-  const {
-    processSequenceMode = 'sequential',
-    outOfSequenceTemplateIds = new Set(),
-  } = opts || {};
+function getSeqRemainingForVariant(order, milestoneTemplateId, variantId, opts) {var _items$find;
+  const _ref =
+
+
+    opts || {},_ref$processSequenceM = _ref.processSequenceMode,processSequenceMode = _ref$processSequenceM === void 0 ? 'sequential' : _ref$processSequenceM,_ref$outOfSequenceTem = _ref.outOfSequenceTemplateIds,outOfSequenceTemplateIds = _ref$outOfSequenceTem === void 0 ? new Set() : _ref$outOfSequenceTem;
   const items = order.items || [];
   const milestones = order.milestones || [];
-  const item = items.find((i) => (i.variantId || '') === variantId)
-    ?? (items.length === 1 ? items[0] : undefined);
+  const item = (_items$find = items.find((i) => (i.variantId || '') === variantId)) != null ? _items$find :
+  items.length === 1 ? items[0] : undefined;
 
   const templateIdPath = milestones.map((m) => m.templateId);
   const tplIndex = milestones.findIndex((m) => m.templateId === milestoneTemplateId);
@@ -53,50 +53,50 @@ function getSeqRemainingForVariant(order, milestoneTemplateId, variantId, opts) 
   const seqConstrained = isProcessSequential(
     processSequenceMode,
     milestoneTemplateId,
-    outOfSequenceTemplateIds,
+    outOfSequenceTemplateIds
   );
 
   if (!seqConstrained || gateIdx < 0) {
     if (!item) return 0;
     if (items.length === 1 && !item.variantId) {
-      const completed = Number(milestone?.completedQuantity) || 0;
+      const completed = Number(milestone == null ? void 0 : milestone.completedQuantity) || 0;
       return Math.max(0, (Number(item.quantity) || 0) - completed);
     }
-    const completedInMilestone = (milestone?.reports || [])
-      .filter((r) => (r.variantId || '') === variantId)
-      .reduce((s, r) => s + (Number(r.quantity) || 0), 0);
+    const completedInMilestone = ((milestone == null ? void 0 : milestone.reports) || []).
+    filter((r) => (r.variantId || '') === variantId).
+    reduce((s, r) => s + (Number(r.quantity) || 0), 0);
     return Math.max(0, (Number(item.quantity) || 0) - completedInMilestone);
   }
 
   let prevQty = 0;
   let curQty = 0;
   const vid = variantId || '';
-  const variantItemQty = items
-    .filter((i) => (i.variantId ?? '') === vid)
-    .reduce((s, i) => s + (Number(i.quantity) || 0), 0);
+  const variantItemQty = items.
+  filter((i) => {var _i$variantId;return ((_i$variantId = i.variantId) != null ? _i$variantId : '') === vid;}).
+  reduce((s, i) => s + (Number(i.quantity) || 0), 0);
   const orderTotalQty = items.reduce((s, i) => s + (Number(i.quantity) || 0), 0);
 
   if (prevTemplateId) {
     const prevMs = milestones.find((m) => m.templateId === prevTemplateId);
-    if (prevMs) {
+    if (prevMs) {var _prevMs$completedQuan;
       const hasVariantReports = (prevMs.reports || []).some((r) => r.variantId && r.variantId !== '');
       if (hasVariantReports) {
         (prevMs.reports || []).forEach((r) => {
           if ((r.variantId || '') === vid) prevQty += Number(r.quantity) || 0;
         });
-      } else if ((prevMs.completedQuantity ?? 0) > 0 && orderTotalQty > 0) {
-        prevQty += Math.round(((Number(prevMs.completedQuantity) || 0) * variantItemQty) / orderTotalQty);
+      } else if (((_prevMs$completedQuan = prevMs.completedQuantity) != null ? _prevMs$completedQuan : 0) > 0 && orderTotalQty > 0) {
+        prevQty += Math.round((Number(prevMs.completedQuantity) || 0) * variantItemQty / orderTotalQty);
       }
     }
   }
-  if (milestone) {
+  if (milestone) {var _milestone$completedQ;
     const hasVariantReports = (milestone.reports || []).some((r) => r.variantId && r.variantId !== '');
     if (hasVariantReports) {
       (milestone.reports || []).forEach((r) => {
         if ((r.variantId || '') === vid) curQty += Number(r.quantity) || 0;
       });
-    } else if ((milestone.completedQuantity ?? 0) > 0 && orderTotalQty > 0) {
-      curQty += Math.round(((Number(milestone.completedQuantity) || 0) * variantItemQty) / orderTotalQty);
+    } else if (((_milestone$completedQ = milestone.completedQuantity) != null ? _milestone$completedQ : 0) > 0 && orderTotalQty > 0) {
+      curQty += Math.round((Number(milestone.completedQuantity) || 0) * variantItemQty / orderTotalQty);
     }
   }
   return Math.max(0, prevQty - curQty);
@@ -127,7 +127,7 @@ function sumOutsourceRemainingByVariant(prodRecords, orderId, templateId) {
 
 function reworkMergeBucketOrderId(orderId, orders) {
   const o = (orders || []).find((x) => x.id === orderId);
-  return (o && o.parentOrderId) ? o.parentOrderId : orderId;
+  return o && o.parentOrderId ? o.parentOrderId : orderId;
 }
 
 function buildDefectiveReworkMapForOrders(orders, prodRecords) {
@@ -136,7 +136,7 @@ function buildDefectiveReworkMapForOrders(orders, prodRecords) {
     (o.milestones || []).forEach((m) => {
       const defective = (m.reports || []).reduce(
         (s, r) => s + (Number(r.defectiveQuantity) || 0),
-        0,
+        0
       );
       map.set(`${o.id}|${m.templateId}`, { defective, rework: 0, reworkByVariant: {} });
     });
@@ -211,8 +211,8 @@ function sumOutsourceRemainingAtNode(prodRecords, orderId, templateId) {
   (prodRecords || []).forEach((r) => {
     if (r.type !== 'OUTSOURCE' || r.sourceReworkId) return;
     if (r.orderId !== orderId || r.nodeId !== templateId) return;
-    if (r.status === '加工中') totalDispatched += Number(r.quantity) || 0;
-    else if (r.status === '已收回') totalReceived += Number(r.quantity) || 0;
+    if (r.status === '加工中') totalDispatched += Number(r.quantity) || 0;else
+    if (r.status === '已收回') totalReceived += Number(r.quantity) || 0;
   });
   return Math.max(0, totalDispatched - totalReceived);
 }
@@ -221,13 +221,13 @@ function sumOutsourceRemainingAtNode(prodRecords, orderId, templateId) {
  * 单工单报工表头数量 hint（对齐 Web computeReportRowDerivations 工单模式）
  */
 function computeOrderReportHints(order, milestone, globalNodes, config, prodRecords) {
-  const processSequenceMode = (config && config.processSequenceMode) || 'sequential';
+  const processSequenceMode = config && config.processSequenceMode || 'sequential';
   const outOfSequenceTemplateIds = buildOutOfSequenceTemplateIds(globalNodes);
   const opts = { processSequenceMode, outOfSequenceTemplateIds };
   const tid = milestone.templateId;
   const hintTotalQty = (order.items || []).reduce(
     (s, i) => s + (Number(i.quantity) || 0),
-    0,
+    0
   );
 
   const idx = (order.milestones || []).findIndex((m) => m.templateId === tid);
@@ -235,15 +235,15 @@ function computeOrderReportHints(order, milestone, globalNodes, config, prodReco
   if (isProcessSequential(processSequenceMode, tid, outOfSequenceTemplateIds)) {
     const templateIds = (order.milestones || []).map((m) => m.templateId);
     const gateIdx = findGatingPredecessorIndex(templateIds, idx, outOfSequenceTemplateIds);
-    if (gateIdx >= 0) {
-      base = Number(order.milestones[gateIdx]?.completedQuantity) || 0;
+    if (gateIdx >= 0) {var _order$milestones$gat;
+      base = Number((_order$milestones$gat = order.milestones[gateIdx]) == null ? void 0 : _order$milestones$gat.completedQuantity) || 0;
     }
   }
 
   const defectiveReworkMap = buildDefectiveReworkMapForOrders([order], prodRecords);
-  const getDr = (oid, nodeTemplateId) => defectiveReworkMap.get(`${oid}|${nodeTemplateId}`)
-    || { defective: 0, rework: 0, reworkByVariant: {} };
-  const { defective, rework } = getDr(order.id, tid);
+  const getDr = (oid, nodeTemplateId) => defectiveReworkMap.get(`${oid}|${nodeTemplateId}`) ||
+  { defective: 0, rework: 0, reworkByVariant: {} };
+  const _getDr = getDr(order.id, tid),defective = _getDr.defective,rework = _getDr.rework;
   const defectiveQtyForHint = defective;
   const totalRework = getDr(reworkMergeBucketOrderId(order.id, [order]), tid).rework;
   const hintMaxReportable = Math.max(0, Math.round(base - defective + rework));
@@ -251,11 +251,11 @@ function computeOrderReportHints(order, milestone, globalNodes, config, prodReco
   const totalOutsourcedAtNode = sumOutsourceRemainingAtNode(prodRecords, order.id, tid);
   const hintRemaining = Math.max(
     0,
-    hintMaxReportable - hintCompletedDisplay - totalOutsourcedAtNode,
+    hintMaxReportable - hintCompletedDisplay - totalOutsourcedAtNode
   );
   const effectiveRemainingForModal = Math.max(
     0,
-    base - defective + totalRework - hintCompletedDisplay - totalOutsourcedAtNode,
+    base - defective + totalRework - hintCompletedDisplay - totalOutsourcedAtNode
   );
 
   return {
@@ -269,7 +269,7 @@ function computeOrderReportHints(order, milestone, globalNodes, config, prodReco
     effectiveRemainingForModal,
     processSequenceMode,
     outOfSequenceTemplateIds,
-    opts,
+    opts
   };
 }
 
@@ -297,14 +297,14 @@ function getSingleMaxQty(variantMaxGoodMap, variantId, effectiveRemaining, allow
 }
 
 function validateReportEntries(entries, opts) {
-  const {
-    formMode,
-    variantMaxGoodMap = {},
-    effectiveRemaining = 0,
-    allowExceedMaxReportQty = false,
-    quantities = {},
-    unitName = '件',
-  } = opts || {};
+  const _ref2 =
+
+
+
+
+
+
+    opts || {},formMode = _ref2.formMode,_ref2$variantMaxGoodM = _ref2.variantMaxGoodMap,variantMaxGoodMap = _ref2$variantMaxGoodM === void 0 ? {} : _ref2$variantMaxGoodM,_ref2$effectiveRemain = _ref2.effectiveRemaining,effectiveRemaining = _ref2$effectiveRemain === void 0 ? 0 : _ref2$effectiveRemain,_ref2$allowExceedMaxR = _ref2.allowExceedMaxReportQty,allowExceedMaxReportQty = _ref2$allowExceedMaxR === void 0 ? false : _ref2$allowExceedMaxR,_ref2$quantities = _ref2.quantities,quantities = _ref2$quantities === void 0 ? {} : _ref2$quantities,_ref2$unitName = _ref2.unitName,unitName = _ref2$unitName === void 0 ? '件' : _ref2$unitName;
 
   if (allowExceedMaxReportQty) return '';
 
@@ -318,7 +318,7 @@ function validateReportEntries(entries, opts) {
         vid,
         quantities,
         effectiveRemaining,
-        false,
+        false
       );
       if (entry.quantity > maxAllowed) {
         return `该规格良品最多可报 ${maxAllowed} ${unitName}`;
@@ -350,7 +350,7 @@ function validateReportEntries(entries, opts) {
     variantMaxGoodMap,
     entry.variantId,
     effectiveRemaining,
-    false,
+    false
   );
   if (entry.quantity > maxAllowed) {
     return `良品最多可报 ${maxAllowed} ${unitName}`;
@@ -370,5 +370,5 @@ module.exports = {
   computeCellMaxAllowed,
   getSingleMaxQty,
   validateReportEntries,
-  sumMatrixQuantities,
+  sumMatrixQuantities
 };

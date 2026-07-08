@@ -1,31 +1,31 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const { normalizeListBody } = require('../../utils/listResponse.js');
-const {
-  DEFAULT_PAGE_SIZE,
-  STATUS_FILTER_TABS,
-} = require('../config/productionPlans.js');
-const {
-  parsePlanSearch,
-  mapPlanListRow,
-  buildPurchaseProgressRequest,
-  normalizeMasterList,
-  productNameSkuParts,
-} = require('../utils/productionPlans.js');
-const {
-  listPlansPaginated,
-  fetchPlansPurchaseProgress,
-  fetchTenantConfig,
-  fetchProductsAll,
-  fetchCategoriesAll,
-} = require('../utils/planApi.js');
-const { sortPlansNewestFirst } = require('../utils/planOrderSort.js');
-const { mapProductCustomTags } = require('../utils/reportCustomDocField.js');
-const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 = require('../../utils/listResponse.js'),normalizeListBody = _require3.normalizeListBody;
+const _require4 =
+
+
+  require('../config/productionPlans.js'),DEFAULT_PAGE_SIZE = _require4.DEFAULT_PAGE_SIZE,STATUS_FILTER_TABS = _require4.STATUS_FILTER_TABS;
+const _require5 =
+
+
+
+
+
+  require('../utils/productionPlans.js'),parsePlanSearch = _require5.parsePlanSearch,mapPlanListRow = _require5.mapPlanListRow,buildPurchaseProgressRequest = _require5.buildPurchaseProgressRequest,normalizeMasterList = _require5.normalizeMasterList,productNameSkuParts = _require5.productNameSkuParts;
+const _require6 =
+
+
+
+
+
+  require('../utils/planApi.js'),listPlansPaginated = _require6.listPlansPaginated,fetchPlansPurchaseProgress = _require6.fetchPlansPurchaseProgress,fetchTenantConfig = _require6.fetchTenantConfig,fetchProductsAll = _require6.fetchProductsAll,fetchCategoriesAll = _require6.fetchCategoriesAll;
+const _require7 = require('../utils/planOrderSort.js'),sortPlansNewestFirst = _require7.sortPlansNewestFirst;
+const _require8 = require('../utils/reportCustomDocField.js'),mapProductCustomTags = _require8.mapProductCustomTags;
+const _require9 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require9.readNavBarMetrics,readWindowMetrics = _require9.readWindowMetrics;
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
-  const toolsPx = Math.ceil((win.windowWidth / 750) * 128);
+  const toolsPx = Math.ceil(win.windowWidth / 750 * 128);
   return nav.statusBarHeight + nav.navBarHeight + toolsPx;
 }
 
@@ -38,7 +38,7 @@ function slimPlanListRow(row) {
   const tags = (row.productCustomTags || []).slice(0, 3).map((t) => ({
     id: t.id,
     label: t.label,
-    display: String(t.display || '').slice(0, 48),
+    display: String(t.display || '').slice(0, 48)
   }));
   return {
     id: row.id,
@@ -68,7 +68,7 @@ function slimPlanListRow(row) {
     progressOverReceived: row.progressOverReceived,
     progressOrderedBarPct: row.progressOrderedBarPct,
     progressOverBarPct: row.progressOverBarPct,
-    showProgress: row.showProgress,
+    showProgress: row.showProgress
   };
 }
 
@@ -78,17 +78,17 @@ function buildListQuery({
   searchKeyword,
   statusFilter,
   excludeCompleted,
-  productionLinkMode,
+  productionLinkMode
 }) {
   const parsed = parsePlanSearch(searchKeyword);
   const params = {
     page,
-    pageSize,
+    pageSize
   };
   if (parsed.search) params.search = parsed.search;
   if (productionLinkMode === 'order') {
-    const dispatchStatus = parsed.dispatchStatus
-      || (statusFilter && statusFilter !== 'all' ? statusFilter : undefined);
+    const dispatchStatus = parsed.dispatchStatus || (
+    statusFilter && statusFilter !== 'all' ? statusFilter : undefined);
     if (dispatchStatus) params.dispatchStatus = dispatchStatus;
     if (excludeCompleted) params.excludeCompleted = 'true';
   } else if (parsed.search) {
@@ -120,7 +120,7 @@ Page({
     navBarHeight: 44,
     headerBlockHeight: 120,
     showFilterPanel: false,
-    filterActive: false,
+    filterActive: false
   },
 
   _pendingStatusFilter: 'all',
@@ -131,14 +131,14 @@ Page({
     this.setData({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
-      headerBlockHeight: computeHeaderBlockHeight(nav),
+      headerBlockHeight: computeHeaderBlockHeight(nav)
     });
 
     const planId = options.planId ? decodeURIComponent(options.planId) : '';
     if (planId) {
       this._loadingDetail = true;
       wx.redirectTo({
-        url: `/packageBusiness/production-plan-detail/production-plan-detail?id=${encodeURIComponent(planId)}`,
+        url: `/packageBusiness/production-plan-detail/production-plan-detail?id=${encodeURIComponent(planId)}`
       });
       return;
     }
@@ -157,8 +157,8 @@ Page({
     }
     this._tenantCtx = ctx;
     this.setData({
-      canCreate: hasPermission(ctx.permissions || [], 'production:plans:create')
-        && hasPermission(ctx.permissions || [], 'basic:products:view'),
+      canCreate: hasPermission(ctx.permissions || [], 'production:plans:create') &&
+      hasPermission(ctx.permissions || [], 'basic:products:view')
     });
     if (!this._initialized) {
       this.bootstrap();
@@ -195,7 +195,7 @@ Page({
     }
     this._filterSnapshot = {
       statusFilter: this.data.statusFilter,
-      excludeCompleted: this.data.excludeCompleted,
+      excludeCompleted: this.data.excludeCompleted
     };
     this._pendingStatusFilter = this.data.statusFilter;
     this._pendingExcludeCompleted = this.data.excludeCompleted;
@@ -208,7 +208,7 @@ Page({
     this.setData({
       showFilterPanel: false,
       statusFilter: snap.statusFilter != null ? snap.statusFilter : 'all',
-      excludeCompleted: !!snap.excludeCompleted,
+      excludeCompleted: !!snap.excludeCompleted
     });
   },
 
@@ -224,22 +224,22 @@ Page({
       statusFilter: 'all',
       excludeCompleted: false,
       showFilterPanel: false,
-      filterActive: false,
+      filterActive: false
     });
     this.reloadList();
   },
 
   onFilterApply() {
-    const statusFilter = this._pendingStatusFilter != null
-      ? this._pendingStatusFilter
-      : this.data.statusFilter;
+    const statusFilter = this._pendingStatusFilter != null ?
+    this._pendingStatusFilter :
+    this.data.statusFilter;
     const excludeCompleted = !!this._pendingExcludeCompleted;
     this._filterSnapshot = { statusFilter, excludeCompleted };
     this.setData({
       statusFilter,
       excludeCompleted,
       showFilterPanel: false,
-      filterActive: isFilterActive(statusFilter, excludeCompleted),
+      filterActive: isFilterActive(statusFilter, excludeCompleted)
     });
     this.reloadList();
   },
@@ -256,7 +256,7 @@ Page({
   },
 
   onStatusTabTap(e) {
-    const { id } = e.currentTarget.dataset;
+    const id = e.currentTarget.dataset.id;
     if (!id) return;
     this._pendingStatusFilter = id;
     if (this.data.showFilterPanel) {
@@ -266,15 +266,15 @@ Page({
     if (id === this.data.statusFilter) return;
     this.setData({
       statusFilter: id,
-      filterActive: isFilterActive(id, this.data.excludeCompleted),
+      filterActive: isFilterActive(id, this.data.excludeCompleted)
     });
     this.reloadList();
   },
 
   onExcludeToggle() {
-    const excludeCompleted = this.data.showFilterPanel
-      ? !this._pendingExcludeCompleted
-      : !this.data.excludeCompleted;
+    const excludeCompleted = this.data.showFilterPanel ?
+    !this._pendingExcludeCompleted :
+    !this.data.excludeCompleted;
     if (this.data.showFilterPanel) {
       this._pendingExcludeCompleted = excludeCompleted;
       this.setData({ excludeCompleted });
@@ -282,17 +282,17 @@ Page({
     }
     this.setData({
       excludeCompleted,
-      filterActive: isFilterActive(this.data.statusFilter, excludeCompleted),
+      filterActive: isFilterActive(this.data.statusFilter, excludeCompleted)
     });
     this.reloadList();
   },
 
   onRowTap(e) {
     this.closeFilterPanel();
-    const { id } = e.currentTarget.dataset;
+    const id = e.currentTarget.dataset.id;
     if (!id) return;
     wx.navigateTo({
-      url: `/packageBusiness/production-plan-detail/production-plan-detail?id=${encodeURIComponent(id)}`,
+      url: `/packageBusiness/production-plan-detail/production-plan-detail?id=${encodeURIComponent(id)}`
     });
   },
 
@@ -308,7 +308,7 @@ Page({
       showSku: display.showSku,
       imageUrl: product.imageUrl || '',
       customTags,
-      categoryLabel: category && category.name ? category.name : '',
+      categoryLabel: category && category.name ? category.name : ''
     };
   },
 
@@ -323,17 +323,17 @@ Page({
         productCustomTags: meta.customTags,
         categoryLabel: meta.categoryLabel,
         purchaseProgress: this._progressMap.get(plan.id),
-        showDeliveryDate: this.data.showDeliveryDate,
+        showDeliveryDate: this.data.showDeliveryDate
       });
       return slimPlanListRow(row);
     });
   },
 
   onProductImageError(e) {
-    const { id } = e.currentTarget.dataset;
+    const id = e.currentTarget.dataset.id;
     if (!id) return;
     const rows = (this.data.rows || []).map((row) =>
-      row.id === id ? { ...row, showProductImage: false } : row,
+    row.id === id ? { ...row, showProductImage: false } : row
     );
     this.setData({ rows });
   },
@@ -357,13 +357,13 @@ Page({
         showDeliveryDate: listDisplay.showDeliveryDate !== false,
         filterActive: isFilterActive(
           this.data.statusFilter,
-          !!listDisplay.onlyShowNotCompleted,
-        ),
+          !!listDisplay.onlyShowNotCompleted
+        )
       });
-      const [productsRaw, categoriesRaw] = await Promise.all([
+      const _await$Promise$all = await Promise.all([
         fetchProductsAll(),
-        fetchCategoriesAll(),
-      ]);
+        fetchCategoriesAll()]
+        ),productsRaw = _await$Promise$all[0],categoriesRaw = _await$Promise$all[1];
       const products = normalizeMasterList(productsRaw);
       const categories = normalizeMasterList(categoriesRaw);
       this._productMap = new Map(products.map((p) => [p.id, p]));
@@ -393,8 +393,8 @@ Page({
   },
 
   async loadPage(page, append) {
-    if (append) this.setData({ loadingMore: true });
-    else if (!this.data.loading) this.setData({ loading: true });
+    if (append) this.setData({ loadingMore: true });else
+    if (!this.data.loading) this.setData({ loading: true });
 
     try {
       const params = buildListQuery({
@@ -403,7 +403,7 @@ Page({
         searchKeyword: this.data.searchKeyword,
         statusFilter: this.data.statusFilter,
         excludeCompleted: this.data.excludeCompleted,
-        productionLinkMode: this._productionLinkMode || 'order',
+        productionLinkMode: this._productionLinkMode || 'order'
       });
       const result = await listPlansPaginated(params);
       const pagePlans = result.data || [];
@@ -432,20 +432,20 @@ Page({
         page,
         total: result.total || 0,
         hasMore,
-        emptyText: this.data.searchKeyword ? '无搜索结果' : '暂无生产计划',
+        emptyText: this.data.searchKeyword ? '无搜索结果' : '暂无生产计划'
       });
       this.setData({
         loading: false,
-        loadingMore: false,
+        loadingMore: false
       });
     } catch {
       this.setData({
         loading: false,
         loadingMore: false,
         rows: append ? this.data.rows : [],
-        hasMore: false,
+        hasMore: false
       });
       wx.showToast({ title: '加载失败', icon: 'none' });
     }
-  },
+  }
 });

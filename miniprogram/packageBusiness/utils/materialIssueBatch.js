@@ -2,10 +2,10 @@
  * 工单领料批次（对齐 Web MaterialIssueBatchSelect + MaterialIssueModal 校验）
  */
 
-const { BATCH_NO_UNTAGGED } = require('./materialStockConfirm.js');
+const _require = require('./materialStockConfirm.js'),BATCH_NO_UNTAGGED = _require.BATCH_NO_UNTAGGED;
 
 function normalizeBatchNoFromApi(raw) {
-  const s = String(raw ?? '').trim();
+  const s = String(raw != null ? raw : '').trim();
   return s || BATCH_NO_UNTAGGED;
 }
 
@@ -19,14 +19,14 @@ function formatBatchOptionLabel(batchNo, stock) {
 function enrichBatchRowFields(row) {
   const batchNo = row.batchNo || '';
   const batchStock = Math.max(0, Number(row.batchStock) || 0);
-  const batchDisplayText = batchNo
-    ? (batchStock > 0 ? formatBatchOptionLabel(batchNo, batchStock) : batchNo)
-    : '';
+  const batchDisplayText = batchNo ?
+  batchStock > 0 ? formatBatchOptionLabel(batchNo, batchStock) : batchNo :
+  '';
   return {
     ...row,
     batchStock,
     batchDisplayText,
-    showBatchStock: Boolean(batchNo) && batchStock > 0,
+    showBatchStock: Boolean(batchNo) && batchStock > 0
   };
 }
 
@@ -42,7 +42,7 @@ function materialProductNeedsBatch(materialProductId, productsById, categoryById
 
 function rowsNeedBatchColumn(rows, productsById, categoryById) {
   return (rows || []).some(
-    (r) => materialProductNeedsBatch(r.materialProductId, productsById, categoryById),
+    (r) => materialProductNeedsBatch(r.materialProductId, productsById, categoryById)
   );
 }
 
@@ -54,7 +54,7 @@ function decorateRowsWithBatchFlags(rows, productsById, categoryById) {
     batchPickerRange: [],
     batchIndex: 0,
     batchNo: '',
-    batchStock: 0,
+    batchStock: 0
   }));
 }
 
@@ -72,7 +72,7 @@ async function attachBatchOptionsToRows(rows, warehouseId, fetchStockBatches) {
         batchPickerRange: ['请先选择仓库'],
         batchIndex: 0,
         batchNo: '',
-        batchStock: 0,
+        batchStock: 0
       });
       continue;
     }
@@ -80,7 +80,7 @@ async function attachBatchOptionsToRows(rows, warehouseId, fetchStockBatches) {
     try {
       const raw = await fetchStockBatches({
         productId: row.materialProductId,
-        warehouseId,
+        warehouseId
       });
       batchOptions = (Array.isArray(raw) ? raw : []).map((o) => {
         const batchNo = normalizeBatchNoFromApi(o.batchNo);
@@ -88,15 +88,15 @@ async function attachBatchOptionsToRows(rows, warehouseId, fetchStockBatches) {
         return {
           batchNo,
           stock,
-          label: formatBatchOptionLabel(batchNo, stock),
+          label: formatBatchOptionLabel(batchNo, stock)
         };
       });
     } catch {
       batchOptions = [];
     }
-    const batchPickerRange = batchOptions.length
-      ? batchOptions.map((o) => o.label)
-      : ['暂无可用批次'];
+    const batchPickerRange = batchOptions.length ?
+    batchOptions.map((o) => o.label) :
+    ['暂无可用批次'];
     const prevBatchNo = row.batchNo || '';
     let batchIndex = batchOptions.findIndex((o) => o.batchNo === prevBatchNo);
     if (batchIndex < 0) batchIndex = 0;
@@ -107,7 +107,7 @@ async function attachBatchOptionsToRows(rows, warehouseId, fetchStockBatches) {
       batchPickerRange,
       batchIndex,
       batchNo: selected ? selected.batchNo : '',
-      batchStock: selected ? selected.stock : 0,
+      batchStock: selected ? selected.stock : 0
     }));
   }
   return out;
@@ -127,14 +127,14 @@ function mergeWarehouseBatchOptions(apiRows, mergeRows) {
     const prev = map.get(batchNo);
     map.set(batchNo, Math.max(prev != null ? prev : 0, Number(m.stock) || 0));
   });
-  return [...map.entries()]
-    .map(([batchNo, stock]) => ({
-      batchNo,
-      stock,
-      label: formatBatchOptionLabel(batchNo, stock) || batchNo,
-    }))
-    .filter((o) => o.batchNo && o.stock > 0)
-    .sort((a, b) => a.batchNo.localeCompare(b.batchNo, 'zh-CN'));
+  return [...map.entries()].
+  map(([batchNo, stock]) => ({
+    batchNo,
+    stock,
+    label: formatBatchOptionLabel(batchNo, stock) || batchNo
+  })).
+  filter((o) => o.batchNo && o.stock > 0).
+  sort((a, b) => a.batchNo.localeCompare(b.batchNo, 'zh-CN'));
 }
 
 function applyBatchSelection(row, batchIndex) {
@@ -148,7 +148,7 @@ function applyBatchSelection(row, batchIndex) {
     ...row,
     batchIndex: idx,
     batchNo: selected.batchNo,
-    batchStock: selected.stock,
+    batchStock: selected.stock
   });
 }
 
@@ -178,7 +178,7 @@ function decorateConfirmRowsWithBatchFlags(rows, productsById, categoryById) {
     batchPickerRange: [],
     batchIndex: 0,
     batchNo: '',
-    batchStock: 0,
+    batchStock: 0
   }));
 }
 
@@ -196,7 +196,7 @@ async function attachBatchOptionsToConfirmRows(rows, warehouseId, fetchStockBatc
         batchPickerRange: ['请先选择仓库'],
         batchIndex: 0,
         batchNo: '',
-        batchStock: 0,
+        batchStock: 0
       });
       continue;
     }
@@ -204,7 +204,7 @@ async function attachBatchOptionsToConfirmRows(rows, warehouseId, fetchStockBatc
     try {
       const raw = await fetchStockBatches({
         productId: row.productId,
-        warehouseId,
+        warehouseId
       });
       batchOptions = (Array.isArray(raw) ? raw : []).map((o) => {
         const batchNo = normalizeBatchNoFromApi(o.batchNo);
@@ -212,15 +212,15 @@ async function attachBatchOptionsToConfirmRows(rows, warehouseId, fetchStockBatc
         return {
           batchNo,
           stock,
-          label: formatBatchOptionLabel(batchNo, stock),
+          label: formatBatchOptionLabel(batchNo, stock)
         };
       });
     } catch {
       batchOptions = [];
     }
-    const batchPickerRange = batchOptions.length
-      ? batchOptions.map((o) => o.label)
-      : ['暂无可用批次'];
+    const batchPickerRange = batchOptions.length ?
+    batchOptions.map((o) => o.label) :
+    ['暂无可用批次'];
     const prevBatchNo = row.batchNo || '';
     let batchIndex = batchOptions.findIndex((o) => o.batchNo === prevBatchNo);
     if (batchIndex < 0) batchIndex = 0;
@@ -231,7 +231,7 @@ async function attachBatchOptionsToConfirmRows(rows, warehouseId, fetchStockBatc
       batchPickerRange,
       batchIndex,
       batchNo: selected ? selected.batchNo : '',
-      batchStock: selected ? selected.stock : 0,
+      batchStock: selected ? selected.stock : 0
     }));
   }
   return out;
@@ -245,11 +245,11 @@ function attachReturnBatchOptionsToConfirmRows(rows, dispatchedByProduct) {
     const batchOptions = batches.map((batchNo) => ({
       batchNo,
       stock: 0,
-      label: batchNo,
+      label: batchNo
     }));
-    const batchPickerRange = batchOptions.length
-      ? batchOptions.map((o) => o.label)
-      : ['暂无已发批次'];
+    const batchPickerRange = batchOptions.length ?
+    batchOptions.map((o) => o.label) :
+    ['暂无已发批次'];
     const prevBatchNo = row.batchNo || '';
     let batchIndex = batchOptions.findIndex((o) => o.batchNo === prevBatchNo);
     if (batchIndex < 0) batchIndex = 0;
@@ -260,7 +260,7 @@ function attachReturnBatchOptionsToConfirmRows(rows, dispatchedByProduct) {
       batchPickerRange,
       batchIndex,
       batchNo: selected ? selected.batchNo : '',
-      batchStock: 0,
+      batchStock: 0
     });
   });
 }
@@ -273,11 +273,11 @@ function attachReturnBatchOptionsToRows(rows, dispatchedByProduct) {
     const batchOptions = batches.map((batchNo) => ({
       batchNo,
       stock: 0,
-      label: batchNo,
+      label: batchNo
     }));
-    const batchPickerRange = batchOptions.length
-      ? batchOptions.map((o) => o.label)
-      : ['暂无已发批次'];
+    const batchPickerRange = batchOptions.length ?
+    batchOptions.map((o) => o.label) :
+    ['暂无已发批次'];
     const prevBatchNo = row.batchNo || '';
     let batchIndex = batchOptions.findIndex((o) => o.batchNo === prevBatchNo);
     if (batchIndex < 0) batchIndex = 0;
@@ -288,7 +288,7 @@ function attachReturnBatchOptionsToRows(rows, dispatchedByProduct) {
       batchPickerRange,
       batchIndex,
       batchNo: selected ? selected.batchNo : '',
-      batchStock: 0,
+      batchStock: 0
     });
   });
 }
@@ -348,5 +348,5 @@ module.exports = {
   attachReturnBatchOptionsToRows,
   validateReturnBatchRows,
   confirmRowsNeedBatchColumn,
-  validateConfirmBatchRows,
+  validateConfirmBatchRows
 };

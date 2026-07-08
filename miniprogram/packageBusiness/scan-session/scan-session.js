@@ -1,24 +1,24 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const { getScanType } = require('../../config/scanTypes.js');
-const { normalizeListBody } = require('../../utils/listResponse.js');
-const { parseScanPayload, getUnrecognizedScanImeHint } = require('../utils/scanPayload.js');
-const { request } = require('../../utils/request.js');
-const { fetchScanByPayload, fetchProductionRecords } = require('../utils/scanApi.js');
-const { failScan } = require('../utils/scanCommon.js');
-const { dispatchScanHandler } = require('../utils/scanHandlers/index.js');
-const {
-  buildOutsourceReceiveAggregates,
-  filterAggregatesByPartner,
-} = require('../utils/outsourceReceiveAggregates.js');
-const { buildOutsourcePartnerOptions } = require('../utils/outsourcePartnerOptions.js');
-const { listReworkNodeIdsWithPending } = require('../utils/reworkReportPathsLite.js');
-const {
-  SCAN_DEBOUNCE_CONTINUOUS_MS,
-  ensureCameraAuth,
-  openAppSetting,
-  vibrateOnScan,
-} = require('../utils/scanCamera.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 = require('../config/scanTypes.js'),getScanType = _require3.getScanType;
+const _require4 = require('../../utils/listResponse.js'),normalizeListBody = _require4.normalizeListBody;
+const _require5 = require('../utils/scanPayload.js'),parseScanPayload = _require5.parseScanPayload,getUnrecognizedScanImeHint = _require5.getUnrecognizedScanImeHint;
+const _require6 = require('../../utils/request.js'),request = _require6.request;
+const _require7 = require('../utils/scanApi.js'),fetchScanByPayload = _require7.fetchScanByPayload,fetchProductionRecords = _require7.fetchProductionRecords;
+const _require8 = require('../utils/scanCommon.js'),failScan = _require8.failScan;
+const _require9 = require('../utils/scanHandlers/index.js'),dispatchScanHandler = _require9.dispatchScanHandler;
+const _require0 =
+
+
+  require('../utils/outsourceReceiveAggregates.js'),buildOutsourceReceiveAggregates = _require0.buildOutsourceReceiveAggregates,filterAggregatesByPartner = _require0.filterAggregatesByPartner;
+const _require1 = require('../utils/outsourcePartnerOptions.js'),buildOutsourcePartnerOptions = _require1.buildOutsourcePartnerOptions;
+const _require10 = require('../utils/reworkReportPathsLite.js'),listReworkNodeIdsWithPending = _require10.listReworkNodeIdsWithPending;
+const _require11 =
+
+
+
+
+  require('../utils/scanCamera.js'),SCAN_DEBOUNCE_CONTINUOUS_MS = _require11.SCAN_DEBOUNCE_CONTINUOUS_MS,ensureCameraAuth = _require11.ensureCameraAuth,openAppSetting = _require11.openAppSetting,vibrateOnScan = _require11.vibrateOnScan;
 
 const WAREHOUSE_PREF_KEY = 'scanStockInWarehouseId';
 
@@ -62,7 +62,8 @@ Page({
     cameraDenied: false,
     cameraReady: false,
     isDevtools: false,
-    sessionLogs: [],
+    conditionSheetOpen: false,
+    sessionLogs: []
   },
 
   onLoad(options) {
@@ -91,7 +92,7 @@ Page({
       partnerName: decodeOpt(options.partnerName),
       reworkNodeId: decodeOpt(options.reworkNodeId),
       reworkNodeName: decodeOpt(options.reworkNodeName),
-      pageTitle: typeDef.label,
+      pageTitle: typeDef.label
     };
 
     this.setData(session);
@@ -126,25 +127,42 @@ Page({
     wx.navigateBack();
   },
 
+  onConditionSheetOpen() {
+    this.setData({ conditionSheetOpen: true, cameraReady: false });
+  },
+
+  onConditionSheetClose() {
+    this.setData({ conditionSheetOpen: false }, () => {
+      if (this.data.useCamera) {
+        const resume = () => this.setData({ cameraReady: true });
+        if (typeof wx.nextTick === 'function') {
+          wx.nextTick(resume);
+        } else {
+          setTimeout(resume, 50);
+        }
+      }
+    });
+  },
+
   updatePageTitle() {
-    const { scanType, typeLabel } = this.data;
+    const _this$data = this.data,scanType = _this$data.scanType,typeLabel = _this$data.typeLabel;
     this.setData({
-      pageTitle: buildSessionTitle(scanType, typeLabel, this.data),
+      pageTitle: buildSessionTitle(scanType, typeLabel, this.data)
     });
   },
 
   onReportNodeChange(e) {
-    const { id, name } = e.detail || {};
+    const _ref = e.detail || {},id = _ref.id,name = _ref.name;
     this.setData({ nodeId: id || '', nodeName: name || '' }, () => this.updatePageTitle());
   },
 
   onReworkNodeChange(e) {
-    const { id, name } = e.detail || {};
+    const _ref2 = e.detail || {},id = _ref2.id,name = _ref2.name;
     this.setData({ reworkNodeId: id || '', reworkNodeName: name || '' }, () => this.updatePageTitle());
   },
 
   onPartnerChange(e) {
-    const { name } = e.detail || {};
+    const _ref3 = e.detail || {},name = _ref3.name;
     this.setData({ partnerName: name || '' }, () => {
       this.updatePageTitle();
       this.refreshOutsourcePending();
@@ -152,7 +170,7 @@ Page({
   },
 
   guardScanConditions() {
-    const { scanType, nodeId, reworkNodeId, partnerName } = this.data;
+    const _this$data2 = this.data,scanType = _this$data2.scanType,nodeId = _this$data2.nodeId,reworkNodeId = _this$data2.reworkNodeId,partnerName = _this$data2.partnerName;
     if (scanType === 'report' && !nodeId) {
       wx.showToast({ title: '请先选择工序', icon: 'none' });
       return false;
@@ -169,7 +187,7 @@ Page({
   },
 
   async loadRuntimeData() {
-    const { scanType } = this.data;
+    const scanType = this.data.scanType;
     try {
       if (scanType === 'report') {
         await Promise.all([this.loadReportOrders(), this.loadReportNodes()]);
@@ -187,14 +205,14 @@ Page({
         this.refreshReworkNodeOptions();
       }
     } catch {
-      /* ignore */
-    }
+
+      /* ignore */}
   },
 
   async loadReportOrders() {
     const orders = await request({
       path: '/orders?all=true&excludeCompleted=true',
-      method: 'GET',
+      method: 'GET'
     }).catch(() => []);
     this._orders = normalizeListBody(orders);
   },
@@ -204,18 +222,18 @@ Page({
     const nodeList = normalizeListBody(nodes);
     this._globalNodes = nodeList;
     this.setData({
-      reportNodes: nodeList.map((n) => ({ id: n.id, name: n.name })),
+      reportNodes: nodeList.map((n) => ({ id: n.id, name: n.name }))
     });
   },
 
   async loadStockInRuntime() {
-    const [orders, wh] = await Promise.all([
+    const _await$Promise$all = await Promise.all([
       request({
         path: '/orders?all=true&lite=true&excludeCompleted=true',
-        method: 'GET',
+        method: 'GET'
       }).catch(() => []),
-      request({ path: '/settings/warehouses?all=true', method: 'GET' }).catch(() => []),
-    ]);
+      request({ path: '/settings/warehouses?all=true', method: 'GET' }).catch(() => [])]
+      ),orders = _await$Promise$all[0],wh = _await$Promise$all[1];
     this._orders = normalizeListBody(orders);
     const warehouses = normalizeListBody(wh);
     const savedId = wx.getStorageSync(WAREHOUSE_PREF_KEY) || '';
@@ -236,11 +254,11 @@ Page({
   },
 
   async loadOutsourceData() {
-    const [records, orders, nodes] = await Promise.all([
+    const _await$Promise$all2 = await Promise.all([
       fetchProductionRecords({ type: 'OUTSOURCE', all: 'true' }).catch(() => []),
       request({ path: '/orders?all=true&lite=true', method: 'GET' }).catch(() => []),
-      request({ path: '/settings/nodes?all=true', method: 'GET' }).catch(() => []),
-    ]);
+      request({ path: '/settings/nodes?all=true', method: 'GET' }).catch(() => [])]
+      ),records = _await$Promise$all2[0],orders = _await$Promise$all2[1],nodes = _await$Promise$all2[2];
     const orderList = normalizeListBody(orders);
     const nodeList = normalizeListBody(nodes);
     const recordList = normalizeListBody(records);
@@ -257,38 +275,38 @@ Page({
       outsourceOnly,
       ordersById,
       productsById,
-      nodesById,
+      nodesById
     );
   },
 
   async loadOutsourcePickerData() {
-    const [partners, categories] = await Promise.all([
+    const _await$Promise$all3 = await Promise.all([
       request({ path: '/master/partners?all=true', method: 'GET' }).catch(() => []),
-      request({ path: '/settings/partner-categories?all=true', method: 'GET' }).catch(() => []),
-    ]);
+      request({ path: '/settings/partner-categories?all=true', method: 'GET' }).catch(() => [])]
+      ),partners = _await$Promise$all3[0],categories = _await$Promise$all3[1];
     this._allPartners = normalizeListBody(partners);
     const partnerCategories = normalizeListBody(categories);
     const partnerOptions = buildOutsourcePartnerOptions(
       this._allOutsourceAggregates,
-      this._allPartners,
+      this._allPartners
     );
     this.setData({ partnerOptions, partnerCategories });
   },
 
   refreshOutsourcePending() {
-    const { partnerName } = this.data;
+    const partnerName = this.data.partnerName;
     const filtered = filterAggregatesByPartner(this._allOutsourceAggregates, partnerName);
     this._pendingOutsourceRows = filtered.filter((r) => r.pending > 0);
   },
 
   async loadReworkRuntime() {
-    const [records, nodes] = await Promise.all([
+    const _await$Promise$all4 = await Promise.all([
       fetchProductionRecords({
         types: 'REWORK,REWORK_REPORT',
-        all: 'true',
+        all: 'true'
       }).catch(() => []),
-      request({ path: '/settings/nodes?all=true', method: 'GET' }).catch(() => []),
-    ]);
+      request({ path: '/settings/nodes?all=true', method: 'GET' }).catch(() => [])]
+      ),records = _await$Promise$all4[0],nodes = _await$Promise$all4[1];
     this._reworkRecords = normalizeListBody(records);
     this._globalNodes = normalizeListBody(nodes);
   },
@@ -297,11 +315,11 @@ Page({
     const nodeIds = listReworkNodeIdsWithPending(
       this._reworkRecords,
       undefined,
-      this._globalNodes,
+      this._globalNodes
     );
     const reworkNodes = nodeIds.map((id) => {
       const n = this._globalNodes.find((g) => g.id === id);
-      return { id, name: n?.name || id };
+      return { id, name: (n == null ? void 0 : n.name) || id };
     });
     this.setData({ reworkNodes });
   },
@@ -320,11 +338,11 @@ Page({
       outsourceOnly,
       ordersById,
       productsById,
-      nodesById,
+      nodesById
     );
     const partnerOptions = buildOutsourcePartnerOptions(
       this._allOutsourceAggregates,
-      this._allPartners,
+      this._allPartners
     );
     this.setData({ partnerOptions });
     this.refreshOutsourcePending();
@@ -341,7 +359,7 @@ Page({
         isDevtools: false,
         useCamera: true,
         cameraDenied: false,
-        cameraReady: true,
+        cameraReady: true
       });
       return;
     }
@@ -377,7 +395,7 @@ Page({
       onlyFromCamera: false,
       success: (res) => this.handleScanResult(res.result || ''),
       fail: () => wx.showToast({ title: '扫码已取消', icon: 'none' }),
-      complete: () => this.setData({ scanning: false }),
+      complete: () => this.setData({ scanning: false })
     });
   },
 
@@ -406,7 +424,7 @@ Page({
       pendingRows: this._pendingOutsourceRows,
       allAggregates: this._allOutsourceAggregates,
       reworkRecords: this._reworkRecords,
-      globalNodes: this._globalNodes,
+      globalNodes: this._globalNodes
     };
   },
 
@@ -416,7 +434,7 @@ Page({
     if (!this.guardScanConditions()) return;
 
     const payload = parseScanPayload(code);
-    const { scanType } = this.data;
+    const scanType = this.data.scanType;
     const ctx = this.buildHandlerCtx();
 
     if (payload.kind === 'UNKNOWN' || !payload.token) {
@@ -425,7 +443,7 @@ Page({
       if (getUnrecognizedScanImeHint(code)) {
         setTimeout(
           () => wx.showToast({ title: getUnrecognizedScanImeHint(code), icon: 'none', duration: 3000 }),
-          2600,
+          2600
         );
       }
       return;
@@ -453,7 +471,7 @@ Page({
         }
       }
     } catch (err) {
-      const result = failScan(ctx, payload.raw, (err && err.message) || '扫码处理失败');
+      const result = failScan(ctx, payload.raw, err && err.message || '扫码处理失败');
       this.appendSessionLog(result.sessionLog);
     } finally {
       this.setData({ processing: false });
@@ -461,5 +479,5 @@ Page({
         setTimeout(() => this.onFallbackScan(), SCAN_DEBOUNCE_CONTINUOUS_MS);
       }
     }
-  },
+  }
 });

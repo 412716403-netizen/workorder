@@ -1,22 +1,22 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const { DEFAULT_PAGE_SIZE, PSI_TRANSFER_TYPE } = require('../config/warehouses.js');
-const {
-  parseTransferSearch,
-  buildTransferListCards,
-  filterTransferCards,
-} = require('../utils/warehouseTransfer.js');
-const { groupRecordsByDocNumber } = require('../utils/psiOpsAggregators.js');
-const { fetchAllPsiRecords } = require('../utils/psiApi.js');
-const { fetchWarehousesAll } = require('../utils/orderApi.js');
-const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
-const { shouldHubListRefetch, trackHubListHidden, LIST_ROUTES } = require('../utils/saveNavigation.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 = require('../config/warehouses.js'),DEFAULT_PAGE_SIZE = _require3.DEFAULT_PAGE_SIZE,PSI_TRANSFER_TYPE = _require3.PSI_TRANSFER_TYPE;
+const _require4 =
+
+
+
+  require('../utils/warehouseTransfer.js'),parseTransferSearch = _require4.parseTransferSearch,buildTransferListCards = _require4.buildTransferListCards,filterTransferCards = _require4.filterTransferCards;
+const _require5 = require('../utils/psiOpsAggregators.js'),groupRecordsByDocNumber = _require5.groupRecordsByDocNumber;
+const _require6 = require('../utils/psiApi.js'),fetchAllPsiRecords = _require6.fetchAllPsiRecords;
+const _require7 = require('../utils/orderApi.js'),fetchWarehousesAll = _require7.fetchWarehousesAll;
+const _require8 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require8.readNavBarMetrics,readWindowMetrics = _require8.readWindowMetrics;
+const _require9 = require('../utils/saveNavigation.js'),shouldHubListRefetch = _require9.shouldHubListRefetch,trackHubListHidden = _require9.trackHubListHidden,LIST_ROUTES = _require9.LIST_ROUTES;
 
 const HUB_LIST_ROUTE = LIST_ROUTES.PSI_WAREHOUSE_TRANSFER.replace(/^\//, '');
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
-  const toolsPx = Math.ceil((win.windowWidth / 750) * 128);
+  const toolsPx = Math.ceil(win.windowWidth / 750 * 128);
   return nav.statusBarHeight + nav.navBarHeight + toolsPx;
 }
 
@@ -42,7 +42,7 @@ Page({
     hasMore: false,
     statusBarHeight: 20,
     navBarHeight: 44,
-    headerBlockHeight: 88,
+    headerBlockHeight: 88
   },
 
   onLoad(options) {
@@ -50,12 +50,12 @@ Page({
     this.setData({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
-      headerBlockHeight: computeHeaderBlockHeight(nav),
+      headerBlockHeight: computeHeaderBlockHeight(nav)
     });
     const docNumber = options.docNumber ? decodeURIComponent(options.docNumber) : '';
     if (docNumber) {
       wx.redirectTo({
-        url: `/packageBusiness/psi-warehouse-transfer-detail/psi-warehouse-transfer-detail?docNumber=${encodeURIComponent(docNumber)}`,
+        url: `/packageBusiness/psi-warehouse-transfer-detail/psi-warehouse-transfer-detail?docNumber=${encodeURIComponent(docNumber)}`
       });
       return;
     }
@@ -78,7 +78,7 @@ Page({
       return;
     }
     this.setData({
-      canCreate: hasPermission(ctx.permissions || [], 'psi:warehouse_transfer:create'),
+      canCreate: hasPermission(ctx.permissions || [], 'psi:warehouse_transfer:create')
     });
     if (!this._initialized) {
       this.bootstrap();
@@ -128,7 +128,7 @@ Page({
     const docNumber = e.currentTarget.dataset.docNumber;
     if (!docNumber) return;
     wx.navigateTo({
-      url: `/packageBusiness/psi-warehouse-transfer-detail/psi-warehouse-transfer-detail?docNumber=${encodeURIComponent(docNumber)}`,
+      url: `/packageBusiness/psi-warehouse-transfer-detail/psi-warehouse-transfer-detail?docNumber=${encodeURIComponent(docNumber)}`
     });
   },
 
@@ -136,10 +136,10 @@ Page({
     this._initialized = true;
     this.setData({ loading: true });
     try {
-      const [records, warehouses] = await Promise.all([
+      const _await$Promise$all = await Promise.all([
         fetchAllPsiRecords(PSI_TRANSFER_TYPE),
-        fetchWarehousesAll().catch(() => []),
-      ]);
+        fetchWarehousesAll().catch(() => [])]
+        ),records = _await$Promise$all[0],warehouses = _await$Promise$all[1];
       this._records = records || [];
       this._warehouseMap = buildWarehouseMap(warehouses || []);
       await this.loadPage(1);
@@ -181,8 +181,8 @@ Page({
       page,
       total: allCards.length,
       hasMore,
-      emptyText: allCards.length ? '' : (this.data.searchKeyword ? '无匹配调拨单' : '暂无调拨单'),
+      emptyText: allCards.length ? '' : this.data.searchKeyword ? '无匹配调拨单' : '暂无调拨单'
     });
     return Promise.resolve();
-  },
+  }
 });

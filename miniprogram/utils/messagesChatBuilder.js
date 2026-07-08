@@ -3,14 +3,14 @@
  * 对齐 Web 协作管理（CollaborationInboxView）的聊天式 UI。
  */
 
-const { peerBindingsForTransfer, sumItems } = require('./collabInboxHelpers.js');
-const {
-  dispatchStatusLabel,
-  returnStatusLabel,
-  forwardStatusLabel,
-  dispatchStatusTone,
-  returnStatusTone,
-} = require('./collabStatusLabels.js');
+const _require = require('./collabInboxHelpers.js'),peerBindingsForTransfer = _require.peerBindingsForTransfer,sumItems = _require.sumItems;
+const _require2 =
+
+
+
+
+
+  require('./collabStatusLabels.js'),dispatchStatusLabel = _require2.dispatchStatusLabel,returnStatusLabel = _require2.returnStatusLabel,forwardStatusLabel = _require2.forwardStatusLabel,dispatchStatusTone = _require2.dispatchStatusTone,returnStatusTone = _require2.returnStatusTone;
 
 const COLLAB_DISPATCH_AMENDMENT_PENDING_B_REVIEW = 'PENDING_B_REVIEW';
 
@@ -18,7 +18,7 @@ const NOTIF_TYPE_META = {
   system: { label: '系统', tone: 'muted' },
   announcement: { label: '公告', tone: 'info' },
   expiry_reminder: { label: '到期', tone: 'warning' },
-  todo: { label: '待办', tone: 'success' },
+  todo: { label: '待办', tone: 'success' }
 };
 
 const TODO_SOURCE_LABELS = {
@@ -33,7 +33,7 @@ const TODO_SOURCE_LABELS = {
   sales_order: '销售订单',
   sales_bill: '销售出库',
   dev_stage: '开发阶段',
-  dev_bom: '开发BOM',
+  dev_bom: '开发BOM'
 };
 
 function pad(n) {
@@ -46,18 +46,18 @@ function formatChatTime(iso) {
   if (Number.isNaN(d.getTime())) return '';
   const now = new Date();
   const sameDay =
-    d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate();
+  d.getFullYear() === now.getFullYear() &&
+  d.getMonth() === now.getMonth() &&
+  d.getDate() === now.getDate();
   if (sameDay) {
     return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
   const isYesterday =
-    d.getFullYear() === yesterday.getFullYear() &&
-    d.getMonth() === yesterday.getMonth() &&
-    d.getDate() === yesterday.getDate();
+  d.getFullYear() === yesterday.getFullYear() &&
+  d.getMonth() === yesterday.getMonth() &&
+  d.getDate() === yesterday.getDate();
   if (isYesterday) {
     return `昨天 ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
@@ -83,24 +83,24 @@ function avatarText(name) {
  * 把 notifications 转为「系统消息」会话的气泡列表
  */
 function buildNotificationBubbles(notifications, { excludeTodoType = false } = {}) {
-  return (Array.isArray(notifications) ? notifications : [])
-    .filter((n) => !(excludeTodoType && n.type === 'todo'))
-    .map((n) => {
-      const meta = NOTIF_TYPE_META[n.type] || { label: '消息', tone: 'muted' };
-      return {
-        id: n.id,
-        kind: 'notification',
-        side: 'left',
-        title: n.title || meta.label,
-        body: n.body || '',
-        tagLabel: meta.label,
-        tagTone: meta.tone,
-        timeText: formatChatTime(n.createdAt),
-        at: new Date(n.createdAt).getTime() || 0,
-        preview: n.title || '',
-        raw: n,
-      };
-    });
+  return (Array.isArray(notifications) ? notifications : []).
+  filter((n) => !(excludeTodoType && n.type === 'todo')).
+  map((n) => {
+    const meta = NOTIF_TYPE_META[n.type] || { label: '消息', tone: 'muted' };
+    return {
+      id: n.id,
+      kind: 'notification',
+      side: 'left',
+      title: n.title || meta.label,
+      body: n.body || '',
+      tagLabel: meta.label,
+      tagTone: meta.tone,
+      timeText: formatChatTime(n.createdAt),
+      at: new Date(n.createdAt).getTime() || 0,
+      preview: n.title || '',
+      raw: n
+    };
+  });
 }
 
 /**
@@ -116,30 +116,30 @@ function buildInboxBubbles(notifications, todos) {
  * 把 todos 转为「待办事项」会话的气泡列表
  */
 function buildTodoBubbles(todos) {
-  return (Array.isArray(todos) ? todos : [])
-    .map((t) => {
-      const sourceLabel = TODO_SOURCE_LABELS[t.sourceType] || t.sourceType || '待办';
-      const done = t.status === 'done';
-      const title = t.sourceTitle || t.note || sourceLabel;
-      const bodyParts = [t.note || ''];
-      if (t.sourceDocNo) bodyParts.push(`单号：${t.sourceDocNo}`);
-      if (t.remindAt) bodyParts.push(`提醒：${formatChatTime(t.remindAt)}`);
-      return {
-        id: t.id,
-        kind: 'todo',
-        side: 'right',
-        title,
-        body: bodyParts.filter(Boolean).join('\n'),
-        tagLabel: done ? '已完成' : '待处理',
-        tagTone: done ? 'muted' : 'warning',
-        sourceLabel,
-        sourceDocNo: t.sourceDocNo || '',
-        timeText: formatChatTime(t.updatedAt || t.createdAt),
-        at: new Date(t.updatedAt || t.createdAt).getTime() || 0,
-        preview: `${done ? '[已完成] ' : ''}${title}`,
-        raw: t,
-      };
-    });
+  return (Array.isArray(todos) ? todos : []).
+  map((t) => {
+    const sourceLabel = TODO_SOURCE_LABELS[t.sourceType] || t.sourceType || '待办';
+    const done = t.status === 'done';
+    const title = t.sourceTitle || t.note || sourceLabel;
+    const bodyParts = [t.note || ''];
+    if (t.sourceDocNo) bodyParts.push(`单号：${t.sourceDocNo}`);
+    if (t.remindAt) bodyParts.push(`提醒：${formatChatTime(t.remindAt)}`);
+    return {
+      id: t.id,
+      kind: 'todo',
+      side: 'right',
+      title,
+      body: bodyParts.filter(Boolean).join('\n'),
+      tagLabel: done ? '已完成' : '待处理',
+      tagTone: done ? 'muted' : 'warning',
+      sourceLabel,
+      sourceDocNo: t.sourceDocNo || '',
+      timeText: formatChatTime(t.updatedAt || t.createdAt),
+      at: new Date(t.updatedAt || t.createdAt).getTime() || 0,
+      preview: `${done ? '[已完成] ' : ''}${title}`,
+      raw: t
+    };
+  });
 }
 
 /**
@@ -161,7 +161,7 @@ function buildCollabConversations(transfers, myTenantId) {
         pendingDispatchPayloadRefresh: 0,
         pendingReturns: 0,
         pendingForwards: 0,
-        totalItems: 0,
+        totalItems: 0
       };
       peerMap.set(peerTenantId, p);
     }
@@ -170,13 +170,13 @@ function buildCollabConversations(transfers, myTenantId) {
 
   function peerNameOf(t, peerTenantId) {
     if (t.senderTenantId === peerTenantId) {
-      return t.senderTenantName && t.senderTenantName !== '本企业'
-        ? t.senderTenantName
-        : peerTenantId;
+      return t.senderTenantName && t.senderTenantName !== '本企业' ?
+      t.senderTenantName :
+      peerTenantId;
     }
-    return t.receiverTenantName && t.receiverTenantName !== '本企业'
-      ? t.receiverTenantName
-      : peerTenantId;
+    return t.receiverTenantName && t.receiverTenantName !== '本企业' ?
+    t.receiverTenantName :
+    peerTenantId;
   }
 
   list.forEach((t) => {
@@ -200,29 +200,29 @@ function buildCollabConversations(transfers, myTenantId) {
     let pendingForwards = 0;
     let totalItems = 0;
 
-    p.entries.forEach((e) => {
+    p.entries.forEach((e) => {var _t$chainStep, _t$dispatches$length, _t$dispatches, _t$returns$length, _t$returns;
       const t = e.transfer;
       if (e.kinds.has('dispatch') && t.receiverTenantName === '本企业') {
         const ds = (t.dispatches || []).filter((d) => d.status === 'PENDING');
         pendingDispatches += ds.length;
         pendingDispatchPayloadRefresh += ds.filter(
-          (d) => d.amendmentStatus === COLLAB_DISPATCH_AMENDMENT_PENDING_B_REVIEW,
+          (d) => d.amendmentStatus === COLLAB_DISPATCH_AMENDMENT_PENDING_B_REVIEW
         ).length;
       }
       if (e.kinds.has('return') && t.senderTenantName === '本企业') {
         pendingReturns += (t.returns || []).filter((r) => r.status === 'PENDING_A_RECEIVE').length;
       }
       if (
-        e.kinds.has('forward') &&
-        t.senderTenantName === '本企业' &&
-        t.originTenantId &&
-        (t.chainStep ?? 0) > 0 &&
-        !t.originConfirmedAt
-      ) {
+      e.kinds.has('forward') &&
+      t.senderTenantName === '本企业' &&
+      t.originTenantId &&
+      ((_t$chainStep = t.chainStep) != null ? _t$chainStep : 0) > 0 &&
+      !t.originConfirmedAt)
+      {
         pendingForwards += 1;
       }
-      if (e.kinds.has('dispatch')) totalItems += t.dispatches?.length ?? 0;
-      if (e.kinds.has('return')) totalItems += t.returns?.length ?? 0;
+      if (e.kinds.has('dispatch')) totalItems += (_t$dispatches$length = (_t$dispatches = t.dispatches) == null ? void 0 : _t$dispatches.length) != null ? _t$dispatches$length : 0;
+      if (e.kinds.has('return')) totalItems += (_t$returns$length = (_t$returns = t.returns) == null ? void 0 : _t$returns.length) != null ? _t$returns$length : 0;
     });
 
     const pending = pendingDispatches + pendingReturns + pendingForwards;
@@ -243,7 +243,7 @@ function buildCollabConversations(transfers, myTenantId) {
       transferCount: p.entries.length,
       lastTimeText: lastBubble ? lastBubble.timeText : '',
       lastSummary: lastBubble ? lastBubble.preview : '',
-      bubbles,
+      bubbles
     };
   });
 
@@ -269,7 +269,7 @@ function buildPeerTimelineBubbles(entries, myTenantId) {
     const t = e.transfer;
 
     if (e.kinds.has('dispatch')) {
-      (t.dispatches || []).forEach((d) => {
+      (t.dispatches || []).forEach((d) => {var _d$payload, _d$payload2;
         const isSender = t.senderTenantId === myTenantId;
         items.push({
           id: `d:${d.id}`,
@@ -280,13 +280,13 @@ function buildPeerTimelineBubbles(entries, myTenantId) {
           tagTone: dispatchStatusTone(d.status),
           productName: t.senderProductName || t.receiverProductName || '',
           productSku: t.senderProductSku || '',
-          quantity: sumItems(d.payload?.items),
-          docNo: (d.payload?.senderRef?.docNos || []).join('、'),
+          quantity: sumItems((_d$payload = d.payload) == null ? void 0 : _d$payload.items),
+          docNo: (((_d$payload2 = d.payload) == null || (_d$payload2 = _d$payload2.senderRef) == null ? void 0 : _d$payload2.docNos) || []).join('、'),
           timeText: formatChatTime(d.createdAt),
           at: new Date(d.createdAt).getTime() || 0,
           preview: `派发 · ${dispatchStatusLabel(d.status)}`,
           transfer: t,
-          doc: d,
+          doc: d
         });
       });
     }
@@ -296,8 +296,8 @@ function buildPeerTimelineBubbles(entries, myTenantId) {
       const leftovers = [];
       (t.returns || []).forEach((r) => {
         const pl = r.payload || {};
-        const gid = (pl.returnGroupId && String(pl.returnGroupId).trim()) || '';
-        const docNo = (pl.stockOutDocNo && String(pl.stockOutDocNo).trim()) || '';
+        const gid = pl.returnGroupId && String(pl.returnGroupId).trim() || '';
+        const docNo = pl.stockOutDocNo && String(pl.stockOutDocNo).trim() || '';
         const groupKey = gid ? `g:${gid}` : docNo ? `n:${docNo}` : '';
         if (!groupKey) {
           leftovers.push(r);
@@ -308,19 +308,19 @@ function buildPeerTimelineBubbles(entries, myTenantId) {
         retGroupsInTransfer.set(groupKey, arr);
       });
 
-      retGroupsInTransfer.forEach((arr, k) => {
+      retGroupsInTransfer.forEach((arr, k) => {var _arr$;
         const latest = arr.reduce((acc, it) => Math.max(acc, new Date(it.createdAt).getTime() || 0), 0);
-        const aggDocNo = arr[0]?.doc?.payload?.stockOutDocNo || '';
+        const aggDocNo = ((_arr$ = arr[0]) == null || (_arr$ = _arr$.doc) == null || (_arr$ = _arr$.payload) == null ? void 0 : _arr$.stockOutDocNo) || '';
         const isSender = t.senderTenantId === myTenantId;
         const side = isSender ? 'left' : 'right';
         const allReceived = arr.every((r) => r.status === 'A_RECEIVED');
         const allWithdrawn = arr.every((r) => r.status === 'WITHDRAWN');
-        const summaryLabel = allReceived
-          ? '已收回'
-          : allWithdrawn
-            ? '已撤回'
-            : '待甲方收回';
-        const qty = arr.reduce((s, r) => s + sumItems(r.payload?.items), 0);
+        const summaryLabel = allReceived ?
+        '已收回' :
+        allWithdrawn ?
+        '已撤回' :
+        '待甲方收回';
+        const qty = arr.reduce((s, r) => {var _r$payload;return s + sumItems((_r$payload = r.payload) == null ? void 0 : _r$payload.items);}, 0);
         items.push({
           id: `agg:${k}:${t.id}`,
           kind: 'agg-return',
@@ -335,7 +335,7 @@ function buildPeerTimelineBubbles(entries, myTenantId) {
           at: latest,
           preview: `批量回传 · ${summaryLabel}`,
           transfer: t,
-          aggItems: arr,
+          aggItems: arr
         });
       });
 
@@ -357,26 +357,26 @@ function buildPeerTimelineBubbles(entries, myTenantId) {
           at: new Date(r.createdAt).getTime() || 0,
           preview: `回传 · ${returnStatusLabel(r.status)}`,
           transfer: t,
-          doc: r,
+          doc: r
         });
       });
     }
 
-    if (e.kinds.has('forward')) {
+    if (e.kinds.has('forward')) {var _t$payload, _t$originTenantId, _t$outsourceRouteSnap;
       const fwdKey = `${t.id}`;
       if (seenForwardChain.has(fwdKey)) return;
       seenForwardChain.add(fwdKey);
 
       const siblings = [t];
-      const sharedDocNo = t.payload?.senderRef?.docNos?.[0] || '';
-      const isOriginSide = (t.originTenantId ?? t.senderTenantId) === myTenantId;
+      const sharedDocNo = ((_t$payload = t.payload) == null || (_t$payload = _t$payload.senderRef) == null || (_t$payload = _t$payload.docNos) == null ? void 0 : _t$payload[0]) || '';
+      const isOriginSide = ((_t$originTenantId = t.originTenantId) != null ? _t$originTenantId : t.senderTenantId) === myTenantId;
       const side = isOriginSide ? 'left' : 'right';
 
-      const productNames = siblings
-        .map((s) => s.senderProductName || s.receiverProductName || '')
-        .filter(Boolean);
-      const totalQty = siblings.reduce((s, x) => s + sumItems(x.payload?.items), 0);
-      const nextStep = t.outsourceRouteSnapshot?.find?.((s) => s.stepOrder === (t.chainStep ?? 0)) || null;
+      const productNames = siblings.
+      map((s) => s.senderProductName || s.receiverProductName || '').
+      filter(Boolean);
+      const totalQty = siblings.reduce((s, x) => {var _x$payload;return s + sumItems((_x$payload = x.payload) == null ? void 0 : _x$payload.items);}, 0);
+      const nextStep = ((_t$outsourceRouteSnap = t.outsourceRouteSnapshot) == null || _t$outsourceRouteSnap.find == null ? void 0 : _t$outsourceRouteSnap.find((s) => {var _t$chainStep2;return s.stepOrder === ((_t$chainStep2 = t.chainStep) != null ? _t$chainStep2 : 0);})) || null;
 
       items.push({
         id: `fwd:${t.id}`,
@@ -388,11 +388,11 @@ function buildPeerTimelineBubbles(entries, myTenantId) {
         productName: productNames.join('、'),
         quantity: totalQty,
         docNo: sharedDocNo,
-        nextFactory: nextStep?.receiverTenantName || '',
+        nextFactory: (nextStep == null ? void 0 : nextStep.receiverTenantName) || '',
         timeText: formatChatTime(t.createdAt),
         at: new Date(t.createdAt).getTime() || 0,
         preview: `转发 · ${forwardStatusLabel(t.originConfirmedAt)}`,
-        transfer: t,
+        transfer: t
       });
     }
   });
@@ -408,7 +408,7 @@ function buildConversationEntry({
   avatarText,
   avatarTone,
   bubbles,
-  badge,
+  badge
 }) {
   const sorted = [...(bubbles || [])].sort((a, b) => a.at - b.at);
   const latest = sorted.length > 0 ? sorted[sorted.length - 1] : null;
@@ -418,11 +418,11 @@ function buildConversationEntry({
     title,
     avatarText,
     avatarTone,
-    lastTimeText: latest?.timeText || '',
-    lastSummary: latest?.preview || (sorted.length === 0 ? '暂无内容' : ''),
+    lastTimeText: (latest == null ? void 0 : latest.timeText) || '',
+    lastSummary: (latest == null ? void 0 : latest.preview) || (sorted.length === 0 ? '暂无内容' : ''),
     unread: badge,
     badge,
-    bubbles: sorted,
+    bubbles: sorted
   };
 }
 
@@ -436,7 +436,7 @@ function buildConversations({ notifications, todos, transfers, tenantId, userId 
 
   const readIdSet = (() => {
     try {
-      const { getReadIdSet } = require('./notificationRead.js');
+      const _require3 = require('./notificationRead.js'),getReadIdSet = _require3.getReadIdSet;
       return getReadIdSet(tenantId, userId);
     } catch {
       return new Set();
@@ -444,15 +444,15 @@ function buildConversations({ notifications, todos, transfers, tenantId, userId 
   })();
 
   const unreadNotifCount = notifBubbles.filter(
-    (b) => b.kind === 'notification' && b.id && !readIdSet.has(b.id),
+    (b) => b.kind === 'notification' && b.id && !readIdSet.has(b.id)
   ).length;
   const openTodoCount = todoBubbles.filter((b) => b.tagTone !== 'muted').length;
 
   const myTenantId = (() => {
     try {
-      const { readTenantCtx } = require('./session.js');
+      const _require4 = require('./session.js'),readTenantCtx = _require4.readTenantCtx;
       const ctx = readTenantCtx();
-      return ctx?.tenantId || null;
+      return (ctx == null ? void 0 : ctx.tenantId) || null;
     } catch {
       return null;
     }
@@ -462,25 +462,25 @@ function buildConversations({ notifications, todos, transfers, tenantId, userId 
   const collabPendingCount = collabPeers.reduce((s, p) => s + p.pending, 0);
 
   const conversations = [
-    buildConversationEntry({
-      kind: 'notifications',
-      id: 'notifications',
-      title: '消息中心',
-      avatarText: '讯',
-      avatarTone: unreadNotifCount > 0 ? 'info' : 'muted',
-      bubbles: notifBubbles,
-      badge: unreadNotifCount,
-    }),
-    buildConversationEntry({
-      kind: 'todos',
-      id: 'todos',
-      title: '待办事项',
-      avatarText: '办',
-      avatarTone: openTodoCount > 0 ? 'warning' : 'muted',
-      bubbles: todoBubbles,
-      badge: openTodoCount,
-    }),
-  ];
+  buildConversationEntry({
+    kind: 'notifications',
+    id: 'notifications',
+    title: '消息中心',
+    avatarText: '讯',
+    avatarTone: unreadNotifCount > 0 ? 'info' : 'muted',
+    bubbles: notifBubbles,
+    badge: unreadNotifCount
+  }),
+  buildConversationEntry({
+    kind: 'todos',
+    id: 'todos',
+    title: '待办事项',
+    avatarText: '办',
+    avatarTone: openTodoCount > 0 ? 'warning' : 'muted',
+    bubbles: todoBubbles,
+    badge: openTodoCount
+  })];
+
 
   collabPeers.forEach((p) => {
     conversations.push({
@@ -494,7 +494,7 @@ function buildConversations({ notifications, todos, transfers, tenantId, userId 
       unread: p.pending,
       badge: p.pending,
       bubbles: p.bubbles,
-      peer: p,
+      peer: p
     });
   });
 
@@ -503,7 +503,7 @@ function buildConversations({ notifications, todos, transfers, tenantId, userId 
     unreadCount: unreadNotifCount + openTodoCount + collabPendingCount,
     collabPendingCount,
     openTodoCount,
-    unreadNotifCount,
+    unreadNotifCount
   };
 }
 
@@ -516,5 +516,5 @@ module.exports = {
   buildPeerTimelineBubbles,
   formatChatTime,
   NOTIF_TYPE_META,
-  TODO_SOURCE_LABELS,
+  TODO_SOURCE_LABELS
 };

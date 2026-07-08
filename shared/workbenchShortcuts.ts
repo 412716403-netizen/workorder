@@ -45,7 +45,7 @@ export interface WorkbenchShortcutDefinition {
 export const WORKBENCH_SHORTCUT_CATALOG: WorkbenchShortcutDefinition[] = [
   { id: 'production-plans', label: '生产计划', group: '生产管理', href: '/production', tab: 'plans', icon: 'CalendarRange', module: 'production' },
   { id: 'production-orders', label: '工单中心', group: '生产管理', href: '/production', tab: 'orders', icon: 'ClipboardList', module: 'production' },
-  { id: 'production-stock-out', label: '生产物料', group: '生产管理', href: '/production', tab: 'STOCK_OUT', icon: 'ArrowUpFromLine', module: 'production', perm: 'production:stock_out:view' },
+  { id: 'production-stock-out', label: '生产物料', group: '生产管理', href: '/production', tab: 'STOCK_OUT', icon: 'ArrowUpFromLine', module: 'production', perm: 'production:material_list:allow' },
   { id: 'production-outsource', label: '外协管理', group: '生产管理', href: '/production', tab: 'OUTSOURCE', icon: 'Truck', module: 'production', perm: 'production:outsource:view' },
   { id: 'production-rework', label: '返工管理', group: '生产管理', href: '/production', tab: 'REWORK', icon: 'RotateCcw', module: 'production', perm: 'production:rework:view' },
 

@@ -7,9 +7,9 @@ function getOrderFamilyIds(orders, parentId, childrenByParentId) {
   const queue = [parentId];
   while (queue.length > 0) {
     const pid = queue.shift();
-    const children = childrenByParentId
-      ? (childrenByParentId.get(pid) || [])
-      : orders.filter((o) => o.parentOrderId === pid);
+    const children = childrenByParentId ?
+    childrenByParentId.get(pid) || [] :
+    orders.filter((o) => o.parentOrderId === pid);
     children.forEach((o) => {
       ids.push(o.id);
       queue.push(o.id);
@@ -36,15 +36,15 @@ function displayMaterialsForKeyword(materials, materialKw, productsById) {
   if (!kw) return materials;
   const hit = (materials || []).filter((m) => {
     const p = productsById.get(m.productId);
-    return (p?.name || '').toLowerCase().includes(kw)
-      || (p?.sku || '').toLowerCase().includes(kw);
+    return ((p == null ? void 0 : p.name) || '').toLowerCase().includes(kw) ||
+    ((p == null ? void 0 : p.sku) || '').toLowerCase().includes(kw);
   });
   return hit.length > 0 ? hit : materials;
 }
 
 function visibleMaterialRowsForList(materials, materialKw, productsById) {
   return filterMaterialRowsWithActivity(
-    displayMaterialsForKeyword(materials, materialKw, productsById),
+    displayMaterialsForKeyword(materials, materialKw, productsById)
   );
 }
 
@@ -63,27 +63,27 @@ function resolveBomItems(productsById, bomsById, bomsByParentProduct, productId,
         if (bom) {
           bom.items.forEach((bi) => items.push({
             productId: bi.productId,
-            quantity: Number(bi.quantity),
+            quantity: Number(bi.quantity)
           }));
           return items;
         }
       }
     }
-    (bomsByParentProduct.get(product.id) || [])
-      .filter((b) => b.nodeId === nodeId && b.variantId === variantId)
-      .forEach((bom) => bom.items.forEach((bi) => items.push({
-        productId: bi.productId,
-        quantity: Number(bi.quantity),
-      })));
+    (bomsByParentProduct.get(product.id) || []).
+    filter((b) => b.nodeId === nodeId && b.variantId === variantId).
+    forEach((bom) => bom.items.forEach((bi) => items.push({
+      productId: bi.productId,
+      quantity: Number(bi.quantity)
+    })));
     if (items.length > 0) return items;
   }
 
-  (bomsByParentProduct.get(product.id) || [])
-    .filter((b) => b.nodeId === nodeId)
-    .forEach((bom) => bom.items.forEach((bi) => items.push({
-      productId: bi.productId,
-      quantity: Number(bi.quantity),
-    })));
+  (bomsByParentProduct.get(product.id) || []).
+  filter((b) => b.nodeId === nodeId).
+  forEach((bom) => bom.items.forEach((bi) => items.push({
+    productId: bi.productId,
+    quantity: Number(bi.quantity)
+  })));
   return items;
 }
 
@@ -141,16 +141,16 @@ function finishedProductHasBom(fpId, productsById, bomsById, bomsByParentProduct
 }
 
 function computeOrderFamilyMaterialStats(params) {
-  const {
-    rootOrderId,
-    orders,
-    productsById,
-    bomsById,
-    bomsByParentProduct,
-    childrenByParentId,
-    stockRecords,
-    nodeWeightEnabledMap,
-  } = params;
+  const
+    rootOrderId =
+
+
+
+
+
+
+
+    params.rootOrderId,orders = params.orders,productsById = params.productsById,bomsById = params.bomsById,bomsByParentProduct = params.bomsByParentProduct,childrenByParentId = params.childrenByParentId,stockRecords = params.stockRecords,nodeWeightEnabledMap = params.nodeWeightEnabledMap;
 
   const familyIds = new Set(getOrderFamilyIds(orders, rootOrderId, childrenByParentId));
   const prodMap = new Map();
@@ -168,10 +168,10 @@ function computeOrderFamilyMaterialStats(params) {
   const familyOrders = orders.filter((o) => familyIds.has(o.id));
   familyOrders.forEach((ord) => {
     const ordProduct = productsById.get(ord.productId);
-    const variants = (ordProduct && ordProduct.variants) || [];
+    const variants = ordProduct && ordProduct.variants || [];
     const bestMsIdx = ord.milestones.reduce(
-      (bi, ms, i) => (ms.completedQuantity > (ord.milestones[bi]?.completedQuantity ?? 0) ? i : bi),
-      0,
+      (bi, ms, i) => {var _ord$milestones$bi$co, _ord$milestones$bi;return ms.completedQuantity > ((_ord$milestones$bi$co = (_ord$milestones$bi = ord.milestones[bi]) == null ? void 0 : _ord$milestones$bi.completedQuantity) != null ? _ord$milestones$bi$co : 0) ? i : bi;},
+      0
     );
     const bestMs = ord.milestones[bestMsIdx];
     const variantCompletedMap = new Map();
@@ -188,12 +188,12 @@ function computeOrderFamilyMaterialStats(params) {
     } else {
       totalCompleted = ord.milestones.reduce(
         (max, ms) => Math.max(max, ms.completedQuantity),
-        0,
+        0
       );
     }
 
     const hasReportQtyForAnyProductVariant = variants.some(
-      (v) => (variantCompletedMap.get(v.id) || 0) > 0,
+      (v) => (variantCompletedMap.get(v.id) || 0) > 0
     );
     if (variants.length > 0 && variantCompletedMap.size > 0 && hasReportQtyForAnyProductVariant) {
       variants.forEach((v) => {
@@ -208,13 +208,13 @@ function computeOrderFamilyMaterialStats(params) {
             if (bom) bom.items.forEach((bi) => addTheory(bi, vCompleted));
           });
         } else if (ordProduct) {
-          (bomsByParentProduct.get(ordProduct.id) || [])
-            .filter((b) => b.variantId === v.id && b.nodeId)
-            .forEach((bom) => {
-              if (seenBomIds.has(bom.id)) return;
-              seenBomIds.add(bom.id);
-              bom.items.forEach((bi) => addTheory(bi, vCompleted));
-            });
+          (bomsByParentProduct.get(ordProduct.id) || []).
+          filter((b) => b.variantId === v.id && b.nodeId).
+          forEach((bom) => {
+            if (seenBomIds.has(bom.id)) return;
+            seenBomIds.add(bom.id);
+            bom.items.forEach((bi) => addTheory(bi, vCompleted));
+          });
         }
       });
     } else if (variants.length > 0) {
@@ -230,14 +230,14 @@ function computeOrderFamilyMaterialStats(params) {
         }
       });
       if (prodMap.size === 0 && ordProduct) {
-        (bomsByParentProduct.get(ordProduct.id) || [])
-          .filter((b) => b.nodeId)
-          .forEach((bom) => bom.items.forEach((bi) => addTheory(bi, totalCompleted)));
+        (bomsByParentProduct.get(ordProduct.id) || []).
+        filter((b) => b.nodeId).
+        forEach((bom) => bom.items.forEach((bi) => addTheory(bi, totalCompleted)));
       }
     } else if (ordProduct) {
-      (bomsByParentProduct.get(ordProduct.id) || [])
-        .filter((b) => b.nodeId)
-        .forEach((bom) => bom.items.forEach((bi) => addTheory(bi, totalCompleted)));
+      (bomsByParentProduct.get(ordProduct.id) || []).
+      filter((b) => b.nodeId).
+      forEach((bom) => bom.items.forEach((bi) => addTheory(bi, totalCompleted)));
     }
   });
 
@@ -246,15 +246,15 @@ function computeOrderFamilyMaterialStats(params) {
     if (!r.orderId || !familyIds.has(r.orderId)) return;
     if (!prodMap.has(r.productId)) prodMap.set(r.productId, emptyAcc());
     const cur = prodMap.get(r.productId);
-    if (r.type === 'STOCK_OUT') cur.issue += r.quantity;
-    else cur.returnQty += r.quantity;
+    if (r.type === 'STOCK_OUT') cur.issue += r.quantity;else
+    cur.returnQty += r.quantity;
   });
 
   return matMapToRows(prodMap);
 }
 
 function computeAllParentMaterialStats(params) {
-  const { orders, idx, stockRecords, nodeWeightEnabledMap } = params;
+  const orders = params.orders,idx = params.idx,stockRecords = params.stockRecords,nodeWeightEnabledMap = params.nodeWeightEnabledMap;
   const result = new Map();
   const parentList = orders.filter((o) => !o.parentOrderId);
   parentList.forEach((parent) => {
@@ -268,31 +268,31 @@ function computeAllParentMaterialStats(params) {
         bomsByParentProduct: idx.bomsByParentProduct,
         childrenByParentId: idx.childrenByParentId,
         stockRecords,
-        nodeWeightEnabledMap,
-      }),
+        nodeWeightEnabledMap
+      })
     );
   });
   return result;
 }
 
 function computeProductMaterialStats(params) {
-  const {
-    productId: fpId,
-    orders,
-    idx,
-    stockRecords,
-    productMilestoneProgresses,
-    nodeWeightEnabledMap,
-  } = params;
-  const {
-    productsById,
-    bomsById,
-    bomsByParentProduct,
-    childrenByParentId,
-    rootOrdersByProductId,
-    ordersByProductId,
-    ordersById,
-  } = idx;
+  const
+    fpId =
+
+
+
+
+
+    params.productId,orders = params.orders,idx = params.idx,stockRecords = params.stockRecords,productMilestoneProgresses = params.productMilestoneProgresses,nodeWeightEnabledMap = params.nodeWeightEnabledMap;
+  const
+    productsById =
+
+
+
+
+
+
+    idx.productsById,bomsById = idx.bomsById,bomsByParentProduct = idx.bomsByParentProduct,childrenByParentId = idx.childrenByParentId,rootOrdersByProductId = idx.rootOrdersByProductId,ordersByProductId = idx.ordersByProductId,ordersById = idx.ordersById;
 
   const roots = rootOrdersByProductId.get(fpId) || [];
   const ordersForThisProduct = ordersByProductId.get(fpId) || [];
@@ -327,7 +327,7 @@ function computeProductMaterialStats(params) {
       bomsByParentProduct,
       fpId,
       nodeId,
-      variantId || undefined,
+      variantId || undefined
     );
     if (bomItems.length === 0) return false;
     bomItems.forEach((bi) => addTheory(bi.productId, Number(bi.quantity) * qty));
@@ -392,23 +392,23 @@ function computeProductMaterialStats(params) {
     if (!bySource && !byOrder) return;
     if (!prodMap.has(r.productId)) prodMap.set(r.productId, emptyAcc());
     const cur = prodMap.get(r.productId);
-    if (r.type === 'STOCK_OUT') cur.issue += r.quantity;
-    else cur.returnQty += r.quantity;
+    if (r.type === 'STOCK_OUT') cur.issue += r.quantity;else
+    cur.returnQty += r.quantity;
   });
 
   return matMapToRows(prodMap);
 }
 
 function computeAllProductMaterialStats(params) {
-  const { orders, idx, stockRecords, productMilestoneProgresses, nodeWeightEnabledMap } = params;
+  const orders = params.orders,idx = params.idx,stockRecords = params.stockRecords,productMilestoneProgresses = params.productMilestoneProgresses,nodeWeightEnabledMap = params.nodeWeightEnabledMap;
   const result = new Map();
-  const finishedIds = [...new Set(orders.map((o) => o.productId).filter(Boolean))]
-    .filter((fpId) => finishedProductHasBom(
-      fpId,
-      idx.productsById,
-      idx.bomsById,
-      idx.bomsByParentProduct,
-    ));
+  const finishedIds = [...new Set(orders.map((o) => o.productId).filter(Boolean))].
+  filter((fpId) => finishedProductHasBom(
+    fpId,
+    idx.productsById,
+    idx.bomsById,
+    idx.bomsByParentProduct
+  ));
   finishedIds.forEach((fpId) => {
     result.set(
       fpId,
@@ -418,8 +418,8 @@ function computeAllProductMaterialStats(params) {
         idx,
         stockRecords,
         productMilestoneProgresses,
-        nodeWeightEnabledMap,
-      }),
+        nodeWeightEnabledMap
+      })
     );
   });
   return result;
@@ -462,17 +462,17 @@ function matRowSurplus(row) {
 const INTERNAL_PARTNER_KEY = '__internal__';
 
 function computePartnerMaterialGroups(params) {
-  const {
-    productionLinkMode,
-    idx,
-    stockRecords,
-    outsourceRecords,
-    nodeWeightEnabledMap,
-    parentMaterialStats,
-    productMaterialStatsByProduct,
-  } = params;
+  const
+    productionLinkMode =
 
-  const { productsById, bomsById, bomsByParentProduct, ordersById } = idx;
+
+
+
+
+
+    params.productionLinkMode,idx = params.idx,stockRecords = params.stockRecords,outsourceRecords = params.outsourceRecords,nodeWeightEnabledMap = params.nodeWeightEnabledMap,parentMaterialStats = params.parentMaterialStats,productMaterialStatsByProduct = params.productMaterialStatsByProduct;
+
+  const productsById = idx.productsById,bomsById = idx.bomsById,bomsByParentProduct = idx.bomsByParentProduct,ordersById = idx.ordersById;
   const buckets = new Map();
 
   const ensure = (pk, sk, matId) => {
@@ -487,18 +487,18 @@ function computePartnerMaterialGroups(params) {
   const getScopeKey = (r) => {
     if (productionLinkMode === 'product') {
       if (r.sourceProductId) return r.sourceProductId;
-      if (r.orderId) {
+      if (r.orderId) {var _ordersById$get;
         const rootId = resolveOrderRootId(r.orderId, ordersById);
-        return ordersById.get(rootId)?.productId || null;
+        return ((_ordersById$get = ordersById.get(rootId)) == null ? void 0 : _ordersById$get.productId) || null;
       }
       return null;
     }
     return r.orderId ? resolveOrderRootId(r.orderId, ordersById) : null;
   };
 
-  const totalSource = productionLinkMode === 'product'
-    ? productMaterialStatsByProduct
-    : parentMaterialStats;
+  const totalSource = productionLinkMode === 'product' ?
+  productMaterialStatsByProduct :
+  parentMaterialStats;
   if (totalSource) {
     totalSource.forEach((rows, scopeKey) => {
       (rows || []).forEach((row) => {
@@ -511,17 +511,17 @@ function computePartnerMaterialGroups(params) {
 
   (stockRecords || []).forEach((r) => {
     if (r.type !== 'STOCK_OUT' && r.type !== 'STOCK_RETURN') return;
-    const pk = (r.partner && String(r.partner).trim()) || INTERNAL_PARTNER_KEY;
+    const pk = r.partner && String(r.partner).trim() || INTERNAL_PARTNER_KEY;
     const sk = getScopeKey(r);
     if (!sk) return;
     const acc = ensure(pk, sk, r.productId);
-    if (r.type === 'STOCK_OUT') acc.issue += Number(r.quantity) || 0;
-    else acc.returnQty += Number(r.quantity) || 0;
+    if (r.type === 'STOCK_OUT') acc.issue += Number(r.quantity) || 0;else
+    acc.returnQty += Number(r.quantity) || 0;
   });
 
   (outsourceRecords || []).forEach((r) => {
     if (r.type !== 'OUTSOURCE' || r.status !== '已收回' || r.sourceReworkId) return;
-    const pk = (r.partner && String(r.partner).trim()) || INTERNAL_PARTNER_KEY;
+    const pk = r.partner && String(r.partner).trim() || INTERNAL_PARTNER_KEY;
     if (pk === INTERNAL_PARTNER_KEY || !r.nodeId) return;
 
     let scopeKey = null;
@@ -529,9 +529,9 @@ function computePartnerMaterialGroups(params) {
     if (productionLinkMode === 'product') {
       scopeKey = r.productId;
       productForBom = r.productId;
-    } else if (r.orderId) {
+    } else if (r.orderId) {var _ordersById$get2;
       scopeKey = resolveOrderRootId(r.orderId, ordersById);
-      productForBom = ordersById.get(r.orderId)?.productId || null;
+      productForBom = ((_ordersById$get2 = ordersById.get(r.orderId)) == null ? void 0 : _ordersById$get2.productId) || null;
     }
     if (!scopeKey || !productForBom) return;
 
@@ -548,7 +548,7 @@ function computePartnerMaterialGroups(params) {
         bomsByParentProduct,
         productForBom,
         r.nodeId,
-        r.variantId || undefined,
+        r.variantId || undefined
       );
       bomItems.forEach((bi) => {
         applyPartnerCost(bi.productId, Number(bi.quantity) * (Number(r.quantity) || 0), 'theoryCost');
@@ -571,7 +571,7 @@ function computePartnerMaterialGroups(params) {
     return {
       partnerKey: pk,
       partnerLabel: pk === INTERNAL_PARTNER_KEY ? '本厂' : pk,
-      data,
+      data
     };
   });
 }
@@ -595,5 +595,5 @@ module.exports = {
   roundQty,
   matRowNetIssue,
   matRowSurplus,
-  computePartnerMaterialGroups,
+  computePartnerMaterialGroups
 };

@@ -1,32 +1,32 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const {
-  DEFAULT_PAGE_SIZE,
-  INVENTORY_VIEW_MODES,
-  WAREHOUSE_SHORTCUTS,
-} = require('../config/warehouses.js');
-const {
-  buildProductStockRows,
-  filterProductStocks,
-  buildVisibleProductStocks,
-  buildWarehouseCards,
-  buildProductCards,
-  paginateItems,
-} = require('../utils/warehouseInventory.js');
-const { buildStockSnapshotIndex } = require('../utils/warehouseStock.js');
-const { buildProductMap, buildCategoryMap } = require('../utils/purchaseOrders.js');
-const { fetchStockSnapshot, fetchStockBatches } = require('../utils/orderApi.js');
-const { fetchProductsAll, fetchCategoriesAll, fetchDictionaries } = require('../utils/planApi.js');
-const { fetchWarehousesAll } = require('../utils/orderApi.js');
-const { normalizeAppDictionaries, normalizeMasterList } = require('../utils/productionPlans.js');
-const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
-const { shouldHubListRefetch, trackHubListHidden, LIST_ROUTES } = require('../utils/saveNavigation.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 =
+
+
+
+  require('../config/warehouses.js'),DEFAULT_PAGE_SIZE = _require3.DEFAULT_PAGE_SIZE,INVENTORY_VIEW_MODES = _require3.INVENTORY_VIEW_MODES,WAREHOUSE_SHORTCUTS = _require3.WAREHOUSE_SHORTCUTS;
+const _require4 =
+
+
+
+
+
+
+  require('../utils/warehouseInventory.js'),buildProductStockRows = _require4.buildProductStockRows,filterProductStocks = _require4.filterProductStocks,buildVisibleProductStocks = _require4.buildVisibleProductStocks,buildWarehouseCards = _require4.buildWarehouseCards,buildProductCards = _require4.buildProductCards,paginateItems = _require4.paginateItems;
+const _require5 = require('../utils/warehouseStock.js'),buildStockSnapshotIndex = _require5.buildStockSnapshotIndex;
+const _require6 = require('../utils/purchaseOrders.js'),buildProductMap = _require6.buildProductMap,buildCategoryMap = _require6.buildCategoryMap;
+const _require7 = require('../utils/orderApi.js'),fetchStockSnapshot = _require7.fetchStockSnapshot,fetchStockBatches = _require7.fetchStockBatches;
+const _require8 = require('../utils/planApi.js'),fetchProductsAll = _require8.fetchProductsAll,fetchCategoriesAll = _require8.fetchCategoriesAll,fetchDictionaries = _require8.fetchDictionaries;
+const _require9 = require('../utils/orderApi.js'),fetchWarehousesAll = _require9.fetchWarehousesAll;
+const _require0 = require('../utils/productionPlans.js'),normalizeAppDictionaries = _require0.normalizeAppDictionaries,normalizeMasterList = _require0.normalizeMasterList;
+const _require1 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require1.readNavBarMetrics,readWindowMetrics = _require1.readWindowMetrics;
+const _require10 = require('../utils/saveNavigation.js'),shouldHubListRefetch = _require10.shouldHubListRefetch,trackHubListHidden = _require10.trackHubListHidden,LIST_ROUTES = _require10.LIST_ROUTES;
 
 const HUB_LIST_ROUTE = LIST_ROUTES.PSI_WAREHOUSES.replace(/^\//, '');
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
-  const toolsPx = Math.ceil((win.windowWidth / 750) * 128);
+  const toolsPx = Math.ceil(win.windowWidth / 750 * 128);
   return nav.statusBarHeight + nav.navBarHeight + toolsPx;
 }
 
@@ -49,7 +49,7 @@ Page({
     hasMore: false,
     statusBarHeight: 20,
     navBarHeight: 44,
-    headerBlockHeight: 88,
+    headerBlockHeight: 88
   },
 
   onLoad() {
@@ -57,7 +57,7 @@ Page({
     this.setData({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
-      headerBlockHeight: computeHeaderBlockHeight(nav),
+      headerBlockHeight: computeHeaderBlockHeight(nav)
     });
     this._initialized = false;
     this._searchTimer = null;
@@ -81,7 +81,7 @@ Page({
     this._tenantCtx = ctx;
     const perms = ctx.permissions || [];
     const shortcuts = WAREHOUSE_SHORTCUTS.filter(
-      (s) => !s.permission || hasPermission(perms, s.permission),
+      (s) => !s.permission || hasPermission(perms, s.permission)
     );
     this.setData({ shortcuts });
     if (!this._initialized) {
@@ -122,7 +122,7 @@ Page({
       selectedWarehouseId: '',
       selectedWarehouseName: '',
       drillLines: [],
-      page: 1,
+      page: 1
     });
     this.applyList();
   },
@@ -145,18 +145,18 @@ Page({
   },
 
   onWarehouseCardTap(e) {
-    const { warehouseId, warehouseName } = e.currentTarget.dataset;
+    const _e$currentTarget$data = e.currentTarget.dataset,warehouseId = _e$currentTarget$data.warehouseId,warehouseName = _e$currentTarget$data.warehouseName;
     const card = (this._allWarehouseCards || []).find((c) => c.warehouseId === warehouseId);
     this.setData({
       selectedWarehouseId: warehouseId,
       selectedWarehouseName: warehouseName,
       drillLines: card ? card.lines : [],
-      page: 1,
+      page: 1
     });
   },
 
   onProductFlowTap(e) {
-    const { productId, warehouseId } = e.currentTarget.dataset;
+    const _e$currentTarget$data2 = e.currentTarget.dataset,productId = _e$currentTarget$data2.productId,warehouseId = _e$currentTarget$data2.warehouseId;
     if (!productId) return;
     const q = [`productId=${encodeURIComponent(productId)}`];
     if (warehouseId) q.push(`warehouseId=${encodeURIComponent(warehouseId)}`);
@@ -166,21 +166,21 @@ Page({
   onToggleProductExpand(e) {
     const productId = e.currentTarget.dataset.productId;
     const cards = (this.data.productCards || []).map((c) =>
-      (c.productId === productId ? { ...c, detailsExpanded: !c.detailsExpanded } : c));
+    c.productId === productId ? { ...c, detailsExpanded: !c.detailsExpanded } : c);
     this.setData({ productCards: cards });
   },
 
   onToggleLineExpand(e) {
-    const { productId, warehouseId } = e.currentTarget.dataset;
+    const _e$currentTarget$data3 = e.currentTarget.dataset,productId = _e$currentTarget$data3.productId,warehouseId = _e$currentTarget$data3.warehouseId;
     const wid = warehouseId || this.data.selectedWarehouseId;
     const line = (this.data.drillLines || []).find((l) => l.productId === productId);
     if (!line || !line.canExpand) return;
     if (line.detailsExpanded) {
       this.setData({
         drillLines: (this.data.drillLines || []).map((l) =>
-          (l.productId === productId
-            ? { ...l, detailsExpanded: false, batchRows: [], batchLoading: false, batchError: '' }
-            : l)),
+        l.productId === productId ?
+        { ...l, detailsExpanded: false, batchRows: [], batchLoading: false, batchError: '' } :
+        l)
       });
       return;
     }
@@ -190,23 +190,23 @@ Page({
     }
     this.setData({
       drillLines: (this.data.drillLines || []).map((l) =>
-        (l.productId === productId ? { ...l, detailsExpanded: true } : l)),
+      l.productId === productId ? { ...l, detailsExpanded: true } : l)
     });
   },
 
   async bootstrap() {
     this.setData({ loading: true });
     try {
-      const [snapshotRaw, warehouses, products, categories, dictionaries] = await Promise.all([
+      const _await$Promise$all = await Promise.all([
         fetchStockSnapshot().catch(() => ({ byWarehouse: [], byVariant: [], byBatch: [] })),
         fetchWarehousesAll().catch(() => []),
         fetchProductsAll().catch(() => []),
         fetchCategoriesAll().catch(() => []),
-        fetchDictionaries().catch(() => ({})),
-      ]);
+        fetchDictionaries().catch(() => ({}))]
+        ),snapshotRaw = _await$Promise$all[0],warehouses = _await$Promise$all[1],products = _await$Promise$all[2],categories = _await$Promise$all[3],dictionaries = _await$Promise$all[4];
       this._products = normalizeMasterList(products);
       this._categories = normalizeMasterList(categories);
-      this._warehouses = Array.isArray(warehouses) ? warehouses : (warehouses.data || []);
+      this._warehouses = Array.isArray(warehouses) ? warehouses : warehouses.data || [];
       this._productMap = buildProductMap(this._products);
       this._categoryMap = buildCategoryMap(this._categories);
       this._warehouseMap = new Map(this._warehouses.map((w) => [w.id, w]));
@@ -217,7 +217,7 @@ Page({
         this._warehouses,
         this._categories,
         this._dictionaries,
-        this._stockIndex,
+        this._stockIndex
       );
       this._initialized = true;
       this.applyList();
@@ -234,13 +234,13 @@ Page({
     const filtered = filterProductStocks(
       this._productStocks || [],
       this.data.searchKeyword,
-      this._productMap,
+      this._productMap
     );
     const visible = buildVisibleProductStocks(filtered);
     this._allWarehouseCards = buildWarehouseCards(
       this._warehouses,
       visible,
-      this._productMap,
+      this._productMap
     );
     this._allProductCards = buildProductCards(visible, this._productMap);
 
@@ -256,12 +256,12 @@ Page({
   },
 
   renderPage(page) {
-    const { items, hasMore, total } = paginateItems(this._paginateSource || [], page, this.data.pageSize);
+    const _paginateItems = paginateItems(this._paginateSource || [], page, this.data.pageSize),items = _paginateItems.items,hasMore = _paginateItems.hasMore,total = _paginateItems.total;
     const patch = {
       loading: false,
       page,
       hasMore,
-      emptyText: total ? '' : '暂无库存数据',
+      emptyText: total ? '' : '暂无库存数据'
     };
     if (this.data.selectedWarehouseId) {
       patch.drillLines = page === 1 ? items : (this.data.drillLines || []).concat(items);
@@ -286,17 +286,17 @@ Page({
           detailsExpanded: true,
           batchLoading: true,
           batchError: '',
-          batchRows: [],
+          batchRows: []
         };
-      }),
+      })
     });
 
     try {
       const rows = await fetchStockBatches({ productId, warehouseId });
-      const batchRows = (rows || []).map((r) => ({
-        batchNo: r.batchNo || '—',
-        stockText: String(r.stock ?? 0),
-      }));
+      const batchRows = (rows || []).map((r) => {var _r$stock;return {
+          batchNo: r.batchNo || '—',
+          stockText: String((_r$stock = r.stock) != null ? _r$stock : 0)
+        };});
       this.setData({
         drillLines: (this.data.drillLines || []).map((line) => {
           if (line.productId !== productId) return line;
@@ -305,12 +305,12 @@ Page({
             detailsExpanded: true,
             batchLoading: false,
             batchRows,
-            batchError: '',
+            batchError: ''
           };
-        }),
+        })
       });
     } catch (err) {
-      const msg = (err && err.message) || '加载批次失败';
+      const msg = err && err.message || '加载批次失败';
       this.setData({
         drillLines: (this.data.drillLines || []).map((line) => {
           if (line.productId !== productId) return line;
@@ -319,10 +319,10 @@ Page({
             detailsExpanded: true,
             batchLoading: false,
             batchError: msg,
-            batchRows: [],
+            batchRows: []
           };
-        }),
+        })
       });
     }
-  },
+  }
 });

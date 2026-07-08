@@ -1,58 +1,58 @@
-const { readTenantCtx, readOperatorDisplayName } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const {
-  getOrder,
-  listOrdersPaginated,
-  fetchBomsAll,
-  fetchProductsAll,
-  fetchCategoriesAll,
-  fetchProductionRecords,
-  createProductionRecordBatch,
-  fetchWarehousesAll,
-  fetchNodesAll,
-  fetchStockBatches,
-  fetchTenantConfig,
-} = require('../utils/orderApi.js');
-const {
-  buildBomMaterialsForOrder,
-  buildBomMaterialsForProductGroup,
-  buildIssuedMapForOrder,
-  buildIssuedMapForProduct,
-  buildReworkIssuedMapForOrder,
-  buildReworkIssuedMapForProduct,
-  buildMaterialIssueUiRows,
-  buildReworkMaterialIssueUiRows,
-} = require('../utils/orderMaterialLite.js');
-const {
-  decorateRowsWithBatchFlags,
-  attachBatchOptionsToRows,
-  attachReturnBatchOptionsToRows,
-  applyBatchSelection,
-  rowsNeedBatchColumn,
-  validateMaterialIssueBatchRows,
-  validateReturnBatchRows,
-} = require('../utils/materialIssueBatch.js');
-const {
-  buildProductionRecordBatchPayload,
-  parseBatchErrorMessage,
-} = require('../utils/materialStockConfirm.js');
-const {
-  computeOutsourceReturnMaterials,
-  buildOutsourceReturnUiRows,
-  buildInternalReturnUiRows,
-  pickPreferredReturnWarehouse,
-  validateReturnRows,
-  buildReturnDispatchedBatchesMap,
-} = require('../utils/orderMaterialReturnLite.js');
-const { normalizeMasterList } = require('../utils/productionOrders.js');
-const { buildPartnerIssuedMap } = require('../utils/outsourceMaterialLite.js');
-const { INTERNAL_PARTNER_KEY } = require('../utils/materialStatsLite.js');
-const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
-const { LIST_ROUTES, afterSaveReturnToList } = require('../utils/saveNavigation.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx,readOperatorDisplayName = _require.readOperatorDisplayName;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 =
+
+
+
+
+
+
+
+
+
+
+
+  require('../utils/orderApi.js'),getOrder = _require3.getOrder,listOrdersPaginated = _require3.listOrdersPaginated,fetchBomsAll = _require3.fetchBomsAll,fetchProductsAll = _require3.fetchProductsAll,fetchCategoriesAll = _require3.fetchCategoriesAll,fetchProductionRecords = _require3.fetchProductionRecords,createProductionRecordBatch = _require3.createProductionRecordBatch,fetchWarehousesAll = _require3.fetchWarehousesAll,fetchNodesAll = _require3.fetchNodesAll,fetchStockBatches = _require3.fetchStockBatches,fetchTenantConfig = _require3.fetchTenantConfig;
+const _require4 =
+
+
+
+
+
+
+
+
+  require('../utils/orderMaterialLite.js'),buildBomMaterialsForOrder = _require4.buildBomMaterialsForOrder,buildBomMaterialsForProductGroup = _require4.buildBomMaterialsForProductGroup,buildIssuedMapForOrder = _require4.buildIssuedMapForOrder,buildIssuedMapForProduct = _require4.buildIssuedMapForProduct,buildReworkIssuedMapForOrder = _require4.buildReworkIssuedMapForOrder,buildReworkIssuedMapForProduct = _require4.buildReworkIssuedMapForProduct,buildMaterialIssueUiRows = _require4.buildMaterialIssueUiRows,buildReworkMaterialIssueUiRows = _require4.buildReworkMaterialIssueUiRows;
+const _require5 =
+
+
+
+
+
+
+
+  require('../utils/materialIssueBatch.js'),decorateRowsWithBatchFlags = _require5.decorateRowsWithBatchFlags,attachBatchOptionsToRows = _require5.attachBatchOptionsToRows,attachReturnBatchOptionsToRows = _require5.attachReturnBatchOptionsToRows,applyBatchSelection = _require5.applyBatchSelection,rowsNeedBatchColumn = _require5.rowsNeedBatchColumn,validateMaterialIssueBatchRows = _require5.validateMaterialIssueBatchRows,validateReturnBatchRows = _require5.validateReturnBatchRows;
+const _require6 =
+
+
+  require('../utils/materialStockConfirm.js'),buildProductionRecordBatchPayload = _require6.buildProductionRecordBatchPayload,parseBatchErrorMessage = _require6.parseBatchErrorMessage;
+const _require7 =
+
+
+
+
+
+
+  require('../utils/orderMaterialReturnLite.js'),computeOutsourceReturnMaterials = _require7.computeOutsourceReturnMaterials,buildOutsourceReturnUiRows = _require7.buildOutsourceReturnUiRows,buildInternalReturnUiRows = _require7.buildInternalReturnUiRows,pickPreferredReturnWarehouse = _require7.pickPreferredReturnWarehouse,validateReturnRows = _require7.validateReturnRows,buildReturnDispatchedBatchesMap = _require7.buildReturnDispatchedBatchesMap;
+const _require8 = require('../utils/productionOrders.js'),normalizeMasterList = _require8.normalizeMasterList;
+const _require9 = require('../utils/outsourceMaterialLite.js'),buildPartnerIssuedMap = _require9.buildPartnerIssuedMap;
+const _require0 = require('../utils/materialStatsLite.js'),INTERNAL_PARTNER_KEY = _require0.INTERNAL_PARTNER_KEY;
+const _require1 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require1.readNavBarMetrics,readWindowMetrics = _require1.readWindowMetrics;
+const _require10 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require10.LIST_ROUTES,afterSaveReturnToList = _require10.afterSaveReturnToList;
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
-  const tailPx = Math.ceil((win.windowWidth / 750) * 16);
+  const tailPx = Math.ceil(win.windowWidth / 750 * 16);
   return nav.statusBarHeight + nav.navBarHeight + tailPx;
 }
 
@@ -74,12 +74,12 @@ async function fetchOrdersByProductId(productId) {
 }
 
 function applyPageLabels(page, opts) {
-  const {
-    isReturn,
-    isOutsource,
-    isMaterialCenter,
-    isRework,
-  } = opts;
+  const
+    isReturn =
+
+
+
+    opts.isReturn,isOutsource = opts.isOutsource,isMaterialCenter = opts.isMaterialCenter,isRework = opts.isRework;
   if (isRework) {
     page.setData({
       isReturnMode: false,
@@ -90,7 +90,7 @@ function applyPageLabels(page, opts) {
       inputColLabel: '本次领料',
       submitLabel: '确认返工领料',
       emptyText: '该工单未配置 BOM 物料，无法进行返工领料',
-      showPartner: false,
+      showPartner: false
     });
     return;
   }
@@ -103,7 +103,7 @@ function applyPageLabels(page, opts) {
       inputColLabel: '本次退料',
       submitLabel: isOutsource ? '确认外协退料' : '确认退料',
       emptyText: isOutsource ? '暂无可退的外协物料' : '暂无可退物料',
-      showPartner: isOutsource && !!page._partnerKey,
+      showPartner: isOutsource && !!page._partnerKey
     });
     if (isMaterialCenter && page._partnerKey && page._partnerKey !== INTERNAL_PARTNER_KEY) {
       page.setData({ showPartner: true });
@@ -114,12 +114,12 @@ function applyPageLabels(page, opts) {
     isReturnMode: false,
     returnLayout: '',
     warehouseLabel: '出库仓库',
-    pageTitle: isOutsource ? '外协领料' : (isMaterialCenter ? '物料发出' : '物料发出'),
+    pageTitle: isOutsource ? '外协领料' : isMaterialCenter ? '物料发出' : '物料发出',
     progressColLabel: '领料进度',
     inputColLabel: '本次领料',
     submitLabel: isOutsource ? '确认外协领料' : '确认领料发出',
     emptyText: '该工单未配置 BOM 物料，无法进行物料发出',
-    showPartner: isOutsource && !!page._partnerKey,
+    showPartner: isOutsource && !!page._partnerKey
   });
 }
 
@@ -152,7 +152,7 @@ Page({
     showPartner: false,
     statusBarHeight: 20,
     navBarHeight: 44,
-    headerBlockHeight: 88,
+    headerBlockHeight: 88
   },
 
   onLoad(options) {
@@ -160,11 +160,11 @@ Page({
     this.setData({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
-      headerBlockHeight: computeHeaderBlockHeight(nav),
+      headerBlockHeight: computeHeaderBlockHeight(nav)
     });
 
     const ctx = readTenantCtx();
-    const perms = (ctx && ctx.permissions) || [];
+    const perms = ctx && ctx.permissions || [];
     this._source = options.source ? decodeURIComponent(options.source) : '';
     this._isOutsource = this._source === 'outsource';
     this._isRework = this._source === 'rework';
@@ -173,7 +173,7 @@ Page({
     this._partnerKey = options.partner ? decodeURIComponent(options.partner) : '';
     this._productionLinkMode = 'order';
 
-    const prefill = (getApp().globalData && getApp().globalData.materialReturnPrefill) || null;
+    const prefill = getApp().globalData && getApp().globalData.materialReturnPrefill || null;
     if (this._isMaterialCenter && prefill) {
       this._returnPrefill = prefill;
       if (getApp().globalData) getApp().globalData.materialReturnPrefill = null;
@@ -200,21 +200,21 @@ Page({
     } else if (this._isRework) {
       canMaterial = hasPermission(perms, 'production:rework_material:allow');
     } else {
-      canMaterial = hasPermission(perms, 'production:orders_material:allow')
-        || hasPermission(perms, 'production:material_issue:allow');
+      canMaterial = hasPermission(perms, 'production:orders_material:allow') ||
+      hasPermission(perms, 'production:material_issue:allow');
     }
 
     this.setData({
       canMaterial,
       partnerLabel: this._partnerKey,
-      showPartner: (this._isOutsource || this._isMaterialCenter) && !!this._partnerKey
-        && this._partnerKey !== INTERNAL_PARTNER_KEY,
+      showPartner: (this._isOutsource || this._isMaterialCenter) && !!this._partnerKey &&
+      this._partnerKey !== INTERNAL_PARTNER_KEY
     });
     applyPageLabels(this, {
       isReturn: this._isReturn,
       isOutsource: this._isOutsource,
       isMaterialCenter: this._isMaterialCenter,
-      isRework: this._isRework,
+      isRework: this._isRework
     });
 
     this._orderId = options.orderId ? decodeURIComponent(options.orderId) : '';
@@ -253,12 +253,12 @@ Page({
       title: '产品信息',
       content: lines.join('\n'),
       showCancel: false,
-      confirmText: '知道了',
+      confirmText: '知道了'
     });
   },
 
   onMaterialNameTap(e) {
-    const { id } = e.currentTarget.dataset;
+    const id = e.currentTarget.dataset.id;
     const row = (this.data.rows || []).find((r) => r.materialProductId === id);
     if (!row) return;
     const lines = [`名称：${row.name || '—'}`];
@@ -270,21 +270,21 @@ Page({
       title: '物料信息',
       content: lines.join('\n'),
       showCancel: false,
-      confirmText: '知道了',
+      confirmText: '知道了'
     });
   },
 
   onIssueQtyInput(e) {
-    const { id } = e.currentTarget.dataset;
+    const id = e.currentTarget.dataset.id;
     const val = e.detail.value || '';
     const rows = (this.data.rows || []).map((r) =>
-      (r.materialProductId === id ? { ...r, issueQty: val } : r),
+    r.materialProductId === id ? { ...r, issueQty: val } : r
     );
     this.syncRows(rows);
   },
 
   onBatchChange(e) {
-    const { id } = e.currentTarget.dataset;
+    const id = e.currentTarget.dataset.id;
     const idx = Number(e.detail.value);
     const rows = (this.data.rows || []).map((r) => {
       if (r.materialProductId !== id) return r;
@@ -301,7 +301,7 @@ Page({
     this.setData({
       rows,
       hasRows: rows.length > 0,
-      canSubmit: canSubmit && this.data.canMaterial,
+      canSubmit: canSubmit && this.data.canMaterial
     });
   },
 
@@ -314,7 +314,7 @@ Page({
       withOptions = await attachBatchOptionsToRows(
         withOptions,
         wh ? wh.id : '',
-        fetchStockBatches,
+        fetchStockBatches
       );
     }
     this.syncRows(withOptions);
@@ -333,20 +333,20 @@ Page({
   },
 
   async loadReturnData(context) {
-    const {
-      boms,
-      products,
-      whList,
-      globalNodes,
-      orderNumber,
-      productName,
-      productSku,
-      showProductSku,
-      showOrderNumber,
-      stockRecords,
-      outsourceRecords,
-      orders,
-    } = context;
+    const
+      boms =
+
+
+
+
+
+
+
+
+
+
+
+      context.boms,products = context.products,whList = context.whList,globalNodes = context.globalNodes,orderNumber = context.orderNumber,productName = context.productName,productSku = context.productSku,showProductSku = context.showProductSku,showOrderNumber = context.showOrderNumber,stockRecords = context.stockRecords,outsourceRecords = context.outsourceRecords,orders = context.orders;
 
     let rows = [];
     let warehouseIndex = 0;
@@ -354,18 +354,18 @@ Page({
     if (this._returnPrefill) {
       rows = buildInternalReturnUiRows(
         this._returnPrefill.materialRows || [],
-        this._returnPrefill.selectedProductIds,
+        this._returnPrefill.selectedProductIds
       );
       this._sourceProductId = this._returnPrefill.sourceProductId || this._productId || '';
-      this._order = this._returnPrefill.orderId
-        ? { id: this._returnPrefill.orderId }
-        : null;
+      this._order = this._returnPrefill.orderId ?
+      { id: this._returnPrefill.orderId } :
+      null;
       this._returnDispatchedByProduct = buildReturnDispatchedBatchesMap({
         records: stockRecords,
         orderId: this._returnPrefill.orderId || '',
         sourceProductId: this._returnPrefill.sourceProductId || '',
         orders,
-        partnerKey: this._partnerKey || INTERNAL_PARTNER_KEY,
+        partnerKey: this._partnerKey || INTERNAL_PARTNER_KEY
       });
     } else if (this._isOutsource) {
       const materials = computeOutsourceReturnMaterials({
@@ -377,15 +377,15 @@ Page({
         products,
         boms,
         stockRecords,
-        outsourceRecords,
+        outsourceRecords
       });
       rows = buildOutsourceReturnUiRows(materials);
       this._returnDispatchedByProduct = buildReturnDispatchedBatchesMap({
         records: stockRecords,
         orderId: this._orderId || '',
-        sourceProductId: this._scopeMode === 'product' ? this._productId : (this._sourceProductId || ''),
+        sourceProductId: this._scopeMode === 'product' ? this._productId : this._sourceProductId || '',
         orders,
-        partnerKey: this._partnerKey,
+        partnerKey: this._partnerKey
       });
       warehouseIndex = pickPreferredReturnWarehouse({
         stockRecords,
@@ -394,7 +394,7 @@ Page({
         productId: this._productId,
         partnerKey: this._partnerKey,
         orders,
-        warehouses: whList,
+        warehouses: whList
       });
       if (this._scopeMode === 'product') {
         this._sourceProductId = this._productId;
@@ -418,25 +418,25 @@ Page({
 
     this.setData({
       loading: false,
-      orderNumber: this._returnPrefill ? (this._returnPrefill.orderNumber || orderNumber) : orderNumber,
-      productName: this._returnPrefill ? (this._returnPrefill.productName || productName) : productName,
+      orderNumber: this._returnPrefill ? this._returnPrefill.orderNumber || orderNumber : orderNumber,
+      productName: this._returnPrefill ? this._returnPrefill.productName || productName : productName,
       productSku,
       showProductSku,
       showOrderNumber,
       showBatchCol,
       warehouseNames,
-      warehouseIndex,
+      warehouseIndex
     });
     this.syncRows(rows);
   },
 
   async loadIssueData(context) {
-    const {
-      boms,
-      products,
-      whList,
-      globalNodes,
-    } = context;
+    const
+      boms =
+
+
+
+      context.boms,products = context.products,whList = context.whList,globalNodes = context.globalNodes;
 
     let bomMaterials = [];
     let issuedMap = new Map();
@@ -450,29 +450,30 @@ Page({
       const groupOrders = await fetchOrdersByProductId(this._productId);
       this._groupOrders = groupOrders;
       const product = this._productsById.get(this._productId);
-      productName = (product && product.name) || groupOrders[0]?.productName || '—';
-      productSku = (product && product.sku) || groupOrders[0]?.sku || '';
+      const firstGroupOrder = groupOrders[0];
+      productName = product && product.name || firstGroupOrder && firstGroupOrder.productName || '—';
+      productSku = product && product.sku || firstGroupOrder && firstGroupOrder.sku || '';
       showProductSku = Boolean(productSku && productName);
 
       const recordsRaw = await fetchProductionRecords({
         types: 'STOCK_OUT,STOCK_RETURN',
         sourceProductIds: this._productId,
-        orderIds: groupOrders.map((o) => o.id).join(','),
+        orderIds: groupOrders.map((o) => o.id).join(',')
       });
-      const records = Array.isArray(recordsRaw) ? recordsRaw : (recordsRaw.data || []);
+      const records = Array.isArray(recordsRaw) ? recordsRaw : recordsRaw.data || [];
 
       bomMaterials = buildBomMaterialsForProductGroup(
         groupOrders,
         this._productId,
         products,
         boms,
-        globalNodes,
+        globalNodes
       );
       if (this._isOutsource) {
         const orderIds = new Set(groupOrders.map((o) => o.id));
         issuedMap = buildPartnerIssuedMap(records, {
           sourceProductId: this._productId,
-          orderIds,
+          orderIds
         }, this._partnerKey);
       } else if (this._isRework) {
         issuedMap = buildReworkIssuedMapForProduct(records, groupOrders, this._productId);
@@ -486,16 +487,16 @@ Page({
       this._order = order;
       const product = this._productsById.get(order.productId);
       orderNumber = order.orderNumber || '';
-      productName = (product && product.name) || order.productName || '—';
-      productSku = (product && product.sku) || order.sku || '';
+      productName = product && product.name || order.productName || '—';
+      productSku = product && product.sku || order.sku || '';
       showProductSku = Boolean(productSku && productName);
       showOrderNumber = Boolean(orderNumber);
 
       const recordsRaw = await fetchProductionRecords({
         types: 'STOCK_OUT,STOCK_RETURN',
-        orderIds: this._orderId,
+        orderIds: this._orderId
       });
-      const records = Array.isArray(recordsRaw) ? recordsRaw : (recordsRaw.data || []);
+      const records = Array.isArray(recordsRaw) ? recordsRaw : recordsRaw.data || [];
 
       bomMaterials = buildBomMaterialsForOrder(order, products, boms, globalNodes);
       if (this._isOutsource) {
@@ -503,7 +504,7 @@ Page({
         issuedMap = buildPartnerIssuedMap(records, {
           orderId: order.id,
           sourceProductId: order.productId || '',
-          orderIds,
+          orderIds
         }, this._partnerKey);
       } else if (this._isRework) {
         issuedMap = buildReworkIssuedMapForOrder(records, order.id);
@@ -513,15 +514,15 @@ Page({
       this._sourceProductId = order.productId || '';
     }
 
-    let rows = this._isRework
-      ? buildReworkMaterialIssueUiRows(bomMaterials, issuedMap)
-      : buildMaterialIssueUiRows(bomMaterials, issuedMap);
+    let rows = this._isRework ?
+    buildReworkMaterialIssueUiRows(bomMaterials, issuedMap) :
+    buildMaterialIssueUiRows(bomMaterials, issuedMap);
     rows = decorateRowsWithBatchFlags(rows, this._productsById, this._categoryById);
     const showBatchCol = rowsNeedBatchColumn(rows, this._productsById, this._categoryById);
     rows = await attachBatchOptionsToRows(
       rows,
       this._selectedWarehouse ? this._selectedWarehouse.id : '',
-      fetchStockBatches,
+      fetchStockBatches
     );
 
     const warehouseNames = whList.map((w) => {
@@ -538,7 +539,7 @@ Page({
       showOrderNumber,
       showBatchCol,
       warehouseNames,
-      warehouseIndex: 0,
+      warehouseIndex: 0
     });
     this.syncRows(rows);
   },
@@ -546,23 +547,23 @@ Page({
   async loadData() {
     this.setData({ loading: true });
     try {
-      const [
-        bomsRaw,
-        productsRaw,
-        categoriesRaw,
-        warehousesRaw,
-        nodesRaw,
-        configRaw,
-      ] = await Promise.all([
+      const _await$Promise$all =
+
+
+
+
+
+
+        await Promise.all([
         fetchBomsAll(),
         fetchProductsAll(),
         fetchCategoriesAll(),
         fetchWarehousesAll(),
         fetchNodesAll(),
-        this._isReturn && this._isOutsource
-          ? fetchTenantConfig().catch(() => ({}))
-          : Promise.resolve({}),
-      ]);
+        this._isReturn && this._isOutsource ?
+        fetchTenantConfig().catch(() => ({})) :
+        Promise.resolve({})]
+        ),bomsRaw = _await$Promise$all[0],productsRaw = _await$Promise$all[1],categoriesRaw = _await$Promise$all[2],warehousesRaw = _await$Promise$all[3],nodesRaw = _await$Promise$all[4],configRaw = _await$Promise$all[5];
 
       const boms = Array.isArray(bomsRaw) ? bomsRaw : normalizeMasterList(bomsRaw);
       const products = normalizeMasterList(productsRaw);
@@ -570,10 +571,10 @@ Page({
       this._productsById = new Map(products.map((p) => [p.id, p]));
       this._categoryById = new Map(categories.map((c) => [c.id, c]));
       const globalNodes = normalizeMasterList(nodesRaw);
-      const whList = Array.isArray(warehousesRaw) ? warehousesRaw : (warehousesRaw.data || []);
+      const whList = Array.isArray(warehousesRaw) ? warehousesRaw : warehousesRaw.data || [];
       this._warehouses = whList;
       this._selectedWarehouse = whList[0] || null;
-      this._productionLinkMode = (configRaw && configRaw.productionLinkMode) || 'order';
+      this._productionLinkMode = configRaw && configRaw.productionLinkMode || 'order';
 
       if (this._isReturn) {
         let stockRecords = [];
@@ -590,21 +591,21 @@ Page({
             const recordsRaw = await fetchProductionRecords({
               types: 'STOCK_OUT,STOCK_RETURN',
               sourceProductIds: this._productId,
-              orderIds: orders.map((o) => o.id).join(','),
+              orderIds: orders.map((o) => o.id).join(',')
             });
-            stockRecords = Array.isArray(recordsRaw) ? recordsRaw : (recordsRaw.data || []);
+            stockRecords = Array.isArray(recordsRaw) ? recordsRaw : recordsRaw.data || [];
           } else {
             const order = await getOrder(this._orderId);
             this._order = order;
             orders = [order];
             const recordsRaw = await fetchProductionRecords({
               types: 'STOCK_OUT,STOCK_RETURN',
-              orderIds: this._orderId,
+              orderIds: this._orderId
             });
-            stockRecords = Array.isArray(recordsRaw) ? recordsRaw : (recordsRaw.data || []);
+            stockRecords = Array.isArray(recordsRaw) ? recordsRaw : recordsRaw.data || [];
           }
           const outsourceRaw = await fetchProductionRecords({ type: 'OUTSOURCE', all: 'true' });
-          outsourceRecords = Array.isArray(outsourceRaw) ? outsourceRaw : (outsourceRaw.data || []);
+          outsourceRecords = Array.isArray(outsourceRaw) ? outsourceRaw : outsourceRaw.data || [];
         }
 
         let heroOrderNumber = '';
@@ -619,14 +620,14 @@ Page({
         } else if (this._isOutsource) {
           if (this._scopeMode === 'product') {
             const product = this._productsById.get(this._productId);
-            heroProductName = (product && product.name) || '—';
-            heroProductSku = (product && product.sku) || '';
+            heroProductName = product && product.name || '—';
+            heroProductSku = product && product.sku || '';
             heroShowProductSku = Boolean(heroProductSku);
           } else if (this._order) {
             const product = this._productsById.get(this._order.productId);
             heroOrderNumber = this._order.orderNumber || '';
-            heroProductName = (product && product.name) || this._order.productName || '—';
-            heroProductSku = (product && product.sku) || this._order.sku || '';
+            heroProductName = product && product.name || this._order.productName || '—';
+            heroProductSku = product && product.sku || this._order.sku || '';
             heroShowProductSku = Boolean(heroProductSku);
             heroShowOrderNumber = Boolean(heroOrderNumber);
           }
@@ -644,7 +645,7 @@ Page({
           showOrderNumber: heroShowOrderNumber,
           stockRecords,
           outsourceRecords,
-          orders,
+          orders
         });
         return;
       }
@@ -656,7 +657,7 @@ Page({
         rows: [],
         hasRows: false,
         canSubmit: false,
-        showBatchCol: false,
+        showBatchCol: false
       });
       wx.showToast({ title: '加载失败', icon: 'none' });
     }
@@ -665,7 +666,7 @@ Page({
   async onSubmitTap() {
     if (!this.data.canMaterial || this.data.submitting) return;
 
-    const warehouse = this._selectedWarehouse || (this._warehouses && this._warehouses[0]);
+    const warehouse = this._selectedWarehouse || this._warehouses && this._warehouses[0];
     if (!warehouse) {
       wx.showToast({ title: '暂无可用仓库', icon: 'none' });
       return;
@@ -677,18 +678,18 @@ Page({
     });
 
     if (!activeRows.length) {
-      const hint = this._isReturn
-        ? '请填写本次退料数量'
-        : '请填写本次领料数量';
+      const hint = this._isReturn ?
+      '请填写本次退料数量' :
+      '请填写本次领料数量';
       wx.showToast({ title: hint, icon: 'none' });
       return;
     }
 
     if (this._isReturn) {
       const returnErrors = [
-        ...validateReturnRows(activeRows, { isOutsource: this._isOutsource }),
-        ...validateReturnBatchRows(activeRows),
-      ];
+      ...validateReturnRows(activeRows, { isOutsource: this._isOutsource }),
+      ...validateReturnBatchRows(activeRows)];
+
       if (returnErrors.length) {
         wx.showToast({ title: returnErrors[0], icon: 'none' });
         return;
@@ -705,14 +706,14 @@ Page({
       productId: row.materialProductId,
       name: row.name,
       quantity: row.issueQty,
-      batchNo: row.batchNo || '',
+      batchNo: row.batchNo || ''
     }));
 
     const payload = buildProductionRecordBatchPayload({
       mode: this._isReturn ? 'stock_return' : 'stock_out',
       rows: selected,
       orderId: this._scopeMode === 'order' && this._order ? this._order.id : undefined,
-      sourceProductId: this._scopeMode === 'product' ? (this._sourceProductId || undefined) : undefined,
+      sourceProductId: this._scopeMode === 'product' ? this._sourceProductId || undefined : undefined,
       warehouse,
       operator: readOperatorDisplayName(),
       reason: this._isRework ? '来自于返工' : undefined,
@@ -722,7 +723,7 @@ Page({
           return this._partnerKey;
         }
         return undefined;
-      })(),
+      })()
     });
 
     this.setData({ submitting: true });
@@ -749,5 +750,5 @@ Page({
       wx.hideLoading();
       this.setData({ submitting: false });
     }
-  },
+  }
 });

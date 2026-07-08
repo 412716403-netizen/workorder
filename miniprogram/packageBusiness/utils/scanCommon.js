@@ -3,7 +3,7 @@ const {
   rewriteScanApiErrorForIme,
   formatScanRecentChipText,
 } = require('./scanPayload.js');
-const { pushScanRecord } = require('../../utils/scanHistory.js');
+const { pushScanRecord } = require('./scanHistory.js');
 
 function scanSummaryLine(scanRes) {
   if (!scanRes) return '';

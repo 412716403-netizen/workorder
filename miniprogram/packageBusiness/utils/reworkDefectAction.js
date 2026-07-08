@@ -2,8 +2,8 @@
  * 处理不良提交 payload（对齐 Web ReworkDefectiveActionModal）
  */
 
-const { splitQtyBySourceDefectiveAcrossParentOrders } = require('./reworkSplitByProductOrders.js');
-const { getNextDefectTreatmentDocNo } = require('./reworkDocNo.js');
+const _require = require('./reworkSplitByProductOrders.js'),splitQtyBySourceDefectiveAcrossParentOrders = _require.splitQtyBySourceDefectiveAcrossParentOrders;
+const _require2 = require('./reworkDocNo.js'),getNextDefectTreatmentDocNo = _require2.getNextDefectTreatmentDocNo;
 
 const DEFECT_TREATMENT_CUSTOM_DATA_KEY = 'defectTreatmentCustomData';
 
@@ -16,88 +16,88 @@ function productHasColorSizeMatrix(product, category) {
 }
 
 function buildDefectPendingByVariant(row, ctx) {
-  const {
-    records = [],
-    orders = [],
-    productMilestoneProgresses = [],
-    product,
-  } = ctx;
+  const _ctx$records =
+
+
+
+
+    ctx.records,records = _ctx$records === void 0 ? [] : _ctx$records,_ctx$orders = ctx.orders,orders = _ctx$orders === void 0 ? [] : _ctx$orders,_ctx$productMilestone = ctx.productMilestoneProgresses,productMilestoneProgresses = _ctx$productMilestone === void 0 ? [] : _ctx$productMilestone,product = ctx.product;
 
   const defectiveByVariant = {};
   if (row.scope === 'product') {
-    (productMilestoneProgresses || [])
-      .filter((p) => p.productId === row.productId && p.milestoneTemplateId === row.nodeId)
-      .forEach((pmp) => {
-        (pmp.reports || []).forEach((r) => {
-          const vid = r.variantId || '';
-          defectiveByVariant[vid] = (defectiveByVariant[vid] || 0) + (r.defectiveQuantity ?? 0);
-        });
+    (productMilestoneProgresses || []).
+    filter((p) => p.productId === row.productId && p.milestoneTemplateId === row.nodeId).
+    forEach((pmp) => {
+      (pmp.reports || []).forEach((r) => {var _r$defectiveQuantity;
+        const vid = r.variantId || '';
+        defectiveByVariant[vid] = (defectiveByVariant[vid] || 0) + ((_r$defectiveQuantity = r.defectiveQuantity) != null ? _r$defectiveQuantity : 0);
       });
+    });
     (orders || []).forEach((o) => {
       if (o.productId !== row.productId) return;
       const ms = (o.milestones || []).find((m) => m.templateId === row.nodeId);
-      (ms && ms.reports || []).forEach((r) => {
+      (ms && ms.reports || []).forEach((r) => {var _r$defectiveQuantity2;
         const vid = r.variantId || '';
-        defectiveByVariant[vid] = (defectiveByVariant[vid] || 0) + (r.defectiveQuantity ?? 0);
+        defectiveByVariant[vid] = (defectiveByVariant[vid] || 0) + ((_r$defectiveQuantity2 = r.defectiveQuantity) != null ? _r$defectiveQuantity2 : 0);
       });
     });
   } else {
     const order = (orders || []).find((o) => o.id === row.orderId);
     const ms = order && (order.milestones || []).find((m) => m.templateId === row.nodeId);
-    (ms && ms.reports || []).forEach((r) => {
+    (ms && ms.reports || []).forEach((r) => {var _r$defectiveQuantity3;
       const vid = r.variantId || '';
-      defectiveByVariant[vid] = (defectiveByVariant[vid] || 0) + (r.defectiveQuantity ?? 0);
+      defectiveByVariant[vid] = (defectiveByVariant[vid] || 0) + ((_r$defectiveQuantity3 = r.defectiveQuantity) != null ? _r$defectiveQuantity3 : 0);
     });
   }
 
   const reworkByVariant = {};
   if (row.scope === 'product') {
-    (records || [])
-      .filter((r) => r.type === 'REWORK'
-        && r.productId === row.productId
-        && (r.sourceNodeId || r.nodeId) === row.nodeId)
-      .forEach((r) => {
-        const vid = r.variantId || '';
-        reworkByVariant[vid] = (reworkByVariant[vid] || 0) + (Number(r.quantity) || 0);
-      });
+    (records || []).
+    filter((r) => r.type === 'REWORK' &&
+    r.productId === row.productId &&
+    (r.sourceNodeId || r.nodeId) === row.nodeId).
+    forEach((r) => {
+      const vid = r.variantId || '';
+      reworkByVariant[vid] = (reworkByVariant[vid] || 0) + (Number(r.quantity) || 0);
+    });
   } else {
-    (records || [])
-      .filter((r) => r.type === 'REWORK'
-        && r.orderId === row.orderId
-        && (r.sourceNodeId || r.nodeId) === row.nodeId)
-      .forEach((r) => {
-        const vid = r.variantId || '';
-        reworkByVariant[vid] = (reworkByVariant[vid] || 0) + (Number(r.quantity) || 0);
-      });
+    (records || []).
+    filter((r) => r.type === 'REWORK' &&
+    r.orderId === row.orderId &&
+    (r.sourceNodeId || r.nodeId) === row.nodeId).
+    forEach((r) => {
+      const vid = r.variantId || '';
+      reworkByVariant[vid] = (reworkByVariant[vid] || 0) + (Number(r.quantity) || 0);
+    });
   }
 
   const scrapByVariant = {};
   if (row.scope === 'product') {
-    (records || [])
-      .filter((r) => r.type === 'SCRAP'
-        && r.productId === row.productId
-        && r.nodeId === row.nodeId)
-      .forEach((r) => {
-        const vid = r.variantId || '';
-        scrapByVariant[vid] = (scrapByVariant[vid] || 0) + (Number(r.quantity) || 0);
-      });
+    (records || []).
+    filter((r) => r.type === 'SCRAP' &&
+    r.productId === row.productId &&
+    r.nodeId === row.nodeId).
+    forEach((r) => {
+      const vid = r.variantId || '';
+      scrapByVariant[vid] = (scrapByVariant[vid] || 0) + (Number(r.quantity) || 0);
+    });
   } else {
-    (records || [])
-      .filter((r) => r.type === 'SCRAP'
-        && r.orderId === row.orderId
-        && r.nodeId === row.nodeId)
-      .forEach((r) => {
-        const vid = r.variantId || '';
-        scrapByVariant[vid] = (scrapByVariant[vid] || 0) + (Number(r.quantity) || 0);
-      });
+    (records || []).
+    filter((r) => r.type === 'SCRAP' &&
+    r.orderId === row.orderId &&
+    r.nodeId === row.nodeId).
+    forEach((r) => {
+      const vid = r.variantId || '';
+      scrapByVariant[vid] = (scrapByVariant[vid] || 0) + (Number(r.quantity) || 0);
+    });
   }
 
   const pending = {};
   const allVariantIds = new Set([
-    ...Object.keys(defectiveByVariant),
-    ...Object.keys(reworkByVariant),
-    ...Object.keys(scrapByVariant),
-  ]);
+  ...Object.keys(defectiveByVariant),
+  ...Object.keys(reworkByVariant),
+  ...Object.keys(scrapByVariant)]
+  );
   if (product && product.variants) {
     product.variants.forEach((v) => allVariantIds.add(v.id));
   }
@@ -120,14 +120,14 @@ function shouldTreatMatrixAsAggregate(product, category, pendingByVariant, pendi
 
 function defectCollabFromValues(values) {
   const clean = Object.fromEntries(
-    Object.entries(values || {}).filter(([, v]) => v !== '' && v != null && v !== undefined),
+    Object.entries(values || {}).filter(([, v]) => v !== '' && v != null && v !== undefined)
   );
   if (!Object.keys(clean).length) return {};
   return { collabData: { [DEFECT_TREATMENT_CUSTOM_DATA_KEY]: clean } };
 }
 
 function sortReworkNodeIds(nodeIds, product) {
-  const seqPath = (product && product.milestoneNodeIds) || [];
+  const seqPath = product && product.milestoneNodeIds || [];
   return [...nodeIds].sort((a, b) => {
     const ia = seqPath.indexOf(a);
     const ib = seqPath.indexOf(b);
@@ -139,29 +139,29 @@ function sortReworkNodeIds(nodeIds, product) {
 }
 
 function buildDefectActionRecords(opts) {
-  const {
-    mode,
-    row,
-    records = [],
-    orders = [],
-    productMilestoneProgresses = [],
-    product,
-    category,
-    qty = 0,
-    variantQuantities = {},
-    reworkNodeIds = [],
-    outsourcePartner = '',
-    operator = '',
-    timestamp,
-    customData = {},
-    outsourceDocNo = '',
-  } = opts;
+  const
+    mode =
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    opts.mode,row = opts.row,_opts$records = opts.records,records = _opts$records === void 0 ? [] : _opts$records,_opts$orders = opts.orders,orders = _opts$orders === void 0 ? [] : _opts$orders,_opts$productMileston = opts.productMilestoneProgresses,productMilestoneProgresses = _opts$productMileston === void 0 ? [] : _opts$productMileston,product = opts.product,category = opts.category,_opts$qty = opts.qty,qty = _opts$qty === void 0 ? 0 : _opts$qty,_opts$variantQuantiti = opts.variantQuantities,variantQuantities = _opts$variantQuantiti === void 0 ? {} : _opts$variantQuantiti,_opts$reworkNodeIds = opts.reworkNodeIds,reworkNodeIds = _opts$reworkNodeIds === void 0 ? [] : _opts$reworkNodeIds,_opts$outsourcePartne = opts.outsourcePartner,outsourcePartner = _opts$outsourcePartne === void 0 ? '' : _opts$outsourcePartne,_opts$operator = opts.operator,operator = _opts$operator === void 0 ? '' : _opts$operator,timestamp = opts.timestamp,_opts$customData = opts.customData,customData = _opts$customData === void 0 ? {} : _opts$customData,_opts$outsourceDocNo = opts.outsourceDocNo,outsourceDocNo = _opts$outsourceDocNo === void 0 ? '' : _opts$outsourceDocNo;
 
   const pendingByVariant = buildDefectPendingByVariant(row, {
-    records, orders, productMilestoneProgresses, product,
+    records, orders, productMilestoneProgresses, product
   });
   const treatAsAggregate = shouldTreatMatrixAsAggregate(
-    product, category, pendingByVariant, row.pendingQty,
+    product, category, pendingByVariant, row.pendingQty
   );
   const useVariantQtyGrid = productHasColorSizeMatrix(product, category) && !treatAsAggregate;
   const docNo = getNextDefectTreatmentDocNo(records);
@@ -181,13 +181,13 @@ function buildDefectActionRecords(opts) {
       quantity: q,
       operator,
       timestamp: ts,
-      nodeId: type === 'SCRAP' ? row.nodeId : (extra.nodeIdFirst || row.nodeId),
+      nodeId: type === 'SCRAP' ? row.nodeId : extra.nodeIdFirst || row.nodeId,
       sourceNodeId: type !== 'SCRAP' ? row.nodeId : undefined,
       docNo,
-      status: type === 'REWORK' ? (extra.isOutsource ? '委外返工中' : '待返工') : undefined,
+      status: type === 'REWORK' ? extra.isOutsource ? '委外返工中' : '待返工' : undefined,
       reworkNodeIds: extra.reworkNodeIdsSorted,
       partner: extra.partner,
-      ...collab,
+      ...collab
     });
   };
 
@@ -203,7 +203,7 @@ function buildDefectActionRecords(opts) {
           qtyMap[vId] = n;
         });
         const splits = splitQtyBySourceDefectiveAcrossParentOrders(
-          row.productId, row.nodeId, parents, productMilestoneProgresses, qtyMap,
+          row.productId, row.nodeId, parents, productMilestoneProgresses, qtyMap
         );
         if (!splits.length) return { error: '无法拆分数量' };
         splits.forEach((sp) => pushLine('SCRAP', sp.orderId, sp.variantId, sp.quantity, {}));
@@ -219,7 +219,7 @@ function buildDefectActionRecords(opts) {
       if (q <= 0 || q > row.pendingQty) return { error: '数量无效' };
       if (splitProduct) {
         const splits = splitQtyBySourceDefectiveAcrossParentOrders(
-          row.productId, row.nodeId, parents, productMilestoneProgresses, { '': q },
+          row.productId, row.nodeId, parents, productMilestoneProgresses, { '': q }
         );
         if (!splits.length) return { error: '无法拆分数量' };
         splits.forEach((sp) => pushLine('SCRAP', sp.orderId, sp.variantId, sp.quantity, {}));
@@ -254,12 +254,12 @@ function buildDefectActionRecords(opts) {
           qtyMap[vId] = n;
         });
         const splits = splitQtyBySourceDefectiveAcrossParentOrders(
-          row.productId, row.nodeId, parents, productMilestoneProgresses, qtyMap,
+          row.productId, row.nodeId, parents, productMilestoneProgresses, qtyMap
         );
         if (!splits.length) return { error: '无法拆分数量' };
         splits.forEach((sp) => {
           reworkLines.push({
-            orderId: sp.orderId, variantId: sp.variantId, quantity: sp.quantity,
+            orderId: sp.orderId, variantId: sp.variantId, quantity: sp.quantity
           });
         });
       } else {
@@ -274,12 +274,12 @@ function buildDefectActionRecords(opts) {
       if (q <= 0 || q > row.pendingQty) return { error: '数量无效' };
       if (splitProduct) {
         const splits = splitQtyBySourceDefectiveAcrossParentOrders(
-          row.productId, row.nodeId, parents, productMilestoneProgresses, { '': q },
+          row.productId, row.nodeId, parents, productMilestoneProgresses, { '': q }
         );
         if (!splits.length) return { error: '无法拆分数量' };
         splits.forEach((sp) => {
           reworkLines.push({
-            orderId: sp.orderId, variantId: sp.variantId, quantity: sp.quantity,
+            orderId: sp.orderId, variantId: sp.variantId, quantity: sp.quantity
           });
         });
       } else {
@@ -292,7 +292,7 @@ function buildDefectActionRecords(opts) {
     reworkLines.forEach((line, i) => {
       const reworkId = `rework-${Date.now()}-${i}`;
       pushLine('REWORK', line.orderId, line.variantId, line.quantity, {
-        isOutsource, reworkNodeIdsSorted, nodeIdFirst, partner,
+        isOutsource, reworkNodeIdsSorted, nodeIdFirst, partner
       });
       const last = out[out.length - 1];
       last._clientId = reworkId;
@@ -309,7 +309,7 @@ function buildDefectActionRecords(opts) {
           partner,
           status: '加工中',
           docNo: outsourceDocNo || docNo,
-          sourceReworkId: reworkId,
+          sourceReworkId: reworkId
         });
       }
     });
@@ -329,5 +329,5 @@ module.exports = {
   buildDefectPendingByVariant,
   shouldTreatMatrixAsAggregate,
   buildDefectActionRecords,
-  sortReworkNodeIds,
+  sortReworkNodeIds
 };

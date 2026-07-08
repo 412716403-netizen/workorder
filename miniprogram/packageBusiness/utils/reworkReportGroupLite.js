@@ -1,11 +1,11 @@
-/**
+function _arrayLikeToArray(r, a) {(null == a || a > r.length) && (a = r.length);for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e];return n;} /**
  * 返工报工路径分组（对齐 utils/reworkReportGroup.ts，扫码/手输共用）
  */
 
-const {
-  buildOutOfSequenceTemplateIds,
-  reworkRemainingAtNode,
-} = require('./reworkPanelLite.js');
+const _require =
+
+
+  require('./reworkPanelLite.js'),buildOutOfSequenceTemplateIds = _require.buildOutOfSequenceTemplateIds,reworkRemainingAtNode = _require.reworkRemainingAtNode;
 
 function reworkQtyKey(productId, pathKey, variantId) {
   if (variantId === undefined) return `${productId}__${pathKey}`;
@@ -15,7 +15,7 @@ function reworkQtyKey(productId, pathKey, variantId) {
 function parseReworkQtyKey(key) {
   const parts = String(key || '').split('__');
   if (parts.length < 2) return null;
-  const [productId, ...rest] = parts;
+  const productId = parts[0],rest = _arrayLikeToArray(parts).slice(1);
   if (!productId) return null;
   if (rest.length === 1) return { productId, pathKey: rest[0] };
   const pathKey = rest.slice(0, -1).join('__');
@@ -24,16 +24,16 @@ function parseReworkQtyKey(key) {
 }
 
 function buildReworkReportPaths(args) {
-  const {
-    records = [],
-    currentNodeId,
-    isOutsourceRework = false,
-    outsourcePartner = '',
-    globalNodes = [],
-    anchorProductId,
-    scopeProductId,
-    scopeOrderId,
-  } = args;
+  const _args$records =
+
+
+
+
+
+
+
+
+    args.records,records = _args$records === void 0 ? [] : _args$records,currentNodeId = args.currentNodeId,_args$isOutsourceRewo = args.isOutsourceRework,isOutsourceRework = _args$isOutsourceRewo === void 0 ? false : _args$isOutsourceRewo,_args$outsourcePartne = args.outsourcePartner,outsourcePartner = _args$outsourcePartne === void 0 ? '' : _args$outsourcePartne,_args$globalNodes = args.globalNodes,globalNodes = _args$globalNodes === void 0 ? [] : _args$globalNodes,anchorProductId = args.anchorProductId,scopeProductId = args.scopeProductId,scopeOrderId = args.scopeOrderId;
 
   const outOfSequenceTemplateIds = buildOutOfSequenceTemplateIds(globalNodes);
   const reworkList = (records || []).filter((r) => {
@@ -44,9 +44,9 @@ function buildReworkReportPaths(args) {
     if (isOutsourceRework) {
       if (recPartner !== String(outsourcePartner || '').trim()) return false;
     } else if (recPartner) return false;
-    const pathNodes = r.reworkNodeIds && r.reworkNodeIds.length > 0
-      ? r.reworkNodeIds
-      : (r.nodeId ? [r.nodeId] : []);
+    const pathNodes = r.reworkNodeIds && r.reworkNodeIds.length > 0 ?
+    r.reworkNodeIds :
+    r.nodeId ? [r.nodeId] : [];
     if (!pathNodes.includes(currentNodeId)) return false;
     if (r.status === '已完成') return false;
     const remaining = reworkRemainingAtNode(r, currentNodeId, outOfSequenceTemplateIds);
@@ -57,9 +57,9 @@ function buildReworkReportPaths(args) {
   reworkList.forEach((r) => {
     const productId = r.productId;
     if (!productId) return;
-    const pathNodes = r.reworkNodeIds && r.reworkNodeIds.length > 0
-      ? r.reworkNodeIds
-      : (r.nodeId ? [r.nodeId] : []);
+    const pathNodes = r.reworkNodeIds && r.reworkNodeIds.length > 0 ?
+    r.reworkNodeIds :
+    r.nodeId ? [r.nodeId] : [];
     const pathKey = pathNodes.join('|');
     const mapKey = `${productId}::${pathKey}`;
     const cur = byKey.get(mapKey) || { productId, records: [], pendingByVariant: {} };
@@ -73,18 +73,18 @@ function buildReworkReportPaths(args) {
   const rows = [];
   byKey.forEach(({ productId, records: recs, pendingByVariant }) => {
     const first = recs[0];
-    const pathNodes = first && first.reworkNodeIds && first.reworkNodeIds.length > 0
-      ? first.reworkNodeIds
-      : (first && first.nodeId ? [first.nodeId] : []);
+    const pathNodes = first && first.reworkNodeIds && first.reworkNodeIds.length > 0 ?
+    first.reworkNodeIds :
+    first && first.nodeId ? [first.nodeId] : [];
     const pathKey = pathNodes.join('|');
     const nodeIds = pathKey.split('|').filter(Boolean);
-    const pathLabel = nodeIds.length <= 1
-      ? ((globalNodes.find((n) => n.id === nodeIds[0]) || {}).name || nodeIds[0])
-      : nodeIds.map((nid) => (globalNodes.find((n) => n.id === nid) || {}).name || nid).join('、');
+    const pathLabel = nodeIds.length <= 1 ?
+    (globalNodes.find((n) => n.id === nodeIds[0]) || {}).name || nodeIds[0] :
+    nodeIds.map((nid) => (globalNodes.find((n) => n.id === nid) || {}).name || nid).join('、');
     const totalPending = Object.values(pendingByVariant).reduce((s, q) => s + q, 0);
     if (totalPending > 0) {
       rows.push({
-        productId, pathKey, pathLabel, nodeIds, records: recs, totalPending, pendingByVariant,
+        productId, pathKey, pathLabel, nodeIds, records: recs, totalPending, pendingByVariant
       });
     }
   });
@@ -111,7 +111,7 @@ function groupReworkPathsByProduct(paths) {
   return Array.from(byProduct.entries()).map(([productId, productPaths]) => ({
     productId,
     paths: productPaths,
-    totalPending: productPaths.reduce((s, p) => s + p.totalPending, 0),
+    totalPending: productPaths.reduce((s, p) => s + p.totalPending, 0)
   }));
 }
 
@@ -125,13 +125,13 @@ function findReworkPathForScan(paths, productId, variantId) {
 
 function collectReworkOrderIdsForProduct(paths, productId, fallbackOrderId) {
   const ids = new Set();
-  (paths || [])
-    .filter((p) => p.productId === productId)
-    .forEach((p) => {
-      p.records.forEach((r) => {
-        if (r.orderId) ids.add(r.orderId);
-      });
+  (paths || []).
+  filter((p) => p.productId === productId).
+  forEach((p) => {
+    p.records.forEach((r) => {
+      if (r.orderId) ids.add(r.orderId);
     });
+  });
   if (ids.size === 0 && fallbackOrderId) ids.add(fallbackOrderId);
   return [...ids];
 }
@@ -143,9 +143,9 @@ function listReworkNodeIdsWithPending(records, orderId, globalNodes) {
     if (r.type !== 'REWORK') return;
     if (orderId && r.orderId !== orderId) return;
     if ((r.partner || '').trim()) return;
-    const pathNodes = r.reworkNodeIds && r.reworkNodeIds.length > 0
-      ? r.reworkNodeIds
-      : (r.nodeId ? [r.nodeId] : []);
+    const pathNodes = r.reworkNodeIds && r.reworkNodeIds.length > 0 ?
+    r.reworkNodeIds :
+    r.nodeId ? [r.nodeId] : [];
     pathNodes.forEach((nid) => {
       if (reworkRemainingAtNode(r, nid, outOfSequenceTemplateIds) > 0) nodeIds.add(nid);
     });
@@ -176,5 +176,5 @@ module.exports = {
   reworkQtyKey,
   parseReworkQtyKey,
   sumReworkEnteredForPath,
-  hasAnyReworkEnteredQty,
+  hasAnyReworkEnteredQty
 };

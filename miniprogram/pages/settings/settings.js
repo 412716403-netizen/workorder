@@ -1,6 +1,7 @@
 const { readTenantCtx } = require('../../utils/session.js');
 const { buildSettingsCategories } = require('../../config/settingsTabs.js');
 const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
+const { syncTenantCtx } = require('../../utils/tenantCtxSync.js');
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
@@ -31,14 +32,16 @@ Page({
       wx.reLaunch({ url: '/pages/login/login' });
       return;
     }
-    const ctx = readTenantCtx();
-    if (!ctx || !ctx.tenantId) {
-      wx.reLaunch({ url: '/pages/tenant-select/tenant-select' });
-      return;
-    }
+    syncTenantCtx().then((ctx) => {
+      const activeCtx = ctx || readTenantCtx();
+      if (!activeCtx || !activeCtx.tenantId) {
+        wx.reLaunch({ url: '/pages/tenant-select/tenant-select' });
+        return;
+      }
 
-    const categories = buildSettingsCategories(ctx.permissions || [], ctx.tenantRole || '');
-    this.setData({ categories, loading: false });
+      const categories = buildSettingsCategories(activeCtx.permissions || [], activeCtx.tenantRole || '');
+      this.setData({ categories, loading: false });
+    });
   },
 
   onHeaderBack() {

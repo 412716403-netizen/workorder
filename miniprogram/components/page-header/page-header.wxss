@@ -8,6 +8,19 @@
   background: var(--color-bg-page);
 }
 
+.st-header--primary {
+  background: linear-gradient(135deg, var(--color-primary-gradient-start), var(--color-primary-gradient-end));
+  padding-bottom: 28rpx;
+}
+
+.st-header--primary .st-header__title {
+  color: rgba(255, 255, 255, 0.98);
+}
+
+.st-header--primary .st-header__back {
+  color: rgba(255, 255, 255, 0.92);
+}
+
 .st-header__bar {
   display: flex;
   align-items: center;

@@ -1,25 +1,25 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const { DEFAULT_PAGE_SIZE, PSI_TYPE } = require('../config/purchaseBills.js');
-const {
-  parsePurchaseBillSearch,
-  buildPurchaseBillListCards,
-  slimPurchaseBillListCard,
-} = require('../utils/purchaseBills.js');
-const { groupRecordsByDocNumber } = require('../utils/psiOpsAggregators.js');
-const { fetchAllPsiRecords } = require('../utils/psiApi.js');
-const { fetchProductsAll, fetchDictionaries, fetchCategoriesAll } = require('../utils/planApi.js');
-const { fetchWarehousesAll } = require('../utils/orderApi.js');
-const { buildProductMap, buildCategoryMap } = require('../utils/purchaseOrders.js');
-const { normalizeAppDictionaries } = require('../utils/productionPlans.js');
-const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
-const { shouldHubListRefetch, trackHubListHidden, LIST_ROUTES } = require('../utils/saveNavigation.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 = require('../config/purchaseBills.js'),DEFAULT_PAGE_SIZE = _require3.DEFAULT_PAGE_SIZE,PSI_TYPE = _require3.PSI_TYPE;
+const _require4 =
+
+
+
+  require('../utils/purchaseBills.js'),parsePurchaseBillSearch = _require4.parsePurchaseBillSearch,buildPurchaseBillListCards = _require4.buildPurchaseBillListCards,slimPurchaseBillListCard = _require4.slimPurchaseBillListCard;
+const _require5 = require('../utils/psiOpsAggregators.js'),groupRecordsByDocNumber = _require5.groupRecordsByDocNumber;
+const _require6 = require('../utils/psiApi.js'),fetchAllPsiRecords = _require6.fetchAllPsiRecords;
+const _require7 = require('../utils/planApi.js'),fetchProductsAll = _require7.fetchProductsAll,fetchDictionaries = _require7.fetchDictionaries,fetchCategoriesAll = _require7.fetchCategoriesAll;
+const _require8 = require('../utils/orderApi.js'),fetchWarehousesAll = _require8.fetchWarehousesAll;
+const _require9 = require('../utils/purchaseOrders.js'),buildProductMap = _require9.buildProductMap,buildCategoryMap = _require9.buildCategoryMap;
+const _require0 = require('../utils/productionPlans.js'),normalizeAppDictionaries = _require0.normalizeAppDictionaries;
+const _require1 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require1.readNavBarMetrics,readWindowMetrics = _require1.readWindowMetrics;
+const _require10 = require('../utils/saveNavigation.js'),shouldHubListRefetch = _require10.shouldHubListRefetch,trackHubListHidden = _require10.trackHubListHidden,LIST_ROUTES = _require10.LIST_ROUTES;
 
 const HUB_LIST_ROUTE = LIST_ROUTES.PSI_PURCHASE_BILLS.replace(/^\//, '');
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
-  const toolsPx = Math.ceil((win.windowWidth / 750) * 128);
+  const toolsPx = Math.ceil(win.windowWidth / 750 * 128);
   return nav.statusBarHeight + nav.navBarHeight + toolsPx;
 }
 
@@ -47,7 +47,7 @@ Page({
     hasMore: false,
     statusBarHeight: 20,
     navBarHeight: 44,
-    headerBlockHeight: 88,
+    headerBlockHeight: 88
   },
 
   onLoad(options) {
@@ -55,13 +55,13 @@ Page({
     this.setData({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
-      headerBlockHeight: computeHeaderBlockHeight(nav),
+      headerBlockHeight: computeHeaderBlockHeight(nav)
     });
 
     const docNumber = options.docNumber ? decodeURIComponent(options.docNumber) : '';
     if (docNumber) {
       wx.redirectTo({
-        url: `/packageBusiness/psi-purchase-bill-detail/psi-purchase-bill-detail?docNumber=${encodeURIComponent(docNumber)}`,
+        url: `/packageBusiness/psi-purchase-bill-detail/psi-purchase-bill-detail?docNumber=${encodeURIComponent(docNumber)}`
       });
       return;
     }
@@ -87,7 +87,7 @@ Page({
     this.setData({
       canViewFlow: hasPermission(ctx.permissions || [], 'psi:purchase_bill:view'),
       canCreate: hasPermission(ctx.permissions || [], 'psi:purchase_bill:create'),
-      canViewAmount: hasPermission(ctx.permissions || [], 'psi:purchase_bill:amount'),
+      canViewAmount: hasPermission(ctx.permissions || [], 'psi:purchase_bill:amount')
     });
     if (!this._initialized) {
       this.bootstrap();
@@ -141,7 +141,7 @@ Page({
     const docNumber = e.currentTarget.dataset.docNumber;
     if (!docNumber) return;
     wx.navigateTo({
-      url: `/packageBusiness/psi-purchase-bill-detail/psi-purchase-bill-detail?docNumber=${encodeURIComponent(docNumber)}`,
+      url: `/packageBusiness/psi-purchase-bill-detail/psi-purchase-bill-detail?docNumber=${encodeURIComponent(docNumber)}`
     });
   },
 
@@ -155,7 +155,7 @@ Page({
         lines: (card.lines || []).map((line) => {
           if (line.lineGroupId !== lineGroupId) return line;
           return { ...line, showProductImage: false };
-        }),
+        })
       };
     });
     this.setData({ cards });
@@ -165,13 +165,13 @@ Page({
     this._initialized = true;
     this.setData({ loading: true });
     try {
-      const [purchaseBills, products, dictionaries, warehouses, categories] = await Promise.all([
+      const _await$Promise$all = await Promise.all([
         fetchAllPsiRecords(PSI_TYPE),
         fetchProductsAll().catch(() => []),
         fetchDictionaries().catch(() => ({})),
         fetchWarehousesAll().catch(() => []),
-        fetchCategoriesAll().catch(() => []),
-      ]);
+        fetchCategoriesAll().catch(() => [])]
+        ),purchaseBills = _await$Promise$all[0],products = _await$Promise$all[1],dictionaries = _await$Promise$all[2],warehouses = _await$Promise$all[3],categories = _await$Promise$all[4];
       this._purchaseBills = purchaseBills || [];
       this._productMap = buildProductMap(products || []);
       this._categoryMap = buildCategoryMap(categories || []);
@@ -192,7 +192,7 @@ Page({
       categoryMap: this._categoryMap,
       warehouseMap: this._warehouseMap,
       dictionaries: this._dictionaries,
-      showAmount: this.data.canViewAmount,
+      showAmount: this.data.canViewAmount
     };
     return buildPurchaseBillListCards(groups, parsed.search, ctx).map(slimPurchaseBillListCard);
   },
@@ -224,8 +224,8 @@ Page({
       page,
       total: allCards.length,
       hasMore,
-      emptyText: allCards.length ? '' : (this.data.searchKeyword ? '无匹配采购入库' : '暂无采购入库'),
+      emptyText: allCards.length ? '' : this.data.searchKeyword ? '无匹配采购入库' : '暂无采购入库'
     });
     return Promise.resolve();
-  },
+  }
 });

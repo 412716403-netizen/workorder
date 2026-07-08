@@ -177,6 +177,14 @@
   box-sizing: border-box;
 }
 
+.scan-camera-fallback--paused {
+  background: #1a1d24;
+}
+
+.scan-camera-fallback--paused .scan-camera-fallback__text {
+  color: rgba(255, 255, 255, 0.75);
+}
+
 .scan-camera-fallback__icon {
   width: 96rpx;
   height: 96rpx;

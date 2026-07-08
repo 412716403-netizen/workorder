@@ -1,0 +1,14 @@
+{
+  "name": "smarttrack-miniprogram",
+  "private": true,
+  "scripts": {
+    "build:npm": "node scripts/build-miniprogram-npm.js",
+    "compat:syntax": "node scripts/compat-modern-syntax.js"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.29.0",
+    "@babel/plugin-transform-destructuring": "^7.29.0",
+    "@babel/plugin-transform-nullish-coalescing-operator": "^7.29.0",
+    "@babel/plugin-transform-optional-chaining": "^7.29.0"
+  }
+}

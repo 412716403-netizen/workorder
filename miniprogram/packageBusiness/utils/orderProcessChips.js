@@ -39,11 +39,11 @@ function sumDefectiveAtMilestone(ms) {
  * @param {object} opts
  */
 function buildOrderProcessChips(order, opts = {}) {
-  const {
-    processSequenceMode = 'sequential',
-    outOfSequenceTemplateIds = new Set(),
-    canReport = false,
-  } = opts;
+  const _opts$processSequence =
+
+
+
+    opts.processSequenceMode,processSequenceMode = _opts$processSequence === void 0 ? 'sequential' : _opts$processSequence,_opts$outOfSequenceTe = opts.outOfSequenceTemplateIds,outOfSequenceTemplateIds = _opts$outOfSequenceTe === void 0 ? new Set() : _opts$outOfSequenceTe,_opts$canReport = opts.canReport,canReport = _opts$canReport === void 0 ? false : _opts$canReport;
 
   const milestones = order.milestones || [];
   if (!milestones.length) return [];
@@ -58,16 +58,16 @@ function buildOrderProcessChips(order, opts = {}) {
       const gateIdx = findGatingPredecessorIndex(templateIds, idx, outOfSequenceTemplateIds);
       if (gateIdx >= 0) {
         const prev = milestones[gateIdx];
-        baseQty = Number(prev?.completedQuantity) || 0;
+        baseQty = Number(prev == null ? void 0 : prev.completedQuantity) || 0;
       }
     }
     const defective = sumDefectiveAtMilestone(ms);
     const availableQty = Math.max(0, Math.round(baseQty - defective));
     const remaining = availableQty - completed;
-    const progress = availableQty > 0
-      ? Math.min(100, Math.round((completed / availableQty) * 100))
-      : (completed > 0 ? 100 : 0);
-    const isCompleted = ms.status === 'COMPLETED' || (availableQty > 0 && completed >= availableQty);
+    const progress = availableQty > 0 ?
+    Math.min(100, Math.round(completed / availableQty * 100)) :
+    completed > 0 ? 100 : 0;
+    const isCompleted = ms.status === 'COMPLETED' || availableQty > 0 && completed >= availableQty;
     const canReportThis = canReport && remaining > 0 && availableQty > 0;
 
     return {
@@ -82,7 +82,7 @@ function buildOrderProcessChips(order, opts = {}) {
       isCompleted,
       canReport: canReportThis,
       disabled: !canReportThis,
-      toneIndex: idx % 6,
+      toneIndex: idx % 6
     };
   });
 }
@@ -92,5 +92,5 @@ module.exports = {
   findGatingPredecessorIndex,
   buildOutOfSequenceTemplateIds,
   sumOrderQty,
-  buildOrderProcessChips,
+  buildOrderProcessChips
 };

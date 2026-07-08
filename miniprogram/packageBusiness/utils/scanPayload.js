@@ -7,24 +7,24 @@ const MIN_TOKEN_LEN = 16;
 const MAX_TOKEN_LEN = 64;
 
 const UNRECOGNIZED_SCAN_IME_HINT =
-  '检测到可能为中文输入法误转，请切换到英文（半角）输入法后重扫。';
+'检测到可能为中文输入法误转，请切换到英文（半角）输入法后重扫。';
 
 function normalizeScanSeparators(s) {
   let out = s;
   try {
     out = out.normalize('NFKC');
   } catch {
-    /* ignore */
-  }
-  return out
-    .replace(/[\u3002\uFF0E]/g, '.')
-    .replace(/[\u2014\u2013\u2212\uFF0D]/g, '-')
-    .replace(/[\uFF3F]/g, '_')
-    .replace(/\uFF0F/g, '/');
+
+    /* ignore */}
+  return out.
+  replace(/[\u3002\uFF0E]/g, '.').
+  replace(/[\u2014\u2013\u2212\uFF0D]/g, '-').
+  replace(/[\uFF3F]/g, '_').
+  replace(/\uFF0F/g, '/');
 }
 
 function scanRawLooksLikeImeCorruption(raw) {
-  const s = String(raw ?? '');
+  const s = String(raw != null ? raw : '');
   if (!s) return false;
   if (/[\u3002\uFF0E\u2014\u2013\u2212\uFF0D\uFF3F\uFF0F]/.test(s)) return true;
   if (/[\uFF21-\uFF3A\uFF41-\uFF5A\uFF10-\uFF19]/.test(s)) return true;
@@ -43,7 +43,7 @@ function trimAndStripQuery(v) {
 }
 
 function scanInputLikelyImeIssue(raw) {
-  const s = String(raw ?? '');
+  const s = String(raw != null ? raw : '');
   if (!s.trim()) return false;
   if (scanRawLooksLikeImeCorruption(s)) return true;
   const trimmed = trimAndStripQuery(s);
@@ -98,14 +98,14 @@ function getUnrecognizedScanImeHint(raw) {
 const SCAN_CODE_NOT_FOUND_RE = /(单品码|批次码)不存在/;
 
 function rewriteScanApiErrorForIme(raw, message) {
-  const m = String(message ?? '').trim();
+  const m = String(message != null ? message : '').trim();
   if (!m || !SCAN_CODE_NOT_FOUND_RE.test(m)) return message;
   if (!scanInputLikelyImeIssue(raw)) return message;
   return '读码内容疑似被输入法改写，请切换到英文（半角）输入法后重新扫码。';
 }
 
 function formatScanRecentChipText(raw) {
-  const s = String(raw ?? '').trim();
+  const s = String(raw != null ? raw : '').trim();
   if (!s) return '—';
   const batchPath = s.match(/\/scan\/batch\/([^/?#]+)\/?$/i);
   if (batchPath && batchPath[1]) {
@@ -124,5 +124,5 @@ module.exports = {
   parseScanPayload,
   getUnrecognizedScanImeHint,
   rewriteScanApiErrorForIme,
-  formatScanRecentChipText,
+  formatScanRecentChipText
 };

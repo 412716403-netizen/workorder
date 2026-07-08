@@ -1,33 +1,33 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const { buildDefectFlowDetailView } = require('../utils/reworkDefectFlowDetail.js');
-const {
-  buildDefectFlowEditMatrixLayout,
-  buildDefectFlowEditSavePlan,
-} = require('../utils/reworkDefectFlowDetailEdit.js');
-const {
-  fetchProductionRecords,
-  fetchProductsAll,
-  fetchNodesAll,
-  fetchTenantConfig,
-  fetchCategoriesAll,
-  updateProductionRecord,
-  deleteProductionRecord,
-} = require('../utils/orderApi.js');
-const { fetchDictionaries } = require('../utils/planApi.js');
-const { fetchAllOrdersPaginated } = require('../utils/pendingStockBadge.js');
-const { normalizeMasterList } = require('../utils/productionPlans.js');
-const {
-  activateMatrixKeyboardCell,
-  applyMatrixKeyboardKey,
-  buildMatrixKeyboardPreview,
-  createMatrixKeyboardInputSession,
-  getNextMatrixVariantIdInColumn,
-  getNextMatrixVariantIdInRow,
-} = require('../utils/matrixQtyKeyboard.js');
-const { readNavBarMetrics, readWindowMetrics, computePlanCreateHeaderHeight } = require('../../utils/windowMetrics.js');
-const { afterMatrixKeyboardOpen } = require('../utils/matrixKeyboardLayout.js');
-const { LIST_ROUTES, afterSaveReturnToList } = require('../utils/saveNavigation.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 = require('../utils/reworkDefectFlowDetail.js'),buildDefectFlowDetailView = _require3.buildDefectFlowDetailView;
+const _require4 =
+
+
+  require('../utils/reworkDefectFlowDetailEdit.js'),buildDefectFlowEditMatrixLayout = _require4.buildDefectFlowEditMatrixLayout,buildDefectFlowEditSavePlan = _require4.buildDefectFlowEditSavePlan;
+const _require5 =
+
+
+
+
+
+
+
+  require('../utils/orderApi.js'),fetchProductionRecords = _require5.fetchProductionRecords,fetchProductsAll = _require5.fetchProductsAll,fetchNodesAll = _require5.fetchNodesAll,fetchTenantConfig = _require5.fetchTenantConfig,fetchCategoriesAll = _require5.fetchCategoriesAll,updateProductionRecord = _require5.updateProductionRecord,deleteProductionRecord = _require5.deleteProductionRecord;
+const _require6 = require('../utils/planApi.js'),fetchDictionaries = _require6.fetchDictionaries;
+const _require7 = require('../utils/pendingStockBadge.js'),fetchAllOrdersPaginated = _require7.fetchAllOrdersPaginated;
+const _require8 = require('../utils/productionPlans.js'),normalizeMasterList = _require8.normalizeMasterList;
+const _require9 =
+
+
+
+
+
+
+  require('../utils/matrixQtyKeyboard.js'),activateMatrixKeyboardCell = _require9.activateMatrixKeyboardCell,applyMatrixKeyboardKey = _require9.applyMatrixKeyboardKey,buildMatrixKeyboardPreview = _require9.buildMatrixKeyboardPreview,createMatrixKeyboardInputSession = _require9.createMatrixKeyboardInputSession,getNextMatrixVariantIdInColumn = _require9.getNextMatrixVariantIdInColumn,getNextMatrixVariantIdInRow = _require9.getNextMatrixVariantIdInRow;
+const _require0 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require0.readNavBarMetrics,readWindowMetrics = _require0.readWindowMetrics,computePlanCreateHeaderHeight = _require0.computePlanCreateHeaderHeight;
+const _require1 = require('../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require1.afterMatrixKeyboardOpen;
+const _require10 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require10.LIST_ROUTES,afterSaveReturnToList = _require10.afterSaveReturnToList;
 
 function computeHeaderBlockHeight(nav) {
   return computePlanCreateHeaderHeight(nav);
@@ -39,7 +39,7 @@ function emptyMatrixKeyboardState() {
     matrixInputReplaceAll: false,
     activeMatrixVariantId: '',
     matrixKeyboardLabel: '',
-    matrixKeyboardValue: '',
+    matrixKeyboardValue: ''
   };
 }
 
@@ -81,7 +81,7 @@ Page({
     statusBarHeight: 20,
     navBarHeight: 44,
     headerBlockHeight: 88,
-    scrollHeight: 400,
+    scrollHeight: 400
   },
 
   _records: [],
@@ -116,7 +116,7 @@ Page({
       canEdit: this._canEdit,
       canDelete: this._canDelete,
       showFooter,
-      scrollHeight: computeScrollHeight(nav, showFooter),
+      scrollHeight: computeScrollHeight(nav, showFooter)
     });
 
     if (!this._docNo) {
@@ -145,7 +145,7 @@ Page({
       productsById: this._productsById,
       nodesById: this._nodesById,
       categoriesById: this._categoriesById,
-      dictionaries: this._dictionaries,
+      dictionaries: this._dictionaries
     });
     const showFooter = (this._canEdit || this._canDelete) && !this.data.editing;
     if (detail) {
@@ -154,14 +154,14 @@ Page({
     this.setData({
       detail,
       showFooter,
-      scrollHeight: computeScrollHeight(readNavBarMetrics(), showFooter || this.data.editing),
+      scrollHeight: computeScrollHeight(readNavBarMetrics(), showFooter || this.data.editing)
     });
   },
 
   rebuildEditMatrixLayout() {
-    const editMatrixLayout = this._product && this.data.detail && this.data.detail.showMatrix
-      ? buildDefectFlowEditMatrixLayout(this._product, this._dictionaries, this._editLineItems)
-      : null;
+    const editMatrixLayout = this._product && this.data.detail && this.data.detail.showMatrix ?
+    buildDefectFlowEditMatrixLayout(this._product, this._dictionaries, this._editLineItems) :
+    null;
     this.setData({ editMatrixLayout });
     this.syncMatrixKeyboardPreview();
   },
@@ -171,11 +171,11 @@ Page({
     const preview = buildMatrixKeyboardPreview(
       this.data.editMatrixLayout,
       id,
-      this.buildMatrixQtyMap(),
+      this.buildMatrixQtyMap()
     );
     this.setData({
       matrixKeyboardLabel: preview.label,
-      matrixKeyboardValue: preview.value,
+      matrixKeyboardValue: preview.value
     });
   },
 
@@ -191,23 +191,23 @@ Page({
   async bootstrap() {
     this.setData({ loading: true });
     try {
-      const [
-        config,
-        orders,
-        productsRaw,
-        nodesRaw,
-        categoriesRaw,
-        dictionariesRaw,
-        recordsRaw,
-      ] = await Promise.all([
+      const _await$Promise$all =
+
+
+
+
+
+
+
+        await Promise.all([
         fetchTenantConfig().catch(() => ({})),
         fetchAllOrdersPaginated({}),
         fetchProductsAll(),
         fetchNodesAll(),
         fetchCategoriesAll().catch(() => []),
         fetchDictionaries().catch(() => ({})),
-        fetchProductionRecords({ docNo: this._docNo, types: 'REWORK,SCRAP', all: 'true' }),
-      ]);
+        fetchProductionRecords({ docNo: this._docNo, types: 'REWORK,SCRAP', all: 'true' })]
+        ),config = _await$Promise$all[0],orders = _await$Promise$all[1],productsRaw = _await$Promise$all[2],nodesRaw = _await$Promise$all[3],categoriesRaw = _await$Promise$all[4],dictionariesRaw = _await$Promise$all[5],recordsRaw = _await$Promise$all[6];
 
       this._records = recordsRaw || [];
       if (!this._records.length) {
@@ -217,7 +217,7 @@ Page({
         return;
       }
 
-      this._productionLinkMode = (config && config.productionLinkMode) || 'order';
+      this._productionLinkMode = config && config.productionLinkMode || 'order';
       this._ordersById = new Map((orders || []).map((o) => [o.id, o]));
       this._productsById = new Map(normalizeMasterList(productsRaw).map((p) => [p.id, p]));
       this._nodesById = new Map(normalizeMasterList(nodesRaw).map((n) => [n.id, n]));
@@ -226,13 +226,13 @@ Page({
 
       const first = this._records[0] || {};
       const order = first.orderId ? this._ordersById.get(first.orderId) : null;
-      this._product = this._productsById.get(first.productId || (order && order.productId)) || null;
+      this._product = this._productsById.get(first.productId || order && order.productId) || null;
 
       this.setData({ loading: false });
       this.refreshViewModel();
     } catch (err) {
       this.setData({ loading: false });
-      wx.showToast({ title: (err && err.message) || '加载失败', icon: 'none' });
+      wx.showToast({ title: err && err.message || '加载失败', icon: 'none' });
     }
   },
 
@@ -242,7 +242,7 @@ Page({
       editing: false,
       editLineItems: [],
       editMatrixLayout: null,
-      ...emptyMatrixKeyboardState(),
+      ...emptyMatrixKeyboardState()
     });
     this.refreshViewModel();
   },
@@ -256,12 +256,12 @@ Page({
       id: item.id,
       quantity: item.quantity,
       variantId: item.variantId || '',
-      editQty: String(item.quantity || 0),
+      editQty: String(item.quantity || 0)
     }));
 
-    const editMatrixLayout = detail.showMatrix
-      ? buildDefectFlowEditMatrixLayout(this._product, this._dictionaries, this._editLineItems)
-      : null;
+    const editMatrixLayout = detail.showMatrix ?
+    buildDefectFlowEditMatrixLayout(this._product, this._dictionaries, this._editLineItems) :
+    null;
 
     this.setData({
       editing: true,
@@ -269,7 +269,7 @@ Page({
       editLineItems: this._editLineItems,
       editMatrixLayout,
       scrollHeight: computeScrollHeight(readNavBarMetrics(), true),
-      ...emptyMatrixKeyboardState(),
+      ...emptyMatrixKeyboardState()
     });
   },
 
@@ -286,7 +286,7 @@ Page({
   },
 
   onLineQtyInput(e) {
-    const { index } = e.currentTarget.dataset;
+    const index = e.currentTarget.dataset.index;
     const qty = Number(e.detail.value) || 0;
     if (this._editLineItems[index]) {
       this._editLineItems[index].quantity = qty;
@@ -295,32 +295,32 @@ Page({
   },
 
   onMatrixCellTap(e) {
-    const { variantId } = e.currentTarget.dataset;
+    const variantId = e.currentTarget.dataset.variantId;
     if (!variantId) return;
     activateMatrixKeyboardCell(this._matrixKbInput);
     const preview = buildMatrixKeyboardPreview(
       this.data.editMatrixLayout,
       variantId,
-      this.buildMatrixQtyMap(),
+      this.buildMatrixQtyMap()
     );
     this.setData({
       matrixKeyboardVisible: true,
       matrixInputReplaceAll: true,
       activeMatrixVariantId: variantId,
       matrixKeyboardLabel: preview.label,
-      matrixKeyboardValue: preview.value,
+      matrixKeyboardValue: preview.value
     }, () => {
       afterMatrixKeyboardOpen(this, '.plan-detail-scroll');
     });
   },
 
   onMatrixKeyboardAction(e) {
-    const { action, digit } = e.detail || {};
+    const _ref = e.detail || {},action = _ref.action,digit = _ref.digit;
     if (action === 'confirm') {
       this.setData(emptyMatrixKeyboardState());
       return;
     }
-    const { activeMatrixVariantId, editMatrixLayout } = this.data;
+    const _this$data = this.data,activeMatrixVariantId = _this$data.activeMatrixVariantId,editMatrixLayout = _this$data.editMatrixLayout;
     const qtyMap = this.buildMatrixQtyMap();
 
     if (action === 'enter') {
@@ -332,7 +332,7 @@ Page({
           activeMatrixVariantId: nextId,
           matrixInputReplaceAll: true,
           matrixKeyboardLabel: preview.label,
-          matrixKeyboardValue: preview.value,
+          matrixKeyboardValue: preview.value
         }, () => {
           afterMatrixKeyboardOpen(this, '.plan-detail-scroll');
         });
@@ -351,7 +351,7 @@ Page({
           activeMatrixVariantId: nextId,
           matrixInputReplaceAll: true,
           matrixKeyboardLabel: preview.label,
-          matrixKeyboardValue: preview.value,
+          matrixKeyboardValue: preview.value
         }, () => {
           afterMatrixKeyboardOpen(this, '.plan-detail-scroll');
         });
@@ -363,7 +363,7 @@ Page({
 
     if (!activeMatrixVariantId) return;
     const current = qtyMap[activeMatrixVariantId] || '';
-    const { value, replaceConsumed } = applyMatrixKeyboardKey(this._matrixKbInput, current, action, digit);
+    const _applyMatrixKeyboardK = applyMatrixKeyboardKey(this._matrixKbInput, current, action, digit),value = _applyMatrixKeyboardK.value,replaceConsumed = _applyMatrixKeyboardK.replaceConsumed;
     syncVariantQtyToLineItems(this._editLineItems, activeMatrixVariantId, value);
     if (replaceConsumed) {
       this.setData({ matrixInputReplaceAll: false });
@@ -385,7 +385,7 @@ Page({
       lineItems: this._editLineItems,
       editDate: detail.editDate,
       editTime: detail.editTime,
-      operator: (detail.editOperator || detail.operator || '').trim(),
+      operator: (detail.editOperator || detail.operator || '').trim()
     });
 
     if (plan.error) {
@@ -404,18 +404,18 @@ Page({
         await updateProductionRecord(u.id, {
           quantity: u.quantity,
           operator: u.operator,
-          timestamp: u.timestamp,
+          timestamp: u.timestamp
         });
       }
       wx.hideLoading();
       afterSaveReturnToList({
         listUrl: LIST_ROUTES.REWORK_DEFECT_FLOW,
-        toastTitle: '已保存',
+        toastTitle: '已保存'
       });
     } catch (err) {
       wx.hideLoading();
       this.setData({ saving: false });
-      wx.showToast({ title: (err && err.message) || '保存失败', icon: 'none' });
+      wx.showToast({ title: err && err.message || '保存失败', icon: 'none' });
     }
   },
 
@@ -427,7 +427,7 @@ Page({
       confirmColor: '#ff4d4f',
       success: (res) => {
         if (res.confirm) this.deleteDoc();
-      },
+      }
     });
   },
 
@@ -440,11 +440,11 @@ Page({
       wx.hideLoading();
       afterSaveReturnToList({
         listUrl: LIST_ROUTES.REWORK_DEFECT_FLOW,
-        toastTitle: '已删除',
+        toastTitle: '已删除'
       });
     } catch (err) {
       wx.hideLoading();
-      wx.showToast({ title: (err && err.message) || '删除失败', icon: 'none' });
+      wx.showToast({ title: err && err.message || '删除失败', icon: 'none' });
     }
-  },
+  }
 });

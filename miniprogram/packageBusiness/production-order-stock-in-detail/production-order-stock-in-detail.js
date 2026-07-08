@@ -1,35 +1,35 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const {
-  fetchWarehousesAll,
-  fetchProductsAll,
-  fetchCategoriesAll,
-  fetchTenantConfig,
-  fetchProductionRecords,
-  createProductionRecord,
-  updateProductionRecord,
-  deleteProductionRecord,
-} = require('../utils/orderApi.js');
-const { fetchDictionaries } = require('../utils/planApi.js');
-const { normalizeMasterList } = require('../utils/productionPlans.js');
-const { buildStockInFlowDetailView, normalizeStockInRecord } = require('../utils/stockInFlow.js');
-const {
-  initStockInEditMatrixState,
-  buildStockInEditMatrixLayout,
-  validateStockInEditSave,
-  buildStockInEditSaveOperations,
-} = require('../utils/stockInDetailEdit.js');
-const {
-  activateMatrixKeyboardCell,
-  applyMatrixKeyboardKey,
-  buildMatrixKeyboardPreview,
-  createMatrixKeyboardInputSession,
-  getNextMatrixVariantIdInColumn,
-  getNextMatrixVariantIdInRow,
-} = require('../utils/matrixQtyKeyboard.js');
-const { readNavBarMetrics, readWindowMetrics, computePlanCreateHeaderHeight } = require('../../utils/windowMetrics.js');
-const { afterMatrixKeyboardOpen } = require('../utils/matrixKeyboardLayout.js');
-const { LIST_ROUTES, afterSaveReturnToList } = require('../utils/saveNavigation.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 =
+
+
+
+
+
+
+
+
+  require('../utils/orderApi.js'),fetchWarehousesAll = _require3.fetchWarehousesAll,fetchProductsAll = _require3.fetchProductsAll,fetchCategoriesAll = _require3.fetchCategoriesAll,fetchTenantConfig = _require3.fetchTenantConfig,fetchProductionRecords = _require3.fetchProductionRecords,createProductionRecord = _require3.createProductionRecord,updateProductionRecord = _require3.updateProductionRecord,deleteProductionRecord = _require3.deleteProductionRecord;
+const _require4 = require('../utils/planApi.js'),fetchDictionaries = _require4.fetchDictionaries;
+const _require5 = require('../utils/productionPlans.js'),normalizeMasterList = _require5.normalizeMasterList;
+const _require6 = require('../utils/stockInFlow.js'),buildStockInFlowDetailView = _require6.buildStockInFlowDetailView,normalizeStockInRecord = _require6.normalizeStockInRecord;
+const _require7 =
+
+
+
+
+  require('../utils/stockInDetailEdit.js'),initStockInEditMatrixState = _require7.initStockInEditMatrixState,buildStockInEditMatrixLayout = _require7.buildStockInEditMatrixLayout,validateStockInEditSave = _require7.validateStockInEditSave,buildStockInEditSaveOperations = _require7.buildStockInEditSaveOperations;
+const _require8 =
+
+
+
+
+
+
+  require('../utils/matrixQtyKeyboard.js'),activateMatrixKeyboardCell = _require8.activateMatrixKeyboardCell,applyMatrixKeyboardKey = _require8.applyMatrixKeyboardKey,buildMatrixKeyboardPreview = _require8.buildMatrixKeyboardPreview,createMatrixKeyboardInputSession = _require8.createMatrixKeyboardInputSession,getNextMatrixVariantIdInColumn = _require8.getNextMatrixVariantIdInColumn,getNextMatrixVariantIdInRow = _require8.getNextMatrixVariantIdInRow;
+const _require9 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require9.readNavBarMetrics,readWindowMetrics = _require9.readWindowMetrics,computePlanCreateHeaderHeight = _require9.computePlanCreateHeaderHeight;
+const _require0 = require('../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require0.afterMatrixKeyboardOpen;
+const _require1 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require1.LIST_ROUTES,afterSaveReturnToList = _require1.afterSaveReturnToList;
 
 function computeHeaderBlockHeight(nav) {
   return computePlanCreateHeaderHeight(nav);
@@ -41,7 +41,7 @@ function emptyMatrixKeyboardState() {
     matrixInputReplaceAll: false,
     activeMatrixVariantId: '',
     matrixKeyboardLabel: '',
-    matrixKeyboardValue: '',
+    matrixKeyboardValue: ''
   };
 }
 
@@ -79,17 +79,17 @@ Page({
     statusBarHeight: 20,
     navBarHeight: 44,
     headerBlockHeight: 88,
-    scrollHeight: 400,
+    scrollHeight: 400
   },
 
   onLoad(options) {
     const nav = readNavBarMetrics();
     const ctx = readTenantCtx();
-    const perms = (ctx && ctx.permissions) || [];
+    const perms = ctx && ctx.permissions || [];
     this._docNo = options.docNo ? decodeURIComponent(options.docNo) : '';
     this._productId = options.productId ? decodeURIComponent(options.productId) : '';
     const app = getApp();
-    const cached = (app.globalData && app.globalData.stockInFlowDetail) || null;
+    const cached = app.globalData && app.globalData.stockInFlowDetail || null;
     if (cached && cached.docNo === this._docNo && Array.isArray(cached.rows) && cached.rows.length) {
       this._rows = cached.rows;
     } else {
@@ -108,7 +108,7 @@ Page({
       canEdit: this._canEdit,
       canDelete: this._canDelete,
       showFooter: this._canEdit || this._canDelete,
-      scrollHeight: computeScrollHeight(nav, this._canEdit || this._canDelete),
+      scrollHeight: computeScrollHeight(nav, this._canEdit || this._canDelete)
     });
 
     if (!this._docNo && !this._rows.length) {
@@ -135,41 +135,41 @@ Page({
     this.setData({ loading: true });
     try {
       const needsFetch = !this._rows.length;
-      const [
-        config,
-        productsRaw,
-        categoriesRaw,
-        dictionariesRaw,
-        warehousesRaw,
-        recordsRaw,
-      ] = await Promise.all([
+      const _await$Promise$all =
+
+
+
+
+
+
+        await Promise.all([
         fetchTenantConfig().catch(() => ({})),
         fetchProductsAll().catch(() => []),
         fetchCategoriesAll().catch(() => []),
         fetchDictionaries().catch(() => ({})),
         fetchWarehousesAll(),
-        needsFetch
-          ? fetchProductionRecords({
-            docNo: this._docNo,
-            type: 'STOCK_IN',
-            ...(this._productId ? { productId: this._productId } : {}),
-          }).catch(() => [])
-          : Promise.resolve(null),
-      ]);
+        needsFetch ?
+        fetchProductionRecords({
+          docNo: this._docNo,
+          type: 'STOCK_IN',
+          ...(this._productId ? { productId: this._productId } : {})
+        }).catch(() => []) :
+        Promise.resolve(null)]
+        ),config = _await$Promise$all[0],productsRaw = _await$Promise$all[1],categoriesRaw = _await$Promise$all[2],dictionariesRaw = _await$Promise$all[3],warehousesRaw = _await$Promise$all[4],recordsRaw = _await$Promise$all[5];
 
       if (needsFetch) {
-        const rows = Array.isArray(recordsRaw) ? recordsRaw : (recordsRaw && recordsRaw.data) || [];
+        const rows = Array.isArray(recordsRaw) ? recordsRaw : recordsRaw && recordsRaw.data || [];
         this._rows = rows.map(normalizeStockInRecord);
       }
 
-      const productionLinkMode = (config && config.productionLinkMode) || 'order';
+      const productionLinkMode = config && config.productionLinkMode || 'order';
       const products = normalizeMasterList(productsRaw);
       const categories = normalizeMasterList(categoriesRaw);
       const productMap = new Map(products.map((p) => [p.id, p]));
       const categoryMap = new Map(categories.map((c) => [c.id, c]));
-      const warehouses = Array.isArray(warehousesRaw)
-        ? warehousesRaw
-        : (warehousesRaw.data || []);
+      const warehouses = Array.isArray(warehousesRaw) ?
+      warehousesRaw :
+      warehousesRaw.data || [];
       const warehouseMap = new Map(warehouses.map((w) => [w.id, w]));
 
       const detail = buildStockInFlowDetailView(this._rows, {
@@ -177,7 +177,7 @@ Page({
         categoryMap,
         warehouseMap,
         dictionaries: dictionariesRaw,
-        productionLinkMode,
+        productionLinkMode
       });
 
       if (!detail) {
@@ -189,9 +189,9 @@ Page({
       const first = this._rows[0];
       const whId = first.warehouseId || detail.warehouseId || '';
       const wh = warehouseMap.get(whId);
-      const editWarehouseName = detail.warehouseName
-        || (wh && (wh.name || wh.code))
-        || '';
+      const editWarehouseName = detail.warehouseName ||
+      wh && (wh.name || wh.code) ||
+      '';
 
       this._warehouses = warehouses;
       this._product = first.productId ? productMap.get(first.productId) : null;
@@ -205,7 +205,7 @@ Page({
         warehouseNames: warehouses.map((w) => w.name || w.code || w.id),
         editWarehouseId: whId,
         editWarehouseName,
-        warehousePickerIndex: Math.max(0, warehouses.findIndex((w) => w.id === whId)),
+        warehousePickerIndex: Math.max(0, warehouses.findIndex((w) => w.id === whId))
       });
     } catch {
       this.setData({ loading: false, detail: null });
@@ -228,11 +228,11 @@ Page({
     const preview = buildMatrixKeyboardPreview(
       this.data.editMatrixLayout,
       id,
-      this._quantities,
+      this._quantities
     );
     this.setData({
       matrixKeyboardLabel: preview.label,
-      matrixKeyboardValue: preview.value,
+      matrixKeyboardValue: preview.value
     });
   },
 
@@ -248,7 +248,7 @@ Page({
       editMatrixLayout = buildStockInEditMatrixLayout(
         this._product,
         this._dictionaries,
-        this._quantities,
+        this._quantities
       );
     } else {
       this._quantities = {};
@@ -258,13 +258,13 @@ Page({
     this.setData({
       editing: true,
       editMatrixLayout,
-      ...emptyMatrixKeyboardState(),
+      ...emptyMatrixKeyboardState()
     });
   },
 
   onCancelEdit() {
     const detail = this.data.detail;
-    const first = (this._rows && this._rows[0]) || {};
+    const first = this._rows && this._rows[0] || {};
     const wh = (this._warehouses || []).find((w) => w.id === (first.warehouseId || detail.warehouseId));
     this._quantities = {};
     this._variantRecordMap = {};
@@ -272,42 +272,42 @@ Page({
       editing: false,
       editMatrixLayout: null,
       editQty: detail ? String(detail.totalQty) : '',
-      editWarehouseId: first.warehouseId || (detail && detail.warehouseId) || '',
-      editWarehouseName: (detail && detail.warehouseName) || (wh && (wh.name || wh.code)) || '',
+      editWarehouseId: first.warehouseId || detail && detail.warehouseId || '',
+      editWarehouseName: detail && detail.warehouseName || wh && (wh.name || wh.code) || '',
       warehousePickerIndex: Math.max(0, (this._warehouses || []).findIndex(
-        (w) => w.id === (first.warehouseId || (detail && detail.warehouseId)),
+        (w) => w.id === (first.warehouseId || detail && detail.warehouseId)
       )),
-      ...emptyMatrixKeyboardState(),
+      ...emptyMatrixKeyboardState()
     });
   },
 
   onMatrixCellTap(e) {
-    const { variantId } = e.currentTarget.dataset;
+    const variantId = e.currentTarget.dataset.variantId;
     if (!variantId) return;
     activateMatrixKeyboardCell(this._matrixKbInput);
     const preview = buildMatrixKeyboardPreview(
       this.data.editMatrixLayout,
       variantId,
-      this._quantities,
+      this._quantities
     );
     this.setData({
       matrixKeyboardVisible: true,
       matrixInputReplaceAll: true,
       activeMatrixVariantId: variantId,
       matrixKeyboardLabel: preview.label,
-      matrixKeyboardValue: preview.value,
+      matrixKeyboardValue: preview.value
     }, () => {
       afterMatrixKeyboardOpen(this, '.plan-detail-scroll');
     });
   },
 
   onMatrixKeyboardAction(e) {
-    const { action, digit } = e.detail || {};
+    const _ref = e.detail || {},action = _ref.action,digit = _ref.digit;
     if (action === 'confirm') {
       this.setData(emptyMatrixKeyboardState());
       return;
     }
-    const { activeMatrixVariantId, editMatrixLayout } = this.data;
+    const _this$data = this.data,activeMatrixVariantId = _this$data.activeMatrixVariantId,editMatrixLayout = _this$data.editMatrixLayout;
     if (action === 'enter') {
       const nextId = getNextMatrixVariantIdInRow(editMatrixLayout, activeMatrixVariantId);
       if (nextId) {
@@ -317,7 +317,7 @@ Page({
           activeMatrixVariantId: nextId,
           matrixInputReplaceAll: true,
           matrixKeyboardLabel: preview.label,
-          matrixKeyboardValue: preview.value,
+          matrixKeyboardValue: preview.value
         }, () => {
           afterMatrixKeyboardOpen(this, '.plan-detail-scroll');
         });
@@ -335,7 +335,7 @@ Page({
           activeMatrixVariantId: nextId,
           matrixInputReplaceAll: true,
           matrixKeyboardLabel: preview.label,
-          matrixKeyboardValue: preview.value,
+          matrixKeyboardValue: preview.value
         }, () => {
           afterMatrixKeyboardOpen(this, '.plan-detail-scroll');
         });
@@ -346,7 +346,7 @@ Page({
     }
     if (!activeMatrixVariantId) return;
     const current = this._quantities[activeMatrixVariantId] || '';
-    const { value, replaceConsumed } = applyMatrixKeyboardKey(this._matrixKbInput, current, action, digit);
+    const _applyMatrixKeyboardK = applyMatrixKeyboardKey(this._matrixKbInput, current, action, digit),value = _applyMatrixKeyboardK.value,replaceConsumed = _applyMatrixKeyboardK.replaceConsumed;
     this._quantities[activeMatrixVariantId] = value;
     if (replaceConsumed) {
       this.setData({ matrixInputReplaceAll: false });
@@ -365,7 +365,7 @@ Page({
     this.setData({
       warehousePickerIndex: idx,
       editWarehouseId: wh.id,
-      editWarehouseName: wh.name || wh.code || '',
+      editWarehouseName: wh.name || wh.code || ''
     });
   },
 
@@ -394,7 +394,7 @@ Page({
       quantities: this._quantities,
       matrixLayout: this.data.editMatrixLayout,
       singleQty: this.data.editQty,
-      warehouseId: this.data.editWarehouseId,
+      warehouseId: this.data.editWarehouseId
     });
     if (errMsg) {
       wx.showToast({ title: errMsg, icon: 'none' });
@@ -412,7 +412,7 @@ Page({
       operator: first.operator,
       timestamp: first.timestamp,
       singleQty: this.data.editQty,
-      collabData: first.collabData,
+      collabData: first.collabData
     });
 
     if (!ops.length) {
@@ -429,12 +429,12 @@ Page({
       wx.hideLoading();
       afterSaveReturnToList({
         listUrl: LIST_ROUTES.STOCK_IN_HISTORY,
-        toastTitle: '已保存',
+        toastTitle: '已保存'
       });
     } catch (err) {
       wx.hideLoading();
       this.setData({ saving: false });
-      wx.showToast({ title: (err && err.message) || '保存失败', icon: 'none' });
+      wx.showToast({ title: err && err.message || '保存失败', icon: 'none' });
     }
   },
 
@@ -453,14 +453,14 @@ Page({
           wx.hideLoading();
           afterSaveReturnToList({
             listUrl: LIST_ROUTES.STOCK_IN_HISTORY,
-            toastTitle: '已删除',
+            toastTitle: '已删除'
           });
         } catch (err) {
-          wx.showToast({ title: (err && err.message) || '删除失败', icon: 'none' });
+          wx.showToast({ title: err && err.message || '删除失败', icon: 'none' });
         } finally {
           wx.hideLoading();
         }
-      },
+      }
     });
-  },
+  }
 });

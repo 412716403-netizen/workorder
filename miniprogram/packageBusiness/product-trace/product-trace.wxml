@@ -1,0 +1,129 @@
+<view class="plan-create-shell">
+  <view class="plan-create-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-create-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-create-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-create-header__title">产品追溯查询</text>
+      <view class="plan-create-header__back plan-create-header__back--placeholder"></view>
+    </view>
+  </view>
+
+  <view class="plan-create-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view
+    class="plan-create-scroll"
+    scroll-y
+    show-scrollbar="{{false}}"
+    style="height: {{scrollHeight}}px;"
+  >
+    <view class="plan-create-page" style="padding-bottom: {{footerInsetPx}}px;">
+      <view class="plan-form-card trace-intro-card">
+        <text class="trace-intro-card__hint">仅支持扫单品码，扫码后展示该码的生产链路</text>
+      </view>
+
+      <view wx:if="{{loading}}" class="trace-status-card">
+        <text class="trace-status-card__text">正在查询…</text>
+      </view>
+
+      <view wx:elif="{{error && !hasResult}}" class="trace-error-card">
+        <text class="trace-error-card__text">{{error}}</text>
+      </view>
+
+      <view wx:elif="{{!hasResult && !loading}}" class="trace-empty-hint">
+        <text wx:if="{{scanEnabled}}">点击下方「扫码录入」开始追溯</text>
+        <text wx:else>追溯码插件未开启</text>
+      </view>
+
+      <block wx:if="{{hasResult && !loading}}">
+        <view wx:if="{{isVoided}}" class="trace-void-card">
+          <text class="trace-void-card__text">该单品码已作废：{{voidedMessage}}</text>
+        </view>
+
+        <view wx:else class="trace-summary-card">
+          <view class="trace-summary-card__head">
+            <text class="trace-summary-card__badge">单品码</text>
+            <text class="trace-summary-card__serial">{{serialLabel}}</text>
+          </view>
+          <view class="trace-summary-card__grid">
+            <view wx:for="{{summaryFields}}" wx:key="label" class="trace-summary-card__field">
+              <text class="trace-summary-card__label">{{item.label}}</text>
+              <text class="trace-summary-card__value">{{item.value}}</text>
+            </view>
+          </view>
+          <view wx:if="{{callerContextText}}" class="trace-summary-card__ctx">
+            <text class="trace-summary-card__ctx-label">本企业视角：</text>
+            <text>{{callerContextText}}</text>
+          </view>
+        </view>
+
+        <view class="trace-timeline-card">
+          <view class="trace-timeline-card__head">
+            <text class="trace-timeline-card__title">生产链路时间轴</text>
+            <text wx:if="{{traceItemSerialLabel}}" class="trace-timeline-card__serial">{{traceItemSerialLabel}}</text>
+          </view>
+          <text wx:if="{{traceStatsText}}" class="trace-timeline-card__stats">{{traceStatsText}}</text>
+
+          <view wx:if="{{traceEmpty}}" class="trace-timeline-card__empty">
+            <text>暂无与该单品码匹配的生产事件</text>
+          </view>
+
+          <view wx:else class="trace-timeline">
+            <view
+              wx:for="{{traceEvents}}"
+              wx:key="key"
+              class="trace-timeline__item"
+            >
+              <view class="trace-timeline__dot {{item.dotClass}}"></view>
+              <view class="trace-timeline__icon {{item.bgClass}}"></view>
+              <view class="trace-timeline__body">
+                <view class="trace-timeline__title-row">
+                  <text class="trace-timeline__title">{{item.title}}</text>
+                  <text class="trace-timeline__time">{{item.time}}</text>
+                  <text wx:if="{{item.tenantName}}" class="trace-timeline__tenant">{{item.tenantName}}</text>
+                </view>
+                <view class="trace-timeline__meta">
+                  <text wx:if="{{item.quantity}}">数量 {{item.quantity}}</text>
+                  <text wx:if="{{item.orderNumber}}">工单 {{item.orderNumber}}</text>
+                  <text wx:if="{{item.nodeName}}">工序 {{item.nodeName}}</text>
+                  <text wx:if="{{item.operator}}">操作人 {{item.operator}}</text>
+                  <text wx:if="{{item.partner}}">合作方 {{item.partner}}</text>
+                </view>
+                <text wx:if="{{item.notes}}" class="trace-timeline__notes">{{item.notes}}</text>
+              </view>
+            </view>
+          </view>
+
+          <view wx:if="{{hasMore}}" class="trace-load-more">
+            <view
+              class="trace-load-more__btn {{loadingMore ? 'trace-load-more__btn--disabled' : ''}}"
+              bindtap="onLoadMoreTap"
+            >
+              {{loadingMore ? '加载中…' : loadMoreText}}
+            </view>
+          </view>
+
+          <text wx:if="{{scopeNote}}" class="trace-timeline-card__note">{{scopeNote}}</text>
+          <text wx:elif="{{!traceEmpty}}" class="trace-timeline-card__note">
+            注：仅展示扫码报工/扫码入库时写入关联的事件；同批次下各单品码共享批次链路。
+          </text>
+        </view>
+      </block>
+    </view>
+  </scroll-view>
+
+  <view wx:if="{{scanEnabled}}" class="trace-scan-footer">
+    <button
+      class="scan-batch-scan-btn"
+      hover-class="scan-batch-scan-btn--hover"
+      bindtap="onScanTap"
+      disabled="{{loading}}"
+    >
+      <view class="scan-batch-scan-btn__inner">
+        <view class="scan-batch-scan-btn__icon" aria-hidden="true">
+          <view class="scan-batch-scan-btn__icon-frame"></view>
+          <view class="scan-batch-scan-btn__icon-line"></view>
+        </view>
+        <text class="scan-batch-scan-btn__text">扫码录入</text>
+      </view>
+    </button>
+  </view>
+</view>

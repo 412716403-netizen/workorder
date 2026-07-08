@@ -2,11 +2,11 @@
  * 销售订单表单状态与保存（对齐 Web OrderBillFormPage SALES_ORDER 分支）
  */
 
-const { groupDocItemsByLineGroup, formatPsiQtyDisplay } = require('./psiOpsAggregators.js');
-const { productHasColorSizeMatrix } = require('./productionPlans.js');
-const { buildVariantMatrixUiModel } = require('./variantQtyMatrix.js');
-const { localTodayYmd } = require('./dateYmd.js');
-const { resolveDefaultSalesPrice } = require('./psiPartnerProductLastPrice.js');
+const _require = require('./psiOpsAggregators.js'),groupDocItemsByLineGroup = _require.groupDocItemsByLineGroup,formatPsiQtyDisplay = _require.formatPsiQtyDisplay;
+const _require2 = require('./productionPlans.js'),productHasColorSizeMatrix = _require2.productHasColorSizeMatrix;
+const _require3 = require('./variantQtyMatrix.js'),buildVariantMatrixUiModel = _require3.buildVariantMatrixUiModel;
+const _require4 = require('./dateYmd.js'),localTodayYmd = _require4.localTodayYmd;
+const _require5 = require('./psiPartnerProductLastPrice.js'),resolveDefaultSalesPrice = _require5.resolveDefaultSalesPrice;
 
 function newLineId() {
   return `so-line-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -32,7 +32,7 @@ function createEmptyLine() {
     unitName: 'PCS',
     lineTotalQty: 0,
     lineAmountText: '',
-    showAmount: false,
+    showAmount: false
   };
 }
 
@@ -41,13 +41,13 @@ function buildInitialForm() {
     partner: '',
     partnerId: '',
     docNumber: '',
-    operator: '',
+    operator: ''
   };
 }
 
 function recordsToLineItems(records) {
   const lineMap = groupDocItemsByLineGroup(records || []);
-  return Object.entries(lineMap).map(([lgId, recs]) => {
+  return Object.entries(lineMap).map(([lgId, recs]) => {var _first$salesPrice;
     const first = recs[0] || {};
     const hasVar = recs.some((r) => r.variantId);
     const vq = {};
@@ -62,19 +62,19 @@ function recordsToLineItems(records) {
       productId: first.productId || '',
       productName: first.productName || '',
       quantity: hasVar ? '' : String(lineQtyNoVar || ''),
-      salesPrice: String(first.salesPrice ?? ''),
+      salesPrice: String((_first$salesPrice = first.salesPrice) != null ? _first$salesPrice : ''),
       variantQuantities: hasVar ? vq : {},
-      sourceRecordIds: recs.map((r) => r.id),
+      sourceRecordIds: recs.map((r) => r.id)
     };
   });
 }
 
 function enrichLineForUi(line, ctx) {
-  const { productMap, categoryMap, dictionaries, showAmount } = ctx;
+  const productMap = ctx.productMap,categoryMap = ctx.categoryMap,dictionaries = ctx.dictionaries,showAmount = ctx.showAmount;
   const product = line.productId && productMap ? productMap.get(line.productId) : null;
   const category = product && categoryMap ? categoryMap.get(product.categoryId) : null;
   const useMatrix = Boolean(product && productHasColorSizeMatrix(product, category));
-  const unitName = (product && product.unit) || 'PCS';
+  const unitName = product && product.unit || 'PCS';
   let matrixLayout = null;
   if (useMatrix && product) {
     matrixLayout = buildVariantMatrixUiModel(product, dictionaries, line.variantQuantities || {});
@@ -84,7 +84,7 @@ function enrichLineForUi(line, ctx) {
   const amount = qty * price;
   return {
     ...line,
-    productName: (product && product.name) || line.productName || '',
+    productName: product && product.name || line.productName || '',
     useMatrix,
     matrixLayout,
     unitName,
@@ -92,7 +92,7 @@ function enrichLineForUi(line, ctx) {
     lineAmountText: showAmount && amount > 0 ? `¥${amount.toFixed(2)}` : '',
     showAmount: Boolean(showAmount),
     quantity: line.quantity != null ? String(line.quantity) : '',
-    salesPrice: line.salesPrice != null ? String(line.salesPrice) : '',
+    salesPrice: line.salesPrice != null ? String(line.salesPrice) : ''
   };
 }
 
@@ -110,7 +110,7 @@ function computeFormTotals(lines, showAmount) {
     totalQtyText: `${totalQty} PCS`,
     totalAmountText: showAmount ? `¥${totalAmount.toFixed(2)}` : '',
     showAmount: Boolean(showAmount),
-    canSubmit: (lines || []).some((l) => l.productId && psiOrderLineTotalQty(l) > 0),
+    canSubmit: (lines || []).some((l) => l.productId && psiOrderLineTotalQty(l) > 0)
   };
 }
 
@@ -141,7 +141,7 @@ function localCalendarYmdStartToIso(ymd) {
 function psiDocTimestampIsoForSave(existingRecords, editingDocNumber) {
   if (!editingDocNumber) return new Date().toISOString();
   const lines = (existingRecords || []).filter(
-    (r) => r.type === 'SALES_ORDER' && String(r.docNumber) === String(editingDocNumber),
+    (r) => r.type === 'SALES_ORDER' && String(r.docNumber) === String(editingDocNumber)
   );
   let min = 0;
   lines.forEach((r) => {
@@ -155,7 +155,7 @@ function psiDocTimestampIsoForSave(existingRecords, editingDocNumber) {
 function soCreatedAtIsoForSave(existingRecords, editingDocNumber) {
   if (!editingDocNumber) return localCalendarYmdStartToIso(localTodayYmd());
   const row = (existingRecords || []).find(
-    (r) => r.type === 'SALES_ORDER' && String(r.docNumber) === String(editingDocNumber),
+    (r) => r.type === 'SALES_ORDER' && String(r.docNumber) === String(editingDocNumber)
   );
   if (!row || row.createdAt == null || row.createdAt === '') {
     return localCalendarYmdStartToIso(localTodayYmd());
@@ -171,9 +171,9 @@ function preservedSalesOrderLinePsi(recordsList, sourceRecordIds, variantId, new
   const idSet = new Set(ids);
   const candidates = (recordsList || []).filter(
     (r) =>
-      r.type === 'SALES_ORDER'
-      && idSet.has(r.id)
-      && (variantId ? r.variantId === variantId : !r.variantId),
+    r.type === 'SALES_ORDER' &&
+    idSet.has(r.id) && (
+    variantId ? r.variantId === variantId : !r.variantId)
   );
   if (!candidates.length) return {};
   const shippedRaw = candidates.reduce((s, r) => s + (Number(r.shippedQuantity) || 0), 0);
@@ -187,14 +187,14 @@ function preservedSalesOrderLinePsi(recordsList, sourceRecordIds, variantId, new
 }
 
 function buildSalesOrderSaveRecords(opts) {
-  const {
-    form,
-    lines,
-    docNumber,
-    editingDocNumber,
-    existingRecords,
-    operator,
-  } = opts;
+  const
+    form =
+
+
+
+
+
+    opts.form,lines = opts.lines,docNumber = opts.docNumber,editingDocNumber = opts.editingDocNumber,existingRecords = opts.existingRecords,operator = opts.operator;
   const timestamp = psiDocTimestampIsoForSave(existingRecords, editingDocNumber);
   const soCreatedAtIso = soCreatedAtIsoForSave(existingRecords, editingDocNumber);
   const newRecords = [];
@@ -224,7 +224,7 @@ function buildSalesOrderSaveRecords(opts) {
           operator: operator || '',
           lineGroupId: item.id,
           createdAt: soCreatedAtIso,
-          ...preservedSalesOrderLinePsi(existingRecords, item.sourceRecordIds, variantId, n),
+          ...preservedSalesOrderLinePsi(existingRecords, item.sourceRecordIds, variantId, n)
         });
       });
     } else {
@@ -246,7 +246,7 @@ function buildSalesOrderSaveRecords(opts) {
         operator: operator || '',
         lineGroupId: item.id,
         createdAt: soCreatedAtIso,
-        ...preservedSalesOrderLinePsi(existingRecords, item.sourceRecordIds, undefined, qty),
+        ...preservedSalesOrderLinePsi(existingRecords, item.sourceRecordIds, undefined, qty)
       });
     }
   });
@@ -263,7 +263,7 @@ function applyDefaultSalesPrices(lines, records, form, productMap, excludeDocNum
       form.partner,
       line.productId,
       productMap,
-      excludeDocNumber,
+      excludeDocNumber
     );
     return { ...line, salesPrice: String(price) };
   });
@@ -280,5 +280,5 @@ module.exports = {
   validateSalesOrderSave,
   buildSalesOrderSaveRecords,
   applyDefaultSalesPrices,
-  preservedSalesOrderLinePsi,
+  preservedSalesOrderLinePsi
 };

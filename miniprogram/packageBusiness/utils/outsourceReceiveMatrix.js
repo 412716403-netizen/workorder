@@ -2,42 +2,42 @@
  * 外协收回色码矩阵（对齐 Web OutsourceReceiveQuantityModal）
  */
 
-const { productHasColorSizeMatrix } = require('./productionPlans.js');
-const {
-  RECEIVE_VARIANT_SEP,
-  outsourceReceiveBaseKey,
-  resolveOutsourceReceiveEntry,
-} = require('./outsourceReceiveKeys.js');
+const _require = require('./productionPlans.js'),productHasColorSizeMatrix = _require.productHasColorSizeMatrix;
+const _require2 =
+
+
+
+  require('./outsourceReceiveKeys.js'),RECEIVE_VARIANT_SEP = _require2.RECEIVE_VARIANT_SEP,outsourceReceiveBaseKey = _require2.outsourceReceiveBaseKey,resolveOutsourceReceiveEntry = _require2.resolveOutsourceReceiveEntry;
 
 function receiveVariantQuantityKey(baseKey, variantId, isProductScope) {
   if (!variantId) return baseKey;
-  return isProductScope
-    ? `${baseKey}${RECEIVE_VARIANT_SEP}${variantId}`
-    : `${baseKey}|${variantId}`;
+  return isProductScope ?
+  `${baseKey}${RECEIVE_VARIANT_SEP}${variantId}` :
+  `${baseKey}|${variantId}`;
 }
 
-function filterOutsourceRecordsForRow(row, records, status) {
-  const partner = row.partner ?? '';
-  return (records || []).filter((r) => {
+function filterOutsourceRecordsForRow(row, records, status) {var _row$partner;
+  const partner = (_row$partner = row.partner) != null ? _row$partner : '';
+  return (records || []).filter((r) => {var _r$partner2;
     if (r.type !== 'OUTSOURCE' || r.sourceReworkId) return false;
     if (r.status !== status) return false;
-    if (row.orderId == null) {
-      return !r.orderId
-        && r.productId === row.productId
-        && r.nodeId === row.nodeId
-        && (r.partner ?? '') === partner;
+    if (row.orderId == null) {var _r$partner;
+      return !r.orderId &&
+      r.productId === row.productId &&
+      r.nodeId === row.nodeId &&
+      ((_r$partner = r.partner) != null ? _r$partner : '') === partner;
     }
-    return r.orderId === row.orderId
-      && r.nodeId === row.nodeId
-      && (r.partner ?? '') === partner;
+    return r.orderId === row.orderId &&
+    r.nodeId === row.nodeId &&
+    ((_r$partner2 = r.partner) != null ? _r$partner2 : '') === partner;
   });
 }
 
 function sumQtyByVariant(records, variantId) {
   const vid = variantId || '';
-  return (records || [])
-    .filter((r) => (r.variantId || '') === vid)
-    .reduce((s, r) => s + (Number(r.quantity) || 0), 0);
+  return (records || []).
+  filter((r) => (r.variantId || '') === vid).
+  reduce((s, r) => s + (Number(r.quantity) || 0), 0);
 }
 
 function sumOtherVariantQty(baseKey, variantId, quantities, isProductScope) {
@@ -67,43 +67,43 @@ function resolveReceiveRowMatrixContext(row, ctx) {
   const productMilestoneProgresses = ctx.productMilestoneProgresses || [];
 
   const product = products.find((p) => p.id === row.productId);
-  const category = categories.find((c) => c.id === product?.categoryId);
+  const category = categories.find((c) => c.id === (product == null ? void 0 : product.categoryId));
   const hasColorSizeMatrix = productHasColorSizeMatrix(product, category);
 
   if (row.orderId != null) {
     const order = orders.find((o) => o.id === row.orderId);
     const hasColorSizeOrderRecv = hasColorSizeMatrix;
     const variantIdsInOrderItems = new Set(
-      (order?.items || []).map((i) => i.variantId).filter(Boolean),
+      ((order == null ? void 0 : order.items) || []).map((i) => i.variantId).filter(Boolean)
     );
     const variantIdsFromOrderMilestone = new Set();
-    const ms = (order?.milestones || []).find((m) => m.templateId === row.nodeId);
-    (ms?.reports || []).forEach((r) => {
+    const ms = ((order == null ? void 0 : order.milestones) || []).find((m) => m.templateId === row.nodeId);
+    ((ms == null ? void 0 : ms.reports) || []).forEach((r) => {
       if (r.variantId) variantIdsFromOrderMilestone.add(r.variantId);
     });
     const variantIdsForOrderRecv = new Set([
-      ...variantIdsInOrderItems,
-      ...variantIdsFromOrderMilestone,
-    ]);
+    ...variantIdsInOrderItems,
+    ...variantIdsFromOrderMilestone]
+    );
     const orderRecvHasSpecBreakdown = variantIdsForOrderRecv.size > 0;
-    const variantsInOrder = hasColorSizeOrderRecv && product?.variants
-      ? [...product.variants]
-      : [];
-    const aggregate = hasColorSizeOrderRecv
-      && variantsInOrder.length > 0
-      && !orderRecvHasSpecBreakdown;
+    const variantsInOrder = hasColorSizeOrderRecv && product != null && product.variants ?
+    [...product.variants] :
+    [];
+    const aggregate = hasColorSizeOrderRecv &&
+    variantsInOrder.length > 0 &&
+    !orderRecvHasSpecBreakdown;
 
     const dispatchRecords = filterOutsourceRecordsForRow(row, records, '加工中');
     const receiveRecords = filterOutsourceRecordsForRow(row, records, '已收回');
     const hasVariantDispatch = dispatchRecords.some((r) => !!r.variantId);
 
-    if (!variantsInOrder.length || (!hasVariantDispatch && !aggregate)) {
+    if (!variantsInOrder.length || !hasVariantDispatch && !aggregate) {
       return {
         baseKey,
         isProductScope: false,
         hasMatrix: false,
         variants: [],
-        aggregate: false,
+        aggregate: false
       };
     }
 
@@ -115,15 +115,15 @@ function resolveReceiveRowMatrixContext(row, ctx) {
       aggregate,
       dispatchRecords,
       receiveRecords,
-      product,
+      product
     };
   }
 
   const blockOrders = orders.filter((o) => o.productId === row.productId);
   const variantIdsInBlock = new Set();
   blockOrders.forEach((o) => {
-    (o.items || []).forEach((i) => {
-      if ((i.quantity ?? 0) > 0 && i.variantId) variantIdsInBlock.add(i.variantId);
+    (o.items || []).forEach((i) => {var _i$quantity;
+      if (((_i$quantity = i.quantity) != null ? _i$quantity : 0) > 0 && i.variantId) variantIdsInBlock.add(i.variantId);
     });
   });
   const variantIdsFromProgress = new Set();
@@ -137,28 +137,28 @@ function resolveReceiveRowMatrixContext(row, ctx) {
     });
     blockOrders.forEach((o) => {
       const ms = (o.milestones || []).find((m) => m.templateId === row.nodeId);
-      (ms?.reports || []).forEach((r) => {
+      ((ms == null ? void 0 : ms.reports) || []).forEach((r) => {
         if (r.variantId) variantIdsFromProgress.add(r.variantId);
       });
     });
   }
   const variantIdsForProduct = new Set([...variantIdsInBlock, ...variantIdsFromProgress]);
-  const variantsInProduct = hasColorSizeMatrix && product?.variants
-    ? [...product.variants]
-    : [];
+  const variantsInProduct = hasColorSizeMatrix && product != null && product.variants ?
+  [...product.variants] :
+  [];
   const aggregate = variantsInProduct.length > 0 && variantIdsForProduct.size === 0;
 
   const dispatchRecords = filterOutsourceRecordsForRow(row, records, '加工中');
   const receiveRecords = filterOutsourceRecordsForRow(row, records, '已收回');
   const hasVariantProductDispatches = dispatchRecords.some((r) => !!r.variantId);
 
-  if (!variantsInProduct.length || (!hasVariantProductDispatches && !aggregate)) {
+  if (!variantsInProduct.length || !hasVariantProductDispatches && !aggregate) {
     return {
       baseKey,
       isProductScope: true,
       hasMatrix: false,
       variants: [],
-      aggregate: false,
+      aggregate: false
     };
   }
 
@@ -170,19 +170,19 @@ function resolveReceiveRowMatrixContext(row, ctx) {
     aggregate,
     dispatchRecords,
     receiveRecords,
-    product,
+    product
   };
 }
 
 function getPendingForVariant(matrixCtx, variantId, quantities) {
-  const {
-    baseKey,
-    isProductScope,
-    aggregate,
-    dispatchRecords,
-    receiveRecords,
-    row,
-  } = matrixCtx;
+  const
+    baseKey =
+
+
+
+
+
+    matrixCtx.baseKey,isProductScope = matrixCtx.isProductScope,aggregate = matrixCtx.aggregate,dispatchRecords = matrixCtx.dispatchRecords,receiveRecords = matrixCtx.receiveRecords,row = matrixCtx.row;
 
   if (aggregate) {
     const other = sumOtherVariantQty(baseKey, variantId, quantities, isProductScope);
@@ -198,7 +198,7 @@ function buildReceiveVariantMaxMap(row, ctx, quantities) {
   if (!matrixCtx.hasMatrix) return {};
   const map = {};
   (matrixCtx.variants || []).forEach((v) => {
-    if (!v?.id) return;
+    if (!(v != null && v.id)) return;
     map[v.id] = getPendingForVariant({ ...matrixCtx, row }, v.id, quantities);
   });
   return map;
@@ -227,16 +227,16 @@ function computeReceiveCellMaxAllowed(maxForVariant, variantId, baseKey, quantit
 }
 
 function buildOutsourceReceiveMatrixLayout(product, dict, quantities, maxByVariant, baseKey, isProductScope) {
-  const { buildVariantMatrixUiModel } = require('./variantQtyMatrix.js');
+  const _require3 = require('./variantQtyMatrix.js'),buildVariantMatrixUiModel = _require3.buildVariantMatrixUiModel;
   const subsetVariantIds = new Set(Object.keys(maxByVariant || {}));
-  const subsetVariants = (product?.variants || []).filter((v) => v?.id && subsetVariantIds.has(v.id));
+  const subsetVariants = ((product == null ? void 0 : product.variants) || []).filter((v) => (v == null ? void 0 : v.id) && subsetVariantIds.has(v.id));
   if (!subsetVariants.length) return null;
 
   const subsetProduct = {
     ...product,
     variants: subsetVariants,
     colorIds: product.colorIds,
-    sizeIds: product.sizeIds,
+    sizeIds: product.sizeIds
   };
   const qtyMap = {};
   subsetVariants.forEach((v) => {
@@ -248,14 +248,14 @@ function buildOutsourceReceiveMatrixLayout(product, dict, quantities, maxByVaria
 
   matrix.colorRows = matrix.colorRows.map((row) => ({
     ...row,
-    cells: row.cells.map((cell) => {
+    cells: row.cells.map((cell) => {var _maxByVariant$cell$va;
       if (!cell.variantId) return cell;
-      const maxQty = maxByVariant[cell.variantId] ?? 0;
+      const maxQty = (_maxByVariant$cell$va = maxByVariant[cell.variantId]) != null ? _maxByVariant$cell$va : 0;
       return {
         ...cell,
-        maxQtyLabel: maxQty > 0 ? `最多 ${maxQty}` : '',
+        maxQtyLabel: maxQty > 0 ? `最多 ${maxQty}` : ''
       };
-    }),
+    })
   }));
   return matrix;
 }
@@ -273,9 +273,9 @@ function collectReceiveQuantityEntries(rows, quantities) {
       variantKeys.forEach((k) => {
         const qty = Number(quantities[k]) || 0;
         if (qty <= 0) return;
-        const variantId = isProductScope
-          ? k.slice(baseKey.length + RECEIVE_VARIANT_SEP.length)
-          : k.slice(baseKey.length + 1);
+        const variantId = isProductScope ?
+        k.slice(baseKey.length + RECEIVE_VARIANT_SEP.length) :
+        k.slice(baseKey.length + 1);
         entries.push({ row, baseKey, variantId, quantity: qty });
       });
       return;
@@ -292,11 +292,11 @@ function validateReceiveQuantities(rows, quantities, records, allowExceed, matri
 
   const ctx = {
     ...(matrixCtxInput || {}),
-    records: records || matrixCtxInput?.records || [],
+    records: records || (matrixCtxInput == null ? void 0 : matrixCtxInput.records) || []
   };
 
   for (const entry of entries) {
-    const { row, variantId, quantity } = entry;
+    const row = entry.row,variantId = entry.variantId,quantity = entry.quantity;
     if (allowExceed) continue;
 
     if (variantId) {
@@ -316,9 +316,9 @@ function validateReceiveQuantities(rows, quantities, records, allowExceed, matri
       const dispatchRecords = filterOutsourceRecordsForRow(row, records, '加工中');
       const hasVariantDispatch = dispatchRecords.some((r) => !!r.variantId);
       const dispNoVar = dispatchRecords.filter((r) => !r.variantId).reduce((s, r) => s + r.quantity, 0);
-      const recNoVar = filterOutsourceRecordsForRow(row, records, '已收回')
-        .filter((r) => !r.variantId)
-        .reduce((s, r) => s + r.quantity, 0);
+      const recNoVar = filterOutsourceRecordsForRow(row, records, '已收回').
+      filter((r) => !r.variantId).
+      reduce((s, r) => s + r.quantity, 0);
       const pendingNoVar = Math.max(0, dispNoVar - recNoVar);
       const maxAgg = hasVariantDispatch ? pendingNoVar : row.pending;
       if (quantity > maxAgg) {
@@ -341,5 +341,5 @@ module.exports = {
   buildOutsourceReceiveMatrixLayout,
   collectReceiveQuantityEntries,
   validateReceiveQuantities,
-  resolveOutsourceReceiveEntry,
+  resolveOutsourceReceiveEntry
 };

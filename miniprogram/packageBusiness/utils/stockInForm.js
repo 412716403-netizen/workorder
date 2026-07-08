@@ -2,9 +2,9 @@
  * 待入库表单：矩阵、校验、默认值（对齐 Web PendingStockSingleModal）
  */
 
-const { productHasColorSizeMatrix } = require('./productionPlans.js');
-const { buildVariantMatrixUiModel } = require('./variantQtyMatrix.js');
-const { sumMatrixQuantities } = require('./reportVariantMaxQty.js');
+const _require = require('./productionPlans.js'),productHasColorSizeMatrix = _require.productHasColorSizeMatrix;
+const _require2 = require('./variantQtyMatrix.js'),buildVariantMatrixUiModel = _require2.buildVariantMatrixUiModel;
+const _require3 = require('./reportVariantMaxQty.js'),sumMatrixQuantities = _require3.sumMatrixQuantities;
 
 const WAREHOUSE_PREF_SINGLE = 'PROD_PENDING_STOCK_IN_WAREHOUSE';
 const WAREHOUSE_PREF_BATCH = 'PROD_PENDING_STOCK_IN_BATCH_WAREHOUSE';
@@ -23,8 +23,8 @@ function writeWarehousePreference(kind, warehouseId) {
   try {
     if (warehouseId) wx.setStorageSync(key, warehouseId);
   } catch {
-    /* ignore */
-  }
+
+    /* ignore */}
 }
 
 function resolvePreferredWarehouse(warehouses, kind) {
@@ -52,30 +52,30 @@ function buildInitialVariantQuantities(pendingByVariant) {
  * （对齐 views/order-list/pendingStockStockInHelpers.tsx expandPendingByVariantForMatrix）
  */
 function expandPendingByVariantForMatrix(item, product, category) {
-  const pb = (item && item.pendingByVariant) || {};
+  const pb = item && item.pendingByVariant || {};
   if (!productHasColorSizeMatrix(product, category) || !(product && product.variants && product.variants.length)) {
     return { ...pb };
   }
 
   const positive = Object.entries(pb).filter(([, q]) => (Number(q) || 0) > 0);
-  const onlyUndiff = positive.length === 0 || (positive.length === 1 && positive[0][0] === '');
+  const onlyUndiff = positive.length === 0 || positive.length === 1 && positive[0][0] === '';
 
-  if (!onlyUndiff) {
+  if (!onlyUndiff) {var _out$;
     const out = { ...pb };
-    if ((out[''] ?? 0) > 0 && positive.some(([k]) => k !== '')) delete out[''];
+    if (((_out$ = out['']) != null ? _out$ : 0) > 0 && positive.some(([k]) => k !== '')) delete out[''];
     return out;
   }
 
-  const T = (item && item.pendingTotal) || 0;
+  const T = item && item.pendingTotal || 0;
   if (T <= 0) return {};
 
   const weights = new Map();
   for (const v of product.variants) {
     let w = 0;
-    for (const o of (item.ordersInRow || [])) {
-      w += (o.items || [])
-        .filter((i) => (i.variantId || '') === v.id)
-        .reduce((s, i) => s + (Number(i.quantity) || 0), 0);
+    for (const o of item.ordersInRow || []) {
+      w += (o.items || []).
+      filter((i) => (i.variantId || '') === v.id).
+      reduce((s, i) => s + (Number(i.quantity) || 0), 0);
     }
     if (w > 0) weights.set(v.id, w);
   }
@@ -89,7 +89,7 @@ function expandPendingByVariantForMatrix(item, product, category) {
       if (idx === entries.length - 1) {
         out[vid] = rem;
       } else {
-        const q = Math.floor((T * w) / totalW);
+        const q = Math.floor(T * w / totalW);
         out[vid] = q;
         rem -= q;
       }
@@ -111,7 +111,7 @@ function defaultQuantitiesForPendingItem(item) {
   let variantQuantities = {};
   const order = item && item.order;
   const hasLineVariants = order && (order.items || []).some((i) => i.variantId);
-  const pb = (item && item.pendingByVariant) || {};
+  const pb = item && item.pendingByVariant || {};
   if (hasLineVariants && Object.keys(pb).length > 0) {
     Object.entries(pb).forEach(([vid, q]) => {
       if ((Number(q) || 0) > 0) variantQuantities[vid] = Number(q) || 0;
@@ -120,7 +120,7 @@ function defaultQuantitiesForPendingItem(item) {
     if (sum > item.pendingTotal && item.pendingTotal > 0) {
       const scale = item.pendingTotal / sum;
       variantQuantities = Object.fromEntries(
-        Object.entries(variantQuantities).map(([vid, q]) => [vid, Math.max(0, Math.round(q * scale))]),
+        Object.entries(variantQuantities).map(([vid, q]) => [vid, Math.max(0, Math.round(q * scale))])
       );
     }
   }
@@ -129,15 +129,15 @@ function defaultQuantitiesForPendingItem(item) {
 
 /** 打开入库表单默认数量（含颜色尺码矩阵 + 通栏待入库拆规格） */
 function buildStockInFormDefaultsForPending(item, product, category) {
-  const hasMatrix = productHasColorSizeMatrix(product, category)
-    && (product && product.variants && product.variants.length > 0);
+  const hasMatrix = productHasColorSizeMatrix(product, category) &&
+  product && product.variants && product.variants.length > 0;
   if (!hasMatrix) {
     return defaultQuantitiesForPendingItem(item);
   }
 
-  const pb = (item && item.pendingByVariant) || {};
+  const pb = item && item.pendingByVariant || {};
   const positive = Object.entries(pb).filter(([, q]) => (Number(q) || 0) > 0);
-  const onlyUndiff = positive.length === 0 || (positive.length === 1 && positive[0][0] === '');
+  const onlyUndiff = positive.length === 0 || positive.length === 1 && positive[0][0] === '';
   const caps = expandPendingByVariantForMatrix(item, product, category);
 
   if (onlyUndiff) {
@@ -163,7 +163,7 @@ function buildStockInFormDefaultsForPending(item, product, category) {
   if (sum > item.pendingTotal && item.pendingTotal > 0) {
     const scale = item.pendingTotal / sum;
     variantQuantities = Object.fromEntries(
-      Object.entries(variantQuantities).map(([vid, q]) => [vid, Math.max(0, Math.floor(q * scale))]),
+      Object.entries(variantQuantities).map(([vid, q]) => [vid, Math.max(0, Math.floor(q * scale))])
     );
     sum = Object.values(variantQuantities).reduce((s, q) => s + q, 0);
   }
@@ -181,13 +181,13 @@ function buildPendingStockItem(row, order, ordersInRow) {
   return {
     rowKey: row.rowKey,
     ordersInRow: ordersInRow || [],
-    order: order || (ordersInRow && ordersInRow[0]) || null,
+    order: order || ordersInRow && ordersInRow[0] || null,
     orderTotal: row.orderTotal || 0,
     productBlockOrderTotal: row.productBlockOrderTotal || row.orderTotal || 0,
     alreadyIn: row.alreadyIn || 0,
     pendingTotal: row.pendingTotal || 0,
     alreadyInByVariant: row.alreadyInByVariant || {},
-    pendingByVariant: row.pendingByVariant || {},
+    pendingByVariant: row.pendingByVariant || {}
   };
 }
 
@@ -208,7 +208,7 @@ function decorateStockInMatrixCell(cell, qtyMap, pendingByVariant, matrixTotal, 
     ...cell,
     quantity,
     maxQty: maxAllowed,
-    maxQtyLabel: `最多 ${maxAllowed}`,
+    maxQtyLabel: `最多 ${maxAllowed}`
   };
 }
 
@@ -225,9 +225,9 @@ function patchStockInMatrixLayout(matrixLayout, quantities, pendingByVariant, al
         qtyMap,
         pendingByVariant,
         matrixTotal,
-        allowExceed,
-      )),
-    })),
+        allowExceed
+      ))
+    }))
   };
 }
 
@@ -281,7 +281,7 @@ function validateStockInQty(formMode, quantities, singleQuantity, pendingTotal, 
 function buildBatchLineViewModels(rows, lineForms, unitName) {
   const unit = unitName || '件';
   return (rows || []).map((row) => {
-    const form = (lineForms && lineForms[row.rowKey]) || {};
+    const form = lineForms && lineForms[row.rowKey] || {};
     const pendingTotal = row.pendingTotal || 0;
     const qty = form.singleQuantity != null ? String(form.singleQuantity) : String(pendingTotal || '');
     return {
@@ -290,7 +290,7 @@ function buildBatchLineViewModels(rows, lineForms, unitName) {
       subtitleLine: row.productName || '',
       pendingTotal,
       quantity: qty,
-      pendingMeta: `待入库 ${pendingTotal} ${unit}`,
+      pendingMeta: `待入库 ${pendingTotal} ${unit}`
     };
   });
 }
@@ -310,5 +310,5 @@ module.exports = {
   resolveStockInFormMode,
   sumVariantQtyMap,
   validateStockInQty,
-  buildBatchLineViewModels,
+  buildBatchLineViewModels
 };

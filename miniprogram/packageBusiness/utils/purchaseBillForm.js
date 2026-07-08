@@ -2,17 +2,17 @@
  * 采购入库表单状态与保存（对齐 Web OrderBillFormPage PURCHASE_BILL 分支）
  */
 
-const { PSI_TYPE } = require('../config/purchaseBills.js');
-const {
-  groupDocItemsByLineGroup,
-  formatPsiQtyDisplay,
-  purchaseOrderDocHasUnsettled,
-} = require('./psiOpsAggregators.js');
-const { productHasColorSizeMatrix } = require('./productionPlans.js');
-const { buildVariantMatrixUiModel } = require('./variantQtyMatrix.js');
-const { localTodayYmd } = require('./dateYmd.js');
-const { categoryUsesBatchManagement } = require('./materialIssueBatch.js');
-const { BATCH_NO_UNTAGGED } = require('./materialStockConfirm.js');
+const _require = require('../config/purchaseBills.js'),PSI_TYPE = _require.PSI_TYPE;
+const _require2 =
+
+
+
+  require('./psiOpsAggregators.js'),groupDocItemsByLineGroup = _require2.groupDocItemsByLineGroup,formatPsiQtyDisplay = _require2.formatPsiQtyDisplay,purchaseOrderDocHasUnsettled = _require2.purchaseOrderDocHasUnsettled;
+const _require3 = require('./productionPlans.js'),productHasColorSizeMatrix = _require3.productHasColorSizeMatrix;
+const _require4 = require('./variantQtyMatrix.js'),buildVariantMatrixUiModel = _require4.buildVariantMatrixUiModel;
+const _require5 = require('./dateYmd.js'),localTodayYmd = _require5.localTodayYmd;
+const _require6 = require('./materialIssueBatch.js'),categoryUsesBatchManagement = _require6.categoryUsesBatchManagement;
+const _require7 = require('./materialStockConfirm.js'),BATCH_NO_UNTAGGED = _require7.BATCH_NO_UNTAGGED;
 
 const WAREHOUSE_PREF_KEY = 'PSI_PURCHASE_BILL_WAREHOUSE';
 
@@ -32,8 +32,8 @@ function writeWarehousePreference(warehouseId) {
   try {
     if (warehouseId) wx.setStorageSync(WAREHOUSE_PREF_KEY, warehouseId);
   } catch {
-    /* ignore */
-  }
+
+    /* ignore */}
 }
 
 function resolvePreferredWarehouse(warehouses) {
@@ -72,7 +72,7 @@ function createEmptyLine() {
     unitName: 'PCS',
     lineTotalQty: 0,
     lineAmountText: '',
-    showAmount: false,
+    showAmount: false
   };
 }
 
@@ -84,13 +84,13 @@ function buildInitialForm() {
     warehouseName: '',
     docNumber: '',
     operator: '',
-    note: '',
+    note: ''
   };
 }
 
 function recordsToLineItems(records) {
   const lineMap = groupDocItemsByLineGroup(records || []);
-  return Object.entries(lineMap).map(([lgId, recs]) => {
+  return Object.entries(lineMap).map(([lgId, recs]) => {var _first$purchasePrice;
     const first = recs[0] || {};
     const hasVar = recs.some((r) => r.variantId);
     const vq = {};
@@ -111,24 +111,24 @@ function recordsToLineItems(records) {
       productId: first.productId || '',
       productName: first.productName || '',
       quantity: hasVar ? '' : String(lineQtyNoVar || ''),
-      purchasePrice: String(first.purchasePrice ?? ''),
+      purchasePrice: String((_first$purchasePrice = first.purchasePrice) != null ? _first$purchasePrice : ''),
       variantQuantities: hasVar ? vq : {},
       batch: first.batchNo || first.batch || '',
       sourceOrderNumber,
       sourceLineId,
       lineNote: first.note != null ? String(first.note) : '',
-      sourceRecordIds: recs.map((r) => r.id),
+      sourceRecordIds: recs.map((r) => r.id)
     };
   });
 }
 
 function enrichLineForUi(line, ctx) {
-  const { productMap, categoryMap, dictionaries, showAmount } = ctx;
+  const productMap = ctx.productMap,categoryMap = ctx.categoryMap,dictionaries = ctx.dictionaries,showAmount = ctx.showAmount;
   const product = line.productId && productMap ? productMap.get(line.productId) : null;
   const category = product && categoryMap ? categoryMap.get(product.categoryId) : null;
   const useMatrix = Boolean(product && productHasColorSizeMatrix(product, category));
   const showBatch = Boolean(product && categoryUsesBatchManagement(category) && !useMatrix);
-  const unitName = (product && product.unit) || 'PCS';
+  const unitName = product && product.unit || 'PCS';
   let matrixLayout = null;
   if (useMatrix && product) {
     matrixLayout = buildVariantMatrixUiModel(product, dictionaries, line.variantQuantities || {});
@@ -138,7 +138,7 @@ function enrichLineForUi(line, ctx) {
   const amount = qty * price;
   return {
     ...line,
-    productName: (product && product.name) || line.productName || '',
+    productName: product && product.name || line.productName || '',
     useMatrix,
     showBatch,
     matrixLayout,
@@ -148,7 +148,7 @@ function enrichLineForUi(line, ctx) {
     showAmount: Boolean(showAmount),
     quantity: line.quantity != null ? String(line.quantity) : '',
     purchasePrice: line.purchasePrice != null ? String(line.purchasePrice) : '',
-    batch: line.batch != null ? String(line.batch) : '',
+    batch: line.batch != null ? String(line.batch) : ''
   };
 }
 
@@ -167,7 +167,7 @@ function computeFormTotals(lines, showAmount) {
     totalQtyText: `${totalQty} PCS`,
     totalAmountText: showAmount ? `¥${totalAmount.toFixed(2)}` : '',
     showAmount: Boolean(showAmount),
-    canSubmit: hasLine,
+    canSubmit: hasLine
   };
 }
 
@@ -215,7 +215,7 @@ function localCalendarYmdStartToIso(ymd) {
 function psiDocTimestampIsoForSave(existingRecords, editingDocNumber) {
   if (!editingDocNumber) return new Date().toISOString();
   const lines = (existingRecords || []).filter(
-    (r) => r.type === PSI_TYPE && String(r.docNumber) === String(editingDocNumber),
+    (r) => r.type === PSI_TYPE && String(r.docNumber) === String(editingDocNumber)
   );
   let min = 0;
   lines.forEach((r) => {
@@ -229,7 +229,7 @@ function psiDocTimestampIsoForSave(existingRecords, editingDocNumber) {
 function pbCreatedAtIsoForSave(existingRecords, editingDocNumber) {
   if (!editingDocNumber) return localCalendarYmdStartToIso(localTodayYmd());
   const row = (existingRecords || []).find(
-    (r) => r.type === PSI_TYPE && String(r.docNumber) === String(editingDocNumber),
+    (r) => r.type === PSI_TYPE && String(r.docNumber) === String(editingDocNumber)
   );
   if (!row || row.createdAt == null || row.createdAt === '') {
     return localCalendarYmdStartToIso(localTodayYmd());
@@ -256,23 +256,23 @@ function pbOperatorForLine(item, operator) {
 }
 
 function pbSourceLinkForLine(item) {
-  const son = item.sourceOrderNumber != null && String(item.sourceOrderNumber).trim() !== ''
-    ? String(item.sourceOrderNumber).trim() : '';
-  const sl = item.sourceLineId != null && String(item.sourceLineId).trim() !== ''
-    ? String(item.sourceLineId).trim() : '';
+  const son = item.sourceOrderNumber != null && String(item.sourceOrderNumber).trim() !== '' ?
+  String(item.sourceOrderNumber).trim() : '';
+  const sl = item.sourceLineId != null && String(item.sourceLineId).trim() !== '' ?
+  String(item.sourceLineId).trim() : '';
   if (son && sl) return { sourceOrderNumber: son, sourceLineId: sl };
   return {};
 }
 
 function buildPurchaseBillSaveRecords(opts) {
-  const {
-    form,
-    lines,
-    docNumber,
-    editingDocNumber,
-    existingRecords,
-    operator,
-  } = opts;
+  const
+    form =
+
+
+
+
+
+    opts.form,lines = opts.lines,docNumber = opts.docNumber,editingDocNumber = opts.editingDocNumber,existingRecords = opts.existingRecords,operator = opts.operator;
   const timestamp = psiDocTimestampIsoForSave(existingRecords, editingDocNumber);
   const pbCreatedAtIso = pbCreatedAtIsoForSave(existingRecords, editingDocNumber);
   const newRecords = [];
@@ -309,7 +309,7 @@ function buildPurchaseBillSaveRecords(opts) {
           lineGroupId: item.id,
           createdAt: pbCreatedAtIso,
           ...sourceLink,
-          ...(batchVal ? { batch: batchVal } : {}),
+          ...(batchVal ? { batch: batchVal } : {})
         });
       });
     } else {
@@ -333,7 +333,7 @@ function buildPurchaseBillSaveRecords(opts) {
         lineGroupId: item.id,
         createdAt: pbCreatedAtIso,
         ...sourceLink,
-        ...(batchVal ? { batch: batchVal } : {}),
+        ...(batchVal ? { batch: batchVal } : {})
       });
     }
   });
@@ -341,12 +341,12 @@ function buildPurchaseBillSaveRecords(opts) {
   return newRecords;
 }
 
-function getReceivedQty(receivedByOrderLine, docNum, lineId) {
-  return receivedByOrderLine[`${docNum}::${lineId}`] ?? 0;
+function getReceivedQty(receivedByOrderLine, docNum, lineId) {var _receivedByOrderLine;
+  return (_receivedByOrderLine = receivedByOrderLine[`${docNum}::${lineId}`]) != null ? _receivedByOrderLine : 0;
 }
 
 function buildPendingPoLineUi(item, docNumber, ctx) {
-  const { receivedByOrderLine, productMap, categoryMap, dictionaries, showAmount } = ctx;
+  const receivedByOrderLine = ctx.receivedByOrderLine,productMap = ctx.productMap,categoryMap = ctx.categoryMap,dictionaries = ctx.dictionaries,showAmount = ctx.showAmount;
   const orderQty = formatPsiQtyDisplay(item.quantity);
   const received = getReceivedQty(receivedByOrderLine, docNumber, item.id);
   const remaining = Math.max(0, orderQty - received);
@@ -363,8 +363,8 @@ function buildPendingPoLineUi(item, docNumber, ctx) {
     lineGroupId: item.lineGroupId || item.id,
     docNumber,
     productId: item.productId || '',
-    productName: (product && product.name) || item.productName || '',
-    productSku: (product && product.sku) || item.productSku || '',
+    productName: product && product.name || item.productName || '',
+    productSku: product && product.sku || item.productSku || '',
     ordered: orderQty,
     received,
     remaining,
@@ -379,9 +379,9 @@ function buildPendingPoLineUi(item, docNumber, ctx) {
     showAmount: Boolean(showAmount),
     priceText: showAmount ? `¥${price.toFixed(2)}` : '',
     variantId: item.variantId || '',
-    variantLabel: item.variantId && product && product.variants
-      ? (product.variants.find((v) => v.id === item.variantId) || {}).size || item.variantId
-      : '',
+    variantLabel: item.variantId && product && product.variants ?
+    (product.variants.find((v) => v.id === item.variantId) || {}).size || item.variantId :
+    ''
   };
 }
 
@@ -409,7 +409,7 @@ function buildPendingPoDocs(purchaseOrders, receivedByOrderLine, ctx) {
       partner: String(first.partner || '').trim() || '—',
       lineCount: lines.length,
       expanded: false,
-      lines,
+      lines
     });
   });
 
@@ -429,12 +429,12 @@ function filterPendingPoDocs(docs, keyword) {
 }
 
 function buildConvertFromOrderRecords(opts) {
-  const {
-    form,
-    selectedLines,
-    docNumber,
-    operator,
-  } = opts;
+  const
+    form =
+
+
+
+    opts.form,selectedLines = opts.selectedLines,docNumber = opts.docNumber,operator = opts.operator;
   const timestamp = new Date().toISOString();
   const pbCreatedAtIso = localCalendarYmdStartToIso(localTodayYmd());
   const newRecords = [];
@@ -465,7 +465,7 @@ function buildConvertFromOrderRecords(opts) {
       operator: `${operator}(订单转化)`,
       lineGroupId: line.lineGroupId || line.id,
       createdAt: pbCreatedAtIso,
-      ...(batchVal ? { batch: batchVal } : {}),
+      ...(batchVal ? { batch: batchVal } : {})
     });
   });
 
@@ -488,9 +488,9 @@ function validateFromOrderConvert(form, selectedLines) {
 function applyLastPurchasePrices(lines, prices, productIndexByLine) {
   return (lines || []).map((line, idx) => {
     const pIdx = productIndexByLine ? productIndexByLine[idx] : idx;
-    const price = prices && prices[pIdx] && prices[pIdx].price != null
-      ? Number(prices[pIdx].price)
-      : null;
+    const price = prices && prices[pIdx] && prices[pIdx].price != null ?
+    Number(prices[pIdx].price) :
+    null;
     if (price == null || !line.productId) return line;
     return { ...line, purchasePrice: String(price) };
   });
@@ -515,5 +515,5 @@ module.exports = {
   buildPendingPoDocs,
   filterPendingPoDocs,
   buildConvertFromOrderRecords,
-  applyLastPurchasePrices,
+  applyLastPurchasePrices
 };

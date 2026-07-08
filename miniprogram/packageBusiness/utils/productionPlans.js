@@ -1,24 +1,24 @@
-const {
-  PlanDispatchStatus,
-  PLAN_DISPATCH_STATUS_LABEL,
-  PLAN_DISPATCH_STATUS_BY_LABEL,
-  PLAN_STATUS_LABEL,
-  PRIORITY_LABEL,
-  PlanStatus,
-} = require('../config/productionPlans.js');
-const { normalizeListBody } = require('../../utils/listResponse.js');
-const { mapProductCustomTags } = require('./reportCustomDocField.js');
-const { buildVariantMatrixUiModel } = require('./variantQtyMatrix.js');
-const { localTodayYmd } = require('./dateYmd.js');
-const {
-  customerShowInDetail,
-  standardFieldShowInDetail,
-  buildPlanDetailCustomFields,
-  customFieldDisplayValue,
-  getProductUnitName,
-  normalizePlanFormFieldConfigArray,
-} = require('./planFormCustomField.js');
-const { DEFAULT_PRODUCT_PLACEHOLDER_ICON, productNameSkuParts } = require('./listProductThumb.js');
+const _require =
+
+
+
+
+
+
+  require('../config/productionPlans.js'),PlanDispatchStatus = _require.PlanDispatchStatus,PLAN_DISPATCH_STATUS_LABEL = _require.PLAN_DISPATCH_STATUS_LABEL,PLAN_DISPATCH_STATUS_BY_LABEL = _require.PLAN_DISPATCH_STATUS_BY_LABEL,PLAN_STATUS_LABEL = _require.PLAN_STATUS_LABEL,PRIORITY_LABEL = _require.PRIORITY_LABEL,PlanStatus = _require.PlanStatus;
+const _require2 = require('../../utils/listResponse.js'),normalizeListBody = _require2.normalizeListBody;
+const _require3 = require('./reportCustomDocField.js'),mapProductCustomTags = _require3.mapProductCustomTags;
+const _require4 = require('./variantQtyMatrix.js'),buildVariantMatrixUiModel = _require4.buildVariantMatrixUiModel;
+const _require5 = require('./dateYmd.js'),localTodayYmd = _require5.localTodayYmd;
+const _require6 =
+
+
+
+
+
+
+  require('./planFormCustomField.js'),customerShowInDetail = _require6.customerShowInDetail,standardFieldShowInDetail = _require6.standardFieldShowInDetail,buildPlanDetailCustomFields = _require6.buildPlanDetailCustomFields,customFieldDisplayValue = _require6.customFieldDisplayValue,getProductUnitName = _require6.getProductUnitName,normalizePlanFormFieldConfigArray = _require6.normalizePlanFormFieldConfigArray;
+const _require7 = require('./listProductThumb.js'),DEFAULT_PRODUCT_PLACEHOLDER_ICON = _require7.DEFAULT_PRODUCT_PLACEHOLDER_ICON,productNameSkuParts = _require7.productNameSkuParts;
 
 function pad(n) {
   return String(n).padStart(2, '0');
@@ -50,7 +50,7 @@ function formatPlanListTime(iso) {
  * 解析计划单列表搜索框（对齐 utils/parsePlanSearch.ts）
  */
 function parsePlanSearch(raw) {
-  const trimmed = String(raw ?? '').trim();
+  const trimmed = String(raw != null ? raw : '').trim();
   if (!trimmed) return { search: '' };
   const matched = PLAN_DISPATCH_STATUS_BY_LABEL[trimmed];
   if (matched) return { search: '', dispatchStatus: matched };
@@ -74,10 +74,10 @@ function dispatchStatusLabel(status) {
 }
 
 function computePurchaseProgressPct(received, ordered) {
-  const o = Number(ordered ?? 0);
-  const r = Number(received ?? 0);
+  const o = Number(ordered != null ? ordered : 0);
+  const r = Number(received != null ? received : 0);
   if (!(o > 0)) return null;
-  return Math.min(100, Math.round((r / o) * 100));
+  return Math.min(100, Math.round(r / o * 100));
 }
 
 /** 列表采购进度文案（对齐 Web PlanOrderListView.renderPlanListPurchaseProgress） */
@@ -88,7 +88,7 @@ function planListPurchaseProgressMeta(purchaseProgress, pct) {
       progressComplete: false,
       progressOverReceived: false,
       progressOrderedBarPct: 0,
-      progressOverBarPct: 0,
+      progressOverBarPct: 0
     };
   }
   const ordered = Number(purchaseProgress.ordered) || 0;
@@ -96,14 +96,14 @@ function planListPurchaseProgressMeta(purchaseProgress, pct) {
   const progressOverReceived = ordered > 0 && received > ordered;
   const progressComplete = pct >= 100 && !progressOverReceived;
   let progressLabel;
-  if (progressOverReceived) progressLabel = '采购已超收';
-  else if (progressComplete) progressLabel = '采购已完成';
-  else progressLabel = `采购 ${pct}%`;
+  if (progressOverReceived) progressLabel = '采购已超收';else
+  if (progressComplete) progressLabel = '采购已完成';else
+  progressLabel = `采购 ${pct}%`;
 
   let progressOrderedBarPct = pct;
   let progressOverBarPct = 0;
   if (progressOverReceived && received > 0) {
-    progressOrderedBarPct = Math.round((ordered / received) * 100);
+    progressOrderedBarPct = Math.round(ordered / received * 100);
     progressOverBarPct = 100 - progressOrderedBarPct;
   }
 
@@ -112,7 +112,7 @@ function planListPurchaseProgressMeta(purchaseProgress, pct) {
     progressComplete,
     progressOverReceived,
     progressOrderedBarPct,
-    progressOverBarPct,
+    progressOverBarPct
   };
 }
 
@@ -132,12 +132,12 @@ function planNumbersWithAncestors(plan, planById) {
 
 function buildPurchaseProgressRequest(plans) {
   const planById = new Map((plans || []).map((p) => [p.id, p]));
-  return (plans || [])
-    .filter((p) => p && p.id)
-    .map((p) => ({
-      planId: p.id,
-      planNumbers: planNumbersWithAncestors(p, planById),
-    }));
+  return (plans || []).
+  filter((p) => p && p.id).
+  map((p) => ({
+    planId: p.id,
+    planNumbers: planNumbersWithAncestors(p, planById)
+  }));
 }
 
 function sumPlanQuantity(items) {
@@ -146,13 +146,13 @@ function sumPlanQuantity(items) {
 
 function productColorSizeEnabled(product, category) {
   return (
-    Boolean(product && product.colorIds && product.colorIds.length && product.sizeIds && product.sizeIds.length)
-    || Boolean(category && category.hasColorSize)
-  );
+    Boolean(product && product.colorIds && product.colorIds.length && product.sizeIds && product.sizeIds.length) ||
+    Boolean(category && category.hasColorSize));
+
 }
 
 function productHasColorSizeMatrix(product, category) {
-  const n = (product && product.variants && product.variants.length) || 0;
+  const n = product && product.variants && product.variants.length || 0;
   if (n < 1) return false;
   return productColorSizeEnabled(product, category) || n > 1;
 }
@@ -164,7 +164,7 @@ function normalizeAppDictionaries(body) {
       return {
         colors: Array.isArray(body.colors) ? body.colors : [],
         sizes: Array.isArray(body.sizes) ? body.sizes : [],
-        units: Array.isArray(body.units) ? body.units : [],
+        units: Array.isArray(body.units) ? body.units : []
       };
     }
   }
@@ -173,7 +173,7 @@ function normalizeAppDictionaries(body) {
     return {
       colors: list.filter((i) => i.type === 'color'),
       sizes: list.filter((i) => i.type === 'size'),
-      units: list.filter((i) => i.type === 'unit'),
+      units: list.filter((i) => i.type === 'unit')
     };
   }
   return { colors: [], sizes: [], units: [] };
@@ -187,8 +187,8 @@ function dictName(list, id) {
 
 function variantLabel(variant, dictionaries) {
   if (!variant) return '规格';
-  const colors = (dictionaries && dictionaries.colors) || [];
-  const sizes = (dictionaries && dictionaries.sizes) || [];
+  const colors = dictionaries && dictionaries.colors || [];
+  const sizes = dictionaries && dictionaries.sizes || [];
   const colorName = dictName(colors, variant.colorId);
   const sizeName = dictName(sizes, variant.sizeId);
   const parts = [colorName, sizeName].filter(Boolean);
@@ -217,26 +217,26 @@ function formatProductLabelWithSku(product) {
  * 列表行 UI 模型
  */
 function mapPlanListRow(
-  plan,
-  {
-    productName = '',
-    productSku = '',
-    showProductSku,
-    productImageUrl = '',
-    productCustomTags = [],
-    categoryLabel = '',
-    purchaseProgress,
-    showDeliveryDate = true,
-  } = {},
-) {
+plan,
+{
+  productName = '',
+  productSku = '',
+  showProductSku,
+  productImageUrl = '',
+  productCustomTags = [],
+  categoryLabel = '',
+  purchaseProgress,
+  showDeliveryDate = true
+} = {})
+{
   const status = plan.derivedStatus || PlanDispatchStatus.NOT_DISPATCHED;
-  const pct = purchaseProgress
-    ? computePurchaseProgressPct(purchaseProgress.received, purchaseProgress.ordered)
-    : null;
+  const pct = purchaseProgress ?
+  computePurchaseProgressPct(purchaseProgress.received, purchaseProgress.ordered) :
+  null;
   const customer = plan.customer || '';
-  const dueDateLabel = showDeliveryDate && plan.dueDate
-    ? `交期 ${formatPlanDate(plan.dueDate)}`
-    : '';
+  const dueDateLabel = showDeliveryDate && plan.dueDate ?
+  `交期 ${formatPlanDate(plan.dueDate)}` :
+  '';
   const qty = sumPlanQuantity(plan.items);
   const createdAtText = formatPlanListTime(plan.createdAt);
   const progressMeta = planListPurchaseProgressMeta(purchaseProgress, pct);
@@ -246,9 +246,9 @@ function mapPlanListRow(
     planNumber: plan.planNumber || '',
     productName: productName || '—',
     productSku: productSku || '',
-    showProductSku: showProductSku != null
-      ? !!showProductSku
-      : Boolean(String(productSku || '').trim() && productName && productSku !== productName),
+    showProductSku: showProductSku != null ?
+    !!showProductSku :
+    Boolean(String(productSku || '').trim() && productName && productSku !== productName),
     productImageUrl: productImageUrl || '',
     showProductImage: Boolean(String(productImageUrl || '').trim()),
     productCustomTags: productCustomTags || [],
@@ -274,7 +274,7 @@ function mapPlanListRow(
     progressOverReceived: progressMeta.progressOverReceived,
     progressOrderedBarPct: progressMeta.progressOrderedBarPct,
     progressOverBarPct: progressMeta.progressOverBarPct,
-    showProgress: pct != null,
+    showProgress: pct != null
   };
 }
 
@@ -288,18 +288,18 @@ function buildAssignmentRows(plan, { nodes = [], equipment = [] } = {}) {
     const node = nodeById.get(nodeId);
     const a = assignments[nodeId] || {};
     const workerCount = (a.workerIds || []).length;
-    const equipNames = (a.equipmentIds || [])
-      .map((id) => {
-        const eq = equipById.get(id);
-        return eq ? eq.name : id;
-      })
-      .filter(Boolean);
+    const equipNames = (a.equipmentIds || []).
+    map((id) => {
+      const eq = equipById.get(id);
+      return eq ? eq.name : id;
+    }).
+    filter(Boolean);
     const parts = [];
     if (workerCount > 0) parts.push(`工人 ${workerCount} 人`);
     if (equipNames.length) parts.push(`设备 ${equipNames.join('、')}`);
     rows.push({
       label: node ? node.name : nodeId,
-      value: parts.length ? parts.join(' · ') : '未分配',
+      value: parts.length ? parts.join(' · ') : '未分配'
     });
   });
 
@@ -321,7 +321,7 @@ function buildQuantityRows(plan, product, { category, dictionaries } = {}) {
     const variant = it.variantId ? variantById.get(it.variantId) : null;
     return {
       label: variant ? variantLabel(variant, dictionaries) : `规格 ${idx + 1}`,
-      value: `${Number(it.quantity) || 0} 件`,
+      value: `${Number(it.quantity) || 0} 件`
     };
   });
 }
@@ -330,38 +330,38 @@ function buildQuantityRows(plan, product, { category, dictionaries } = {}) {
  * 详情分区（section-card 用）
  */
 function mapPlanDetailSections(
-  plan,
-  {
-    product,
-    category,
-    dictionaries,
-    nodes = [],
-    equipment = [],
-    planRelated,
-    purchaseProgress,
-    productionLinkMode = 'order',
-    showDeliveryDate = true,
-  } = {},
-) {
+plan,
+{
+  product,
+  category,
+  dictionaries,
+  nodes = [],
+  equipment = [],
+  planRelated,
+  purchaseProgress,
+  productionLinkMode = 'order',
+  showDeliveryDate = true
+} = {})
+{
   const sections = [];
   const status = plan.derivedStatus || PlanDispatchStatus.NOT_DISPATCHED;
   const basicRows = [
-    { label: '计划单号', value: plan.planNumber || '—' },
-    { label: '产品', value: formatProductLabelWithSku(product) },
-    { label: '客户', value: plan.customer || '—' },
-  ];
+  { label: '计划单号', value: plan.planNumber || '—' },
+  { label: '产品', value: formatProductLabelWithSku(product) },
+  { label: '客户', value: plan.customer || '—' }];
+
   if (showDeliveryDate) {
     basicRows.push({ label: '交货日期', value: plan.dueDate ? formatPlanDate(plan.dueDate) : '—' });
   }
   basicRows.push(
     { label: '优先级', value: PRIORITY_LABEL[plan.priority] || plan.priority || '—' },
     { label: '单据状态', value: PLAN_STATUS_LABEL[plan.status] || plan.status || '—' },
-    { label: '创建日期', value: plan.createdAt ? formatPlanDate(plan.createdAt) : '—' },
+    { label: '创建日期', value: plan.createdAt ? formatPlanDate(plan.createdAt) : '—' }
   );
   if (productionLinkMode === 'order') {
     basicRows.push({
       label: '派发状态',
-      value: dispatchStatusLabel(status),
+      value: dispatchStatusLabel(status)
     });
   }
   sections.push({ id: 'basic', title: '基本信息', rows: basicRows });
@@ -374,16 +374,16 @@ function mapPlanDetailSections(
     sections.push({ id: 'assignments', title: '工序派发', rows: assignRows });
   }
 
-  const poCount = (planRelated && planRelated.purchaseOrders && planRelated.purchaseOrders.length) || 0;
-  const pct = purchaseProgress
-    ? computePurchaseProgressPct(purchaseProgress.received, purchaseProgress.ordered)
-    : null;
+  const poCount = planRelated && planRelated.purchaseOrders && planRelated.purchaseOrders.length || 0;
+  const pct = purchaseProgress ?
+  computePurchaseProgressPct(purchaseProgress.received, purchaseProgress.ordered) :
+  null;
   if (poCount > 0 || pct != null) {
     const purchaseRows = [{ label: '关联采购订单', value: `${poCount} 张` }];
     if (pct != null) {
       purchaseRows.push({
         label: '到货进度',
-        value: `${pct}%${purchaseProgress && Number(purchaseProgress.received) > Number(purchaseProgress.ordered) ? '（超收）' : ''}`,
+        value: `${pct}%${purchaseProgress && Number(purchaseProgress.received) > Number(purchaseProgress.ordered) ? '（超收）' : ''}`
       });
     }
     sections.push({ id: 'purchase', title: '采购进度', rows: purchaseRows });
@@ -409,53 +409,53 @@ function buildPlanQtyMap(plan) {
 
 function planFormFieldLabel(planFormSettings, fieldId, defaultLabel) {
   const fields = normalizePlanFormFieldConfigArray(
-    planFormSettings && planFormSettings.standardFields,
+    planFormSettings && planFormSettings.standardFields
   );
   const field = fields.find((f) => f.id === fieldId);
-  return (field && field.label) || defaultLabel;
+  return field && field.label || defaultLabel;
 }
 
 /**
  * 详情页 UI 模型（对齐 Web PlanDetailPanel 五个分区）
  */
 function mapPlanDetailView(
-  plan,
-  {
-    product,
-    category,
-    dictionaries,
-    nodes = [],
-    equipment = [],
-    workers = [],
-    boms = [],
-    products = [],
-    categories = [],
-    allPlans = [],
-    stockMap = {},
-    stockReady = false,
-    planRelated,
-    planNumbersForPO = [],
-    productionLinkMode = 'order',
-    showDeliveryDate = true,
-    planFormSettings = {},
-    planWorkOrdersDispatched = false,
-    materialLoading = false,
-    materialLoadError = '',
-  } = {},
-) {
-  const { buildPlanProcessNodes } = require('./planDetailProcess.js');
-  const { computePlanMaterialRequirements } = require('./planDetailMaterial.js');
-  const { formatPlanCreatedDateList } = require('./planDetailHelpers.js');
+plan,
+{
+  product,
+  category,
+  dictionaries,
+  nodes = [],
+  equipment = [],
+  workers = [],
+  boms = [],
+  products = [],
+  categories = [],
+  allPlans = [],
+  stockMap = {},
+  stockReady = false,
+  planRelated,
+  planNumbersForPO = [],
+  productionLinkMode = 'order',
+  showDeliveryDate = true,
+  planFormSettings = {},
+  planWorkOrdersDispatched = false,
+  materialLoading = false,
+  materialLoadError = ''
+} = {})
+{
+  const _require8 = require('./planDetailProcess.js'),buildPlanProcessNodes = _require8.buildPlanProcessNodes;
+  const _require9 = require('./planDetailMaterial.js'),computePlanMaterialRequirements = _require9.computePlanMaterialRequirements;
+  const _require0 = require('./planDetailHelpers.js'),formatPlanCreatedDateList = _require0.formatPlanCreatedDateList;
 
   const sections = [];
   const productParts = productNameSkuParts(product);
   const productImageUrl = product && product.imageUrl ? String(product.imageUrl) : '';
   const unitName = getProductUnitName(product, dictionaries);
   const productCustomTags = mapProductCustomTags(product, category, { includeFile: false });
-  const useMatrix = productHasColorSizeMatrix(product, category)
-    && product
-    && product.variants
-    && product.variants.length;
+  const useMatrix = productHasColorSizeMatrix(product, category) &&
+  product &&
+  product.variants &&
+  product.variants.length;
   const totalQuantity = sumPlanQuantity(plan.items);
   let matrixLayout = null;
   if (useMatrix) {
@@ -471,7 +471,7 @@ function mapPlanDetailView(
     showProductImage: Boolean(productImageUrl),
     placeholderIconSrc: DEFAULT_PRODUCT_PLACEHOLDER_ICON,
     productCustomTags,
-    showProductCustomTags: productCustomTags.length > 0,
+    showProductCustomTags: productCustomTags.length > 0
   };
 
   const basicRows = [];
@@ -479,28 +479,28 @@ function mapPlanDetailView(
     basicRows.push({
       type: 'text',
       label: '单据号',
-      value: plan.planNumber || '—',
+      value: plan.planNumber || '—'
     });
   }
   if (standardFieldShowInDetail(planFormSettings, 'createdAt', true)) {
     basicRows.push({
       type: 'text',
       label: planFormFieldLabel(planFormSettings, 'createdAt', '创建时间'),
-      value: formatPlanCreatedDateList(plan.createdAt) || '—',
+      value: formatPlanCreatedDateList(plan.createdAt) || '—'
     });
   }
   if (showDeliveryDate) {
     basicRows.push({
       type: 'text',
       label: '交货日期',
-      value: plan.dueDate ? formatPlanDate(plan.dueDate) : '—',
+      value: plan.dueDate ? formatPlanDate(plan.dueDate) : '—'
     });
   }
   if (customerShowInDetail(planFormSettings, productionLinkMode)) {
     basicRows.push({
       type: 'text',
       label: '计划客户（合作单位）',
-      value: plan.customer || '—',
+      value: plan.customer || '—'
     });
   }
   buildPlanDetailCustomFields(planFormSettings).forEach((field) => {
@@ -508,8 +508,8 @@ function mapPlanDetailView(
     basicRows.push({
       type: 'text',
       label: field.label,
-      value: field.desktopOnly ? (val || '请在电脑端查看') : (val || '—'),
-      muted: field.desktopOnly && !val,
+      value: field.desktopOnly ? val || '请在电脑端查看' : val || '—',
+      muted: field.desktopOnly && !val
     });
   });
   if (basicRows.length) {
@@ -526,7 +526,7 @@ function mapPlanDetailView(
     totalQuantity,
     showTotal: totalQuantity > 0,
     matrixLayout,
-    totalText: totalQuantity > 0 ? String(totalQuantity) : '0',
+    totalText: totalQuantity > 0 ? String(totalQuantity) : '0'
   };
   sections.push(qtySection);
 
@@ -536,30 +536,30 @@ function mapPlanDetailView(
     plan.assignments,
     product && product.nodeRates,
     workers,
-    equipment,
+    equipment
   );
   sections.push({
     id: 'process',
     title: '3. 工序任务',
     nodes: processNodes,
-    emptyText: processNodes.length ? '' : '该产品未配置工序路线',
+    emptyText: processNodes.length ? '' : '该产品未配置工序路线'
   });
 
   const materialLossEnabled = Boolean(
-    planFormSettings.listDisplay && planFormSettings.listDisplay.materialLossEnabled,
+    planFormSettings.listDisplay && planFormSettings.listDisplay.materialLossEnabled
   );
   const materialSectionBase = {
     id: 'material',
     title: '4. 计划生产用料清单 (BOM 汇总)',
     materialLossEnabled,
-    tableMinWidth: materialLossEnabled ? 1360 : 1240,
+    tableMinWidth: materialLossEnabled ? 1360 : 1240
   };
   if (materialLoading) {
     sections.push({
       ...materialSectionBase,
       loading: true,
       materials: [],
-      emptyText: '',
+      emptyText: ''
     });
   } else if (materialLoadError) {
     sections.push({
@@ -567,7 +567,7 @@ function mapPlanDetailView(
       loading: false,
       loadError: materialLoadError,
       materials: [],
-      emptyText: '',
+      emptyText: ''
     });
   } else {
     const getUnitName = (productId) => {
@@ -590,20 +590,20 @@ function mapPlanDetailView(
       materialLossEnabled,
       customData: plan.customData,
       plannedQtyByKey: {},
-      getUnitName,
+      getUnitName
     });
     sections.push({
       ...materialSectionBase,
       loading: false,
       materials,
-      emptyText: materials.length ? '' : '尚未配置 BOM 详情',
+      emptyText: materials.length ? '' : '尚未配置 BOM 详情'
     });
   }
 
   return {
     productHero,
     sections,
-    planWorkOrdersDispatched,
+    planWorkOrdersDispatched
   };
 }
 
@@ -643,5 +643,5 @@ module.exports = {
   planListPlaceholderIcon,
   planListPlaceholderIconSrc,
   productNameSkuParts,
-  formatProductLabelWithSku,
+  formatProductLabelWithSku
 };

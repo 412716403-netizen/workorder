@@ -1,18 +1,18 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const { getSettingsTab } = require('../../config/settingsTabs.js');
-const {
-  getArchiveTabMeta,
-  buildArchiveListRows,
-  filterArchiveListByKeyword,
-} = require('../utils/settingsArchive.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 = require('../../config/settingsTabs.js'),getSettingsTab = _require3.getSettingsTab;
+const _require4 =
+
+
+
+  require('../utils/settingsArchive.js'),getArchiveTabMeta = _require4.getArchiveTabMeta,buildArchiveListRows = _require4.buildArchiveListRows,filterArchiveListByKeyword = _require4.filterArchiveListByKeyword;
 const settingsApi = require('../../utils/settingsApi.js');
-const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
-const { shouldHubListRefetch, trackHubListHidden } = require('../utils/saveNavigation.js');
+const _require5 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require5.readNavBarMetrics,readWindowMetrics = _require5.readWindowMetrics;
+const _require6 = require('../utils/saveNavigation.js'),shouldHubListRefetch = _require6.shouldHubListRefetch,trackHubListHidden = _require6.trackHubListHidden;
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
-  const toolsPx = Math.ceil((win.windowWidth / 750) * 128);
+  const toolsPx = Math.ceil(win.windowWidth / 750 * 128);
   return nav.statusBarHeight + nav.navBarHeight + toolsPx;
 }
 
@@ -34,7 +34,7 @@ Page({
     reordering: false,
     statusBarHeight: 20,
     navBarHeight: 44,
-    headerBlockHeight: 88,
+    headerBlockHeight: 88
   },
 
   onLoad(options) {
@@ -42,7 +42,7 @@ Page({
     this.setData({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
-      headerBlockHeight: computeHeaderBlockHeight(nav),
+      headerBlockHeight: computeHeaderBlockHeight(nav)
     });
     this._tabId = options.id ? decodeURIComponent(options.id) : '';
     this._initialized = false;
@@ -67,9 +67,9 @@ Page({
     }
     const perms = ctx.permissions || [];
     if (
-      ctx.tenantRole !== 'owner' &&
-      !hasPermission(perms, `${meta.permBase}:view`)
-    ) {
+    ctx.tenantRole !== 'owner' &&
+    !hasPermission(perms, `${meta.permBase}:view`))
+    {
       wx.showToast({ title: '无权限', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 800);
       return;
@@ -77,11 +77,11 @@ Page({
     this._tenantCtx = ctx;
     this.setData({
       canCreate:
-        ctx.tenantRole === 'owner' ||
-        hasPermission(perms, `${meta.permBase}:create`),
+      ctx.tenantRole === 'owner' ||
+      hasPermission(perms, `${meta.permBase}:create`),
       canReorder:
-        this._tabId === 'nodes' &&
-        (ctx.tenantRole === 'owner' || hasPermission(perms, `${meta.permBase}:edit`)),
+      this._tabId === 'nodes' && (
+      ctx.tenantRole === 'owner' || hasPermission(perms, `${meta.permBase}:edit`))
     });
     const hubRoute = hubRouteForTab(this._tabId);
     if (!this._initialized) {
@@ -115,10 +115,10 @@ Page({
 
     try {
       const api = settingsApi[meta.apiKey];
-      const [list, usage] = await Promise.all([
+      const _await$Promise$all = await Promise.all([
         api.fetchAll(),
-        api.fetchUsage().catch(() => new Set()),
-      ]);
+        api.fetchUsage().catch(() => new Set())]
+        ),list = _await$Promise$all[0],usage = _await$Promise$all[1];
       this._allRows = buildArchiveListRows(list, this._tabId, usage);
       this.applyFilter();
     } catch {
@@ -134,7 +134,7 @@ Page({
       rows,
       loading: false,
       reordering: false,
-      emptyText: '暂无数据',
+      emptyText: '暂无数据'
     });
   },
 
@@ -154,21 +154,21 @@ Page({
       return;
     }
     wx.navigateTo({
-      url: `/packageBusiness/settings-archive-edit/settings-archive-edit?tab=${encodeURIComponent(this._tabId)}`,
+      url: `/packageBusiness/settings-archive-edit/settings-archive-edit?tab=${encodeURIComponent(this._tabId)}`
     });
   },
 
   onRowTap(e) {
-    const { id } = e.currentTarget.dataset;
+    const id = e.currentTarget.dataset.id;
     if (!id) return;
     wx.navigateTo({
-      url: `/packageBusiness/settings-archive-edit/settings-archive-edit?tab=${encodeURIComponent(this._tabId)}&id=${encodeURIComponent(id)}`,
+      url: `/packageBusiness/settings-archive-edit/settings-archive-edit?tab=${encodeURIComponent(this._tabId)}&id=${encodeURIComponent(id)}`
     });
   },
 
   async onMoveNode(e) {
     if (!this.data.canReorder || this.data.reordering) return;
-    const { id, dir } = e.currentTarget.dataset;
+    const _e$currentTarget$data = e.currentTarget.dataset,id = _e$currentTarget$data.id,dir = _e$currentTarget$data.dir;
     if (!id || !dir) return;
     const ids = (this._allRows || []).map((r) => r.id);
     const idx = ids.indexOf(id);
@@ -184,8 +184,8 @@ Page({
       await settingsApi.nodes.reorder(nextIds);
       await this.bootstrap();
     } catch (err) {
-      wx.showToast({ title: (err && err.message) || '排序失败', icon: 'none' });
+      wx.showToast({ title: err && err.message || '排序失败', icon: 'none' });
       this.setData({ reordering: false });
     }
-  },
+  }
 });

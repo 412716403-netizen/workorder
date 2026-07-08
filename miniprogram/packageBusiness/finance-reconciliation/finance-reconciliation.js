@@ -1,51 +1,51 @@
-const { readTenantCtx } = require('../../utils/session.js');
-const { hasPermission } = require('../../utils/permissions.js');
-const {
-  fetchAllFinanceRecords,
-  partnerOpeningBalance,
-  normalizeMasterList,
-} = require('../../utils/financeApi.js');
-const { fetchAllPsiRecords } = require('../utils/psiApi.js');
-const {
-  fetchProductionRecords,
-  listReportHistory,
-  fetchWorkersAll,
-  fetchNodesAll,
-  fetchProductsAll,
-} = require('../utils/orderApi.js');
-const {
-  fetchPartnersAll,
-  fetchPartnerCategoriesAll,
-} = require('../utils/planApi.js');
-const { buildProductMap } = require('../utils/purchaseOrders.js');
-const {
-  buildPartnerReconList,
-  buildPartnerReconBalances,
-  summarizePartnerReconBalances,
-  filterPartnerReconList,
-  buildSettlementReconList,
-  buildSettlementReconBalances,
-  summarizeSettlementReconBalances,
-  computeSettlementOpeningBalance,
-  filterSettlementReconList,
-  buildPartnerProductLineReconList,
-  filterPartnerProductReconList,
-  buildSettlementProductLineReconList,
-  filterSettlementProductReconList,
-  mapPartnerBalancedCard,
-  mapSettlementBalancedCard,
-  mapProductLineCard,
-  mapSummaryView,
-  dateRangeToQuery,
-  dateToEndExclusiveIso,
-} = require('../utils/financeReconciliation.js');
-const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require3 =
+
+
+
+  require('../../utils/financeApi.js'),fetchAllFinanceRecords = _require3.fetchAllFinanceRecords,partnerOpeningBalance = _require3.partnerOpeningBalance,normalizeMasterList = _require3.normalizeMasterList;
+const _require4 = require('../utils/psiApi.js'),fetchAllPsiRecords = _require4.fetchAllPsiRecords;
+const _require5 =
+
+
+
+
+
+  require('../utils/orderApi.js'),fetchProductionRecords = _require5.fetchProductionRecords,listReportHistory = _require5.listReportHistory,fetchWorkersAll = _require5.fetchWorkersAll,fetchNodesAll = _require5.fetchNodesAll,fetchProductsAll = _require5.fetchProductsAll;
+const _require6 =
+
+
+  require('../utils/planApi.js'),fetchPartnersAll = _require6.fetchPartnersAll,fetchPartnerCategoriesAll = _require6.fetchPartnerCategoriesAll;
+const _require7 = require('../utils/purchaseOrders.js'),buildProductMap = _require7.buildProductMap;
+const _require8 =
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  require('../utils/financeReconciliation.js'),buildPartnerReconList = _require8.buildPartnerReconList,buildPartnerReconBalances = _require8.buildPartnerReconBalances,summarizePartnerReconBalances = _require8.summarizePartnerReconBalances,filterPartnerReconList = _require8.filterPartnerReconList,buildSettlementReconList = _require8.buildSettlementReconList,buildSettlementReconBalances = _require8.buildSettlementReconBalances,summarizeSettlementReconBalances = _require8.summarizeSettlementReconBalances,computeSettlementOpeningBalance = _require8.computeSettlementOpeningBalance,filterSettlementReconList = _require8.filterSettlementReconList,buildPartnerProductLineReconList = _require8.buildPartnerProductLineReconList,filterPartnerProductReconList = _require8.filterPartnerProductReconList,buildSettlementProductLineReconList = _require8.buildSettlementProductLineReconList,filterSettlementProductReconList = _require8.filterSettlementProductReconList,mapPartnerBalancedCard = _require8.mapPartnerBalancedCard,mapSettlementBalancedCard = _require8.mapSettlementBalancedCard,mapProductLineCard = _require8.mapProductLineCard,mapSummaryView = _require8.mapSummaryView,dateRangeToQuery = _require8.dateRangeToQuery,dateToEndExclusiveIso = _require8.dateToEndExclusiveIso;
+const _require9 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require9.readNavBarMetrics,readWindowMetrics = _require9.readWindowMetrics;
 
 const WORK_DETAIL_STORAGE_KEY = 'financeReconWorkDetail';
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
-  const toolsPx = Math.ceil((win.windowWidth / 750) * 8);
+  const toolsPx = Math.ceil(win.windowWidth / 750 * 8);
   return nav.statusBarHeight + nav.navBarHeight + toolsPx;
 }
 
@@ -63,9 +63,9 @@ function attachMilestoneNames(productReports, nodes) {
     if (n && n.id) nodeMap.set(n.id, n.name || '');
   });
   return (productReports || []).map((r) =>
-    Object.assign({}, r, {
-      milestoneName: nodeMap.get(r.templateId) || r.milestoneName || '',
-    }),
+  Object.assign({}, r, {
+    milestoneName: nodeMap.get(r.templateId) || r.milestoneName || ''
+  })
   );
 }
 
@@ -93,7 +93,7 @@ Page({
     hintText: '请选择合作单位后点击查询',
     statusBarHeight: 20,
     navBarHeight: 44,
-    headerBlockHeight: 64,
+    headerBlockHeight: 64
   },
 
   onLoad() {
@@ -101,7 +101,7 @@ Page({
     this.setData({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
-      headerBlockHeight: computeHeaderBlockHeight(nav),
+      headerBlockHeight: computeHeaderBlockHeight(nav)
     });
     this._cardsRaw = [];
     this._workerMap = new Map();
@@ -120,7 +120,7 @@ Page({
       return;
     }
     const ctx = readTenantCtx();
-    const perms = (ctx && ctx.permissions) || [];
+    const perms = ctx && ctx.permissions || [];
     if (!hasPermission(perms, 'finance:reconciliation:allow')) {
       wx.showToast({ title: '无对账权限', icon: 'none' });
       setTimeout(() => wx.navigateBack({ fail: () => wx.switchTab({ url: '/pages/apps/apps' }) }), 600);
@@ -135,13 +135,13 @@ Page({
 
   async loadMasters() {
     try {
-      const [partners, partnerCategories, workers, nodes, products] = await Promise.all([
+      const _await$Promise$all = await Promise.all([
         fetchPartnersAll().catch(() => []),
         fetchPartnerCategoriesAll().catch(() => []),
         fetchWorkersAll().catch(() => []),
         fetchNodesAll().catch(() => []),
-        fetchProductsAll().catch(() => []),
-      ]);
+        fetchProductsAll().catch(() => [])]
+        ),partners = _await$Promise$all[0],partnerCategories = _await$Promise$all[1],workers = _await$Promise$all[2],nodes = _await$Promise$all[3],products = _await$Promise$all[4];
       const partnerList = normalizeMasterList(partners);
       const workerList = normalizeMasterList(workers);
       const nodeList = normalizeMasterList(nodes);
@@ -154,7 +154,7 @@ Page({
         partnerCategories: normalizeMasterList(partnerCategories),
         workers: workerList,
         processNodes: nodeList,
-        canQuery: this.computeCanQuery(),
+        canQuery: this.computeCanQuery()
       });
     } catch (e) {
       console.error('[finance-reconciliation] loadMasters', e);
@@ -182,7 +182,7 @@ Page({
       searchKeyword: '',
       hintText: tab === 'partner' ? '请选择合作单位后点击查询' : '请选择工人后点击查询',
       emptyText: '该条件下暂无对账单据',
-      canQuery: tab === 'partner' ? !!this.data.partnerId : !!this.data.workerId,
+      canQuery: tab === 'partner' ? !!this.data.partnerId : !!this.data.workerId
     });
     this._cardsRaw = [];
     this._partnerRows = [];
@@ -211,7 +211,7 @@ Page({
     const detail = e.detail || {};
     this.setData({
       partnerId: detail.id || '',
-      partnerName: detail.name || '',
+      partnerName: detail.name || ''
     });
     this.syncCanQuery();
   },
@@ -220,7 +220,7 @@ Page({
     const detail = e.detail || {};
     this.setData({
       workerId: detail.id || detail.workerId || '',
-      workerName: detail.name || detail.workerName || '',
+      workerName: detail.name || detail.workerName || ''
     });
     this.syncCanQuery();
   },
@@ -251,7 +251,7 @@ Page({
           productMap: this._productMap,
           partnerName: this.data.partnerName,
           partnerId: this.data.partnerId,
-          partnerOpeningBalance: openingBalance,
+          partnerOpeningBalance: openingBalance
         });
         const filtered = filterPartnerProductReconList(allProductRows, q);
         const cards = filtered.map((row, i) => mapProductLineCard(row, i, { partyMode: 'partner' }));
@@ -259,9 +259,9 @@ Page({
         this.setData({
           cards,
           emptyText:
-            allProductRows.length > 0 && cards.length === 0
-              ? '无匹配项，请调整搜索关键词'
-              : '该条件下暂无对账单据',
+          allProductRows.length > 0 && cards.length === 0 ?
+          '无匹配项，请调整搜索关键词' :
+          '该条件下暂无对账单据'
         });
         return;
       }
@@ -269,16 +269,16 @@ Page({
       const filtered = filterPartnerReconList(this._partnerRows || [], q);
       const allBalanced = buildPartnerReconBalances(this._partnerRows || [], openingBalance);
       const filteredSet = new Set(filtered);
-      const cards = allBalanced
-        .filter((b) => filteredSet.has(b.row))
-        .map((b, i) => mapPartnerBalancedCard(b, i));
+      const cards = allBalanced.
+      filter((b) => filteredSet.has(b.row)).
+      map((b, i) => mapPartnerBalancedCard(b, i));
       this._cardsRaw = cards;
       this.setData({
         cards,
         emptyText:
-          (this._partnerRows || []).length > 0 && cards.length === 0
-            ? '无匹配项，请调整搜索关键词'
-            : '该条件下暂无对账单据',
+        (this._partnerRows || []).length > 0 && cards.length === 0 ?
+        '无匹配项，请调整搜索关键词' :
+        '该条件下暂无对账单据'
       });
       return;
     }
@@ -288,7 +288,7 @@ Page({
         documentRows: this._settlementRows || [],
         productMap: this._productMap,
         workerName: this.data.workerName,
-        openingBalance,
+        openingBalance
       });
       const filtered = filterSettlementProductReconList(allProductRows, q);
       const cards = filtered.map((row, i) => mapProductLineCard(row, i, { partyMode: 'worker' }));
@@ -296,9 +296,9 @@ Page({
       this.setData({
         cards,
         emptyText:
-          allProductRows.length > 0 && cards.length === 0
-            ? '无匹配项，请调整搜索关键词'
-            : '该条件下暂无对账单据',
+        allProductRows.length > 0 && cards.length === 0 ?
+        '无匹配项，请调整搜索关键词' :
+        '该条件下暂无对账单据'
       });
       return;
     }
@@ -306,16 +306,16 @@ Page({
     const filtered = filterSettlementReconList(this._settlementRows || [], q, this._workerMap);
     const allBalanced = buildSettlementReconBalances(this._settlementRows || [], openingBalance);
     const filteredSet = new Set(filtered);
-    const cards = allBalanced
-      .filter((b) => filteredSet.has(b.row))
-      .map((b, i) => mapSettlementBalancedCard(b, i, this._workerMap));
+    const cards = allBalanced.
+    filter((b) => filteredSet.has(b.row)).
+    map((b, i) => mapSettlementBalancedCard(b, i, this._workerMap));
     this._cardsRaw = cards;
     this.setData({
       cards,
       emptyText:
-        (this._settlementRows || []).length > 0 && cards.length === 0
-          ? '无匹配项，请调整搜索关键词'
-          : '该条件下暂无对账单据',
+      (this._settlementRows || []).length > 0 && cards.length === 0 ?
+      '无匹配项，请调整搜索关键词' :
+      '该条件下暂无对账单据'
     });
   },
 
@@ -323,22 +323,22 @@ Page({
     if (!this.computeCanQuery()) {
       wx.showToast({
         title: this.data.subTab === 'partner' ? '请选择合作单位' : '请选择工人',
-        icon: 'none',
+        icon: 'none'
       });
       return;
     }
-    if (this.data.subTab === 'partner') this.runPartnerQuery();
-    else this.runSettlementQuery();
+    if (this.data.subTab === 'partner') this.runPartnerQuery();else
+    this.runSettlementQuery();
   },
 
   async runPartnerQuery() {
     const token = ++this._queryToken;
-    const { partnerId, partnerName, dateFrom, dateTo } = this.data;
+    const _this$data = this.data,partnerId = _this$data.partnerId,partnerName = _this$data.partnerName,dateFrom = _this$data.dateFrom,dateTo = _this$data.dateTo;
     const dateQs = dateRangeToQuery(dateFrom, dateTo);
     this.setData({ loading: true, hasQueried: true, searchKeyword: '', summary: null, cards: [] });
 
     try {
-      const [psiRecords, financeRecords, prodRecords, openingResp] = await Promise.all([
+      const _await$Promise$all2 = await Promise.all([
         fetchAllPsiRecords({ partnerId }).catch(() => []),
         fetchAllFinanceRecords({ partner: partnerName, ...dateQs }).catch(() => []),
         fetchProductionRecords({
@@ -346,16 +346,16 @@ Page({
           type: 'OUTSOURCE',
           status: '已收回',
           all: 'true',
-          ...dateQs,
+          ...dateQs
         }).catch(() => []),
-        dateFrom
-          ? partnerOpeningBalance({
-              partnerName,
-              partnerId,
-              before: dateToEndExclusiveIso(dateFrom),
-            })
-          : Promise.resolve({ previousBalance: 0 }),
-      ]);
+        dateFrom ?
+        partnerOpeningBalance({
+          partnerName,
+          partnerId,
+          before: dateToEndExclusiveIso(dateFrom)
+        }) :
+        Promise.resolve({ previousBalance: 0 })]
+        ),psiRecords = _await$Promise$all2[0],financeRecords = _await$Promise$all2[1],prodRecords = _await$Promise$all2[2],openingResp = _await$Promise$all2[3];
 
       if (token !== this._queryToken) return;
 
@@ -367,7 +367,7 @@ Page({
         dateTo,
         psiRecords,
         prodRecords,
-        financeRecords,
+        financeRecords
       });
       const summary = mapSummaryView(summarizePartnerReconBalances(rows, openingBalance));
 
@@ -383,13 +383,13 @@ Page({
       if (token !== this._queryToken) return;
       console.error('[finance-reconciliation] partner query', e);
       this.setData({ loading: false, cards: [], summary: null });
-      wx.showToast({ title: (e && e.message) || '查询失败', icon: 'none' });
+      wx.showToast({ title: e && e.message || '查询失败', icon: 'none' });
     }
   },
 
   async runSettlementQuery() {
     const token = ++this._queryToken;
-    const { workerId, workerName, dateFrom, dateTo } = this.data;
+    const _this$data2 = this.data,workerId = _this$data2.workerId,workerName = _this$data2.workerName,dateFrom = _this$data2.dateFrom,dateTo = _this$data2.dateTo;
     const dateQs = dateRangeToQuery(dateFrom, dateTo);
     const nodes = this._processNodes || this.data.processNodes || [];
     this.setData({ loading: true, hasQueried: true, searchKeyword: '', summary: null, cards: [] });
@@ -397,60 +397,60 @@ Page({
     try {
       const historyPeriodP = listReportHistory({
         ...dateQs,
-        productionLinkMode: 'product',
+        productionLinkMode: 'product'
       }).catch(() => ({ orderReports: [], productReports: [] }));
 
-      const historyOpeningP = dateFrom
-        ? listReportHistory({
-            endDate: dateToEndExclusiveIso(dateFrom),
-            productionLinkMode: 'product',
-          }).catch(() => ({ orderReports: [], productReports: [] }))
-        : Promise.resolve({ orderReports: [], productReports: [] });
+      const historyOpeningP = dateFrom ?
+      listReportHistory({
+        endDate: dateToEndExclusiveIso(dateFrom),
+        productionLinkMode: 'product'
+      }).catch(() => ({ orderReports: [], productReports: [] })) :
+      Promise.resolve({ orderReports: [], productReports: [] });
 
       const financePeriodP = fetchAllFinanceRecords({ workerId, ...dateQs }).catch(() => []);
-      const financeOpeningP = dateFrom
-        ? fetchAllFinanceRecords({
-            workerId,
-            endDate: dateToEndExclusiveIso(dateFrom),
-          }).catch(() => [])
-        : Promise.resolve([]);
+      const financeOpeningP = dateFrom ?
+      fetchAllFinanceRecords({
+        workerId,
+        endDate: dateToEndExclusiveIso(dateFrom)
+      }).catch(() => []) :
+      Promise.resolve([]);
 
       const prodPeriodP = fetchProductionRecords({
         workerId,
         type: 'REWORK_REPORT',
         all: 'true',
-        ...dateQs,
+        ...dateQs
       }).catch(() => []);
-      const prodOpeningP = dateFrom
-        ? fetchProductionRecords({
-            workerId,
-            type: 'REWORK_REPORT',
-            all: 'true',
-            endDate: dateToEndExclusiveIso(dateFrom),
-          }).catch(() => [])
-        : Promise.resolve([]);
+      const prodOpeningP = dateFrom ?
+      fetchProductionRecords({
+        workerId,
+        type: 'REWORK_REPORT',
+        all: 'true',
+        endDate: dateToEndExclusiveIso(dateFrom)
+      }).catch(() => []) :
+      Promise.resolve([]);
 
-      const [historyPeriod, historyOpening, financePeriod, financeOpening, prodPeriod, prodOpening] =
+      const _await$Promise$all3 =
         await Promise.all([
-          historyPeriodP,
-          historyOpeningP,
-          financePeriodP,
-          financeOpeningP,
-          prodPeriodP,
-          prodOpeningP,
-        ]);
+        historyPeriodP,
+        historyOpeningP,
+        financePeriodP,
+        financeOpeningP,
+        prodPeriodP,
+        prodOpeningP]
+        ),historyPeriod = _await$Promise$all3[0],historyOpening = _await$Promise$all3[1],financePeriod = _await$Promise$all3[2],financeOpening = _await$Promise$all3[3],prodPeriod = _await$Promise$all3[4],prodOpening = _await$Promise$all3[5];
 
       if (token !== this._queryToken) return;
 
-      const orderReports = (historyPeriod && historyPeriod.orderReports) || [];
+      const orderReports = historyPeriod && historyPeriod.orderReports || [];
       const productReports = attachMilestoneNames(
-        (historyPeriod && historyPeriod.productReports) || [],
-        nodes,
+        historyPeriod && historyPeriod.productReports || [],
+        nodes
       );
-      const openingOrderReports = (historyOpening && historyOpening.orderReports) || [];
+      const openingOrderReports = historyOpening && historyOpening.orderReports || [];
       const openingProductReports = attachMilestoneNames(
-        (historyOpening && historyOpening.productReports) || [],
-        nodes,
+        historyOpening && historyOpening.productReports || [],
+        nodes
       );
 
       const listInput = {
@@ -465,7 +465,7 @@ Page({
         openingOrderReports,
         openingProductReports,
         openingWorkerProdRecords: prodOpening,
-        openingWorkerFinanceRecords: financeOpening,
+        openingWorkerFinanceRecords: financeOpening
       };
 
       const openingBalance = computeSettlementOpeningBalance(listInput);
@@ -484,7 +484,7 @@ Page({
       if (token !== this._queryToken) return;
       console.error('[finance-reconciliation] settlement query', e);
       this.setData({ loading: false, cards: [], summary: null });
-      wx.showToast({ title: (e && e.message) || '查询失败', icon: 'none' });
+      wx.showToast({ title: e && e.message || '查询失败', icon: 'none' });
     }
   },
 
@@ -495,37 +495,37 @@ Page({
 
     if (card.navType === 'receipt' && card.navId) {
       wx.navigateTo({
-        url: `/packageBusiness/finance-receipt-detail/finance-receipt-detail?id=${encodeURIComponent(card.navId)}`,
+        url: `/packageBusiness/finance-receipt-detail/finance-receipt-detail?id=${encodeURIComponent(card.navId)}`
       });
       return;
     }
     if (card.navType === 'payment' && card.navId) {
       wx.navigateTo({
-        url: `/packageBusiness/finance-payment-detail/finance-payment-detail?id=${encodeURIComponent(card.navId)}`,
+        url: `/packageBusiness/finance-payment-detail/finance-payment-detail?id=${encodeURIComponent(card.navId)}`
       });
       return;
     }
     if (card.navType === 'purchase_bill' && card.navDocNo) {
       wx.navigateTo({
-        url: `/packageBusiness/psi-purchase-bill-detail/psi-purchase-bill-detail?docNumber=${encodeURIComponent(card.navDocNo)}`,
+        url: `/packageBusiness/psi-purchase-bill-detail/psi-purchase-bill-detail?docNumber=${encodeURIComponent(card.navDocNo)}`
       });
       return;
     }
     if (card.navType === 'sales_bill' && card.navDocNo) {
       wx.navigateTo({
-        url: `/packageBusiness/psi-sales-bill-detail/psi-sales-bill-detail?docNumber=${encodeURIComponent(card.navDocNo)}`,
+        url: `/packageBusiness/psi-sales-bill-detail/psi-sales-bill-detail?docNumber=${encodeURIComponent(card.navDocNo)}`
       });
       return;
     }
     if (card.navType === 'outsource' && card.navDocNo) {
       wx.navigateTo({
-        url: `/packageBusiness/production-outsource-flow-detail/production-outsource-flow-detail?docNo=${encodeURIComponent(card.navDocNo)}`,
+        url: `/packageBusiness/production-outsource-flow-detail/production-outsource-flow-detail?docNo=${encodeURIComponent(card.navDocNo)}`
       });
       return;
     }
     if (card.navType === 'rework_report' && card.navDocNo) {
       wx.navigateTo({
-        url: `/packageBusiness/production-rework-report-flow-detail/production-rework-report-flow-detail?docNo=${encodeURIComponent(card.navDocNo)}`,
+        url: `/packageBusiness/production-rework-report-flow-detail/production-rework-report-flow-detail?docNo=${encodeURIComponent(card.navDocNo)}`
       });
       return;
     }
@@ -537,5 +537,5 @@ Page({
       }
       wx.navigateTo({ url: '/packageBusiness/finance-recon-work-detail/finance-recon-work-detail' });
     }
-  },
+  }
 });
