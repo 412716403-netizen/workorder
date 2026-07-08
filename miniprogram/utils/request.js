@@ -1,5 +1,6 @@
 const { API_BASE } = require('../config.js');
 const { clearSession } = require('./session.js');
+const { isAccessTokenExpired } = require('./tokenUtils.js');
 
 let refreshPromise = null;
 let authRedirecting = false;
@@ -48,8 +49,20 @@ function refreshToken() {
   return refreshPromise;
 }
 
+function ensureFreshAccessToken() {
+  const access = wx.getStorageSync('accessToken');
+  if (access && !isAccessTokenExpired(access)) {
+    return Promise.resolve(true);
+  }
+  const refresh = wx.getStorageSync('refreshToken');
+  if (!refresh) {
+    return Promise.resolve(false);
+  }
+  return refreshToken();
+}
+
 /**
- * 已登录请求：自动带 Bearer，401 时尝试 refresh 后重试一次
+ * 已登录请求：过期前自动 refresh，401 时兜底重试一次
  * @param {{ path: string, method?: string, data?: object }} opts path 以 / 开头，如 /auth/me
  */
 function request(opts) {
@@ -100,20 +113,29 @@ function request(opts) {
       wx.request(reqOpts);
     });
 
-  return once().catch((err) => {
-    if (err && err.statusCode === 401) {
-      return refreshToken().then((ok) => {
-        if (ok) return once();
+  return ensureFreshAccessToken()
+    .then((ok) => {
+      if (!ok) {
         handleAuthFailure();
-        throw err;
-      });
-    }
-    throw err;
-  });
+        throw Object.assign(new Error('UNAUTHORIZED'), { statusCode: 401 });
+      }
+      return once();
+    })
+    .catch((err) => {
+      if (err && err.statusCode === 401) {
+        return refreshToken().then((refreshed) => {
+          if (refreshed) return once();
+          handleAuthFailure();
+          throw err;
+        });
+      }
+      throw err;
+    });
 }
 
 module.exports = {
   API_BASE,
   request,
   refreshToken,
+  ensureFreshAccessToken,
 };
