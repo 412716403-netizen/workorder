@@ -9,7 +9,7 @@ const _require4 =
 
 
   require('../utils/productionOrders.js'),parseOrderSearch = _require4.parseOrderSearch,buildOrderListBlocks = _require4.buildOrderListBlocks,flattenBlockOrders = _require4.flattenBlockOrders,mapOrderListRow = _require4.mapOrderListRow,normalizeMasterList = _require4.normalizeMasterList,productNameSkuParts = _require4.productNameSkuParts;
-const _require5 = require('../utils/orderProcessChips.js'),buildOrderProcessChips = _require5.buildOrderProcessChips,buildOutOfSequenceTemplateIds = _require5.buildOutOfSequenceTemplateIds,applyOrderCenterChipOutsource = _require5.applyOrderCenterChipOutsource,buildProductOrdersTotalQtyMap = _require5.buildProductOrdersTotalQtyMap;
+const _require5 = require('../utils/orderProcessChips.js'),buildOrderProcessChips = _require5.buildOrderProcessChips,buildOutOfSequenceTemplateIds = _require5.buildOutOfSequenceTemplateIds;
 const { buildDefectiveReworkByOrderMilestone } = require('../utils/outsourceDispatchMatrix.js');
 const _require6 =
 
@@ -653,9 +653,6 @@ Page({
       rework: 0,
       reworkByVariant: {},
     }));
-    const productQtyMap = buildProductOrdersTotalQtyMap(
-      this._allOrders && this._allOrders.length ? this._allOrders : orders,
-    );
     const out = [];
 
     blocks.forEach((block) => {var _flat$;
@@ -671,16 +668,11 @@ Page({
       flat.forEach((item, idx) => {
         if (hasChildren && !expanded && idx > 0) return;
         const meta = this.productMetaForOrder(item.order);
-        let chips = buildOrderProcessChips(item.order, {
+        const chips = buildOrderProcessChips(item.order, {
           processSequenceMode: this._processSequenceMode || 'sequential',
           outOfSequenceTemplateIds: this._outOfSequenceIds || new Set(),
           canReport,
           getDefectiveRework,
-        });
-        chips = applyOrderCenterChipOutsource(item.order, chips, {
-          prodRecords: this._chipProdRecords || [],
-          productionLinkMode: this._productionLinkMode || 'order',
-          productOrdersTotalQtyByPid: productQtyMap,
         });
         const row = mapOrderListRow(item.order, {
           productName: meta.name,
@@ -722,11 +714,10 @@ Page({
 
     const prodRecords = await fetchProductionRecords({
       orderIds: ids.join(','),
-      types: 'OUTSOURCE,REWORK,REWORK_REPORT',
+      types: 'REWORK,REWORK_REPORT',
       all: 'true',
     }).catch(() => []);
 
-    this._chipProdRecords = prodRecords;
     this._chipDrMap = buildDefectiveReworkByOrderMilestone(list, prodRecords);
     this._getDefectiveReworkForChips = (orderId, templateId) =>
       this._chipDrMap.get(`${orderId}|${templateId}`) || {

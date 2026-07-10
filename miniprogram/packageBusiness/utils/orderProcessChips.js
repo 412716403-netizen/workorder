@@ -90,90 +90,7 @@ function buildOrderProcessChips(order, opts = {}) {
       isCompleted,
       canReport: canReportThis,
       disabled: !canReportThis,
-      toneIndex: idx % 6,
-      outsourceRemaining: 0,
-      metaText: `${availableQty} / ${remaining}`,
-    };
-  });
-}
-
-function buildOutsourceNetByOrderTemplate(prodRecords) {
-  const m = new Map();
-  (prodRecords || []).forEach((r) => {
-    if (r.type !== 'OUTSOURCE' || r.sourceReworkId || !r.orderId || !r.nodeId) return;
-    const k = `${r.orderId}|${r.nodeId}`;
-    const cur = m.get(k) || 0;
-    const q = Number(r.quantity) || 0;
-    if (r.status === '加工中') m.set(k, cur + q);
-    else if (r.status === '已收回') m.set(k, cur - q);
-  });
-  m.forEach((v, k) => {
-    m.set(k, Math.max(0, Math.round(v)));
-  });
-  return m;
-}
-
-function buildOutsourceNetByProductTemplate(prodRecords) {
-  const m = new Map();
-  (prodRecords || []).forEach((r) => {
-    if (r.type !== 'OUTSOURCE' || r.sourceReworkId || r.orderId || !r.productId || !r.nodeId) return;
-    const k = `${r.productId}|${r.nodeId}`;
-    const cur = m.get(k) || 0;
-    const q = Number(r.quantity) || 0;
-    if (r.status === '加工中') m.set(k, cur + q);
-    else if (r.status === '已收回') m.set(k, cur - q);
-  });
-  m.forEach((v, k) => {
-    m.set(k, Math.max(0, Math.round(v)));
-  });
-  return m;
-}
-
-function buildProductOrdersTotalQtyMap(orders) {
-  const m = new Map();
-  (orders || []).forEach((o) => {
-    const q = sumOrderQty(o);
-    m.set(o.productId, (m.get(o.productId) || 0) + q);
-  });
-  return m;
-}
-
-function formatOrderCenterChipMeta(availableQty, remaining, outsourceRemaining) {
-  const base = `${availableQty} / ${remaining}`;
-  if (outsourceRemaining > 0) return `${base} · 外协${outsourceRemaining}`;
-  return base;
-}
-
-/**
- * 工单中心工序卡下方数字对齐 Web：可报上限/剩余不扣外协、不扣待审；
- * 外协剩余单独追加展示（Web 为 hover tooltip，小程序写在标签上）。
- */
-function applyOrderCenterChipOutsource(order, chips, opts) {
-  const {
-    prodRecords,
-    productionLinkMode,
-    productOrdersTotalQtyByPid,
-  } = opts || {};
-  if (!prodRecords) return chips;
-
-  const byOrder = buildOutsourceNetByOrderTemplate(prodRecords);
-  const byProduct = buildOutsourceNetByProductTemplate(prodRecords);
-  const orderQty = sumOrderQty(order);
-  const productTotal = (productOrdersTotalQtyByPid && productOrdersTotalQtyByPid.get(order.productId)) || orderQty;
-  const shareRatio = productTotal > 0 ? orderQty / productTotal : 1;
-
-  return (chips || []).map((chip) => {
-    const tid = chip.templateId;
-    const outsourceRaw =
-      (byOrder.get(`${order.id}|${tid}`) || 0) +
-      (productionLinkMode === 'product'
-        ? (byProduct.get(`${order.productId}|${tid}`) || 0) * shareRatio
-        : 0);
-    const outsourceRemaining = Math.max(0, Math.round(outsourceRaw));
-    return {
-      ...chip,
-      outsourceRemaining,
-      metaText: formatOrderCenterChipMeta(chip.availableQty, chip.remaining, outsourceRemaining),
+      toneIndex: idx % 6
     };
   });
 }
@@ -184,8 +101,4 @@ module.exports = {
   buildOutOfSequenceTemplateIds,
   sumOrderQty,
   buildOrderProcessChips,
-  buildOutsourceNetByOrderTemplate,
-  buildOutsourceNetByProductTemplate,
-  buildProductOrdersTotalQtyMap,
-  applyOrderCenterChipOutsource,
 };

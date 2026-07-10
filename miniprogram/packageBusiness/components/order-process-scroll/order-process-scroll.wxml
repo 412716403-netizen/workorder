@@ -25,7 +25,7 @@
         <view class="order-process-chip__circle">
           <text class="order-process-chip__count">{{item.completed}}</text>
         </view>
-        <text class="order-process-chip__meta">{{item.metaText || (item.availableQty + ' / ' + item.remaining)}}</text>
+        <text class="order-process-chip__meta">{{item.availableQty}} / {{item.remaining}}</text>
         <view class="order-process-chip__bar">
           <view class="order-process-chip__bar-fill" style="width: {{item.progress}}%;"></view>
         </view>
