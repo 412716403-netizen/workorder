@@ -252,7 +252,7 @@ export async function listMyReportableTasks(
   const orders = await db.productionOrder.findMany({
     where: {
       status: { not: OrderStatus.SHIPPED },
-      milestones: { some: { templateId: { in: assignedMilestoneIds } } } },
+      milestones: { some: { templateId: { in: assignedMilestoneIds } } },
     },
     select: {
       id: true,
