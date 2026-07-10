@@ -112,7 +112,10 @@ async function enrichReportableTasksRemaining(rawTasks, productMap, categoryMap)
       return;
     }
     const milestone = (order.milestones || []).find((m) => m.id === task.milestoneId);
-    if (!milestone) return;
+    if (!milestone) {
+      if ((Number(task.remaining) || 0) > 0) enriched.push(task);
+      return;
+    }
     const product = productMap && productMap.get(order.productId);
     const category =
       product && product.categoryId && categoryMap

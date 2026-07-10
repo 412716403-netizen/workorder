@@ -248,9 +248,12 @@ export async function listMyReportableTasks(
     outOfSequenceNodes.map((n) => ({ id: n.id, allowOutOfSequence: true })),
   );
 
-  // 与工单中心列表一致：未发货工单均可出现可报工序（不限定 dispatchStatus=IN_PROGRESS）
+  // 与工单中心列表一致：未发货 + 含已分配工序的工单（不限定 dispatchStatus=IN_PROGRESS）
   const orders = await db.productionOrder.findMany({
-    where: { status: { not: OrderStatus.SHIPPED } },
+    where: {
+      status: { not: OrderStatus.SHIPPED },
+      milestones: { some: { templateId: { in: assignedMilestoneIds } } } },
+    },
     select: {
       id: true,
       orderNumber: true,
@@ -278,7 +281,6 @@ export async function listMyReportableTasks(
       },
     },
     orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
-    take: 500,
   });
 
   const orderIds = orders.map((o) => o.id);

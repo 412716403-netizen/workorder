@@ -95,10 +95,69 @@ function buildOrderProcessChips(order, opts = {}) {
   });
 }
 
+/**
+ * 工序卡下方「可报上限 / 剩余」与报工详情、可报任务列表一致（扣外协、待审、按规格）。
+ */
+function applyReportRemainingToChips(order, chips, opts) {
+  const {
+    prodRecords,
+    config,
+    globalNodes,
+    product,
+    category,
+  } = opts || {};
+  if (!prodRecords || !globalNodes || !globalNodes.length) return chips;
+
+  const { computeOrderReportHints, buildVariantMaxGoodMap } = require('./reportVariantMaxQty.js');
+  const { productHasColorSizeMatrix } = require('./productionPlans.js');
+
+  return (chips || []).map((chip) => {
+    const ms = (order.milestones || []).find((m) => m.id === chip.milestoneId);
+    if (!ms) return chip;
+
+    const hints = computeOrderReportHints(order, ms, globalNodes, config || {}, prodRecords);
+    let reportRemaining = Math.max(0, Number(hints.hintRemaining) || 0);
+    if (product && productHasColorSizeMatrix(product, category)) {
+      const variantMaxGoodMap = buildVariantMaxGoodMap(
+        order,
+        ms,
+        product,
+        hints.opts,
+        prodRecords,
+      );
+      const variantSum = Object.values(variantMaxGoodMap).reduce(
+        (s, v) => s + (Math.max(0, Number(v) || 0)),
+        0,
+      );
+      reportRemaining = Math.max(0, Math.min(variantSum, reportRemaining));
+    }
+
+    const maxReportable = Math.max(0, Number(hints.hintMaxReportable) || chip.availableQty);
+    const completed = chip.completed;
+    const progress = maxReportable > 0
+      ? Math.min(100, Math.round((completed / maxReportable) * 100))
+      : (completed > 0 ? 100 : 0);
+    const isCompleted = ms.status === 'COMPLETED'
+      || (maxReportable > 0 && completed >= maxReportable);
+    const canReportThis = chip.canReport && reportRemaining > 0 && maxReportable > 0;
+
+    return {
+      ...chip,
+      availableQty: maxReportable,
+      remaining: reportRemaining,
+      progress,
+      isCompleted,
+      canReport: canReportThis,
+      disabled: !canReportThis,
+    };
+  });
+}
+
 module.exports = {
   isProcessSequential,
   findGatingPredecessorIndex,
   buildOutOfSequenceTemplateIds,
   sumOrderQty,
-  buildOrderProcessChips
+  buildOrderProcessChips,
+  applyReportRemainingToChips,
 };
