@@ -19,6 +19,10 @@ import {
   type ReportableProdRecord,
 } from '../../../shared/orderReportableAggregates.js';
 import { computeWorkerReportTaskDisplayRemaining } from '../../../shared/workerReportTaskRemaining.js';
+import { productHasColorSizeMatrix } from '../../../shared/productColorSize.js';
+import {
+  reworkMergeBucketOrderId,
+} from '../../../shared/orderReportableAggregates.js';
 import {
   recalcMilestoneCompleted,
   recalcProgressCompleted,
@@ -198,6 +202,43 @@ function chipRemainingAtMilestone(
   return { remaining, maxReportable, reported, totalQty };
 }
 
+function jsonStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((x): x is string => typeof x === 'string') : [];
+}
+
+type OrderForestNode = { id: string; parentOrderId: string | null };
+
+function resolveProdRecordOrderIds(orders: OrderForestNode[]): string[] {
+  const ids = new Set<string>();
+  orders.forEach((o) => {
+    ids.add(o.id);
+    if (o.parentOrderId) ids.add(o.parentOrderId);
+    const bucketId = reworkMergeBucketOrderId(o.id, orders);
+    if (bucketId !== o.id) ids.add(bucketId);
+  });
+  return [...ids];
+}
+
+function resolveOrderProdRecords(
+  order: OrderForestNode,
+  prodRecordsByOrder: Map<string, ReportableProdRecord[]>,
+  orderForest: OrderForestNode[],
+): ReportableProdRecord[] {
+  const bucketId = reworkMergeBucketOrderId(order.id, orderForest);
+  const relatedIds = new Set<string>([order.id, bucketId]);
+  if (order.parentOrderId) relatedIds.add(order.parentOrderId);
+  const merged: ReportableProdRecord[] = [];
+  const seen = new Set<string>();
+  relatedIds.forEach((oid) => {
+    (prodRecordsByOrder.get(oid) ?? []).forEach((r) => {
+      if (seen.has(r.id)) return;
+      seen.add(r.id);
+      merged.push(r);
+    });
+  });
+  return merged;
+}
+
 export type MyReportableTask = {
   mode: 'order' | 'product';
   orderId?: string;
@@ -283,13 +324,17 @@ export async function listMyReportableTasks(
     orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
   });
 
-  const orderIds = orders.map((o) => o.id);
+  const orderForest: OrderForestNode[] = orders.map((o) => ({
+    id: o.id,
+    parentOrderId: o.parentOrderId ?? null,
+  }));
+  const prodRecordOrderIds = resolveProdRecordOrderIds(orderForest);
   const prodRecordsRaw =
-    orderIds.length === 0
+    prodRecordOrderIds.length === 0
       ? []
       : await db.productionOpRecord.findMany({
           where: {
-            orderId: { in: orderIds },
+            orderId: { in: prodRecordOrderIds },
             type: { in: ['OUTSOURCE', 'REWORK', 'REWORK_REPORT'] },
           },
           select: {
@@ -315,6 +360,46 @@ export async function listMyReportableTasks(
     prodRecordsByOrder.set(r.orderId, list);
   });
 
+  const productIds = [...new Set(orders.map((o) => o.productId))];
+  const productsRaw =
+    productIds.length === 0
+      ? []
+      : await db.product.findMany({
+          where: { id: { in: productIds } },
+          select: {
+            id: true,
+            categoryId: true,
+            colorIds: true,
+            sizeIds: true,
+            variants: { select: { id: true } },
+          },
+        });
+  const categoryIds = [
+    ...new Set(
+      productsRaw.map((p) => p.categoryId).filter((id): id is string => typeof id === 'string'),
+    ),
+  ];
+  const categoriesRaw =
+    categoryIds.length === 0
+      ? []
+      : await db.productCategory.findMany({
+          where: { id: { in: categoryIds } },
+          select: { id: true, hasColorSize: true },
+        });
+  const productById = new Map(
+    productsRaw.map((p) => [
+      p.id,
+      {
+        id: p.id,
+        categoryId: p.categoryId,
+        colorIds: jsonStringArray(p.colorIds),
+        sizeIds: jsonStringArray(p.sizeIds),
+        variants: p.variants,
+      },
+    ]),
+  );
+  const categoryById = new Map(categoriesRaw.map((c) => [c.id, c]));
+
   for (const order of orders) {
     const msList = order.milestones;
     const relevantIdx = msList
@@ -323,7 +408,14 @@ export async function listMyReportableTasks(
     if (relevantIdx.length === 0) continue;
 
     const reportableOrder = mapOrderForReportableRemaining(order);
-    const orderProdRecords = prodRecordsByOrder.get(order.id) ?? [];
+    const orderProdRecords = resolveOrderProdRecords(order, prodRecordsByOrder, orderForest);
+    const product = productById.get(order.productId);
+    const category =
+      product?.categoryId && typeof product.categoryId === 'string'
+        ? categoryById.get(product.categoryId)
+        : undefined;
+    const useProductVariantMatrix = productHasColorSizeMatrix(product, category);
+    const productVariantIds = product?.variants.map((v) => v.id) ?? [];
 
     for (const { m, idx } of relevantIdx) {
       const chip = chipRemainingAtMilestone(
@@ -338,6 +430,8 @@ export async function listMyReportableTasks(
         processSequenceMode,
         outOfSequenceTemplateIds,
         prodRecords: orderProdRecords,
+        useProductVariantMatrix,
+        productVariantIds,
       });
       if (!(remaining > 0)) continue;
       tasks.push({

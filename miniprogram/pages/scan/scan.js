@@ -463,8 +463,8 @@ Page({
     let emptyTasksText = '暂无可报任务';
     if (res.emptyReason === 'unassigned') {
       emptyTasksText = '未分配生产工序，请联系管理员';
-    } else if (!rawTasks.length) {
-      emptyTasksText = '分配工序下暂无可报内容';
+    } else if (!rawTasks.length && (res.assignedMilestoneIds || []).length > 0) {
+      emptyTasksText = '分配工序下暂无可报内容（请确认工单工序已在成员管理中分配给您）';
     }
     this.setData({
       tasks: grouping.tasks,

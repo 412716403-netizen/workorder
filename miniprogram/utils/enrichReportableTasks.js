@@ -132,6 +132,8 @@ async function enrichReportableTasksRemaining(rawTasks, productMap, categoryMap)
     );
     if (remaining > 0) {
       enriched.push({ ...task, remaining });
+    } else if ((Number(task.remaining) || 0) > 0) {
+      enriched.push(task);
     }
   });
   return enriched;

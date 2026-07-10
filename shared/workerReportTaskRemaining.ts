@@ -213,10 +213,18 @@ function getVariantMaxGood(
   return Math.max(0, base + reworkForVariant - outsourcedForVariant);
 }
 
-function collectVariantIds(order: ReportableOrder): string[] {
+function collectVariantIds(order: ReportableOrder, productVariantIds?: readonly string[]): string[] {
   const ids = new Set<string>();
+  (productVariantIds ?? []).forEach((id) => ids.add(id));
   (order.items || []).forEach((it) => ids.add(it.variantId || ''));
   return [...ids];
+}
+
+function shouldUseVariantMatrix(
+  order: ReportableOrder,
+  useProductVariantMatrix?: boolean,
+): boolean {
+  return Boolean(useProductVariantMatrix) || orderUsesVariantBreakdown(order);
 }
 
 /**
@@ -228,9 +236,19 @@ export function computeWorkerReportTaskDisplayRemaining(opts: {
   processSequenceMode: ProcessSequenceMode;
   outOfSequenceTemplateIds: ReadonlySet<string>;
   prodRecords: ReportableProdRecord[];
+  /** 产品档案启用颜色尺码矩阵时与报工详情一致走规格汇总 */
+  useProductVariantMatrix?: boolean;
+  productVariantIds?: readonly string[];
 }): number {
-  const { order, milestoneTemplateId, processSequenceMode, outOfSequenceTemplateIds, prodRecords } =
-    opts;
+  const {
+    order,
+    milestoneTemplateId,
+    processSequenceMode,
+    outOfSequenceTemplateIds,
+    prodRecords,
+    useProductVariantMatrix,
+    productVariantIds,
+  } = opts;
   const milestone = order.milestones.find((m) => m.templateId === milestoneTemplateId);
   if (!milestone) return 0;
 
@@ -249,7 +267,9 @@ export function computeWorkerReportTaskDisplayRemaining(opts: {
   const drMap = buildDefectiveReworkByOrderMilestone([order], prodRecords);
   const getDr = (oid: string, nodeTemplateId: string) =>
     drMap.get(`${oid}|${nodeTemplateId}`) ?? { defective: 0, rework: 0, reworkByVariant: {} };
-  const { defective, rework } = getDr(order.id, tid);
+  const bucketId = reworkMergeBucketOrderId(order.id, [order]);
+  const defective = getDr(order.id, tid).defective;
+  const rework = getDr(bucketId, tid).rework;
   const hintMaxReportable = Math.max(0, Math.round(base - defective + rework));
   const hintCompletedDisplay = Math.max(0, Number(milestone.completedQuantity) || 0);
   const pendingOccupied = sumPendingReportQty(milestone.reports);
@@ -259,11 +279,11 @@ export function computeWorkerReportTaskDisplayRemaining(opts: {
     hintMaxReportable - hintCompletedDisplay - pendingOccupied - totalOutsourcedAtNode,
   );
 
-  if (!orderUsesVariantBreakdown(order)) {
+  if (!shouldUseVariantMatrix(order, useProductVariantMatrix)) {
     return hintRemaining;
   }
 
-  const variantIds = collectVariantIds(order);
+  const variantIds = collectVariantIds(order, productVariantIds);
   const variantSum = variantIds.reduce((s, vid) => {
     return (
       s +

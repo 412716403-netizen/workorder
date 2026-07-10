@@ -22,3 +22,23 @@ export function validateProductColorSizeForSave(params: {
   if (sizeCount === 0) return MSG_PRODUCT_COLOR_SIZE_REQUIRED_SIZE;
   return null;
 }
+
+export function productColorSizeEnabled(
+  product: { colorIds?: readonly string[] | null; sizeIds?: readonly string[] | null } | null | undefined,
+  category: { hasColorSize?: boolean | null } | null | undefined,
+): boolean {
+  return (
+    Boolean(product?.colorIds?.length && product?.sizeIds?.length) ||
+    Boolean(category?.hasColorSize)
+  );
+}
+
+/** 与 Web / 小程序报工详情一致：是否按颜色尺码规格矩阵计算可报余量 */
+export function productHasColorSizeMatrix(
+  product: { variants?: readonly { id: string }[] | null; colorIds?: readonly string[] | null; sizeIds?: readonly string[] | null } | null | undefined,
+  category: { hasColorSize?: boolean | null } | null | undefined,
+): boolean {
+  const n = product?.variants?.length ?? 0;
+  if (n < 1) return false;
+  return productColorSizeEnabled(product, category) || n > 1;
+}

@@ -175,7 +175,8 @@ function buildDefectiveReworkMapForOrders(orders, prodRecords) {
 }
 
 function getReworkByVariantForReport(order, templateId, prodRecords) {
-  const drMap = buildDefectiveReworkMapForOrders([order], prodRecords);
+  const { buildDefectiveReworkByOrderMilestone } = require('./outsourceDispatchMatrix.js');
+  const drMap = buildDefectiveReworkByOrderMilestone([order], prodRecords);
   const bucketId = reworkMergeBucketOrderId(order.id, [order]);
   const merged = {};
   const mergeEntry = (orderId) => {
@@ -258,12 +259,15 @@ function computeOrderReportHints(order, milestone, globalNodes, config, prodReco
     }
   }
 
-  const defectiveReworkMap = buildDefectiveReworkMapForOrders([order], prodRecords);
-  const getDr = (oid, nodeTemplateId) => defectiveReworkMap.get(`${oid}|${nodeTemplateId}`) ||
+  const { buildDefectiveReworkByOrderMilestone } = require('./outsourceDispatchMatrix.js');
+  const defectiveReworkMapFull = buildDefectiveReworkByOrderMilestone([order], prodRecords);
+  const getDr = (oid, nodeTemplateId) => defectiveReworkMapFull.get(`${oid}|${nodeTemplateId}`) ||
   { defective: 0, rework: 0, reworkByVariant: {} };
-  const _getDr = getDr(order.id, tid),defective = _getDr.defective,rework = _getDr.rework;
+  const defective = getDr(order.id, tid).defective;
+  const bucketId = reworkMergeBucketOrderId(order.id, [order]);
+  const rework = getDr(bucketId, tid).rework;
   const defectiveQtyForHint = defective;
-  const totalRework = getDr(reworkMergeBucketOrderId(order.id, [order]), tid).rework;
+  const totalRework = rework;
   const hintMaxReportable = Math.max(0, Math.round(base - defective + rework));
   const hintCompletedDisplay = Math.max(0, Number(milestone.completedQuantity) || 0);
   const pendingOccupied = sumPendingReportQty(milestone.reports);
