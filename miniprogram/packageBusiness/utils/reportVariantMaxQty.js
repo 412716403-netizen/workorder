@@ -2,6 +2,32 @@
  * 报工按规格最大可报数量（对齐 Web useReportModalState.getSeqRemainingForVariant + reportRowDerivations）
  */
 
+function reportQtyOccupies(approvalStatus) {
+  return approvalStatus === 'APPROVED' || approvalStatus === 'PENDING' || !approvalStatus;
+}
+
+function sumOccupyingReportQty(reports, variantId) {
+  const vid = variantId === undefined ? undefined : variantId || '';
+  return (reports || [])
+    .filter((r) => reportQtyOccupies(r.approvalStatus))
+    .filter((r) => vid === undefined || (r.variantId || '') === vid)
+    .reduce((s, r) => s + (Number(r.quantity) || 0), 0);
+}
+
+function sumOccupyingDefectiveQty(reports, variantId) {
+  const vid = variantId === undefined ? undefined : variantId || '';
+  return (reports || [])
+    .filter((r) => reportQtyOccupies(r.approvalStatus))
+    .filter((r) => vid === undefined || (r.variantId || '') === vid)
+    .reduce((s, r) => s + (Number(r.defectiveQuantity) || 0), 0);
+}
+
+function sumPendingReportQty(reports) {
+  return (reports || [])
+    .filter((r) => r.approvalStatus === 'PENDING')
+    .reduce((s, r) => s + (Number(r.quantity) || 0), 0);
+}
+
 function isProcessSequential(processSequenceMode, nodeId, outOfSequenceTemplateIds) {
   if (processSequenceMode !== 'sequential') return false;
   if (nodeId && outOfSequenceTemplateIds && outOfSequenceTemplateIds.has(nodeId)) return false;
@@ -26,10 +52,7 @@ function buildOutOfSequenceTemplateIds(nodes) {
 }
 
 function sumDefectiveForVariantAtMilestone(milestone, variantId) {
-  const vid = variantId || '';
-  return (milestone.reports || []).
-  filter((r) => (r.variantId || '') === vid).
-  reduce((s, r) => s + (Number(r.defectiveQuantity) || 0), 0);
+  return sumOccupyingDefectiveQty(milestone.reports, variantId || '');
 }
 
 /**
@@ -62,9 +85,7 @@ function getSeqRemainingForVariant(order, milestoneTemplateId, variantId, opts) 
       const completed = Number(milestone == null ? void 0 : milestone.completedQuantity) || 0;
       return Math.max(0, (Number(item.quantity) || 0) - completed);
     }
-    const completedInMilestone = ((milestone == null ? void 0 : milestone.reports) || []).
-    filter((r) => (r.variantId || '') === variantId).
-    reduce((s, r) => s + (Number(r.quantity) || 0), 0);
+    const completedInMilestone = sumOccupyingReportQty(milestone == null ? void 0 : milestone.reports, variantId);
     return Math.max(0, (Number(item.quantity) || 0) - completedInMilestone);
   }
 
@@ -79,22 +100,22 @@ function getSeqRemainingForVariant(order, milestoneTemplateId, variantId, opts) 
   if (prevTemplateId) {
     const prevMs = milestones.find((m) => m.templateId === prevTemplateId);
     if (prevMs) {var _prevMs$completedQuan;
-      const hasVariantReports = (prevMs.reports || []).some((r) => r.variantId && r.variantId !== '');
+      const hasVariantReports = (prevMs.reports || []).some(
+        (r) => r.variantId && r.variantId !== '' && reportQtyOccupies(r.approvalStatus),
+      );
       if (hasVariantReports) {
-        (prevMs.reports || []).forEach((r) => {
-          if ((r.variantId || '') === vid) prevQty += Number(r.quantity) || 0;
-        });
+        prevQty = sumOccupyingReportQty(prevMs.reports, vid);
       } else if (((_prevMs$completedQuan = prevMs.completedQuantity) != null ? _prevMs$completedQuan : 0) > 0 && orderTotalQty > 0) {
         prevQty += Math.round((Number(prevMs.completedQuantity) || 0) * variantItemQty / orderTotalQty);
       }
     }
   }
   if (milestone) {var _milestone$completedQ;
-    const hasVariantReports = (milestone.reports || []).some((r) => r.variantId && r.variantId !== '');
+    const hasVariantReports = (milestone.reports || []).some(
+      (r) => r.variantId && r.variantId !== '' && reportQtyOccupies(r.approvalStatus),
+    );
     if (hasVariantReports) {
-      (milestone.reports || []).forEach((r) => {
-        if ((r.variantId || '') === vid) curQty += Number(r.quantity) || 0;
-      });
+      curQty = sumOccupyingReportQty(milestone.reports, vid);
     } else if (((_milestone$completedQ = milestone.completedQuantity) != null ? _milestone$completedQ : 0) > 0 && orderTotalQty > 0) {
       curQty += Math.round((Number(milestone.completedQuantity) || 0) * variantItemQty / orderTotalQty);
     }
@@ -134,10 +155,7 @@ function buildDefectiveReworkMapForOrders(orders, prodRecords) {
   const map = new Map();
   (orders || []).forEach((o) => {
     (o.milestones || []).forEach((m) => {
-      const defective = (m.reports || []).reduce(
-        (s, r) => s + (Number(r.defectiveQuantity) || 0),
-        0
-      );
+      const defective = sumOccupyingDefectiveQty(m.reports);
       map.set(`${o.id}|${m.templateId}`, { defective, rework: 0, reworkByVariant: {} });
     });
   });
@@ -248,14 +266,15 @@ function computeOrderReportHints(order, milestone, globalNodes, config, prodReco
   const totalRework = getDr(reworkMergeBucketOrderId(order.id, [order]), tid).rework;
   const hintMaxReportable = Math.max(0, Math.round(base - defective + rework));
   const hintCompletedDisplay = Math.max(0, Number(milestone.completedQuantity) || 0);
+  const pendingOccupied = sumPendingReportQty(milestone.reports);
   const totalOutsourcedAtNode = sumOutsourceRemainingAtNode(prodRecords, order.id, tid);
   const hintRemaining = Math.max(
     0,
-    hintMaxReportable - hintCompletedDisplay - totalOutsourcedAtNode
+    hintMaxReportable - hintCompletedDisplay - pendingOccupied - totalOutsourcedAtNode
   );
   const effectiveRemainingForModal = Math.max(
     0,
-    base - defective + totalRework - hintCompletedDisplay - totalOutsourcedAtNode
+    base - defective + totalRework - hintCompletedDisplay - pendingOccupied - totalOutsourcedAtNode
   );
 
   return {

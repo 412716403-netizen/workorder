@@ -20,12 +20,11 @@ function resetReportScanMeta(page) {
 }
 
 /**
- * @param {WechatMiniprogram.Page.Instance} page
+ * @param {ReturnType<typeof createReportScanMetaSession>} meta
  * @param {{ detail?: object; vid?: string; payloadKind?: string }} prepared
  */
-function recordReportScanMeta(page, prepared) {
-  if (!page._reportScanMeta) resetReportScanMeta(page);
-  const meta = page._reportScanMeta;
+function recordScanMetaEntry(meta, prepared) {
+  if (!meta) return;
   const detail = prepared && prepared.detail;
   const kind = (prepared && prepared.payloadKind) || (detail && detail.kindLabel === '批次' ? 'BATCH' : 'ITEM');
   const vid = scanTraceKey((prepared && prepared.vid) || (detail && detail.variantId) || '');
@@ -48,6 +47,15 @@ function recordReportScanMeta(page, prepared) {
   } else if (virtualBatchId) {
     meta.link.virtualBatchId = virtualBatchId;
   }
+}
+
+/**
+ * @param {WechatMiniprogram.Page.Instance} page
+ * @param {{ detail?: object; vid?: string; payloadKind?: string }} prepared
+ */
+function recordReportScanMeta(page, prepared) {
+  if (!page._reportScanMeta) resetReportScanMeta(page);
+  recordScanMetaEntry(page._reportScanMeta, prepared);
 }
 
 function collectScanItemCodeIds(meta, variantId) {
@@ -95,6 +103,7 @@ module.exports = {
   SCAN_ITEM_CODE_IDS_KEY,
   createReportScanMetaSession,
   resetReportScanMeta,
+  recordScanMetaEntry,
   recordReportScanMeta,
   buildReportScanPayloadFields,
 };

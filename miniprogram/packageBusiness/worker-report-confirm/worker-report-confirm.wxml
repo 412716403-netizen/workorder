@@ -1,0 +1,75 @@
+<view class="plan-create-shell">
+  <view class="plan-create-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-create-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-create-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-create-header__title">{{pageTitle}}</text>
+      <view class="plan-create-header__back plan-create-header__back--placeholder"></view>
+    </view>
+  </view>
+
+  <view class="plan-create-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view
+    class="plan-create-scroll"
+    scroll-y
+    show-scrollbar="{{false}}"
+    style="height: {{scrollHeight}}px;"
+  >
+    <view wx:if="{{loading}}" class="plan-create-muted">加载中…</view>
+
+    <view wx:else class="plan-create-page">
+      <view class="plan-form-card worker-report-confirm-summary">
+        <text class="worker-report-confirm-summary__title">{{templateName || '扫码报工'}}</text>
+        <text class="worker-report-confirm-summary__meta">{{summaryMeta}}</text>
+      </view>
+
+      <view class="plan-form-card">
+        <view class="plan-form-cell plan-form-cell--last">
+          <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>生产人员</text>
+          <text class="plan-form-cell__value">{{workerName || '本人'}}</text>
+        </view>
+      </view>
+
+      <view
+        wx:for="{{lineCards}}"
+        wx:key="key"
+        class="plan-form-card worker-report-confirm-line"
+      >
+        <view class="worker-report-confirm-line__head">
+          <text class="worker-report-confirm-line__title">{{item.headline}}</text>
+          <text wx:if="{{item.showProductSku}}" class="worker-report-confirm-line__sku">{{item.productSku}}</text>
+        </view>
+        <view class="worker-report-confirm-line__total">合计 {{item.totalGoodText}}</view>
+        <view
+          wx:for="{{item.qtyRows}}"
+          wx:for-item="qtyRow"
+          wx:key="label"
+          class="worker-report-confirm-line__row"
+        >
+          <text class="worker-report-confirm-line__spec">{{qtyRow.label}}</text>
+          <view class="worker-report-confirm-line__qty-wrap">
+            <text class="worker-report-confirm-line__qty">{{qtyRow.goodText}}</text>
+            <text wx:if="{{qtyRow.showDefective}}" class="worker-report-confirm-line__defective">{{qtyRow.defectiveText}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view wx:if="{{reportCustomFields.length}}" class="plan-form-card">
+        <plan-form-custom-field
+          fields="{{reportCustomFields}}"
+          values="{{customData}}"
+          bind:change="onCustomDataChange"
+        />
+      </view>
+    </view>
+  </scroll-view>
+
+  <view class="plan-create-footer">
+    <button
+      class="plan-create-submit"
+      loading="{{submitting}}"
+      disabled="{{submitting || !canSubmit}}"
+      bindtap="onSubmit"
+    >{{submitting ? '提交中…' : '提交待审'}}</button>
+  </view>
+</view>

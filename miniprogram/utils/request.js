@@ -87,7 +87,9 @@ function request(opts) {
             return;
           }
           if (res.statusCode === 403) {
-            reject(Object.assign(new Error('FORBIDDEN'), { statusCode: 403 }));
+            const msg =
+              (res.data && (res.data.error || res.data.message)) || '无权访问该功能';
+            reject(Object.assign(new Error(typeof msg === 'string' ? msg : '无权访问该功能'), { statusCode: 403 }));
             return;
           }
           if (res.statusCode >= 200 && res.statusCode < 300) {
@@ -96,7 +98,9 @@ function request(opts) {
           }
           const msg =
             (res.data && (res.data.error || res.data.message)) || `请求失败 ${res.statusCode}`;
-          reject(new Error(typeof msg === 'string' ? msg : JSON.stringify(msg)));
+          reject(Object.assign(new Error(typeof msg === 'string' ? msg : JSON.stringify(msg)), {
+            statusCode: res.statusCode,
+          }));
         },
         fail(err) {
           const errMsg = (err && err.errMsg) || '';

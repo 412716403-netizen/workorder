@@ -1,0 +1,27 @@
+<page-meta page-style="{{scanBatchOpen ? 'overflow:hidden;height:100vh;' : ''}}" />
+<view class="worker-report-scan-page">
+  <page-header title="{{pageTitle}}" show-back="{{true}}" center="{{true}}" bind:back="onHeaderBack" />
+
+  <view wx:if="{{loading}}" class="worker-report-scan-loading">加载中…</view>
+
+  <scan-batch-modal
+    wx:if="{{scanEnabled && !loading}}"
+    open="{{scanBatchOpen}}"
+    rows="{{scanBatchRows}}"
+    title="{{scanBatchTitle}}"
+    hint="{{scanBatchHint}}"
+    processing="{{scanBatchProcessing}}"
+    show-intent-toggle="{{scanBatchShowIntentToggle}}"
+    scan-intent="{{scanBatchIntent}}"
+    bind:close="onScanBatchClose"
+    bind:scan="onScanBatchScan"
+    bind:confirm="onScanBatchConfirm"
+    bind:remove="onScanBatchRemove"
+    bind:intentchange="onScanBatchIntentChange"
+  >
+    <view wx:if="{{templateName}}" slot="header" class="worker-report-scan-milestone">
+      <text class="worker-report-scan-milestone__tag">当前工序</text>
+      <text class="worker-report-scan-milestone__name">{{templateName}}</text>
+    </view>
+  </scan-batch-modal>
+</view>

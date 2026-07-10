@@ -57,7 +57,9 @@ function rowDisplayLine(detail) {
     detail.specNote || `${detail.colorName} / ${detail.sizeName}`,
     `×${detail.quantity}`,
   ].filter(Boolean);
-  return parts.join(' · ');
+  const core = parts.join(' · ');
+  if (detail.orderLabel) return `${detail.orderLabel} · ${core}`;
+  return core;
 }
 
 module.exports = {

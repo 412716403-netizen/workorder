@@ -223,9 +223,9 @@ export function canUseWidget(
   if (def.requiredPlugin && opts.featurePlugins[def.requiredPlugin] === false) return false;
   if (fullAccess) return true;
   if (!def.requiredModule) return true;
-  if (opts.tenantRole === 'owner' || opts.tenantRole === 'admin') return true;
+  if (opts.tenantRole === 'owner') return true;
   const { permissions } = opts;
-  if (!permissions || permissions.length === 0) return true;
+  if (!permissions || permissions.length === 0) return false;
   if (permissions.includes(def.requiredModule)) return true;
   return permissions.some(p => p.startsWith(`${def.requiredModule}:`));
 }
@@ -235,24 +235,56 @@ export interface WorkbenchPageAccessOpts {
   userId: string;
   /** 当前查看者有效权限（含 `workbench:<pageId>` 授权 key） */
   permissions: string[];
+  /** 企业成员角色；owner 对全部工作台页面恒可见、可编辑 */
+  tenantRole?: string;
+}
+
+function isWorkbenchElevatedRole(tenantRole?: string): boolean {
+  return tenantRole === 'owner';
 }
 
 /**
- * 判断某页面对当前用户是否可见（严格模式：不给 owner/admin 自动可见）：
- * - 首页：始终可见。
- * - 自定义页面：仅**创建者本人**，或角色被授予 `workbench:<pageId>`（或裸 `workbench` 模块＝全部页面）。
+ * 角色是否持有任一工作台入口权限（裸 `workbench` 或任一 `workbench:<pageId>`）。
+ */
+export function hasWorkbenchModuleAccess(permissions: string[]): boolean {
+  if (!permissions || permissions.length === 0) return false;
+  return (
+    permissions.includes(WORKBENCH_PERM_MODULE)
+    || permissions.some(p => p.startsWith(`${WORKBENCH_PERM_MODULE}:`))
+  );
+}
+
+/**
+ * 侧栏「工作台」入口是否显示：须显式授予 workbench 模块或页面 key。
+ * owner 恒显示；成员未勾选工作台时不显示。
+ */
+export function hasWorkbenchNavAccess(
+  permissions: string[] | undefined,
+  tenantRole?: string,
+): boolean {
+  if (tenantRole === 'owner') return true;
+  const perms = permissions ?? [];
+  return (
+    perms.includes(WORKBENCH_PERM_MODULE)
+    || perms.some(p => p.startsWith(`${WORKBENCH_PERM_MODULE}:`))
+  );
+}
+
+/**
+ * 判断某页面对当前用户是否可见：
+ * - owner：全部页面恒可见。
+ * - 成员：裸 `workbench` 可见全部页面；否则仅可见显式授予的 `workbench:<pageId>`。
  */
 export function canViewWorkbenchPage(page: WorkbenchPage, opts: WorkbenchPageAccessOpts): boolean {
+  if (isWorkbenchElevatedRole(opts.tenantRole)) return true;
   if (isWorkbenchHomePage(page.id)) {
     // 裸 workbench（＝全部页面）或显式授予首页查看权
     if (opts.permissions.includes(WORKBENCH_PERM_MODULE)) return true;
     if (opts.permissions.includes(workbenchPagePermKey(page.id))) return true;
     // 角色已启用「按页面授权」（持有任意 workbench:<pageId> 键）但未含首页 → 隐藏首页
     if (opts.permissions.some(p => p.startsWith(`${WORKBENCH_PERM_MODULE}:`))) return false;
-    // 未涉及工作台页面权限的角色：首页作为默认落地页保持可见
-    return true;
+    return false;
   }
-  if (page.createdByUserId && page.createdByUserId === opts.userId) return true;
   return (
     opts.permissions.includes(workbenchPagePermKey(page.id))
     || opts.permissions.includes(WORKBENCH_PERM_MODULE)
@@ -261,8 +293,7 @@ export function canViewWorkbenchPage(page: WorkbenchPage, opts: WorkbenchPageAcc
 
 /**
  * 判断某页面对当前用户是否「完整可见」——页面查看权限＝该页内容的整体授权：
- * - owner/admin（提权角色）：恒为 true。
- * - 自定义页面创建者本人：true。
+ * - owner（企业创建者）：恒为 true。
  * - 角色被授予 `workbench:<pageId>`，或裸 `workbench`（＝全部页面，含首页）：true。
  *
  * 命中完整可见时，该页 widget 不再按模块/金额权限过滤，统计内容（含金额）全部展示。
@@ -272,8 +303,7 @@ export function hasWorkbenchPageFullAccess(
   page: WorkbenchPage,
   opts: { userId: string; permissions: string[]; tenantRole?: string },
 ): boolean {
-  if (opts.tenantRole === 'owner' || opts.tenantRole === 'admin') return true;
-  if (page.createdByUserId && page.createdByUserId === opts.userId) return true;
+  if (opts.tenantRole === 'owner') return true;
   return (
     opts.permissions.includes(workbenchPagePermKey(page.id))
     || opts.permissions.includes(WORKBENCH_PERM_MODULE)
@@ -281,12 +311,11 @@ export function hasWorkbenchPageFullAccess(
 }
 
 /**
- * 判断某自定义页面当前用户是否可编辑：仅**创建者本人**（被授权的查看者只读）。
- * 首页为每位用户的个人页，恒可编辑（编辑的是自己的个人副本）。
+ * 仅企业创建者 owner 可编辑工作台页面；成员被授权后仅可查看。
  */
-export function canEditWorkbenchPage(page: WorkbenchPage, opts: WorkbenchPageAccessOpts): boolean {
-  if (isWorkbenchHomePage(page.id)) return true;
-  return !!page.createdByUserId && page.createdByUserId === opts.userId;
+export function canEditWorkbenchPage(_page: WorkbenchPage, opts: WorkbenchPageAccessOpts): boolean {
+  if (isWorkbenchElevatedRole(opts.tenantRole)) return true;
+  return false;
 }
 
 /** 仅保留当前用户可见的页面（首页可被角色权限隐藏），用于 GET 返回前过滤 */

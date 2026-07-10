@@ -15,6 +15,8 @@ import type {
 } from '../../types';
 
 export interface WorkbenchResponse {
+  /** 服务端判定：当前用户是否有工作台入口（含页面级授权） */
+  canAccess?: boolean;
   effective: WorkbenchConfig;
 }
 
@@ -279,7 +281,7 @@ function appendWorkbenchStatsQuery(search: URLSearchParams, params: WorkbenchSta
 export const dashboard = {
   getWorkbench: () => request<WorkbenchResponse>('/dashboard/workbench'),
   saveWorkbench: (config: WorkbenchConfig) =>
-    request<WorkbenchConfig>('/dashboard/workbench', { method: 'PUT', body: JSON.stringify(config) }),
+    request<WorkbenchResponse>('/dashboard/workbench', { method: 'PUT', body: JSON.stringify(config) }),
   getWorkbenchPages: () =>
     request<{ pages: WorkbenchPageSummary[] }>('/dashboard/workbench/pages'),
   getShortcuts: () => request<ShortcutsResponse>('/dashboard/shortcuts'),

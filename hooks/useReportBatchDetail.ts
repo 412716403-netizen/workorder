@@ -17,6 +17,7 @@ import type {
   Worker,
   ProductMilestoneProgress,
 } from '../types';
+import { reportAllowsEditDelete } from '../types';
 import {
   weightToNumberSumPart,
   parseWeightFieldForEdit,
@@ -31,7 +32,8 @@ export type OrderReportRow = {
   milestone: { id: string; name: string; templateId: string };
   report: {
     id: string; timestamp: string; operator: string; quantity: number;
-    defectiveQuantity?: number; variantId?: string; reportBatchId?: string; reportNo?: string;
+    defectiveQuantity?: number;     variantId?: string; reportBatchId?: string; reportNo?: string;
+    approvalStatus?: string;
     weight?: unknown;
     customData?: Record<string, unknown>;
     [k: string]: unknown;
@@ -136,6 +138,15 @@ export function useReportBatchDetail(args: UseReportBatchDetailArgs) {
   } = args;
 
   const [editingReport, setEditingReport] = useState<EditingReportState>(null);
+
+  const batchAllowsMutation = useCallback(() => {
+    if (reportDetailBatch.rows.length === 0) return false;
+    const firstReport = reportDetailBatch.rows[0]!.report;
+    return reportAllowsEditDelete(
+      firstReport.approvalStatus,
+      reportDetailBatch.reportNo ?? firstReport.reportNo,
+    );
+  }, [reportDetailBatch]);
 
   const handleClose = useCallback(() => {
     setEditingReport(null);
@@ -270,6 +281,10 @@ export function useReportBatchDetail(args: UseReportBatchDetailArgs) {
 
   const handleEnterEdit = useCallback(() => {
     if (reportDetailBatch.rows.length === 0) return;
+    if (!batchAllowsMutation()) {
+      toast.error('该报工已审核或已驳回，不可编辑');
+      return;
+    }
     if (reportDetailBatch.source === 'order') {
       if (!onUpdateReport) return;
       const { order, milestone, report } = (reportDetailBatch.rows as OrderReportRow[])[0];
@@ -450,9 +465,10 @@ export function useReportBatchDetail(args: UseReportBatchDetailArgs) {
         },
       });
     }
-  }, [reportDetailBatch, batchDetailMatrix, productMap, workers, globalNodes, onUpdateReport, onUpdateReportProduct, onReportSubmit, onReportSubmitProduct]);
+  }, [reportDetailBatch, batchDetailMatrix, productMap, workers, globalNodes, onUpdateReport, onUpdateReportProduct, onReportSubmit, onReportSubmitProduct, batchAllowsMutation]);
 
   const handleDelete = (() => {
+    if (!batchAllowsMutation()) return undefined;
     if (reportDetailBatch.source === 'order' && onDeleteReport) {
       return () => {
         (reportDetailBatch.rows as OrderReportRow[]).forEach(({ order, milestone, report }) => {

@@ -4,6 +4,7 @@
 
 const { request } = require('./request.js');
 const { readTenantCtx, parseTenantListResponse } = require('./session.js');
+const { syncCurrentCustomTabBar } = require('./tabAccess.js');
 
 let syncPromise = null;
 
@@ -53,6 +54,7 @@ function syncTenantCtx() {
       if (JSON.stringify(next) !== JSON.stringify(ctx)) {
         wx.setStorageSync('tenantCtx', JSON.stringify(next));
       }
+      syncCurrentCustomTabBar(next);
       return next;
     })
     .catch(() => ctx)

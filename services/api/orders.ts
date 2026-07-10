@@ -44,8 +44,49 @@ export const orders = {
     productIds?: string;
     search?: string;
     productionLinkMode?: 'order' | 'product';
+    workerId?: string;
+    approvalStatus?: 'PENDING' | 'APPROVED' | 'REJECTED';
   }) =>
     request<{ orderReports: MilestoneReport[]; productReports: MilestoneReport[] }>(`/orders/report-history${buildQs(params)}`),
+  /** 工人可报任务 */
+  listMyReportableTasks: (params?: { productionLinkMode?: 'order' | 'product' }) =>
+    request<{
+      tasks: Array<{
+        mode: 'order' | 'product';
+        orderId?: string;
+        orderNumber?: string | null;
+        milestoneId?: string;
+        productId: string;
+        productName: string | null;
+        productSku: string | null;
+        milestoneTemplateId: string;
+        milestoneName: string;
+        remaining: number;
+        maxReportable: number;
+        totalQty: number;
+        reported: number;
+      }>;
+      assignedMilestoneIds: string[];
+      emptyReason?: string;
+    }>(`/orders/my-reportable-tasks${buildQs(params || {})}`),
+  /** 工人我的报工 */
+  listMyReportHistory: (params?: {
+    startDate?: string;
+    endDate?: string;
+    search?: string;
+    productionLinkMode?: 'order' | 'product';
+    approvalStatus?: 'PENDING' | 'APPROVED' | 'REJECTED';
+  }) =>
+    request<{ orderReports: MilestoneReport[]; productReports: MilestoneReport[] }>(
+      `/orders/my-report-history${buildQs(params || {})}`,
+    ),
+  approveReport: (reportId: string) =>
+    request<unknown>(`/orders/reports/${reportId}/approve`, { method: 'POST', body: '{}' }),
+  rejectReport: (reportId: string, reason?: string) =>
+    request<unknown>(`/orders/reports/${reportId}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
   /**
    * 手动切换工单派发完成状态（关联工单模式下工单中心徽章点击）。
    * 后端会同时把 `dispatchStatusManual` 置为 true，之后 STOCK_IN 入库自动逻辑不再覆盖。

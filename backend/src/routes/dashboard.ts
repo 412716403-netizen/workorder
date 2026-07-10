@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import * as ctrl from '../controllers/dashboard.controller.js';
-import { requireSubPermission } from '../middleware/tenant.js';
+import { requireSubPermission, requireTenantOwner } from '../middleware/tenant.js';
 import { validate } from '../middleware/validate.js';
 
 const router = Router();
@@ -45,10 +45,10 @@ const publishMessageSchema = z.object({
   body: z.string().trim().min(1).max(2000),
 });
 
-/** 工作台：任意已选租户用户可访问，不做模块级 requirePermission */
+/** 工作台：GET 由页面权限裁剪；布局与页面目录仅 owner 可修改/读取。 */
 router.get('/workbench', ctrl.getWorkbench);
-router.put('/workbench', validate(workbenchConfigSchema), ctrl.saveUserWorkbench);
-router.get('/workbench/pages', ctrl.getWorkbenchPages);
+router.put('/workbench', requireTenantOwner(), validate(workbenchConfigSchema), ctrl.saveUserWorkbench);
+router.get('/workbench/pages', requireTenantOwner(), ctrl.getWorkbenchPages);
 router.get('/shortcuts', ctrl.getShortcuts);
 router.put('/shortcuts', validate(shortcutIdsSchema), ctrl.saveShortcuts);
 

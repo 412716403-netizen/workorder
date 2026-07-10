@@ -226,6 +226,7 @@ npm run build
 4. 浏览器打开上文「测试环境访问地址」，强刷一次，确认登录、产品列表、系统设置、**打印模板列表**、生产/PSI/财务等核心模块无「数据库结构不一致」或字段缺失类错误。
 5. `cd /var/www/smarttrack-pro/backend && npx prisma migrate status` 显示迁移已全部应用。
 6. 关键功能升级时可在线上 grep 编译产物，确认新逻辑已落地（例如系统打印模板合并：见上节「构建路径与历史坑」末尾）。
+7. **小程序报工 Tab**：未带 Token 访问 `curl -s -o /dev/null -w "%{http_code}" https://<域名>/api/orders/my-reportable-tasks` 应返回 **401**（不是 404）；404 表示后端仍是旧代码（`my-reportable-tasks` 被当成工单 id）。发版后确认 `backend/dist/backend/src/routes/orders.js` 含该路由，且已执行 migration `20260708120000_report_approval_status`。
 
 ### 测试环境回滚（简要）
 

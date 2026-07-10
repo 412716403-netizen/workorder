@@ -121,6 +121,10 @@ PostgreSQL
 | 工序报工 | 生产明细 / 工单详情 | `orders.createReport` 等 | `/api/orders/:id/milestones/:mid/reports` |
 | 产品进度报工 | 产品关联模式相关入口 | `orders.createProductReport` 等 | `/api/orders/product-progress/report` |
 | 可报量查询 | 报工前校验 | `orders.getReportable` | `/api/orders/:id/reportable` |
+| 工人可报任务 | 小程序 Tab 报工 | `orders.listMyReportableTasks` | `/api/orders/my-reportable-tasks` |
+| 报工审核 | Web 流水 / 小程序待审 | `orders.approveReport` / `rejectReport` | `/api/orders/reports/:id/approve\|reject` |
+
+**可报 remaining（含待审占用）**：`remaining = 可报基数 − sum(APPROVED.qty) − sum(PENDING.qty)`（`REJECTED` 不占）；进度 / 顺控上游完成量只计 `APPROVED`。
 
 **同工序多产品扫码报工数据流**（[`useReportModalState`](../hooks/useReportModalState.ts) + [`utils/reportRowDerivations.ts`](../utils/reportRowDerivations.ts)）：
 

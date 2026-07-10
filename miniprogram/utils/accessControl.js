@@ -5,7 +5,7 @@
 const COLLABORATION_LIST_PERM = 'collaboration:list:allow';
 
 function isTenantElevatedRole(tenantRole) {
-  return tenantRole === 'owner' || tenantRole === 'admin';
+  return tenantRole === 'owner';
 }
 
 /** 与 Web utils/hasSubPermission.ts 一致 */
@@ -81,7 +81,7 @@ function filterShortcutsByAccess(items, plugins, tenantRole, permissions) {
 
     if (isTenantElevatedRole(tenantRole)) return true;
 
-    if (!perms.length) return true;
+    if (!perms.length) return false;
 
     const itemPerm = readItemPerm(item);
     if (itemPerm && !hasSubPermission(perms, itemPerm)) return false;
@@ -99,7 +99,7 @@ function filterShortcutsByAccess(items, plugins, tenantRole, permissions) {
 function canViewSettingsTab(permissions, tenantRole, tabPermission) {
   if (tenantRole === 'owner') return true;
   if (!tabPermission) return true;
-  if (!permissions || permissions.length === 0) return true;
+  if (!permissions || permissions.length === 0) return false;
   if (permissions.includes(tabPermission)) return true;
   const module = String(tabPermission).split(':')[0];
   if (module && permissions.includes(module)) return true;

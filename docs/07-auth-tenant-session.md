@@ -158,7 +158,7 @@ refresh 依赖后端 Cookie 机制，而不是前端直接读写 refresh token�
 | `price_amount`（裸模块键） | 单价/金额 · 模块入口；细粒度见下 |
 | `psi:purchase_order:amount` 等 | 单价/金额 · 各业务（在角色「单价/金额」区块配置） |
 
-判定逻辑：`utils/canViewAmount.ts`（封装 `hasModulePerm`）。owner/admin、裸模块键且无细粒度 → 可见；细粒度角色须精确命中上表 key。
+判定逻辑：`utils/canViewAmount.ts`（封装 `hasModulePerm`）。owner、裸模块键且无细粒度 → 可见；细粒度角色须精确命中上表 key；成员空权限列表 → 无业务权限。
 
 ### 4.6.1 租户业务配置 API 与生产「表单配置」权限
 
@@ -176,7 +176,7 @@ refresh 依赖后端 Cookie 机制，而不是前端直接读写 refresh token�
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/dashboard/workbench` | 有效配置（个人首页 + 当前用户可见的共享自定义页，按权限过滤） |
-| PUT | `/dashboard/workbench` | 保存：首页落个人 preferences，自定义页按「创建者/提权」合并进租户共享池 |
+| PUT | `/dashboard/workbench` | 保存：仅 owner 可修改首页和租户共享自定义页 |
 | GET | `/dashboard/workbench/pages` | 列出租户共享自定义页（含创建者名），供角色管理按页面授权查看权 |
 | GET/PUT | `/dashboard/feature-plugins` | 功能插件；PUT 需管理员 |
 | GET | `/dashboard/stats` | 按模块权限返回生产/销售/财务统计 |

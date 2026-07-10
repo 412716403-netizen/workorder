@@ -78,6 +78,7 @@ model TenantMembership {
   id                   String   @id @default(uuid()) @db.Uuid
   userId               String   @map("user_id") @db.Uuid
   tenantId             String   @map("tenant_id") @db.Uuid
+  /** owner=企业创建者；worker=成员。业务权限由 roleId 绑定的自定义角色提供。 */
   role                 String   @default("worker") @db.VarChar(20)
   permissions          Json     @default("[]")
   roleId               String?  @map("role_id") @db.VarChar(50)
@@ -684,6 +685,11 @@ model MilestoneReport {
   virtualBatchId    String?  @map("virtual_batch_id") @db.Uuid
   /** 扫码报工关联的单品码（item_codes.id） */
   itemCodeId        String?  @map("item_code_id") @db.Uuid
+  /** APPROVED | PENDING | REJECTED；存量默认 APPROVED */
+  approvalStatus    String   @default("APPROVED") @map("approval_status") @db.VarChar(20)
+  approvedAt        DateTime? @map("approved_at") @db.Timestamptz()
+  approvedBy        String?  @map("approved_by") @db.VarChar(50)
+  rejectedReason    String?  @map("rejected_reason") @db.VarChar(500)
   createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   milestone Milestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
@@ -694,6 +700,8 @@ model MilestoneReport {
   @@index([reportNo])
   @@index([virtualBatchId])
   @@index([itemCodeId])
+  @@index([approvalStatus])
+  @@index([workerId, approvalStatus])
   @@map("milestone_reports")
 }
 
@@ -739,6 +747,11 @@ model ProductProgressReport {
   materialBreakdown Json?    @map("material_breakdown")
   virtualBatchId    String?  @map("virtual_batch_id") @db.Uuid
   itemCodeId        String?  @map("item_code_id") @db.Uuid
+  /** APPROVED | PENDING | REJECTED；存量默认 APPROVED */
+  approvalStatus    String   @default("APPROVED") @map("approval_status") @db.VarChar(20)
+  approvedAt        DateTime? @map("approved_at") @db.Timestamptz()
+  approvedBy        String?  @map("approved_by") @db.VarChar(50)
+  rejectedReason    String?  @map("rejected_reason") @db.VarChar(500)
   createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   progress ProductMilestoneProgress @relation(fields: [progressId], references: [id], onDelete: Cascade)
@@ -748,6 +761,8 @@ model ProductProgressReport {
   @@index([reportNo])
   @@index([virtualBatchId])
   @@index([itemCodeId])
+  @@index([approvalStatus])
+  @@index([workerId, approvalStatus])
   @@map("product_progress_reports")
 }
 

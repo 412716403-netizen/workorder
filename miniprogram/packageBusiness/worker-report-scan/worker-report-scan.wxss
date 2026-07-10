@@ -1,0 +1,40 @@
+.worker-report-scan-page {
+  min-height: 100vh;
+  background: var(--color-bg-page, #f7f8fa);
+}
+
+.worker-report-scan-loading {
+  padding: 80rpx 0;
+  text-align: center;
+  font-size: 28rpx;
+  color: var(--color-text-secondary, #8f959e);
+}
+
+.worker-report-scan-milestone {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 16rpx 20rpx;
+  background: #eef2ff;
+  border: 1rpx solid #c7d2fe;
+  border-radius: 12rpx;
+  flex-shrink: 0;
+}
+
+.worker-report-scan-milestone__tag {
+  flex-shrink: 0;
+  font-size: 22rpx;
+  font-weight: 600;
+  color: #4f46e5;
+}
+
+.worker-report-scan-milestone__name {
+  flex: 1;
+  min-width: 0;
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #1e3a8a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

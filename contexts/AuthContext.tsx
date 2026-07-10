@@ -81,11 +81,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const hasPerm = useCallback(
     (mod: string) => {
       if (!tenantCtx) return false;
-      return (
-        isTenantElevatedRole(tenantCtx.tenantRole) ||
-        tenantCtx.permissions.includes(mod) ||
-        tenantCtx.permissions.some(p => p.startsWith(`${mod}:`))
-      );
+      if (isTenantElevatedRole(tenantCtx.tenantRole)) return true;
+      const perms = tenantCtx.permissions;
+      // 成员未绑定角色（或角色无权限）时不得默认获得全模块权限。
+      if (!perms || perms.length === 0) return false;
+      return perms.includes(mod) || perms.some(p => p.startsWith(`${mod}:`));
     },
     [tenantCtx],
   );
@@ -192,37 +192,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     void refreshSessionSilently();
   }, []);
 
-  useEffect(() => {
+  /** 从服务端同步租户列表与有效权限（角色变更后避免 localStorage 残留 workbench 等键） */
+  const syncTenantPermissions = useCallback(() => {
     if (!isLoggedIn) return;
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') void refreshSessionSilently();
-    };
-    document.addEventListener('visibilitychange', onVisible);
-    return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [isLoggedIn]);
-
-  /**
-   * 后端 access 默认约 15m（JWT_EXPIRES_IN）。原先每 8m 刷新一次：若某次失败，下次已到 16m 之后，令牌已过期，仍在操作也会被踢。
-   * 改为约 4m 一次，并网络恢复时再试，给足重试窗口。
-   */
-  useEffect(() => {
-    if (!isLoggedIn) return;
-    const tick = () => void refreshSessionSilently();
-    const t = window.setInterval(tick, 4 * 60 * 1000);
-    window.addEventListener('online', tick);
-    return () => {
-      window.clearInterval(t);
-      window.removeEventListener('online', tick);
-    };
-  }, [isLoggedIn]);
-
-  useEffect(() => {
-    if (!isLoggedIn || !tenantCtx) return;
-    let cancelled = false;
+    const currentTenantId = (() => {
+      try {
+        const raw = localStorage.getItem('tenantCtx');
+        if (!raw) return null;
+        return (JSON.parse(raw) as TenantContext).tenantId ?? null;
+      } catch {
+        return null;
+      }
+    })();
     api.tenants
       .list()
       .then(list => {
-        if (cancelled) return;
         const infos: TenantInfo[] = list.map((t: any) => ({
           id: t.id, name: t.name, role: t.role,
           permissions: typeof t.permissions === 'string' ? JSON.parse(t.permissions) : (t.permissions || []),
@@ -232,8 +216,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }));
         setUserTenants(infos);
         localStorage.setItem('userTenants', JSON.stringify(infos));
-        const matched = infos.find(t => t.id === tenantCtx.tenantId);
-        if (matched) {
+        setTenantCtx(prev => {
+          const tid = prev?.tenantId ?? currentTenantId;
+          if (!tid) return prev;
+          const matched = infos.find(t => t.id === tid);
+          if (!matched) return prev;
           const next: TenantContext = {
             tenantId: matched.id,
             tenantName: matched.name,
@@ -244,15 +231,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             equipmentFeaturesEnabled: matched.equipmentFeaturesEnabled,
             industryKind: matched.industryKind,
           };
-          if (JSON.stringify(next) !== JSON.stringify(tenantCtx)) {
-            setTenantCtx(next);
-            localStorage.setItem('tenantCtx', JSON.stringify(next));
-          }
-        }
+          if (prev && JSON.stringify(next) === JSON.stringify(prev)) return prev;
+          localStorage.setItem('tenantCtx', JSON.stringify(next));
+          return next;
+        });
       })
       .catch(() => {});
-    return () => { cancelled = true; };
-  }, [isLoggedIn, tenantCtx?.tenantId]);
+  }, [isLoggedIn]);
+
+  useEffect(() => {
+    if (!isLoggedIn || !tenantCtx?.tenantId) return;
+    syncTenantPermissions();
+  }, [isLoggedIn, tenantCtx?.tenantId, syncTenantPermissions]);
+
+  /**
+   * 后端 access 默认约 15m（JWT_EXPIRES_IN）。原先每 8m 刷新一次：若某次失败，下次已到 16m 之后，令牌已过期，仍在操作也会被踢。
+   * 改为约 4m 一次，并网络恢复时再试，给足重试窗口。
+   * 回前台时同时刷新会话与租户权限。
+   */
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshSessionSilently();
+        syncTenantPermissions();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    const tick = () => {
+      void refreshSessionSilently();
+      syncTenantPermissions();
+    };
+    const t = window.setInterval(tick, 4 * 60 * 1000);
+    window.addEventListener('online', tick);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.clearInterval(t);
+      window.removeEventListener('online', tick);
+    };
+  }, [isLoggedIn, syncTenantPermissions]);
 
   const value: AuthContextValue = {
     currentUser,

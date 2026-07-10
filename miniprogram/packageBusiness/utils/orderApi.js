@@ -65,6 +65,38 @@ function listReportHistory(params) {
     .catch(() => ({ orderReports: [], productReports: [] }));
 }
 
+function listMyReportableTasks(params) {
+  return request({
+    path: `/orders/my-reportable-tasks${buildQs(params)}`,
+    method: 'GET',
+    timeout: 60000,
+  });
+}
+
+function listMyReportHistory(params) {
+  return request({
+    path: `/orders/my-report-history${buildQs(params)}`,
+    method: 'GET',
+    timeout: 60000,
+  }).catch(() => ({ orderReports: [], productReports: [] }));
+}
+
+function approveReport(reportId) {
+  return request({
+    path: `/orders/reports/${encodeURIComponent(reportId)}/approve`,
+    method: 'POST',
+    data: {},
+  });
+}
+
+function rejectReport(reportId, reason) {
+  return request({
+    path: `/orders/reports/${encodeURIComponent(reportId)}/reject`,
+    method: 'POST',
+    data: reason ? { reason } : {},
+  });
+}
+
 function listProductProgressAll() {
   return request({ path: '/orders/product-progress?all=true', method: 'GET', timeout: 60000 })
     .catch(() => []);
@@ -229,6 +261,10 @@ module.exports = {
   getOrderReportable,
   createOrderReport,
   listReportHistory,
+  listMyReportableTasks,
+  listMyReportHistory,
+  approveReport,
+  rejectReport,
   listProductProgressAll,
   createProductReport,
   fetchProductionRecords,

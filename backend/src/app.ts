@@ -8,7 +8,7 @@ import { env } from './config/env.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authMiddleware } from './middleware/auth.js';
 import { requireAdmin } from './middleware/requireAdmin.js';
-import { requireTenant, requirePermission } from './middleware/tenant.js';
+import { requireTenant, requirePermission, requireProductionModuleAccess } from './middleware/tenant.js';
 import { cacheControl } from './middleware/cacheControl.js';
 
 import authRoutes from './routes/auth.js';
@@ -104,8 +104,8 @@ app.use('/api/dashboard',  authMiddleware, requireTenant, apiLimiter, dashboardR
 app.use('/api/todos',      authMiddleware, requireTenant, apiLimiter, todosRoutes);
 app.use('/api/knowledge-base', authMiddleware, requireTenant, apiLimiter, knowledgeBaseRoutes);
 app.use('/api/plans',      authMiddleware, requireTenant, apiLimiter, plansRoutes);
-app.use('/api/orders',     authMiddleware, requireTenant, requirePermission('production'), apiLimiter, ordersRoutes);
-app.use('/api/production', authMiddleware, requireTenant, requirePermission('production'), apiLimiter, productionRoutes);
+app.use('/api/orders',     authMiddleware, requireTenant, requireProductionModuleAccess(), apiLimiter, ordersRoutes);
+app.use('/api/production', authMiddleware, requireTenant, requireProductionModuleAccess(), apiLimiter, productionRoutes);
 app.use('/api/psi',        authMiddleware, requireTenant, requirePermission('psi'),        apiLimiter, psiRoutes);
 app.use('/api/finance',    authMiddleware, requireTenant, requirePermission('finance'),    apiLimiter, financeRoutes);
 

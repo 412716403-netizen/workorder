@@ -49,13 +49,12 @@ function resolveMemberPermissions(membership: {
   roleId?: string | null;
   customRole?: { permissions: unknown } | null;
 }): string[] {
-  if (membership.role === 'owner' || membership.role === 'admin') return [...ALL_PERMISSIONS];
-  if (membership.roleId && membership.customRole) {
+  if (membership.role === 'owner') return [...ALL_PERMISSIONS];
+  // 已绑定自定义角色：只认角色权限，禁止回退 membership.permissions（其中可能残留旧的 workbench 等键）
+  if (membership.roleId) {
+    if (!membership.customRole) return [];
     const rolePerms = membership.customRole.permissions;
-    const fromRole = Array.isArray(rolePerms) ? (rolePerms as string[]) : [];
-    if (fromRole.length > 0) return fromRole;
-    const fromMembership = Array.isArray(membership.permissions) ? (membership.permissions as string[]) : [];
-    return fromMembership.length > 0 ? fromMembership : [];
+    return Array.isArray(rolePerms) ? (rolePerms as string[]) : [];
   }
   return Array.isArray(membership.permissions) ? membership.permissions as string[] : [];
 }
@@ -137,7 +136,7 @@ function tenantCacheKey(userId: string, tenantId?: string): string {
  * 拿当前生效的权限数组。命中 5s Redis 缓存就走缓存，否则查 DB。
  *
  * 调用方应先用 `isTenantElevatedRole(tenantRole)` 走快路径，
- * 只有非 owner/admin 才需要调本函数。
+ * 只有非 owner 才需要调本函数。
  */
 export async function loadEffectivePermissions(userId: string, tenantId: string): Promise<string[]> {
   const payload = await buildTenantPayload(userId, tenantId);
@@ -388,7 +387,7 @@ export async function refresh(oldRefreshToken: string) {
     await assertTenantActive(decoded.tenantId);
   }
 
-  // 仍然刷一下 tenantRole（owner/admin → member 这种降级，旧 access token 内
+  // 仍然刷一下 tenantRole（owner → member 这种降级，旧 access token 内
   // 的 tenantRole 必须随刷新失效）。permissions 不再放 JWT，无需在此加载。
   const tenantInfo = decoded.tenantId
     ? await buildTenantPayload(user.id, decoded.tenantId)

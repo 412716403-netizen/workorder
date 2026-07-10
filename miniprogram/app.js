@@ -1,6 +1,7 @@
 const { readTenants, readTenantCtx, clearSession } = require('./utils/session.js');
 const { syncTenantCtx } = require('./utils/tenantCtxSync.js');
 const { ensureFreshAccessToken } = require('./utils/request.js');
+const { resolveDefaultTabPath } = require('./utils/tabAccess.js');
 
 App({
   globalData: {},
@@ -24,7 +25,7 @@ App({
         const tenants = readTenants();
 
         if (ctx && ctx.tenantId) {
-          wx.switchTab({ url: '/pages/home/home' });
+          wx.switchTab({ url: resolveDefaultTabPath(ctx) });
           return;
         }
         if (tenants.length > 0) {

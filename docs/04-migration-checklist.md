@@ -37,6 +37,7 @@
 |------|------|------|------|
 | 计划单 CRUD、拆单、工序路线覆盖、下达工单、子计划 | 已落地 | `PlanOrder.milestoneNodeIds` 可选覆盖产品标准路线；详情可编辑；`POST /api/plans/:id/split` 继承源计划路线；`convertPlanToOrders` 优先计划路线 | 继续核对前端是否仍保留旧计算路径 |
 | 工单 CRUD、报工、可报量查询 | 已落地 | 已有 `/api/orders`、报工与产品进度接口；`GET /:id/reportable` 已合并 PMP；`createReport` / `createProductReport` 受 `allowExceedMaxReportQty` 控制做硬校验；新增 `PATCH /:id/dispatch-status` 用于关联工单模式下手动切换派发完成徽章（写 `dispatchStatusManual=true`） | 继续补充服务层与测试 |
+| 小程序自报工审核 | 已落地 | `approvalStatus`（migration `20260708120000`）；`requireApproval` 创建 PENDING；`GET /my-reportable-tasks` / `my-report-history`；`POST /reports/:id/approve\|reject`；可报占用含 PENDING | Web 流水 + 小程序待审列表已接 |
 | 工单派发完成状态（关联工单模式） | 已落地 | `ProductionOrder.dispatchStatus` / `dispatchStatusManual` 持久化字段；`recalcOrderDispatchStatusByStockIn` 在入库达标时返回 `dispatchCompletionPending` 供前端确认，确认后 `PATCH dispatch-status` 写 COMPLETED；回退仍自动写 IN_PROGRESS（`manual=true` 时跳过）；计划单徽章基于工单聚合（详见 `docs/01-business-rules.md §3.10`） | 后续如需"恢复自动判定"按钮，可补 `dispatchStatusManual=false` 重置接口 |
 | 生产操作记录 | 已落地 | 已有 `/api/production/records` 等接口；`createRecord` / `createRecordBatch` 在 `OUTSOURCE 已收回` 写入前调用 `enforceOutsourceReceiveQuantity`，受 `allowExceedMaxOutsourceReceiveQty` 控制做硬校验 | 梳理大体量前端页面与复杂业务校验 |
 | 生产关联模式 | 已落地 | 规则与实现并存，读口径统一为"PMP + milestone 双路求和"（含 `OrderDetailModal` / `OrderListView` / 后端 `getReportable`）；OutsourcePanel 展示统计端已"全收"含 `orderId` 历史记录；**待收回清单与收货录入弹窗按行级 `orderId` 决定 scope，跨模式可见、可收回**（方案 A）；`OrderListView` 工单卡 / 产品组卡圆下剩余数字保持原口径（不扣外协），**hover tooltip 上额外提示"外协剩余 Z 件"**作为补充信息；`ProductionConfigTab` 切换前已加 `useConfirm` 提示；删除工单在 `product` 模式下不再跳过基础校验；后端 `createReport`/`createProductReport` 加 `enforceReportQuantity` 硬校验（受 `allowExceedMaxReportQty` 控制） | 持续在更多页面（看板、打印）核对模式分流口径 |
@@ -77,7 +78,7 @@
 | 财务记录 CRUD | 已落地 | 已有 `/api/finance/records` | 补充统计、校验与测试说明 |
 | 资金账户余额 | 已落地 | `FinanceAccountType` 加期初余额；`GET /api/finance/account-balances` 实时聚合（期初+收-付）；`FinanceRecord.accountTypeId` 外键（migration `20260625120000` 已回填）；前端「资金账户」Tab | 后续可加按状态过滤（审核流）/账户报表 |
 | 账户间转账 | 已落地 | `POST /api/finance/transfers` 事务内落 PAYMENT+RECEIPT 同组（`ZZD` 单号） | 后续可加转账撤销/红冲 |
-| Dashboard / 工作台 | 已落地 | `/api/dashboard/*`：… **material-purchase-prices**、**report-prices** / **outsource-prices**（报工/外协工序单价：`economics_report_node_price` / `economics_outsource_node_price`；理论成本工序段消费）、**product-economics**（含 `theoreticalUnitCost` / `theoreticalCostBreakdown`）、notifications；…**工作台自定义页改为租户共享：仅 owner 可创建/编辑，默认仅创建者可见（不给 owner/admin 自动可见），角色按页授权只读查看**（`workbench:<pageId>`，列表 `GET /dashboard/workbench/pages` 含首页，存于 `system_settings.workbenchSharedPages`，首页仍按用户存 `preferences`）；**页面查看权限＝该页内容整体授权：被授权页内组件全部展示、金额不掩码，统计接口经 `augmentPermissionsWithWorkbench` 临时补齐模块返回完整数据；首页可单独授予 `workbench:<首页id>` 解除金额掩码；**首页可见性也纳入按页面授权**：角色启用按页面授权但未含首页时首页隐藏，未涉及工作台权限的角色首页仍默认可见，前端在无可见页时显示空态** | 前端 `WorkbenchView`（`WorkbenchPageAccessProvider` 下发 `fullAccess`）+ 角色管理「工作台」模块；存量用户旧 `preferences.dashboardWorkbench` 中的自定义页不会自动迁入共享池（仅保留个人首页），需重新创建 |
+| Dashboard / 工作台 | 已落地 | `/api/dashboard/*`：工作台页面存于 `system_settings.workbenchSharedPages`；owner 恒可见并可编辑全部页面；成员按裸 `workbench` 或 `workbench:<pageId>` 严格授权且只读，未授予任何工作台 key 时不显示入口；页面授权同时授予该页组件完整数据 | migration `20260710113000_tenant_member_role_cleanup` 将历史租户 `admin` 迁为 `worker`并清理旧 `dashboard` 权限；存量用户旧 `preferences.dashboardWorkbench` 中的自定义页不会自动迁入共享池 |
 | 追溯码插件 | 已落地 | `featurePlugins.traceability`：计划追溯码、扫码累加、扫码称重 UI gate | 插件中心开通；存量租户默认开启 |
 | 资料库 | 已落地 | `/api/knowledge-base/*`：文件夹/文档 CRUD、图片资源上传 | 前端 `KnowledgeBaseView`；插件 `knowledge_base` 可开关 |
 | 收支汇总、库存预警、订单进度 | 部分落地 | 已有后端聚合方向 | 继续按指标逐项校验计算口径 |
@@ -148,7 +149,8 @@
 | **工单中心** | **部分落地（P2+）** | 列表（搜索/仅未完成/分组/工序卡）+ 详情 + 手输报工 + 编辑 + 报工流水 + 待入库 + 领料；`packageBusiness/production-orders` 及子页 | 删除/打印/表单配置/矩阵报工留 Web |
 | **外协管理** | **部分落地（P2+）** | Hub 主列表 + 待发/待收回/流水 + 发出/收回录入 + 往来明细 + 物料外发/退回（复用 stock-out-confirm）；`packageBusiness/production-outsource` 及子页 | 表单配置/流水编辑删除/打印/色码矩阵/协作同步留 Web |
 | **返工管理** | **部分落地（P2+）** | Hub 主列表 + 待处理不良 + 处理/报工 + 流水编辑删除 + 详情 + 返工领料；`packageBusiness/production-rework` 及子页 | 表单配置/打印留 Web |
-| **扫码 Tab** | **部分落地** | TabBar **5 项**（扫码居中）；枢纽五类入口直达会话页；报工/返工页内底部弹窗选工序；外协可搜索加工厂；入库/查询无预备条件 | 产品关联模式外协/外协返工；待入库合并行 `orderIds` |
+| **报工 Tab** | **已落地** | TabBar 居中「报工」=`pages/scan`：可报任务 + 我的报工；`selfReport` 提交 PENDING；应用入口「报工待审」 | 原生 tabBar 无法按权限隐藏项（无 `process_report` 时页内空态） |
+| **扫码会话** | **部分落地** | 分包 `scan-session` 连续扫码；报工/返工页内选工序；外协可选加工厂 | 产品关联模式外协/外协返工；待入库合并行 `orderIds` |
 | **消息 Tab** | **部分落地** | 聊天式 UI：会话列表（系统消息/待办事项/协作合作单位）+ 聊天详情气泡（`pages/messages-chat`）；融合 `/dashboard/notifications` + `/todos` + `/collaboration/subcontract-transfers`；本地已读；Tab 角标 | 协作单据详情/操作仍依赖电脑端 |
 | **产品与 BOM** | **部分落地** | 档案列表（分类 Tab/搜索/分页/启用切换）+ 产品编辑（基本信息/颜色尺码）；`packageBusiness/basic-products` / `basic-product-edit`；**不含**工序/BOM 配置、批量导入 | 工序路线、工价、BOM、分类/报工 file·knowledge 附件上传留 Web |
 | **合作单位** | **部分落地** | 档案列表（分类 Tab/搜索/分页）+ 单位编辑（名称/分类/扩展字段）；`packageBusiness/basic-partners` / `basic-partner-edit`；**不含**批量导入 | 协作租户绑定、file/knowledge 附件上传留 Web |

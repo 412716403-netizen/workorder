@@ -49,6 +49,7 @@ import {
   resolveOrdersForProductAtTemplate,
   resolveTargetOrderForReport,
 } from '../utils/reportRowDerivations';
+import { reportQtyOccupies } from '../utils/reportQtyOccupies';
 
 export interface ReportModalData {
   order: ProductionOrder;
@@ -699,6 +700,7 @@ export function useReportModalState(args: UseReportModalStateArgs) {
         return item.quantity - (freshMilestone?.completedQuantity ?? reportModal.milestone.completedQuantity ?? 0);
       }
       const completedInMilestone = (freshMilestone?.reports || reportModal.milestone.reports || [])
+        .filter(r => reportQtyOccupies(r.approvalStatus))
         .filter(r => (r.variantId || '') === variantId)
         .reduce((s, r) => s + r.quantity, 0);
       return item.quantity - completedInMilestone;
@@ -724,9 +726,13 @@ export function useReportModalState(args: UseReportModalStateArgs) {
       if (prevTemplateId) {
         const prevMs = o.milestones.find(m => m.templateId === prevTemplateId);
         if (prevMs) {
-          const hasVariantReports = (prevMs.reports || []).some(r => r.variantId && r.variantId !== '');
+          const hasVariantReports = (prevMs.reports || []).some(
+            r => r.variantId && r.variantId !== '' && reportQtyOccupies(r.approvalStatus),
+          );
           if (hasVariantReports) {
-            (prevMs.reports || []).forEach(r => { if ((r.variantId || '') === vid) prevQty += r.quantity; });
+            (prevMs.reports || []).forEach(r => {
+              if ((r.variantId || '') === vid && reportQtyOccupies(r.approvalStatus)) prevQty += r.quantity;
+            });
           } else if ((prevMs.completedQuantity ?? 0) > 0 && orderTotalQty > 0) {
             prevQty += Math.round(((prevMs.completedQuantity ?? 0) * variantItemQty) / orderTotalQty);
           }
@@ -734,9 +740,13 @@ export function useReportModalState(args: UseReportModalStateArgs) {
       }
       const curMs = o.milestones.find(m => m.templateId === milestoneTemplateId);
       if (curMs) {
-        const hasVariantReports = (curMs.reports || []).some(r => r.variantId && r.variantId !== '');
+        const hasVariantReports = (curMs.reports || []).some(
+          r => r.variantId && r.variantId !== '' && reportQtyOccupies(r.approvalStatus),
+        );
         if (hasVariantReports) {
-          (curMs.reports || []).forEach(r => { if ((r.variantId || '') === vid) curQty += r.quantity; });
+          (curMs.reports || []).forEach(r => {
+            if ((r.variantId || '') === vid && reportQtyOccupies(r.approvalStatus)) curQty += r.quantity;
+          });
         } else if ((curMs.completedQuantity ?? 0) > 0 && orderTotalQty > 0) {
           curQty += Math.round(((curMs.completedQuantity ?? 0) * variantItemQty) / orderTotalQty);
         }

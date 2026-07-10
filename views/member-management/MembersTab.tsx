@@ -54,7 +54,7 @@ function MembersTab({
                       {m.roleName}
                     </span>
                   )}
-                  {canManage && m.role !== 'owner' && memberHasReportPerm(m, rolesList) && (
+                  {canManage && memberHasReportPerm(m, rolesList) && (
                     <button
                       type="button"
                       onClick={() => onOpenMilestoneModal(m)}

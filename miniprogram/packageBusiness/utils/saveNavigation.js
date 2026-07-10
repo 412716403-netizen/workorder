@@ -21,6 +21,9 @@ const LIST_ROUTES = {
   STOCK_OUT: '/packageBusiness/production-stock-out/production-stock-out',
   STOCK_IN_HISTORY: '/packageBusiness/production-order-stock-in-history/production-order-stock-in-history',
   PRODUCTION_ORDERS: '/packageBusiness/production-orders/production-orders',
+  /** 底部 Tab 报工（主包 pages/scan，非分包路径） */
+  WORKER_REPORT_TAB: '/pages/scan/scan',
+  REPORT_PENDING: '/packageBusiness/production-report-pending/production-report-pending',
   PRODUCTION_PLANS: '/packageBusiness/production-plans/production-plans',
   REWORK_DEFECT_FLOW: '/packageBusiness/production-rework-defect-flow/production-rework-defect-flow',
   REWORK_REPORT_FLOW: '/packageBusiness/production-rework-report-flow/production-rework-report-flow',

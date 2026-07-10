@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { Clock, Layers, Plus, History, User, Sliders, X, FileText, ChevronDown, ChevronRight, ScrollText, Pencil, Search, Package, RotateCcw, ArrowDownToLine, Split } from 'lucide-react';
+import { Clock, Layers, Plus, History, User, Sliders, X, FileText, ChevronDown, ChevronRight, ScrollText, Pencil, Search, Package, RotateCcw, ArrowDownToLine, Split, ClipboardCheck } from 'lucide-react';
 import {
   ProductionOrder,
   MilestoneStatus,
@@ -24,6 +24,7 @@ import {
   Warehouse,
   OrderDispatchStatus,
   DEFAULT_MATERIAL_FORM_SETTINGS,
+  ReportApprovalStatus,
 } from '../types';
 import { getOrderDispatchStatusStyle } from '../utils/dispatchStatusStyle';
 import {
@@ -33,6 +34,7 @@ import {
 import PlanProductDetail from './plan-order-list/PlanProductDetail';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { getRootOrderNumber, reworkRemainingAtNode } from '../utils/orderListHelpers';
+import { countPendingApprovalBatches } from '../utils/pendingApprovalBatchCount';
 import { useQuery } from '@tanstack/react-query';
 import { fetchProductionByFilter } from './production-ops/sharedFlowListHelpers';
 import { orders as ordersApi, production as productionApi } from '../services/api';
@@ -44,6 +46,7 @@ import PendingStockPanel from './order-list/PendingStockPanel';
 import MaterialIssueModal from './order-list/MaterialIssueModal';
 import ReportModal from './order-list/ReportModal';
 import ReportHistoryModal, { type ReportHistoryInitialSeed } from './order-list/ReportHistoryModal';
+import ReportPendingApprovalModal from './order-list/ReportPendingApprovalModal';
 import type { StockFlowInitialSeed } from './production-ops/stockFlowListUtils';
 import StockFlowListModal from './production-ops/StockFlowListModal';
 import StockDocDetailModal from './production-ops/StockDocDetailModal';
@@ -221,6 +224,21 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
     if (userPermissions.includes('production')) return true;
     return userPermissions.includes('production:orders_report_records:create');
   };
+  const canReviewReports = hasOrderPerm('production:orders_report_records:edit');
+
+  const pendingApprovalCountQuery = useQuery({
+    queryKey: ['flow.reportPendingApproval', 'toolbarCount', productionLinkMode],
+    enabled: canReviewReports,
+    queryFn: async () => {
+      const data = await ordersApi.listReportHistory({
+        approvalStatus: ReportApprovalStatus.PENDING,
+        productionLinkMode: 'product',
+      });
+      return countPendingApprovalBatches(data.orderReports ?? [], data.productReports ?? []);
+    },
+    staleTime: 30_000,
+  });
+  const pendingApprovalCount = pendingApprovalCountQuery.data ?? 0;
   const confirm = useConfirm();
   const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
   const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
@@ -265,6 +283,8 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   /** 从产品卡片打开工单流水时传入，用于预填搜索筛选 */
   const [orderFlowProductId, setOrderFlowProductId] = useState<string | null>(null);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  /** 报工审核（待审列表，与报工流水同级） */
+  const [showReportPendingModal, setShowReportPendingModal] = useState(false);
   /** 从工单详情打开报工流水时预填筛选 */
   const [reportHistorySeed, setReportHistorySeed] = useState<ReportHistoryInitialSeed | null>(null);
   const [showStockFlowModal, setShowStockFlowModal] = useState(false);
@@ -823,6 +843,16 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
           >
             <History className="w-4 h-4 shrink-0" />
             报工流水
+          </button>
+          )}
+          {canReviewReports && (
+          <button
+            type="button"
+            onClick={() => setShowReportPendingModal(true)}
+            className={outlineToolbarButtonClass}
+          >
+            <ClipboardCheck className="w-4 h-4 shrink-0" />
+            报工审核{pendingApprovalCount > 0 ? `（${pendingApprovalCount}）` : ''}
           </button>
           )}
           {hasOrderPerm('production:orders_pending_stock_in') && (
@@ -1628,6 +1658,18 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
         prodRecords={effectiveProdRecords}
         onOpenBatchDetail={(batch) => setReportDetailBatch(batch)}
         initialSeed={reportHistorySeed}
+      />
+
+      <ReportPendingApprovalModal
+        open={showReportPendingModal}
+        onClose={() => setShowReportPendingModal(false)}
+        orders={orders}
+        products={products}
+        categories={categories}
+        globalNodes={globalNodes}
+        dictionaries={dictionaries}
+        prodRecords={effectiveProdRecords}
+        productionLinkMode={productionLinkMode}
       />
 
       <StockFlowListModal

@@ -106,6 +106,17 @@ const WorkbenchView: React.FC = () => {
     if (ok) wb.deletePage(pageId);
   };
 
+  if (!wb.navAllowed) {
+    return (
+      <div className="py-12 text-center">
+        <p className="text-slate-500">暂无可查看的工作台页面</p>
+        <p className="mt-2 text-xs text-slate-400">
+          当前角色未授予工作台权限，请联系企业创建者在角色管理中勾选「工作台」。
+        </p>
+      </div>
+    );
+  }
+
   if (wb.isLoading) {
     return (
       <div className="flex min-h-[400px] items-center justify-center">
@@ -114,12 +125,14 @@ const WorkbenchView: React.FC = () => {
     );
   }
 
-  // 角色无任何可查看的工作台页面（首页被权限隐藏且无授权的自定义页面）
+  // 已授予工作台入口，但无任何可见页面（如仅勾选了未创建的自定义页、或按页授权未含首页）
   if (wb.config && wb.config.pages.length === 0) {
     return (
       <div className="py-12 text-center">
         <p className="text-slate-500">暂无可查看的工作台页面</p>
-        <p className="mt-2 text-xs text-slate-400">请联系企业管理员为你的角色分配工作台页面查看权限。</p>
+        <p className="mt-2 text-xs text-slate-400">
+          请联系企业创建者为你的角色分配工作台页面查看权限。
+        </p>
       </div>
     );
   }
@@ -142,14 +155,6 @@ const WorkbenchView: React.FC = () => {
 
   return (
     <div className="w-full min-w-0">
-      {wb.isFallback && (
-        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
-          无法从服务器加载布局，当前显示内置默认。请刷新或联系管理员检查数据库迁移。
-          <button type="button" onClick={() => void wb.refetch()} className="ml-2 font-bold underline">
-            重试
-          </button>
-        </div>
-      )}
       <WorkbenchTabBar
         pages={wb.sortedPages}
         activePageId={activePageId}

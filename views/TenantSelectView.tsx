@@ -76,7 +76,7 @@ export default function TenantSelectView({ tenants, onSelect, onCreateOrJoin, on
                 <div className="flex-1 text-left">
                   <div className="font-bold text-gray-800">{t.name}</div>
                   <div className="text-xs text-gray-400 mt-0.5 flex items-center gap-2">
-                    <span>{t.role === 'owner' ? '创建者' : t.role === 'admin' ? '管理员' : '成员'}</span>
+                    <span>{t.role === 'owner' ? '创建者' : '成员'}</span>
                     {pending && (
                       <span className="inline-flex items-center gap-0.5 text-amber-600 font-bold">
                         <Clock className="w-3 h-3" /> 审核中

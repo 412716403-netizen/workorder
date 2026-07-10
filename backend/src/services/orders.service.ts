@@ -6,7 +6,29 @@ import { genId } from '../utils/genId.js';
 import { sanitizeUpdate, sanitizeItems, normalizeDates } from '../utils/request.js';
 import { buildReportWeightBreakdown } from './reportWeightBreakdown.service.js';
 import { assertScanNotAlreadyUsed } from './scanValidate.service.js';
-import { OrderDispatchStatus, PlanStatus } from '../types/index.js';
+import {
+  OrderDispatchStatus,
+  PlanStatus,
+  ReportApprovalStatus,
+  REPORT_QTY_OCCUPYING_STATUSES,
+  REPORT_NO_PREFIX,
+  WORKER_SELF_REPORT_NO_PREFIX,
+  reportAllowsEditDelete,
+} from '../types/index.js';
+
+/** 占用可报额度的报工 where（APPROVED + PENDING；驳回不占） */
+const occupyingApprovalWhere = {
+  approvalStatus: { in: [...REPORT_QTY_OCCUPYING_STATUSES] },
+};
+
+function reportQtyOccupies(approvalStatus: string | null | undefined): boolean {
+  return (
+    approvalStatus === ReportApprovalStatus.APPROVED ||
+    approvalStatus === ReportApprovalStatus.PENDING ||
+    // 缺省/历史行按已审核占用
+    !approvalStatus
+  );
+}
 
 /**
  * 删除工单后：若该计划已无关联工单，将 `CONVERTED` 回退为可再次下达的状态。
@@ -190,6 +212,10 @@ export interface ListReportHistoryOpts {
   productIds?: string[];
   search?: string;
   productionLinkMode?: 'order' | 'product';
+  /** 按报工人过滤；传 `me` 时由 controller 解析为当前 userId */
+  workerId?: string;
+  /** 按审核状态过滤 */
+  approvalStatus?: string;
 }
 
 export async function listReportHistory(
@@ -213,6 +239,8 @@ export async function listReportHistory(
   if (opts.orderIds && opts.orderIds.length > 0) {
     orderWhere.milestone = { productionOrderId: { in: opts.orderIds } };
   }
+  if (opts.workerId) orderWhere.workerId = opts.workerId;
+  if (opts.approvalStatus) orderWhere.approvalStatus = opts.approvalStatus;
 
   const orderReportsRaw = await db.milestoneReport.findMany({
     where: orderWhere,
@@ -234,6 +262,10 @@ export async function listReportHistory(
       workerId: true,
       weight: true,
       materialBreakdown: true,
+      approvalStatus: true,
+      approvedAt: true,
+      approvedBy: true,
+      rejectedReason: true,
       createdAt: true,
       milestone: {
         select: {
@@ -274,6 +306,10 @@ export async function listReportHistory(
     workerId: r.workerId,
     weight: r.weight,
     materialBreakdown: r.materialBreakdown,
+    approvalStatus: r.approvalStatus,
+    approvedAt: r.approvedAt,
+    approvedBy: r.approvedBy,
+    rejectedReason: r.rejectedReason,
     createdAt: r.createdAt,
     milestoneId: r.milestone.id,
     milestoneName: r.milestone.name,
@@ -287,14 +323,19 @@ export async function listReportHistory(
     dueDate: r.milestone.productionOrder.dueDate,
   }));
 
-  // 关联产品模式下，额外返回 PMP.reports；非该模式时跳过以节省查询
+  // 关联产品模式或按工人查「我的报工」时返回 PMP.reports
   let productReports: Array<Record<string, unknown>> = [];
-  if (opts.productionLinkMode === 'product') {
+  const includePmp =
+    opts.productionLinkMode === 'product' ||
+    !!opts.workerId;
+  if (includePmp) {
     const pmpReportWhere: Record<string, unknown> = {};
     if (range.gte || range.lt) pmpReportWhere.timestamp = range;
     if (opts.productIds && opts.productIds.length > 0) {
       pmpReportWhere.progress = { productId: { in: opts.productIds } };
     }
+    if (opts.workerId) pmpReportWhere.workerId = opts.workerId;
+    if (opts.approvalStatus) pmpReportWhere.approvalStatus = opts.approvalStatus;
     const pmpReportsRaw = await db.productProgressReport.findMany({
       where: pmpReportWhere,
       orderBy: [{ timestamp: 'desc' }, { id: 'asc' }],
@@ -315,6 +356,10 @@ export async function listReportHistory(
         workerId: true,
         weight: true,
         materialBreakdown: true,
+        approvalStatus: true,
+        approvedAt: true,
+        approvedBy: true,
+        rejectedReason: true,
         createdAt: true,
         progress: {
           select: {
@@ -335,6 +380,16 @@ export async function listReportHistory(
       });
       for (const p of products) productNameMap.set(p.id, { name: p.name ?? null, sku: p.sku ?? null });
     }
+    // 工序名：从工序节点库取
+    const templateIds = [...new Set(pmpReportsRaw.map((r) => r.progress.milestoneTemplateId))];
+    const nodeNameMap = new Map<string, string>();
+    if (templateIds.length > 0) {
+    const nodes = await db.globalNodeTemplate.findMany({
+      where: { id: { in: templateIds } },
+      select: { id: true, name: true },
+    });
+    for (const n of nodes) nodeNameMap.set(n.id, n.name);
+    }
     productReports = pmpReportsRaw.map((r) => {
       const meta = productNameMap.get(r.progress.productId);
       return {
@@ -354,12 +409,17 @@ export async function listReportHistory(
         workerId: r.workerId,
         weight: r.weight,
         materialBreakdown: r.materialBreakdown,
+        approvalStatus: r.approvalStatus,
+        approvedAt: r.approvedAt,
+        approvedBy: r.approvedBy,
+        rejectedReason: r.rejectedReason,
         createdAt: r.createdAt,
         progressId: r.progress.id,
         productId: r.progress.productId,
         productName: meta?.name ?? null,
         sku: meta?.sku ?? null,
         templateId: r.progress.milestoneTemplateId,
+        milestoneName: nodeNameMap.get(r.progress.milestoneTemplateId) ?? null,
       };
     });
   }
@@ -396,9 +456,9 @@ async function verifyMilestoneTenant(milestoneId: string, tenantId: string) {
   return milestone;
 }
 
-async function recalcMilestoneCompleted(milestoneId: string) {
+export async function recalcMilestoneCompleted(milestoneId: string) {
   const totalCompleted = await basePrisma.milestoneReport.aggregate({
-    where: { milestoneId },
+    where: { milestoneId, approvalStatus: ReportApprovalStatus.APPROVED },
     _sum: { quantity: true },
   });
   await basePrisma.milestone.update({
@@ -407,19 +467,83 @@ async function recalcMilestoneCompleted(milestoneId: string) {
   });
 }
 
+/** 同 reportBatchId 的多规格报工共用一张报工单号（对齐 Web ReportModal）。 */
+async function resolveReportNoForBatch(
+  tenantId: string,
+  reportBatchId: unknown,
+  bodyReportNo: unknown,
+  prefix: string = REPORT_NO_PREFIX,
+): Promise<string> {
+  const explicit =
+    typeof bodyReportNo === 'string' && bodyReportNo.trim() ? bodyReportNo.trim() : null;
+  if (explicit) return explicit;
+
+  const batchId =
+    typeof reportBatchId === 'string' && reportBatchId.trim() ? reportBatchId.trim() : null;
+  if (batchId) {
+    const [fromOrder, fromProduct] = await Promise.all([
+      basePrisma.milestoneReport.findFirst({
+        where: {
+          reportBatchId: batchId,
+          reportNo: { not: null },
+          milestone: { productionOrder: { tenantId } },
+        },
+        select: { reportNo: true },
+        orderBy: { timestamp: 'asc' },
+      }),
+      basePrisma.productProgressReport.findFirst({
+        where: {
+          reportBatchId: batchId,
+          reportNo: { not: null },
+          progress: { tenantId },
+        },
+        select: { reportNo: true },
+        orderBy: { timestamp: 'asc' },
+      }),
+    ]);
+    const existing = fromOrder?.reportNo || fromProduct?.reportNo;
+    if (existing) return existing;
+  }
+
+  return generateReportNo(prefix, tenantId);
+}
+
+export type CreateReportOpts = {
+  /** 当前登录用户；requireApproval 时校验本人与工序分配 */
+  actorUserId?: string;
+};
+
 export async function createReport(
   tenantId: string,
   milestoneId: string,
   body: Record<string, unknown>,
+  opts: CreateReportOpts = {},
 ) {
   const verified = await verifyMilestoneTenant(milestoneId, tenantId);
-  const reportNo = await generateReportNo('BG', tenantId);
+  const requireApproval = body.requireApproval === true;
+  const reportNoPrefix = requireApproval ? WORKER_SELF_REPORT_NO_PREFIX : REPORT_NO_PREFIX;
+  const reportNo = await resolveReportNoForBatch(
+    tenantId,
+    body.reportBatchId,
+    body.reportNo,
+    reportNoPrefix,
+  );
 
   /** 报工称重：若工序开启 enableWeightOnReport 且传入 weight，拉当前 BOM 现算 breakdown，固化到报工记录 */
   const milestone = await basePrisma.milestone.findUnique({
     where: { id: milestoneId },
     select: { templateId: true, productionOrder: { select: { id: true, productId: true } } },
   });
+
+  if (requireApproval) {
+    const { assertWorkerSelfReportAllowed } = await import('./workerReport.service.js');
+    await assertWorkerSelfReportAllowed({
+      tenantId,
+      actorUserId: opts.actorUserId,
+      workerId: body.workerId as string | undefined,
+      templateId: milestone?.templateId,
+    });
+  }
 
   // 报工最大数量硬校验（受 SystemSetting.allowExceedMaxReportQty 控制）
   if (milestone?.productionOrder?.id && milestone.templateId) {
@@ -454,6 +578,11 @@ export async function createReport(
       })
     : { weight: null, materialBreakdown: null };
 
+  const approvalStatus = requireApproval
+    ? ReportApprovalStatus.PENDING
+    : ReportApprovalStatus.APPROVED;
+  const now = new Date();
+
   const report = await basePrisma.milestoneReport.create({
     data: {
       id: (body.id as string) || genId('rpt'),
@@ -469,19 +598,45 @@ export async function createReport(
       customData: (body.customData as any) || {},
       notes: body.notes,
       rate: body.rate,
-      workerId: body.workerId,
+      workerId: requireApproval ? opts.actorUserId : body.workerId,
       weight: weightPayload.weight,
       materialBreakdown: weightPayload.materialBreakdown as any,
       virtualBatchId: (body.virtualBatchId as string | undefined) || null,
       itemCodeId: (body.itemCodeId as string | undefined) || null,
+      approvalStatus,
+      approvedAt: requireApproval ? null : now,
+      approvedBy: requireApproval ? null : (opts.actorUserId ?? null),
     } as any,
   });
-  await recalcMilestoneCompleted(milestoneId);
+  // PENDING 不推进 completedQuantity；APPROVED 才 recalc
+  if (!requireApproval) {
+    await recalcMilestoneCompleted(milestoneId);
+  }
   await basePrisma.milestone.update({
     where: { id: milestoneId },
     data: { status: 'IN_PROGRESS' },
   });
   return report;
+}
+
+async function assertReportAllowsMutation(
+  reportId: string,
+  table: 'milestone' | 'product',
+): Promise<void> {
+  const row =
+    table === 'milestone'
+      ? await basePrisma.milestoneReport.findUnique({
+          where: { id: reportId },
+          select: { approvalStatus: true, reportNo: true },
+        })
+      : await basePrisma.productProgressReport.findUnique({
+          where: { id: reportId },
+          select: { approvalStatus: true, reportNo: true },
+        });
+  if (!row) throw new AppError(404, '报工记录不存在');
+  if (!reportAllowsEditDelete(row.approvalStatus, row.reportNo)) {
+    throw new AppError(409, '该报工已审核或已驳回，不可修改或删除');
+  }
 }
 
 export async function updateReport(
@@ -491,6 +646,7 @@ export async function updateReport(
   body: Record<string, unknown>,
 ) {
   await verifyMilestoneTenant(milestoneId, tenantId);
+  await assertReportAllowsMutation(reportId, 'milestone');
   const data = sanitizeUpdate(body);
   normalizeDates(data);
 
@@ -546,6 +702,7 @@ export async function deleteReport(
   reportId: string,
 ) {
   await verifyMilestoneTenant(milestoneId, tenantId);
+  await assertReportAllowsMutation(reportId, 'milestone');
   await basePrisma.milestoneReport.delete({ where: { id: reportId } });
   await recalcMilestoneCompleted(milestoneId);
   return { message: '已删除' };
@@ -559,6 +716,7 @@ export async function deleteReport(
  * （详见 docs/05-production-link-mode.md）。计算「上道工序完成量」时必须把两路相加，否则会
  * 在产品模式下漏算 PMP，导致 maxReportable / remaining 长期为 0。
  */
+/** 进度口径：仅 APPROVED（completedQuantity 字段） */
 async function pmpCompletedAtTemplate(
   db: TenantPrismaClient,
   productId: string,
@@ -571,37 +729,76 @@ async function pmpCompletedAtTemplate(
   return rows.reduce((s, p) => s + Number(p.completedQuantity ?? 0), 0);
 }
 
+/** 可报占用：APPROVED + PENDING 报工数量（不含 REJECTED） */
+async function pmpOccupiedAtTemplate(
+  db: TenantPrismaClient,
+  productId: string,
+  templateId: string,
+): Promise<number> {
+  const progresses = await db.productMilestoneProgress.findMany({
+    where: { productId, milestoneTemplateId: templateId },
+    select: { id: true },
+  });
+  if (progresses.length === 0) return 0;
+  const agg = await db.productProgressReport.aggregate({
+    where: {
+      progressId: { in: progresses.map((p) => p.id) },
+      ...occupyingApprovalWhere,
+    },
+    _sum: { quantity: true },
+  });
+  return Number(agg._sum?.quantity ?? 0);
+}
+
 export async function getReportable(db: TenantPrismaClient, orderId: string) {
   const order = await db.productionOrder.findUnique({
     where: { id: orderId },
     include: {
       items: true,
-      milestones: { include: { reports: true }, orderBy: { sortOrder: 'asc' } },
+      milestones: {
+        include: {
+          reports: {
+            select: {
+              quantity: true,
+              defectiveQuantity: true,
+              approvalStatus: true,
+            },
+          },
+        },
+        orderBy: { sortOrder: 'asc' },
+      },
     },
   });
   if (!order) throw new AppError(404, '工单不存在');
 
   const totalQty = order.items.reduce((s, i) => s + Number(i.quantity), 0);
 
-  // 预拉所有工序的 PMP 完成量，避免循环里反复查
-  const pmpByTpl = new Map<string, number>();
+  // 预拉：进度（仅 APPROVED）用于顺控；占用（APPROVED+PENDING）用于 remaining
+  const pmpCompletedByTpl = new Map<string, number>();
+  const pmpOccupiedByTpl = new Map<string, number>();
   await Promise.all(
     order.milestones.map(async (m) => {
-      pmpByTpl.set(m.templateId, await pmpCompletedAtTemplate(db, order.productId, m.templateId));
+      const [completed, occupied] = await Promise.all([
+        pmpCompletedAtTemplate(db, order.productId, m.templateId),
+        pmpOccupiedAtTemplate(db, order.productId, m.templateId),
+      ]);
+      pmpCompletedByTpl.set(m.templateId, completed);
+      pmpOccupiedByTpl.set(m.templateId, occupied);
     }),
   );
-  const combinedAt = (idx: number) => {
+  const combinedCompletedAt = (idx: number) => {
     if (idx < 0) return totalQty;
     const ms = order.milestones[idx];
-    return Number(ms.completedQuantity) + (pmpByTpl.get(ms.templateId) ?? 0);
+    return Number(ms.completedQuantity) + (pmpCompletedByTpl.get(ms.templateId) ?? 0);
   };
 
   return order.milestones.map((ms, idx) => {
-    const reported = ms.reports.reduce((s, r) => s + Number(r.quantity), 0);
-    const defective = ms.reports.reduce((s, r) => s + Number(r.defectiveQuantity), 0);
-    // 上道完成量：PMP（产品池）+ milestone（本工单）合并；首道用工单总量
-    const prevCompleted = idx > 0 ? combinedAt(idx - 1) : totalQty;
-    const reportedCombined = reported + (pmpByTpl.get(ms.templateId) ?? 0);
+    const occupying = ms.reports.filter((r) => reportQtyOccupies(r.approvalStatus));
+    const reported = occupying.reduce((s, r) => s + Number(r.quantity), 0);
+    const defective = occupying.reduce((s, r) => s + Number(r.defectiveQuantity), 0);
+    // 上道完成量：仅 APPROVED（进度）；首道用工单总量
+    const prevCompleted = idx > 0 ? combinedCompletedAt(idx - 1) : totalQty;
+    const reportedCombined = reported + (pmpOccupiedByTpl.get(ms.templateId) ?? 0);
     return {
       milestoneId: ms.id,
       templateId: ms.templateId,
@@ -644,14 +841,23 @@ async function enforceReportQuantity(
   if (scope.mode === 'order') {
     const order = await db.productionOrder.findUnique({
       where: { id: scope.orderId },
-      include: { items: true, milestones: { include: { reports: true } } },
+      include: {
+        items: true,
+        milestones: {
+          include: {
+            reports: { select: { quantity: true, approvalStatus: true } },
+          },
+        },
+      },
     });
     if (!order) throw new AppError(404, '工单不存在');
     const totalQty = order.items.reduce((s, i) => s + Number(i.quantity), 0);
     const ms = order.milestones.find((m) => m.templateId === scope.templateId);
     if (!ms) throw new AppError(404, '工序不存在');
-    const reported = ms.reports.reduce((s, r) => s + Number(r.quantity), 0);
-    const pmpReported = await pmpCompletedAtTemplate(db, order.productId, scope.templateId);
+    const reported = ms.reports
+      .filter((r) => reportQtyOccupies(r.approvalStatus))
+      .reduce((s, r) => s + Number(r.quantity), 0);
+    const pmpReported = await pmpOccupiedAtTemplate(db, order.productId, scope.templateId);
     if (reported + pmpReported + scope.addQty > totalQty) {
       throw new AppError(
         400,
@@ -663,7 +869,14 @@ async function enforceReportQuantity(
 
   const orders = await db.productionOrder.findMany({
     where: { productId: scope.productId },
-    include: { items: true, milestones: { include: { reports: true } } },
+    include: {
+      items: true,
+      milestones: {
+        include: {
+          reports: { select: { quantity: true, approvalStatus: true } },
+        },
+      },
+    },
   });
   const totalQty = orders.reduce(
     (s, o) => s + o.items.reduce((a, i) => a + Number(i.quantity), 0),
@@ -672,9 +885,13 @@ async function enforceReportQuantity(
   let reported = 0;
   for (const o of orders) {
     const ms = o.milestones.find((m) => m.templateId === scope.templateId);
-    if (ms) reported += ms.reports.reduce((s, r) => s + Number(r.quantity), 0);
+    if (ms) {
+      reported += ms.reports
+        .filter((r) => reportQtyOccupies(r.approvalStatus))
+        .reduce((s, r) => s + Number(r.quantity), 0);
+    }
   }
-  const pmpReported = await pmpCompletedAtTemplate(db, scope.productId, scope.templateId);
+  const pmpReported = await pmpOccupiedAtTemplate(db, scope.productId, scope.templateId);
   if (reported + pmpReported + scope.addQty > totalQty) {
     throw new AppError(
       400,
@@ -705,9 +922,9 @@ export async function listProductProgress(
   return { data, total, page, pageSize };
 }
 
-async function recalcProgressCompleted(progressId: string) {
+export async function recalcProgressCompleted(progressId: string) {
   const totalCompleted = await basePrisma.productProgressReport.aggregate({
-    where: { progressId },
+    where: { progressId, approvalStatus: ReportApprovalStatus.APPROVED },
     _sum: { quantity: true },
   });
   await basePrisma.productMilestoneProgress.update({
@@ -720,8 +937,21 @@ export async function createProductReport(
   db: TenantPrismaClient,
   tenantId: string,
   body: Record<string, unknown>,
+  opts: CreateReportOpts = {},
 ) {
-  const { productId, variantId, milestoneTemplateId, ...reportData } = body;
+  const { productId, variantId, milestoneTemplateId, requireApproval: requireApprovalRaw, ...reportData } =
+    body;
+  const requireApproval = requireApprovalRaw === true;
+
+  if (requireApproval) {
+    const { assertWorkerSelfReportAllowed } = await import('./workerReport.service.js');
+    await assertWorkerSelfReportAllowed({
+      tenantId,
+      actorUserId: opts.actorUserId,
+      workerId: reportData.workerId as string | undefined,
+      templateId: milestoneTemplateId as string,
+    });
+  }
 
   // 报工最大数量硬校验（受 SystemSetting.allowExceedMaxReportQty 控制）
   await enforceReportQuantity(db, tenantId, {
@@ -766,7 +996,12 @@ export async function createProductReport(
     });
   }
 
-  const reportNo = await generateReportNo('BG', tenantId);
+  const reportNo = await resolveReportNoForBatch(
+    tenantId,
+    reportData.reportBatchId,
+    reportData.reportNo,
+    requireApproval ? WORKER_SELF_REPORT_NO_PREFIX : REPORT_NO_PREFIX,
+  );
   const weightPayload = await buildReportWeightBreakdown({
     tenantId,
     productId: productId as string,
@@ -775,6 +1010,10 @@ export async function createProductReport(
     quantity: Number(reportData.quantity) || 0,
     weight: reportData.weight,
   });
+  const approvalStatus = requireApproval
+    ? ReportApprovalStatus.PENDING
+    : ReportApprovalStatus.APPROVED;
+  const now = new Date();
   const report = await basePrisma.productProgressReport.create({
     data: {
       id: (reportData.id as string) || genId('ppr'),
@@ -790,15 +1029,20 @@ export async function createProductReport(
       customData: (reportData.customData as any) || {},
       notes: reportData.notes,
       rate: reportData.rate,
-      workerId: reportData.workerId,
+      workerId: requireApproval ? opts.actorUserId : reportData.workerId,
       weight: weightPayload.weight,
       materialBreakdown: weightPayload.materialBreakdown as any,
       virtualBatchId: (reportData.virtualBatchId as string | undefined) || null,
       itemCodeId: (reportData.itemCodeId as string | undefined) || null,
+      approvalStatus,
+      approvedAt: requireApproval ? null : now,
+      approvedBy: requireApproval ? null : (opts.actorUserId ?? null),
     } as any,
   });
 
-  await recalcProgressCompleted(progress.id);
+  if (!requireApproval) {
+    await recalcProgressCompleted(progress.id);
+  }
   return report;
 }
 
@@ -814,6 +1058,8 @@ export async function updateProductReport(
     where: { id: report.progressId },
   });
   if (!progress) throw new AppError(404, '报工记录不存在');
+
+  await assertReportAllowsMutation(reportId, 'product');
 
   const updateData = sanitizeUpdate(body);
   normalizeDates(updateData);
@@ -852,6 +1098,8 @@ export async function deleteProductReport(
     where: { id: report.progressId },
   });
   if (!progress) throw new AppError(404, '报工记录不存在');
+
+  await assertReportAllowsMutation(reportId, 'product');
 
   await basePrisma.productProgressReport.delete({ where: { id: reportId } });
   await recalcProgressCompleted(report.progressId);

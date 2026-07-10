@@ -41,6 +41,7 @@ const _require0 =
 const _require1 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require1.readNavBarMetrics,readWindowMetrics = _require1.readWindowMetrics,computePlanCreateHeaderHeight = _require1.computePlanCreateHeaderHeight;
 const _require10 = require('../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require10.afterMatrixKeyboardOpen;
 const _require11 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require11.LIST_ROUTES,buildReportHistoryListUrl = _require11.buildReportHistoryListUrl,afterSaveReturnToList = _require11.afterSaveReturnToList;
+const { reportAllowsEditDelete } = require('../../utils/reportApprovalMutability.js');
 
 function computeHeaderBlockHeight(nav) {
   return computePlanCreateHeaderHeight(nav);
@@ -108,8 +109,7 @@ Page({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
       headerBlockHeight: computeHeaderBlockHeight(nav),
-      canEdit: this._canEdit,
-      canDelete: this._canDelete
+      scrollHeight: computeScrollHeight(nav, false),
     });
     this.loadDetail();
   },
@@ -150,6 +150,7 @@ Page({
 
   refreshViewModel() {
     if (!this._batch) return;
+    const nav = readNavBarMetrics();
     const detail = buildBatchDetailView(this._batch, {
       products: this._products,
       categories: this._categories,
@@ -159,11 +160,65 @@ Page({
       categoryMap: this._categoryMap,
       showAmount: true
     });
-    const showFooter = !detail.isOutsourceReceive && (this._canEdit || this._canDelete) && !this.data.editing;
+    const first = this._batch.first;
+    const canMutate = reportAllowsEditDelete(
+      first.approvalStatus,
+      this._batch.reportNo || first.reportNo,
+    );
+    const showFooter = !detail.isOutsourceReceive
+      && (this._canEdit || this._canDelete)
+      && canMutate
+      && !this.data.editing;
     this.setData({
       detail,
+      canEdit: this._canEdit && canMutate,
+      canDelete: this._canDelete && canMutate,
       showFooter,
-      scrollHeight: computeScrollHeight(readNavBarMetrics(), showFooter || this.data.editing)
+      scrollHeight: computeScrollHeight(nav, showFooter || this.data.editing)
+    });
+  },
+
+  applyBatchDetailView() {
+    if (!this._batch) {
+      const nav = readNavBarMetrics();
+      this.setData({
+        loading: false,
+        editing: false,
+        detail: null,
+        showFooter: false,
+        canEdit: false,
+        canDelete: false,
+        scrollHeight: computeScrollHeight(nav, false),
+      });
+      return;
+    }
+    const nav = readNavBarMetrics();
+    const detail = buildBatchDetailView(this._batch, {
+      products: this._products,
+      categories: this._categories,
+      dictionaries: this._dictionaries,
+      nodes: this._nodes,
+      productMap: this._productMap,
+      categoryMap: this._categoryMap,
+      showAmount: true
+    });
+    const first = this._batch.first;
+    const canMutate = reportAllowsEditDelete(
+      first.approvalStatus,
+      this._batch.reportNo || first.reportNo,
+    );
+    const showFooter = !detail.isOutsourceReceive
+      && (this._canEdit || this._canDelete)
+      && canMutate
+      && !this.data.editing;
+    this.setData({
+      loading: false,
+      editing: false,
+      detail,
+      canEdit: this._canEdit && canMutate,
+      canDelete: this._canDelete && canMutate,
+      showFooter,
+      scrollHeight: computeScrollHeight(nav, showFooter || this.data.editing),
     });
   },
 
@@ -172,7 +227,14 @@ Page({
       this.setData({ loading: false, detail: null });
       return;
     }
-    this.setData({ loading: true });
+    this.setData({
+      loading: true,
+      showFooter: false,
+      detail: null,
+      canEdit: false,
+      canDelete: false,
+      editing: false,
+    });
     try {
       const _await$Promise$all = await Promise.all([
         fetchTenantConfig(),
@@ -205,14 +267,21 @@ Page({
       this._productionLinkMode = productionLinkMode;
 
       if (!this._batch) {
-        this.setData({ loading: false, detail: null, showFooter: false });
+        this.applyBatchDetailView();
         return;
       }
 
-      this.setData({ loading: false, editing: false });
-      this.refreshViewModel();
+      this.applyBatchDetailView();
     } catch (err) {
-      this.setData({ loading: false, detail: null, showFooter: false });
+      const nav = readNavBarMetrics();
+      this.setData({
+        loading: false,
+        detail: null,
+        showFooter: false,
+        canEdit: false,
+        canDelete: false,
+        scrollHeight: computeScrollHeight(nav, false),
+      });
       wx.showToast({ title: err && err.message || '加载失败', icon: 'none' });
     }
   },
@@ -264,6 +333,11 @@ Page({
       }
       return;
     }
+    const first = this._batch && this._batch.first;
+    if (first && !reportAllowsEditDelete(first.approvalStatus, this._batch.reportNo || first.reportNo)) {
+      wx.showToast({ title: '该报工已审核或已驳回，不可编辑', icon: 'none' });
+      return;
+    }
 
     const detail = buildBatchDetailView(this._batch, {
       products: this._products,
@@ -276,7 +350,6 @@ Page({
     });
     detail.editRate = detail.batchUnitRate > 0 ? String(detail.batchUnitRate) : '';
 
-    const first = this._batch.first;
     this._editProduct = this._productMap.get(first.productId) || null;
 
     let editMatrixLayout = null;
@@ -497,6 +570,11 @@ Page({
       if (this.data.detail && this.data.detail.isOutsourceReceive) {
         wx.showToast({ title: '外协收回请在电脑端删除', icon: 'none' });
       }
+      return;
+    }
+    const first = this._batch.first;
+    if (!reportAllowsEditDelete(first.approvalStatus, this._batch.reportNo || first.reportNo)) {
+      wx.showToast({ title: '该报工已审核或已驳回，不可删除', icon: 'none' });
       return;
     }
     wx.showModal({

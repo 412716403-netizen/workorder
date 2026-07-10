@@ -2,6 +2,7 @@ const _require = require('../../config.js'),API_BASE = _require.API_BASE;
 const _require2 = require('../../config/branding.js'),BRAND_NAME = _require2.BRAND_NAME,BRAND_LOGO_PATH = _require2.BRAND_LOGO_PATH,BRAND_TAGLINE = _require2.BRAND_TAGLINE;
 const _require3 = require('../../utils/unsavedFormDrafts.js'),clearUnsavedFormDrafts = _require3.clearUnsavedFormDrafts;
 const { clearFeaturePluginsCache } = require('../../utils/featurePlugins.js');
+const { resolveDefaultTabPath } = require('../../utils/tabAccess.js');
 
 /**
  * 与网页端 AuthContext.handleLogin 一致：
@@ -81,7 +82,10 @@ Page({
                 equipmentFeaturesEnabled: matched.equipmentFeaturesEnabled !== false
               })
             );
-            wx.switchTab({ url: '/pages/home/home' });
+            wx.switchTab({ url: resolveDefaultTabPath({
+              tenantRole: matched.role,
+              permissions: matched.permissions || [],
+            }) });
             return;
           }
         }

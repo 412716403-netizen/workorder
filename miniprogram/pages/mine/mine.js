@@ -4,7 +4,6 @@ const { clearSession, readTenantCtx } = require('../../utils/session.js');
 
 function roleLabel(role) {
   if (role === 'owner') return '创建者';
-  if (role === 'admin') return '管理员';
   return '成员';
 }
 

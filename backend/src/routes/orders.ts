@@ -27,6 +27,8 @@ const createReportSchema = z.object({
   notes: z.string().optional(),
   rate: z.number().optional(),
   timestamp: z.string().optional(),
+  /** 小程序 Tab 自报工：true → PENDING 待审 */
+  requireApproval: z.boolean().optional(),
 }).passthrough();
 
 const createProductReportSchema = z.object({
@@ -44,6 +46,11 @@ const createProductReportSchema = z.object({
   notes: z.string().optional(),
   rate: z.number().optional(),
   timestamp: z.string().optional(),
+  requireApproval: z.boolean().optional(),
+}).passthrough();
+
+const rejectReportSchema = z.object({
+  reason: z.string().max(500).optional(),
 }).passthrough();
 
 const updateReportSchema = z.object({
@@ -86,6 +93,32 @@ router.get(
   '/report-history',
   requireSubPermission('production:orders_report_records:view'),
   ctrl.listReportHistory,
+);
+
+/** 工人可报任务（成员分配工序 ∩ remaining>0） */
+router.get(
+  '/my-reportable-tasks',
+  requireProductionRead(),
+  ctrl.listMyReportableTasks,
+);
+
+/** 工人我的报工流水（无需 orders_report_records:view） */
+router.get(
+  '/my-report-history',
+  requireProductionRead(),
+  ctrl.listMyReportHistory,
+);
+
+router.post(
+  '/reports/:reportId/approve',
+  requireSubPermission('production:orders_report_records:edit'),
+  ctrl.approveReport,
+);
+router.post(
+  '/reports/:reportId/reject',
+  requireSubPermission('production:orders_report_records:edit'),
+  validate(rejectReportSchema),
+  ctrl.rejectReport,
 );
 
 router.get(

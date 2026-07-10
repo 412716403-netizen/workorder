@@ -13,6 +13,7 @@ function clearSession() {
   wx.removeStorageSync('tenantCtx');
   wx.removeStorageSync('userTenants');
   wx.removeStorageSync('currentUser');
+  wx.removeStorageSync('messagesTabBadge');
 }
 
 function readTenants() {

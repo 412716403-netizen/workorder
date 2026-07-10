@@ -1,11 +1,12 @@
 /**
  * 报工单号生成 (Phase 3.8 抽离自 views/order-list/ReportModal.tsx)。
  *
- * 规则：BG + 当日 yyyymmdd + - + 4 位流水。流水按"当日已存在的不同报工批次数 + 1"。
+ * 规则：{REPORT_NO_PREFIX} + 当日 yyyymmdd + - + 4 位流水。流水按"当日已存在的不同报工批次数 + 1"。
  * - 一个 reportBatchId 计 1 次（同批次的多条记录算同号）
  * - 没有 reportBatchId 时退化为 reportNo / id 做去重
  */
 import type { ProductionOrder, ProductMilestoneProgress } from '../types';
+import { REPORT_NO_PREFIX } from '../types';
 import { toLocalCompactYmd } from './localDateTime';
 
 interface ReportLike {
@@ -15,7 +16,7 @@ interface ReportLike {
   reportNo?: string | null;
 }
 
-/** 计算当日下一个报工批次号：BGyyyymmdd-NNNN */
+/** 计算当日下一个报工批次号：{prefix}yyyymmdd-NNNN */
 export function generateNextReportNo(
   orders: ReadonlyArray<Pick<ProductionOrder, 'milestones'>>,
   productMilestoneProgresses: ReadonlyArray<Pick<ProductMilestoneProgress, 'reports'>>,
@@ -43,5 +44,5 @@ export function generateNextReportNo(
 
   const seq = keys.size + 1;
   const seqStr = String(seq).padStart(4, '0');
-  return `BG${todayStr}-${seqStr}`;
+  return `${REPORT_NO_PREFIX}${todayStr}-${seqStr}`;
 }

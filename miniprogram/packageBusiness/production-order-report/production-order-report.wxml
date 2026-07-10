@@ -31,7 +31,7 @@
             </view>
             <text wx:if="{{qtyHint}}" class="report-context-card__hint">{{qtyHint}}</text>
           </view>
-          <view wx:if="{{scanEnabled}}" class="report-context-card__scan" bindtap="onGoScan">
+          <view wx:if="{{scanEnabled && !selfReport}}" class="report-context-card__scan" bindtap="onGoScan">
             <image class="report-context-card__scan-icon" src="/assets/tab/scan.png" mode="aspectFit" />
             <text class="report-context-card__scan-text">扫码报工</text>
           </view>
@@ -39,7 +39,12 @@
       </view>
 
       <view class="plan-form-card">
+        <view wx:if="{{selfReport}}" class="plan-form-cell">
+          <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>生产人员</text>
+          <text class="plan-form-cell__value">{{workerName || '本人'}}</text>
+        </view>
         <searchable-worker-select
+          wx:else
           cell="{{true}}"
           required="{{true}}"
           label="生产人员"
@@ -91,6 +96,9 @@
             <text class="report-qty-summary__value">{{qtySummary.remainingText}}</text>
           </view>
           <text wx:if="{{qtySummary.detailText}}" class="report-qty-summary__detail">{{qtySummary.detailText}}</text>
+        </view>
+        <view wx:elif="{{formMode === 'matrix' && qtyHint}}" class="report-qty-summary report-qty-summary--compact">
+          <text class="report-qty-summary__detail">{{qtyHint}}</text>
         </view>
 
         <block wx:if="{{formMode === 'matrix' && matrixLayout}}">
@@ -256,7 +264,7 @@
   />
 
   <scan-batch-modal
-    wx:if="{{scanEnabled}}"
+    wx:if="{{scanEnabled && !selfReport}}"
     open="{{scanBatchOpen}}"
     rows="{{scanBatchRows}}"
     title="{{scanBatchTitle}}"

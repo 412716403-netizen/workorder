@@ -11,8 +11,8 @@ interface UseModulePermissionOptions {
  * Centralised permission check for module-level views.
  *
  * Logic (first match wins):
- *  1. tenant owner 或租户管理员（`admin`）→ allow
- *  2. empty / missing permission list → allow (backward compat: unset = full access)
+ *  1. tenant owner → allow
+ *  2. empty / missing permission list → deny (member without a role has no business access)
  *  3. module-level wildcard (e.g. `production` in list) AND no fine-grained
  *     sub-keys (e.g. no `production:*`) → allow everything in that module
  *  4. exact match on `permKey`
@@ -23,7 +23,7 @@ export function useModulePermission({ tenantRole, userPermissions, moduleName }:
 
   const hasPerm = useCallback((permKey: string): boolean => {
     if (isFullAccess) return true;
-    if (!userPermissions || userPermissions.length === 0) return true;
+    if (!userPermissions || userPermissions.length === 0) return false;
     if (moduleName) {
       const hasModule = userPermissions.includes(moduleName);
       const hasFineGrained = userPermissions.some(p => p.startsWith(`${moduleName}:`));

@@ -173,18 +173,15 @@
 
 ### 2.8 工作台（多 Tab 首页）
 
-- 路由：`/workbench`；登录后默认首页。
+- 路由：`/workbench`；登录后进入首个有权模块，有工作台权限时优先进入工作台。
 - **WorkbenchConfig**：`pages[]` 每页含独立 `layout.items`；`activePageId` 记录上次 Tab；自定义页 `createdByUserId` 记录创建者。
-- **页面归属**：**首页**＝个人页（`membership.preferences.dashboardWorkbench`，每人私有、自由自定义）；**自定义页**＝租户级共享池（`system_settings.workbenchSharedPages`）。
-- **自定义页创建/编辑（本次新增）**：**仅企业创建者 owner 账号**可创建/改名/删除/增删组件；其余成员（含 admin）不能创建或编辑。
-- **自定义页可见性（严格）**：默认**仅创建者可见**，**不**给 owner/admin 自动可见；其余成员需在「角色管理 → 工作台」被授予该页查看权（权限 key `workbench:<pageId>`，裸 `workbench` ＝全部自定义页面），且为**只读**。
-- **首页可见性（本次更新）**：首页**不再恒可见**，纳入「角色管理 → 工作台」按页面授权：
- - 角色持有裸 `workbench`（＝全部页面）或显式勾选「首页」（`workbench:<homeId>`）→ 首页可见。
- - 角色**已启用按页面授权**（持有任意 `workbench:<pageId>` 键）但**未含首页** → 首页对该角色**隐藏**（不再作为默认页强行注入）。
- - 角色**完全未涉及**工作台页面权限（无任何 `workbench*` 键）→ 首页作为默认落地页**保持可见**（不破坏既有普通角色）。
- - 若某角色最终无任何可见工作台页面，`/workbench` 显示「暂无可查看的工作台页面」空态。
-- **页面授权＝该页内容整体授权**：当某页面对用户**完整授权**（创建者本人 / 被授予 `workbench:<pageId>` / 裸 `workbench` / owner·admin）时，该页内所有组件内容**全部展示**——不再按查看者各自的模块/金额权限剔除组件或将金额掩码为 `***`；统计接口也据此为该页组件返回完整数据（后端 `augmentPermissionsWithWorkbench` 按页面完整授权临时补齐 psi/production/finance 等模块）。
-- **首页内容授权**：首页可见时，其内容默认仍按查看者**自身**模块/金额权限掩码；在「角色管理 → 工作台」勾选「首页」后，该角色成员的首页内容也**完整展示**（含金额）。仅作用于统计数据展示，不放宽其它业务模块的权限。
+- **页面归属**：**首页**＝个人页（`membership.preferences.dashboardWorkbench`）；**自定义页**＝租户级共享池（`system_settings.workbenchSharedPages`）。
+- **创建/编辑**：仅企业创建者 owner 可创建、改名、删除页面和增删组件；成员始终只读。
+- **页面可见性（严格）**：owner 恒可见全部页面；成员持有裸 `workbench` 时可查看全部页面，否则仅可查看「角色管理 → 工作台」显式授予的 `workbench:<pageId>`。首页也必须单独勾选。
+ - 角色**已配置其它模块权限但未授予任何 `workbench*` 键** → **不可**进入工作台（侧栏无入口，首页不可见）。
+ - 侧栏「工作台」入口由 `hasWorkbenchNavAccess` 控制：成员须显式勾选裸 `workbench` 或至少一个页面 key；owner 恒显示。
+- **页面授权＝该页内容整体授权**：当某页面对用户**完整授权**（owner / 被授予 `workbench:<pageId>` / 裸 `workbench`）时，该页内所有组件内容**全部展示**——不再按查看者各自的模块/金额权限剔除组件或将金额掩码为 `***`；统计接口也据此为该页组件返回完整数据（后端 `augmentPermissionsWithWorkbench` 按页面完整授权临时补齐 psi/production/finance 等模块）。
+- **首页内容授权**：成员持有裸 `workbench` 或显式勾选「首页」后，首页内容完整展示（含金额）。仅作用于工作台统计数据，不放宽其它业务模块的权限。
 - **首页默认布局**：顶部三卡（快捷入口 / 插件中心 / 消息中心）+ 工单/外协统计（各 6×7 格，占满第二行）+ 财务/销售/返工统计（各 4×6 格）；详见 `WORKBENCH_HOME_DEFAULT_LAYOUT`。
 - **首页固定组件**：快捷入口、插件中心、消息中心**不可移除、拖动或缩放**；保存时后端强制合并固定位置，租户仅可调整其余组件与其他 Tab 页。
 - **Tab 约束**：至少保留 1 个页面；编辑模式可增删改 Tab、拖拽排序（自定义页的改名/删除/排序仅对可编辑页生效）。
@@ -535,6 +532,14 @@
 **同工序多产品 / 多款同批报工**（参考外协收货扫码归集）：
 
 - **主列表报工权限门控**：工单中心主列表「工序圈圈」点击报工受角色权限「生产管理 → 工单中心 → 报工流水 · 添加」（`production:orders_report_records:create`）控制——未勾选则圈圈不可点击、无法报工；owner、未配置细粒度权限、或持有裸 `production` 模块键者放行（见 `OrderListView.hasProcessReportPerm`）。
+- **小程序 Tab「报工」自报工审核**（`pages/scan`）：
+  - 可见性：账号持有顶级模块键 `process_report`（工序报工）。
+  - **可报任务** = 成员「生产工序分配」`assignedMilestoneIds` ∩ 当前 `remaining > 0` 的工单工序（`GET /api/orders/my-reportable-tasks`）；**企业创建者**在成员管理中同样可配置工序，配置后参与可报任务与报工选人（`reportable-members` 在已分配工序时包含创建者）；**可见性口径与工单中心工序圈一致**（`completedQuantity` + 顺控上游），工单范围与工单中心相同（未发货，不限定 `dispatchStatus=IN_PROGRESS`）；展示的可报件数在自报工场景下仍扣 **PENDING** 占用。
+  - Tab 手输提交带 `requireApproval: true` → 落库 `approvalStatus=PENDING`；**不计入** `completedQuantity` / 顺控上游，但 **占用可报额度**（下次可报须扣 PENDING）。报工单号前缀 **`ZBG`**（自报工专用），与工单中心即时报工的 **`BG`** 分池取号，避免重号。
+  - **可报任务「扫码报工」**（`pages/scan` 右下圆形 FAB → `worker-report-scan` → `worker-report-confirm`）：前置与 Tab 一致（`process_report` + 追溯码插件）；工序范围仅限成员 `assignedMilestoneIds`；**仅 1 个分配工序时点击 FAB 直达扫码页**，多个则底部弹层选择；进入批量扫码页后按 `templateId` 用 `resolveReportTarget` 反查工单+工序，**同一会话可跨多张工单累加**（按 `orderId + milestoneId` 分行，同产品不同工单不合并）；扫码目标须落在 `my-reportable-tasks` 且 `remaining > 0`；一码匹配多工单仍拒绝；确认后跳转多工单确认页，一次提交共用 `reportBatchId` / `ZBG` 报工单号 → 各工单逐规格 `requireApproval: true` → `PENDING`（「我的报工」聚为一行待审）。
+  - 工单中心报工（Web / 小程序工单点按）与扫码报工 **不传** `requireApproval`，仍即时 `APPROVED`。
+  - 审核：`production:orders_report_records:edit`；Web 工单中心工具栏「报工审核」（与报工流水同级）与小程序「报工待审」；**通过后才进入报工流水**；流水不展示审核状态；驳回后释放额度。Web 报工审核弹窗**默认不限日期**（展示全部待审），可选手动收窄日期；支持勾选**批量通过/驳回**；有待审时工具栏按钮显示待审条数（与弹窗列表行数一致，按 `reportBatchId` 聚合）。
+  - **编辑/删除**：`approvalStatus=PENDING`（待审）可编辑/删除；`REJECTED`（已驳回）与自报工 `ZBG` 前缀且 `APPROVED`（审核通过）**不可**编辑/删除；工单中心即时 `BG` 报工仍可在流水编辑。前后端同口径（`reportAllowsEditDelete`），后端 `updateReport` / `deleteReport` 返回 409。
 - **工序报工**（[`ReportModal`](../views/order-list/ReportModal.tsx) + [`useReportModalState`](../hooks/useReportModalState.ts)）：从某工序节点打开弹窗后，工序模板（`milestone.templateId`）已锁定；批量扫码可扫入**不同产品 / 不同款**的码，系统按 `productId` 归集成多行，共享生产人员 / 设备 / 自定义字段，提交时逐产品、逐规格写入（关联工单模式 → `createReport`；关联产品模式 → `createProductReport`）。扫码须通过计划树兼容校验（关联工单模式：与入口工单 `planOrderId` 父子链兼容；**关联产品模式**：与该产品任一工单的 `planOrderId` 兼容，或处于同一计划树根下的兄弟子计划），且目标产品须包含当前工序模板。
 - **返工报工**（[`ReworkReportSubmitModal`](../views/production-ops/ReworkReportSubmitModal.tsx)）：从某产品/工单工序入口打开时，弹窗**仅展示该入口范围内的待返工路径**（关联产品模式按 `productId`；关联工单模式再限定 `orderId`）；扫码按 `productId + 规格` 在可见路径内累加，提交时 `REWORK_REPORT.productId` 取源 `REWORK` 记录；委外返工收回按产品各生成一条 `OUTSOURCE` 汇总单。
 - **硬约束**：一次报工会话内所有扫码须属于**同一工序模板**；不允许跨工序混扫（外协收货通过首扫锁 `nodeId` 实现；报工 / 返工通过入口工序锁定 + 扫码时校验产品是否含该工序）。
@@ -685,9 +690,9 @@
 
 ### 5.7 成员审核权限
 
-- **成员审核（加入申请的通过/拒绝）** 不再仅限 owner/admin：**被授予「基础信息 → 成员管理 → 添加」（`basic:members:create`）** 细粒度权限的角色成员，也可在「成员管理 → 待审核」查看并审核加入申请。
-- 判定：`role ∈ {owner, admin}` **或** 有效权限含 `basic:members:create` → 可审核；否则隐藏「待审核」Tab 且后端 403。
-- 仅放开**成员审核**；角色管理、分配/修改成员角色与权限、移除成员等仍限 owner/admin（移除成员仍仅 owner）。
+- **成员审核（加入申请的通过/拒绝）**：owner 或**被授予「基础信息 → 成员管理 → 添加」（`basic:members:create`）** 细粒度权限的角色成员可审核。
+- 判定：`role = owner` **或** 有效权限含 `basic:members:create` → 可审核；否则隐藏「待审核」Tab 且后端 403。
+- 仅放开**成员审核**；角色管理、分配/修改成员角色与权限、移除成员均仅限 owner。
 - 实现锚点：前端 `views/MemberManagementView.tsx`（`canReviewApplications`）；后端 `tenants.service.ts` 的 `assertCanReviewApplications` 同时门控 `getApplications` 与 `reviewApplication`（此前后端无校验，已补齐）。
 
 ---

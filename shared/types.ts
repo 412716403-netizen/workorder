@@ -10,6 +10,30 @@ export enum MilestoneStatus {
   DELAYED = 'DELAYED',
 }
 
+/**
+ * 报工审核状态（`MilestoneReport` / `ProductProgressReport.approvalStatus`）。
+ * - `APPROVED`：已审核（或工单中心/扫码即时生效）；计入 completedQuantity 与工序顺控
+ * - `PENDING`：待审核（小程序 Tab 自报工）；占用可报额度，不计入进度
+ * - `REJECTED`：已驳回；不占用可报额度、不计入进度
+ */
+export enum ReportApprovalStatus {
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+}
+
+export const REPORT_APPROVAL_STATUS_LABEL: Record<ReportApprovalStatus, string> = {
+  [ReportApprovalStatus.PENDING]: '未审核',
+  [ReportApprovalStatus.APPROVED]: '已审核',
+  [ReportApprovalStatus.REJECTED]: '已驳回',
+};
+
+/** 占用可报额度的状态（APPROVED + PENDING；REJECTED 不占） */
+export const REPORT_QTY_OCCUPYING_STATUSES: ReportApprovalStatus[] = [
+  ReportApprovalStatus.APPROVED,
+  ReportApprovalStatus.PENDING,
+];
+
 export enum OrderStatus {
   PLANNING = 'PLANNING',
   PRODUCING = 'PRODUCING',
@@ -165,6 +189,30 @@ export const FINANCE_UNASSIGNED_ACCOUNT_KEY = '__unassigned__' as const;
 export const PLAN_DOC_NO_PREFIX = 'PLN' as const;
 /** 生产工单号前缀（如 WO40；主计划下达时由计划单号 PLN→WO 转换） */
 export const WORK_ORDER_DOC_NO_PREFIX = 'WO' as const;
+/** 工单中心 / 即时报工报工单号前缀（如 BG20260709-0001） */
+export const REPORT_NO_PREFIX = 'BG' as const;
+/** 小程序工人自报工（待审核）报工单号前缀（如 ZBG20260709-0001），与 BG 分池取号避免重号 */
+export const WORKER_SELF_REPORT_NO_PREFIX = 'ZBG' as const;
+
+/**
+ * 报工是否允许编辑/删除。
+ * - `PENDING`（待审）或未落库审核字段：允许
+ * - `REJECTED`：不允许
+ * - `APPROVED` 且报工单号为自报工 `ZBG` 前缀：审核通过后不允许（工单中心即时 `BG` 报工仍可在流水编辑）
+ */
+export function reportAllowsEditDelete(
+  approvalStatus: string | null | undefined,
+  reportNo?: string | null,
+): boolean {
+  if (approvalStatus === ReportApprovalStatus.REJECTED) return false;
+  if (approvalStatus === ReportApprovalStatus.PENDING) return true;
+  if (approvalStatus === ReportApprovalStatus.APPROVED) {
+    const no = (reportNo ?? '').trim();
+    if (no.startsWith(WORKER_SELF_REPORT_NO_PREFIX)) return false;
+    return true;
+  }
+  return true;
+}
 
 /** 采购订单 `customData`：由生产计划详情生成 PO 时写入，进销存列表/详情展示来源计划 */
 export const PSI_PO_CUSTOM_DATA_SOURCE_PLAN_ID = 'sourcePlanId' as const;

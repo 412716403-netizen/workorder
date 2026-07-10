@@ -31,7 +31,7 @@ export const PSI_DOC_TYPE_AMOUNT_KEY: Record<string, AmountPermissionKey> = {
 
 /**
  * 是否可查看单价/金额。
- * 语义与 `useModulePermission().hasPerm` 一致：owner/admin、未配置细粒度、裸模块键 → 可见；
+ * 语义与 `useModulePermission().hasPerm` 一致：owner、裸模块键 → 可见；
  * 细粒度角色需精确命中 amount/allow 键。
  */
 export function canViewAmount(
@@ -61,7 +61,7 @@ export function hasPriceAmountModuleAccess(
   userPermissions: string[] | undefined,
 ): boolean {
   if (isTenantElevatedRole(tenantRole)) return true;
-  if (!userPermissions || userPermissions.length === 0) return true;
+  if (!userPermissions || userPermissions.length === 0) return false;
   if (userPermissions.includes('price_amount')) return true;
   return AMOUNT_FINE_GRAINED_PERM_KEYS.some(k => userPermissions.includes(k));
 }
@@ -92,7 +92,7 @@ export function hasCollaborationModuleAccess(
   userPermissions: string[] | undefined,
 ): boolean {
   if (isTenantElevatedRole(tenantRole)) return true;
-  if (!userPermissions || userPermissions.length === 0) return true;
+  if (!userPermissions || userPermissions.length === 0) return false;
   return userPermissions.includes('collaboration');
 }
 

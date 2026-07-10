@@ -22,6 +22,7 @@
     "backgroundTextStyle": "dark"
   },
   "tabBar": {
+    "custom": true,
     "color": "#8F959E",
     "selectedColor": "#2F6BFF",
     "backgroundColor": "#FFFFFF",
@@ -74,7 +75,10 @@
         "production-order-flow/production-order-flow",
         "production-order-detail/production-order-detail",
         "production-order-report/production-order-report",
+        "worker-report-scan/worker-report-scan",
+        "worker-report-confirm/worker-report-confirm",
         "production-order-report-history/production-order-report-history",
+        "production-report-pending/production-report-pending",
         "production-order-report-batch-detail/production-order-report-batch-detail",
         "production-order-pending-stock/production-order-pending-stock",
         "production-order-stock-in-confirm/production-order-stock-in-confirm",

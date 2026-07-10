@@ -103,7 +103,8 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
 
   async function handleSaveRole() {
     if (!roleName.trim()) { toast.error('请输入角色名称'); return; }
-    let permsToSave = [...rolePerms];
+    // `dashboard` 是早期经营看板遗留键，新工作台只认 `workbench*`。
+    let permsToSave = rolePerms.filter(p => p !== 'dashboard');
     if (permsToSave.some(p => p.startsWith('settings:'))) {
       permsToSave = permsToSave.filter(p => p !== 'settings');
     }
@@ -1461,7 +1462,7 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
               {workbenchExpanded && (
                 <>
                   <p className="px-4 py-2 text-xs text-slate-400 bg-slate-50/50 border-t border-slate-100">
-                    勾选某页面后，本角色成员在工作台「完整查看」该页：页面内所有组件内容（含金额等）全部展示，不再按各自模块/金额权限掩码。自定义页面默认仅创建者可见。不勾选任何页面时视为可完整查看全部页面（含首页）；一旦勾选了任意页面，则未勾选的页面（含「首页」）对该角色不可见——如需隐藏首页，勾选其它页面并保持「首页」不勾选即可。
+                    须先在上方「模块权限」勾选「工作台」，成员才能从侧栏进入工作台。勾选某页面后，本角色成员可只读查看该页的完整内容（含金额等）。不勾选任何页面时保留裸 `workbench`，表示可查看全部页面；一旦勾选了任意页面，就只能查看已勾选页面，首页也必须单独勾选。
                   </p>
                   {workbenchPages.length === 0 ? (
                     <p className="px-4 py-6 text-center text-xs text-slate-400">

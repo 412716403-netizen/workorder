@@ -32,6 +32,7 @@ import {
   PrintTemplate,
   PrintRenderContext,
   DEFAULT_OUTSOURCE_FORM_SETTINGS,
+  reportAllowsEditDelete,
 } from '../../types';
 import DocPhaseModal, { DocPhaseEditToolbarPortalContext } from '../../components/DocPhaseModal';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
@@ -165,6 +166,15 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
 }) => {
   const isOutsourceReceiveBatch = isOutsourceReceiveReport(reportDetailBatch.first.report);
   const outsourceDocNo = outsourceReceiveDocNoFromReport(reportDetailBatch.first.report);
+
+  const reportBatchAllowsMutation = useMemo(() => {
+    if (isOutsourceReceiveBatch) return true;
+    const firstReport = reportDetailBatch.first.report;
+    return reportAllowsEditDelete(
+      firstReport.approvalStatus as string | undefined,
+      reportDetailBatch.reportNo ?? (firstReport.reportNo as string | undefined),
+    );
+  }, [isOutsourceReceiveBatch, reportDetailBatch]);
   const outsourceReceiveEditEnabled = isOutsourceReceiveBatch && !!outsourceDocNo && !!onDeleteRecord;
 
   const [outsourcePhase, setOutsourcePhase] = useState<'detail' | 'edit'>('detail');
@@ -410,6 +420,10 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
         outsourceReceiveEditEnabled
           ? '确定要删除该张外协收回单的所有记录吗？此操作不可恢复。'
           : '确定要删除该次报工的所有记录吗？此操作不可恢复。'
+      }
+      showDetailEditButton={outsourceReceiveEditEnabled || reportBatchAllowsMutation}
+      showDetailDeleteButton={
+        outsourceReceiveEditEnabled || (reportBatchAllowsMutation && !!handleDelete)
       }
       onDelete={outsourceReceiveEditEnabled ? handleOutsourceDelete : handleDelete}
       renderDocBadge={() => (

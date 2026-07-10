@@ -1,10 +1,10 @@
 const _require = require('../../utils/request.js'),request = _require.request;
 const _require2 = require('../../utils/session.js'),clearSession = _require2.clearSession,readTenants = _require2.readTenants,parseTenantListResponse = _require2.parseTenantListResponse;
 const { clearFeaturePluginsCache } = require('../../utils/featurePlugins.js');
+const { resolveDefaultTabPath } = require('../../utils/tabAccess.js');
 
 function roleLabel(role) {
   if (role === 'owner') return '创建者';
-  if (role === 'admin') return '管理员';
   return '成员';
 }
 
@@ -120,7 +120,10 @@ Page({
           equipmentFeaturesEnabled: d.equipmentFeaturesEnabled !== false
         })
       );
-      wx.switchTab({ url: '/pages/home/home' });
+      wx.switchTab({ url: resolveDefaultTabPath({
+        tenantRole: d.tenantRole,
+        permissions: d.permissions || [],
+      }) });
     }).
     catch((err) => {
       const msg = err && err.message ? err.message : '切换企业失败';

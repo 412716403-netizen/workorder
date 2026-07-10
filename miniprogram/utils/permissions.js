@@ -1,4 +1,8 @@
-/** 权限判断：与后端 hasSubPermission 规则对齐（精确匹配或持有顶级模块名） */
+/** 权限判断：与 Web hasSubPermission / hasWorkbenchNavAccess 对齐 */
+function isTenantElevatedRole(tenantRole) {
+  return tenantRole === 'owner';
+}
+
 function hasPermission(permissions, required) {
   if (!required) return true;
   if (!Array.isArray(permissions) || permissions.length === 0) return false;
@@ -6,6 +10,13 @@ function hasPermission(permissions, required) {
   const module = String(required).split(':')[0];
   if (module && permissions.includes(module)) return true;
   return permissions.some((p) => String(p).startsWith(`${module}:`));
+}
+
+/** 侧栏 / 数据看板：须显式授予 workbench 或 workbench:<pageId>；owner 恒 true */
+function hasWorkbenchNavAccess(permissions, tenantRole) {
+  if (isTenantElevatedRole(tenantRole)) return true;
+  const perms = Array.isArray(permissions) ? permissions : [];
+  return perms.includes('workbench') || perms.some((p) => String(p).startsWith('workbench:'));
 }
 
 function filterByPermission(items, permissions) {
@@ -28,4 +39,6 @@ module.exports = {
   hasPermission,
   hasPrefixPermission,
   filterByPermission,
+  hasWorkbenchNavAccess,
+  isTenantElevatedRole,
 };

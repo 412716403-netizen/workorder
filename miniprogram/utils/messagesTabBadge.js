@@ -1,20 +1,22 @@
-/** 消息 Tab 角标（index=3：首页/应用/扫码/消息/我的） */
+/** 自定义消息 Tab 角标；首页隐藏后不依赖固定下标。 */
 
-const MESSAGES_TAB_INDEX = 3;
+function currentCustomTabBar() {
+  if (typeof getCurrentPages !== 'function') return null;
+  const pages = getCurrentPages();
+  const current = pages && pages[pages.length - 1];
+  return current && typeof current.getTabBar === 'function' ? current.getTabBar() : null;
+}
 
 function updateMessagesTabBadge(total) {
   const n = Number(total) || 0;
-  if (n > 0) {
-    wx.setTabBarBadge({
-      index: MESSAGES_TAB_INDEX,
-      text: n > 99 ? '99+' : String(n),
-    });
-  } else {
-    wx.removeTabBarBadge({ index: MESSAGES_TAB_INDEX });
+  const text = n > 99 ? '99+' : n > 0 ? String(n) : '';
+  wx.setStorageSync('messagesTabBadge', text);
+  const tabBar = currentCustomTabBar();
+  if (tabBar && typeof tabBar.setMessageBadge === 'function') {
+    tabBar.setMessageBadge(n);
   }
 }
 
 module.exports = {
-  MESSAGES_TAB_INDEX,
   updateMessagesTabBadge,
 };

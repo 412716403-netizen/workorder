@@ -303,7 +303,8 @@ PrintRenderContext.virtualBatch
 |------|------|------|------|
 | Tab 报工 | `pages/scan/scan` | TabBar 居中「报工」 | **占位页**（功能开发中）；工单/返工报工请从应用中心进入 |
 | 产品追溯 | `packageBusiness/product-trace/product-trace` | 应用中心「追溯查询」 | **需追溯码插件**；仅单品码；底部「扫码录入」 |
-| 工单报工 | `production-order-report` | 页头「扫码报工」 | **需追溯码插件**；批量扫码弹窗累加数量 → 确认报工 |
+| 工单报工（工单中心） | `production-order-report` | 页头「扫码报工」 | **需追溯码插件**；仅工单中心即时报工（非 `selfReport`）；批量扫码弹窗累加数量 → 确认报工 |
+| 工人自报工扫码 | `pages/scan` → `worker-report-scan` | 可报任务右下扫码 FAB | **需追溯码插件**；`selfReport` 手填页不再提供扫码入口 |
 | 待入库 | `production-order-pending-stock` | 底栏「扫码入库」 | **需追溯码插件**；批量扫码 → 确认后进入入库确认页 |
 | 外协待收回 | `production-outsource-receive` | 底栏「扫码收货」 | **需追溯码插件**；跳转扫码收货页批量扫码 |
 | 返工报工 | `production-rework-report` | 页头「扫码报工」 | **需追溯码插件**；批量扫码累加数量 → 确认报工 |

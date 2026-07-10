@@ -127,9 +127,10 @@ export type Application = {
 
 export function resolveMemberPermsLocal(m: Member, rolesList: RoleRow[]): string[] {
   if (m.role === 'owner') return ALL_PERMISSIONS.map(p => p.id);
-  if (m.roleId && m.roleName) {
+  // 已绑定自定义角色：只认角色权限，禁止回退 membership.permissions
+  if (m.roleId) {
     const role = rolesList.find(r => r.id === m.roleId);
-    if (role) return Array.isArray(role.permissions) ? role.permissions as string[] : [];
+    return role && Array.isArray(role.permissions) ? role.permissions as string[] : [];
   }
   return Array.isArray(m.permissions) ? m.permissions as string[] : [];
 }

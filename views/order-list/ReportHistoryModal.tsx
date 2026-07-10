@@ -9,6 +9,7 @@ import {
   AppDictionaries,
   ProductMilestoneProgress,
   ProductionOpRecord,
+  ReportApprovalStatus,
 } from '../../types';
 import { toLocalDateYmd } from '../../utils/localDateTime';
 import { flowRecordsEarliestMs } from '../../utils/flowDocSort';
@@ -110,7 +111,7 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
 
   /**
    * Phase 3.E：报工流水改走后端窄查接口，按日期窗口扁平展开 milestone.reports + PMP.reports。
-   * 不再依赖 props.orders 全量遍历。详情链路仍用 props.orders / productMilestoneProgresses 兜底解析。
+   * 仅展示已审核（APPROVED）；待审进「报工审核」，不在此展示审核状态。
    */
   const historyQuery = useQuery({
     queryKey: [
@@ -120,6 +121,7 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
       scopedOrderIds,
       scopedProductIds,
       productionLinkMode,
+      ReportApprovalStatus.APPROVED,
     ],
     queryFn: () =>
       ordersApi.listReportHistory({
@@ -128,6 +130,7 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
         orderIds: scopedOrderIds || undefined,
         productIds: scopedProductIds || undefined,
         productionLinkMode,
+        approvalStatus: ReportApprovalStatus.APPROVED,
       }),
     enabled: open,
     staleTime: 15_000,

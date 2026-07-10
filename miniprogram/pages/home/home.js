@@ -131,6 +131,12 @@ Page({
     this.refreshUserProfile();
     syncTenantCtx().then((freshCtx) => {
       const activeCtx = freshCtx || ctx;
+      const { canShowHomeTab, resolveDefaultTabPath, syncCurrentCustomTabBar } = require('../../utils/tabAccess.js');
+      syncCurrentCustomTabBar(activeCtx);
+      if (!canShowHomeTab(activeCtx)) {
+        wx.switchTab({ url: resolveDefaultTabPath(activeCtx) });
+        return;
+      }
       this.setData(buildUserProfile(activeCtx));
       this.loadHome(activeCtx);
     });
@@ -141,6 +147,12 @@ Page({
     if (ctx && ctx.tenantId && this._deps && !this.data.bootError) {
       syncTenantCtx().then((freshCtx) => {
         const activeCtx = freshCtx || ctx;
+        const { canShowHomeTab, resolveDefaultTabPath, syncCurrentCustomTabBar } = require('../../utils/tabAccess.js');
+        syncCurrentCustomTabBar(activeCtx);
+        if (!canShowHomeTab(activeCtx)) {
+          wx.switchTab({ url: resolveDefaultTabPath(activeCtx) });
+          return null;
+        }
         this.setData(buildUserProfile(activeCtx));
         this.refreshUserProfile();
         return this.loadHome(activeCtx);
@@ -230,12 +242,16 @@ Page({
   loadHome(ctx) {
     if (!this._deps) return Promise.resolve();
 
+    const { hasWorkbenchNavAccess } = require('../../utils/permissions.js');
+
     this.setData({ loading: true, loadError: false, shortcutsLoading: true });
 
     const deps = this._deps;
 
     return Promise.all([
-      request({ path: '/dashboard/workbench', method: 'GET' }).catch(() => null),
+      hasWorkbenchNavAccess(ctx.permissions, ctx.tenantRole)
+        ? request({ path: '/dashboard/workbench', method: 'GET' }).catch(() => null)
+        : Promise.resolve(null),
       request({ path: '/dashboard/shortcuts', method: 'GET' }).catch(() => null),
       request({ path: '/dashboard/feature-plugins', method: 'GET' }).catch(() => ({})),
     ])

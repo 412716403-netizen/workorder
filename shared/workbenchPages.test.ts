@@ -8,6 +8,8 @@ import {
   canViewWorkbenchPage,
   canEditWorkbenchPage,
   hasWorkbenchPageFullAccess,
+  hasWorkbenchModuleAccess,
+  hasWorkbenchNavAccess,
   canUseWidget,
   filterWorkbenchPagesByVisibility,
   mergeSharedWorkbenchPages,
@@ -25,12 +27,53 @@ function page(id: string, createdByUserId: string | null): WorkbenchPage {
 
 const home = page(WORKBENCH_HOME_PAGE_ID, null);
 
+describe('hasWorkbenchNavAccess', () => {
+  it('owner 恒显示侧栏入口，历史 admin 不再提权', () => {
+    expect(hasWorkbenchNavAccess([], 'owner')).toBe(true);
+    expect(hasWorkbenchNavAccess(['production'], 'admin')).toBe(false);
+  });
+
+  it('须显式授予 workbench 或页面 key', () => {
+    expect(hasWorkbenchNavAccess(['workbench'], 'member')).toBe(true);
+    expect(hasWorkbenchNavAccess([workbenchPagePermKey('page-a')], 'member')).toBe(true);
+  });
+
+  it('未配置工作台时不显示（含空权限与其它模块）', () => {
+    expect(hasWorkbenchNavAccess([], 'member')).toBe(false);
+    expect(hasWorkbenchNavAccess(['production', 'psi'], 'member')).toBe(false);
+  });
+});
+
+describe('hasWorkbenchModuleAccess', () => {
+  it('空权限列表无工作台入口', () => {
+    expect(hasWorkbenchModuleAccess([])).toBe(false);
+  });
+
+  it('裸 workbench 或页面 key 视为有入口', () => {
+    expect(hasWorkbenchModuleAccess(['workbench'])).toBe(true);
+    expect(hasWorkbenchModuleAccess([workbenchPagePermKey('page-a')])).toBe(true);
+  });
+
+  it('仅有其它模块权限时无工作台入口', () => {
+    expect(hasWorkbenchModuleAccess(['production', 'psi'])).toBe(false);
+  });
+});
+
 describe('canViewWorkbenchPage', () => {
   const p = page('page-a', 'owner1');
 
-  it('首页对未涉及工作台页面权限的角色默认可见', () => {
-    expect(canViewWorkbenchPage(home, { userId: 'uX', permissions: [] })).toBe(true);
-    expect(canViewWorkbenchPage(home, { userId: 'uX', permissions: ['production', 'psi'] })).toBe(true);
+  it('未授予工作台时首页不可见', () => {
+    expect(canViewWorkbenchPage(home, { userId: 'uX', permissions: [] })).toBe(false);
+  });
+
+  it('owner 对全部页面恒可见，历史 admin 按成员权限处理', () => {
+    expect(canViewWorkbenchPage(home, { userId: 'owner1', permissions: ['production'], tenantRole: 'owner' })).toBe(true);
+    expect(canViewWorkbenchPage(p, { userId: 'owner1', permissions: [], tenantRole: 'owner' })).toBe(true);
+    expect(canViewWorkbenchPage(home, { userId: 'admin1', permissions: ['production'], tenantRole: 'admin' })).toBe(false);
+  });
+
+  it('首页对已配置其它模块但未授予工作台的角色不可见', () => {
+    expect(canViewWorkbenchPage(home, { userId: 'uX', permissions: ['production', 'psi'] })).toBe(false);
   });
 
   it('裸 workbench 或显式授予首页时首页可见', () => {
@@ -49,11 +92,11 @@ describe('canViewWorkbenchPage', () => {
     ).toBe(false);
   });
 
-  it('创建者本人可见自己的自定义页', () => {
-    expect(canViewWorkbenchPage(p, { userId: 'owner1', permissions: [] })).toBe(true);
+  it('成员即使是历史页面创建人也须获得角色授权', () => {
+    expect(canViewWorkbenchPage(p, { userId: 'owner1', permissions: [] })).toBe(false);
   });
 
-  it('非创建者默认不可见（不给 owner/admin 自动可见）', () => {
+  it('未授权成员默认不可见', () => {
     expect(canViewWorkbenchPage(p, { userId: 'u2', permissions: [] })).toBe(false);
   });
 
@@ -70,27 +113,37 @@ describe('canViewWorkbenchPage', () => {
 
 describe('canEditWorkbenchPage', () => {
   const p = page('page-a', 'owner1');
-  it('仅创建者可编辑；被授权的只读查看者不可编辑', () => {
-    expect(canEditWorkbenchPage(p, { userId: 'owner1', permissions: [] })).toBe(true);
+  it('只有企业创建者可编辑；被授权成员只读', () => {
+    expect(canEditWorkbenchPage(p, { userId: 'owner1', permissions: [], tenantRole: 'owner' })).toBe(true);
     expect(
       canEditWorkbenchPage(p, { userId: 'u2', permissions: [workbenchPagePermKey('page-a')] }),
     ).toBe(false);
   });
-  it('首页为个人页，恒可编辑', () => {
-    expect(canEditWorkbenchPage(home, { userId: 'u1', permissions: [] })).toBe(true);
+  it('owner 对首页恒可编辑', () => {
+    expect(canEditWorkbenchPage(home, { userId: 'owner1', permissions: ['production'], tenantRole: 'owner' })).toBe(true);
+  });
+  it('成员的工作台页面始终只读', () => {
+    expect(canEditWorkbenchPage(home, { userId: 'u1', permissions: ['production'] })).toBe(false);
+    expect(canEditWorkbenchPage(home, { userId: 'u1', permissions: ['workbench'] })).toBe(false);
+    expect(
+      canEditWorkbenchPage(home, {
+        userId: 'u1',
+        permissions: [workbenchPagePermKey(WORKBENCH_HOME_PAGE_ID)],
+      }),
+    ).toBe(false);
   });
 });
 
 describe('hasWorkbenchPageFullAccess', () => {
   const p = page('page-a', 'owner1');
 
-  it('owner/admin 恒为完整可见', () => {
+  it('owner 恒为完整可见，历史 admin 不再提权', () => {
     expect(hasWorkbenchPageFullAccess(p, { userId: 'x', permissions: [], tenantRole: 'owner' })).toBe(true);
-    expect(hasWorkbenchPageFullAccess(home, { userId: 'x', permissions: [], tenantRole: 'admin' })).toBe(true);
+    expect(hasWorkbenchPageFullAccess(home, { userId: 'x', permissions: [], tenantRole: 'admin' })).toBe(false);
   });
 
-  it('创建者本人对自己的自定义页完整可见', () => {
-    expect(hasWorkbenchPageFullAccess(p, { userId: 'owner1', permissions: [] })).toBe(true);
+  it('成员的历史页面创建记录不代替角色授权', () => {
+    expect(hasWorkbenchPageFullAccess(p, { userId: 'owner1', permissions: [] })).toBe(false);
   });
 
   it('被授予 workbench:<pageId> 即完整可见', () => {
@@ -139,7 +192,34 @@ describe('canUseWidget 页面级完整授权', () => {
 });
 
 describe('filterWorkbenchPagesByVisibility', () => {
-  it('仅保留可见页；无工作台页面权限时首页默认保留', () => {
+  it('仅保留可见页；页面历史创建人无权限时也不保留', () => {
+    const config = {
+      version: 1 as const,
+      activePageId: 'page-b',
+      pages: [home, page('page-a', 'u1'), page('page-b', 'u2')],
+    };
+    const filtered = filterWorkbenchPagesByVisibility(config, { userId: 'u1', permissions: ['production'] });
+    const ids = filtered.pages.map(p => p.id);
+    expect(ids).not.toContain(WORKBENCH_HOME_PAGE_ID);
+    expect(ids).not.toContain('page-a');
+    expect(ids).not.toContain('page-b');
+    expect(filtered.pages).toHaveLength(0);
+  });
+
+  it('未授予任何工作台权限时结果为空', () => {
+    const config = {
+      version: 1 as const,
+      activePageId: WORKBENCH_HOME_PAGE_ID,
+      pages: [home, page('page-a', 'owner1')],
+    };
+    const filtered = filterWorkbenchPagesByVisibility(config, {
+      userId: 'u2',
+      permissions: ['production', 'psi'],
+    });
+    expect(filtered.pages).toHaveLength(0);
+  });
+
+  it('未授予工作台时首页默认不保留（空权限）', () => {
     const config = {
       version: 1 as const,
       activePageId: 'page-b',
@@ -147,11 +227,25 @@ describe('filterWorkbenchPagesByVisibility', () => {
     };
     const filtered = filterWorkbenchPagesByVisibility(config, { userId: 'u1', permissions: [] });
     const ids = filtered.pages.map(p => p.id);
-    expect(ids).toContain(WORKBENCH_HOME_PAGE_ID);
-    expect(ids).toContain('page-a');
+    expect(ids).not.toContain(WORKBENCH_HOME_PAGE_ID);
+    expect(ids).not.toContain('page-a');
     expect(ids).not.toContain('page-b');
-    // activePageId 不可见时回落首页
-    expect(filtered.activePageId).toBe(WORKBENCH_HOME_PAGE_ID);
+    expect(filtered.pages).toHaveLength(0);
+  });
+
+  it('owner 过滤后保留全部页面', () => {
+    const config = {
+      version: 1 as const,
+      activePageId: WORKBENCH_HOME_PAGE_ID,
+      pages: [home, page('page-a', 'u2')],
+    };
+    const filtered = filterWorkbenchPagesByVisibility(config, {
+      userId: 'owner1',
+      permissions: ['production'],
+      tenantRole: 'owner',
+    });
+    expect(filtered.pages.map(p => p.id)).toContain(WORKBENCH_HOME_PAGE_ID);
+    expect(filtered.pages.map(p => p.id)).toContain('page-a');
   });
 
   it('角色按页面授权但未含首页时，首页被移除且不再被重新注入', () => {

@@ -34,7 +34,7 @@ export default function MemberManagementView({ tenantId, tenantRole, currentUser
   const [loading, setLoading] = useState(true);
 
   const { tenantCtx } = useAuth();
-  const canManage = tenantRole === 'owner' || tenantRole === 'admin';
+  const canManage = tenantRole === 'owner';
   // 被授予「成员管理 - 添加」(basic:members:create) 的角色成员也可审核加入申请
   const canReviewApplications =
     canManage || (tenantCtx?.permissions ?? []).includes('basic:members:create');

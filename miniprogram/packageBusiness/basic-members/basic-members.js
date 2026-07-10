@@ -98,7 +98,7 @@ Page({
     }
 
     const tenantRole = ctx.tenantRole || '';
-    const canManage = tenantRole === 'owner' || tenantRole === 'admin';
+    const canManage = tenantRole === 'owner';
     const canReviewApplications = canManage
       || hasPermission(ctx.permissions || [], 'basic:members:create');
 

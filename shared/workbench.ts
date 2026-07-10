@@ -47,7 +47,7 @@ export interface WorkbenchPage {
   /**
    * 自定义页面创建者的 userId。
    * - 首页（WORKBENCH_HOME_PAGE_ID）为系统页，无创建者（null/undefined）。
-   * - 自定义页面默认仅创建者可见；可在角色管理中按页面授权给角色查看。
+   * - owner 恒可见；成员在角色管理中按页面授权后只读查看。
    */
   createdByUserId?: string | null;
 }

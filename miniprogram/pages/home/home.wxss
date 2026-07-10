@@ -149,7 +149,7 @@
 
 .home-body {
   margin-top: -24rpx;
-  padding: 48rpx var(--spacing-page) 48rpx;
+  padding: 48rpx var(--spacing-page) calc(var(--tabbar-height) + env(safe-area-inset-bottom) + 48rpx);
   border-radius: 32rpx 32rpx 0 0;
   background: var(--color-bg-page);
   min-height: 100%;

@@ -9,14 +9,14 @@ import {
 } from './canViewAmount';
 
 describe('canViewAmount', () => {
-  it('owner/admin 始终可见', () => {
+  it('owner 始终可见，历史 admin 不再提权', () => {
     expect(canViewAmount('owner', [], AMOUNT_PERMISSION_KEYS.PSI_PURCHASE_ORDER)).toBe(true);
-    expect(canViewAmount('admin', ['psi:purchase_order:view'], AMOUNT_PERMISSION_KEYS.PSI_PURCHASE_ORDER)).toBe(true);
+    expect(canViewAmount('admin', ['psi:purchase_order:view'], AMOUNT_PERMISSION_KEYS.PSI_PURCHASE_ORDER)).toBe(false);
   });
 
-  it('未配置权限列表时向后兼容为可见', () => {
-    expect(canViewAmount('member', undefined, AMOUNT_PERMISSION_KEYS.PSI_PURCHASE_ORDER)).toBe(true);
-    expect(canViewAmount('member', [], AMOUNT_PERMISSION_KEYS.PSI_PURCHASE_ORDER)).toBe(true);
+  it('成员未绑定角色时不可见', () => {
+    expect(canViewAmount('member', undefined, AMOUNT_PERMISSION_KEYS.PSI_PURCHASE_ORDER)).toBe(false);
+    expect(canViewAmount('member', [], AMOUNT_PERMISSION_KEYS.PSI_PURCHASE_ORDER)).toBe(false);
   });
 
   it('裸模块键且无细粒度子键时可见', () => {

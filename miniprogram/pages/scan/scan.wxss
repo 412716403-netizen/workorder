@@ -1,5 +1,421 @@
-@import '../../styles/tab-shell.wxss';
+@import "/styles/tokens.wxss";
 
-.report-placeholder {
-  padding: 80rpx 0;
+.worker-report-seg {
+  display: flex;
+  gap: 10rpx;
+  margin: 0 0 24rpx;
+  padding: 8rpx;
+  background: #fff;
+  border-radius: 20rpx;
+  border: 1rpx solid rgba(15, 23, 42, 0.06);
+  box-shadow: 0 2rpx 12rpx rgba(15, 23, 42, 0.04);
+}
+
+.worker-report-seg__item {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10rpx;
+  min-height: 80rpx;
+  padding: 0 20rpx;
+  border-radius: 14rpx;
+  box-sizing: border-box;
+}
+
+.worker-report-seg__label {
+  font-size: 28rpx;
+  font-weight: 500;
+  color: var(--color-text-secondary, #64748b);
+  line-height: 1.2;
+}
+
+.worker-report-seg__item--on .worker-report-seg__label {
+  color: #fff;
+  font-weight: 600;
+}
+
+.worker-report-seg__item--on {
+  background: linear-gradient(135deg, #4d8bff 0%, #2f6bff 100%);
+  box-shadow: 0 6rpx 18rpx rgba(47, 107, 255, 0.28);
+}
+
+.worker-report-seg__item--press {
+  opacity: 0.9;
+  transform: scale(0.98);
+}
+
+.worker-report-seg__badge {
+  min-width: 36rpx;
+  height: 36rpx;
+  padding: 0 10rpx;
+  border-radius: 999rpx;
+  font-size: 20rpx;
+  font-weight: 700;
+  line-height: 36rpx;
+  text-align: center;
+  color: var(--color-primary, #2f6bff);
+  background: #eef2ff;
+  flex-shrink: 0;
+}
+
+.worker-report-seg__badge--pending {
+  color: #b45309;
+  background: #fff7ed;
+}
+
+.worker-report-seg__badge--on {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.worker-report-seg__badge--pending.worker-report-seg__badge--on {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.worker-report-loading,
+.worker-report-empty {
+  padding: 48rpx 0;
+}
+
+.worker-report-milestone-filters {
+  width: 100%;
+  margin: 0 0 20rpx;
+  white-space: nowrap;
+}
+
+.worker-report-milestone-filters__inner {
+  display: inline-flex;
+  gap: 12rpx;
+  padding: 4rpx 0 8rpx;
+}
+
+.worker-report-milestone-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8rpx;
+  padding: 12rpx 24rpx;
+  border-radius: 999rpx;
+  background: #fff;
+  border: 1rpx solid var(--color-border, #e5e7eb);
+  font-size: 26rpx;
+  color: var(--color-text-secondary, #646a73);
+  flex-shrink: 0;
+}
+
+.worker-report-milestone-filter--on {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  color: var(--color-primary, #2f6bff);
+  font-weight: 600;
+}
+
+.worker-report-milestone-filter__count {
+  font-size: 22rpx;
+  color: var(--color-text-tertiary, #a0a4ab);
+}
+
+.worker-report-milestone-filter--on .worker-report-milestone-filter__count {
+  color: #6366f1;
+}
+
+.worker-report-status-filter--pending.worker-report-milestone-filter--on {
+  background: #fff7ed;
+  border-color: #fed7aa;
+  color: #b45309;
+}
+
+.worker-report-status-filter--pending.worker-report-milestone-filter--on
+  .worker-report-milestone-filter__count {
+  color: #b45309;
+}
+
+.worker-report-status-filter--rejected.worker-report-milestone-filter--on {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.worker-report-status-filter--rejected.worker-report-milestone-filter--on
+  .worker-report-milestone-filter__count {
+  color: #b91c1c;
+}
+
+.worker-report-milestone-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin: 8rpx 0 12rpx;
+  padding: 0 4rpx;
+}
+
+.worker-report-milestone-section__title {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: var(--color-text-primary, #1f2329);
+}
+
+.worker-report-milestone-section__count {
+  font-size: 22rpx;
+  color: var(--color-text-tertiary, #a0a4ab);
+  flex-shrink: 0;
+}
+
+.worker-report-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20rpx;
+  padding: 24rpx;
+  margin-bottom: 16rpx;
+  background: #fff;
+  border-radius: var(--radius-card, 24rpx);
+  box-shadow: 0 2rpx 12rpx rgba(15, 23, 42, 0.04);
+}
+
+.worker-report-card__thumb {
+  flex-shrink: 0;
+}
+
+.worker-report-card__img {
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 14rpx;
+  border: 1rpx solid var(--color-border, #e5e7eb);
+  background: var(--color-bg-page, #f7f8fa);
+  display: block;
+}
+
+.worker-report-card__img--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #eef2ff;
+  border-color: #e0e7ff;
+}
+
+.worker-report-card__placeholder-icon {
+  width: 44rpx;
+  height: 44rpx;
+}
+
+.worker-report-card--static {
+  align-items: flex-start;
+}
+
+.worker-report-card__side--qty,
+.worker-report-card__side--mine {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8rpx;
+}
+
+.worker-report-card__detail-btn {
+  flex-shrink: 0;
+  padding: 6rpx 20rpx;
+  font-size: 22rpx;
+  font-weight: 600;
+  color: #2f6bff;
+  background: #eef2ff;
+  border: 1rpx solid #c7d2fe;
+  border-radius: 10rpx;
+  line-height: 1.3;
+}
+
+.worker-report-card__qty {
+  font-size: 28rpx;
+  color: var(--color-text-primary, #1f2329);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.worker-report-card__defective {
+  font-size: 22rpx;
+  color: #b45309;
+  white-space: nowrap;
+}
+
+.worker-report-card__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.worker-report-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.worker-report-card__time {
+  font-size: 24rpx;
+  color: var(--color-text-tertiary, #a0a4ab);
+}
+
+.worker-report-card__report-no {
+  font-size: 22rpx;
+  color: var(--color-text-secondary, #646a73);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.worker-report-card__order {
+  font-size: 26rpx;
+  color: var(--color-primary, #2f6bff);
+  font-weight: 500;
+}
+
+.worker-report-card__product-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8rpx;
+  min-width: 0;
+}
+
+.worker-report-card__product {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--color-text-primary, #1f2329);
+}
+
+.worker-report-card__sku {
+  font-size: 24rpx;
+  color: var(--color-text-secondary, #8f959e);
+}
+
+.worker-report-card__node {
+  font-size: 26rpx;
+  color: var(--color-text-secondary, #646a73);
+}
+
+.worker-report-card__side {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  flex-shrink: 0;
+}
+
+.worker-report-card__remain {
+  font-size: 26rpx;
+  color: var(--color-primary, #2f6bff);
+  font-weight: 600;
+}
+
+.worker-report-card__chevron {
+  font-size: 40rpx;
+  color: var(--color-text-tertiary, #a0a4ab);
+  line-height: 1;
+}
+
+.worker-report-badge {
+  font-size: 22rpx;
+  padding: 4rpx 12rpx;
+  border-radius: 8rpx;
+  flex-shrink: 0;
+}
+
+.worker-report-badge--pending {
+  color: #b45309;
+  background: #fff7ed;
+}
+
+.worker-report-badge--approved {
+  color: #047857;
+  background: #ecfdf5;
+}
+
+.worker-report-badge--rejected {
+  color: #b91c1c;
+  background: #fef2f2;
+}
+
+.worker-report-scan-fab {
+  position: fixed;
+  right: 32rpx;
+  bottom: calc(110rpx + env(safe-area-inset-bottom));
+  z-index: 30;
+}
+
+.worker-report-scan-fab__circle {
+  width: 112rpx;
+  height: 112rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(145deg, #4d8bff 0%, #2563eb 100%);
+  box-shadow:
+    0 10rpx 28rpx rgba(37, 99, 235, 0.38),
+    0 2rpx 8rpx rgba(37, 99, 235, 0.18);
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.worker-report-scan-fab--active .worker-report-scan-fab__circle {
+  transform: scale(0.94);
+  opacity: 0.92;
+}
+
+.worker-report-scan-fab__icon {
+  width: 50rpx;
+  height: 50rpx;
+  flex-shrink: 0;
+  filter: brightness(0) invert(1);
+}
+
+.worker-report-milestone-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: flex-end;
+}
+
+.worker-report-milestone-sheet {
+  width: 100%;
+  max-height: 70vh;
+  background: #fff;
+  border-radius: 24rpx 24rpx 0 0;
+  padding-bottom: calc(16rpx + env(safe-area-inset-bottom));
+}
+
+.worker-report-milestone-sheet__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 28rpx 32rpx 16rpx;
+  border-bottom: 1rpx solid var(--color-border, #e5e7eb);
+}
+
+.worker-report-milestone-sheet__title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: var(--color-text-primary, #1f2329);
+}
+
+.worker-report-milestone-sheet__close {
+  font-size: 44rpx;
+  line-height: 1;
+  color: var(--color-text-tertiary, #a0a4ab);
+  padding: 0 8rpx;
+}
+
+.worker-report-milestone-sheet__list {
+  max-height: calc(70vh - 100rpx);
+}
+
+.worker-report-milestone-sheet__item {
+  padding: 28rpx 32rpx;
+  font-size: 30rpx;
+  color: var(--color-text-primary, #1f2329);
+  border-bottom: 1rpx solid var(--color-border, #f0f1f3);
+}
+
+.worker-report-milestone-sheet__item:active {
+  background: #f7f8fa;
 }

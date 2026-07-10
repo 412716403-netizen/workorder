@@ -1,0 +1,39 @@
+<view class="plan-shell">
+  <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-header__title">报工待审</text>
+      <view class="plan-header__back plan-header__back--placeholder"></view>
+    </view>
+  </view>
+  <view class="plan-header-spacer" style="height: {{statusBarHeight + navBarHeight}}px;"></view>
+
+  <view class="pending-page">
+    <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
+    <empty-state wx:elif="{{!rows.length}}" text="暂无待审核报工" />
+    <view wx:else>
+      <view wx:for="{{rows}}" wx:key="reportId" class="pending-row">
+        <view class="pending-row__main">
+          <text class="pending-row__time">{{item.timeLabel}}</text>
+          <text wx:if="{{item.showOrderNumber}}" class="pending-row__order">{{item.orderNumber}}</text>
+          <text class="pending-row__product">{{item.productName}}</text>
+          <text wx:if="{{item.showProductSku}}" class="pending-row__sku">{{item.productSku}}</text>
+          <text class="pending-row__node">{{item.milestoneName}} · {{item.goodQtyText}}</text>
+          <text wx:if="{{item.showOperator}}" class="pending-row__op">{{item.operatorLine}}</text>
+        </view>
+        <view class="pending-row__actions">
+          <view
+            class="pending-btn pending-btn--ok {{actingId === item.reportId ? 'pending-btn--disabled' : ''}}"
+            data-id="{{item.reportId}}"
+            bindtap="onApprove"
+          >通过</view>
+          <view
+            class="pending-btn pending-btn--no {{actingId === item.reportId ? 'pending-btn--disabled' : ''}}"
+            data-id="{{item.reportId}}"
+            bindtap="onReject"
+          >驳回</view>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

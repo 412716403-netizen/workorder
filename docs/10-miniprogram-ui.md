@@ -47,12 +47,13 @@ SmartTrack Pro 微信小程序采用 **企业蓝 + 卡片化 + 底部 Tab** 的 
 
 ## 页面壳类型
 
-### A. Tab 页壳（首页 / 应用 / 扫码 / 消息 / 我的）
+### A. Tab 页壳（首页 / 应用 / 报工 / 消息 / 我的）
 
 - `navigationStyle: custom`
 - **蓝色渐变顶栏** + **白色圆角内容区**（首页自定义布局；其余 Tab 用 `tab-shell` 组件，样式见 [`styles/tab-shell.wxss`](../miniprogram/styles/tab-shell.wxss)）
 - 顶栏安全区由 [`utils/tabShell.js`](../miniprogram/utils/tabShell.js) 计算
-- 底部原生 `tabBar` 共 **5 项**，顺序：首页 → 应用 → **扫码（居中）** → 消息 → 我的（见 `app.json`）
+- 底部使用 `custom-tab-bar`，通常为：首页 → 应用 → **报工（`pages/scan`）** → 消息 → 我的。创建者恒显示首页；成员仅在拥有裸 `workbench` 或任一 `workbench:<pageId>` 时显示首页，没有工作台权限时首页 Tab 会从导航中移除。
+- 登录、启动或切换企业时，无工作台权限但拥有 `process_report` 的成员直接进入「报工」；其它无工作台权限成员进入「应用」。直接停留在首页后权限被撤销时也会自动跳离首页。
 
 ### B. 流程页壳（登录 / 选企业 / 入驻）
 
@@ -66,7 +67,7 @@ SmartTrack Pro 微信小程序采用 **企业蓝 + 卡片化 + 底部 Tab** 的 
 RBAC 字段单一事实源：[`shared/workbenchShortcuts.ts`](../shared/workbenchShortcuts.ts)（小程序在 [`miniprogram/config/menus.js`](../miniprogram/config/menus.js) 维护同构 `WORKBENCH_SHORTCUT_CATALOG` + 专属 `path`）。
 
 - `HOME_QUICK_ENTRIES` / `DEFAULT_HOME_SHORTCUT_IDS`：默认快捷 id 列表，与 Web [`DEFAULT_DASHBOARD_SHORTCUT_IDS`](../shared/workbenchShortcuts.ts) 一致
-- 首页蓝色区域拉取 `GET /dashboard/shortcuts`，经 [`utils/workbenchShortcuts.js`](../miniprogram/utils/workbenchShortcuts.js) 解析后，用 [`utils/accessControl.js`](../miniprogram/utils/accessControl.js) 的 `filterShortcutsByAccess` 过滤（与 Web `filterWorkbenchShortcutsByAccess` + 协作侧栏规则一致；含 owner/admin 提权、插件开关、协作双门控）
+- 首页蓝色区域拉取 `GET /dashboard/shortcuts`，经 [`utils/workbenchShortcuts.js`](../miniprogram/utils/workbenchShortcuts.js) 解析后，用 [`utils/accessControl.js`](../miniprogram/utils/accessControl.js) 的 `filterShortcutsByAccess` 过滤（与 Web `filterWorkbenchShortcutsByAccess` + 协作侧栏规则一致；含 owner 提权、插件开关、协作双门控）
 - `APP_CATEGORIES`：应用中心，由同文件内 `WORKBENCH_SHORTCUT_CATALOG` 按 `group` 派生；展示顺序见 `APP_GROUP_ORDER`（**插件中心**置顶，其后生产管理、进销存、财务结算、基础信息）
 - `buildAppCategories(permissions, keyword, plugins, tenantRole)`：按 RBAC + 插件过滤（`keyword` 保留供扩展，应用页未启用搜索）
 - 系统设置 Tab 可见性：`config/settingsTabs.js` 使用 `canViewSettingsTab`（对齐 Web `SettingsView`：`owner` 全开，其余按 `settings:<tab>:view` 与裸 `settings` 模块键）
@@ -87,9 +88,11 @@ RBAC 字段单一事实源：[`shared/workbenchShortcuts.ts`](../shared/workbenc
 |------|----------|
 | 首页 | **蓝色顶栏**：头像 + 用户名 + 企业名；单行白色快捷图标；**白色圆角内容区**含数据看板；下拉刷新 |
 | 应用 | `tab-shell`：标题「应用」+ 分组宫格卡片（左侧色条分区标题） |
-| 扫码 | `tab-shell`：扫码类型彩色顶条卡片 + 「最近扫码」白卡片列表 |
+| 报工 | `tab-shell`：需 `process_report`；双段「可报任务 / 我的报工」；**可报任务**按工序 Chip 筛选 + 分组；**我的报工**按审核状态 Chip 筛选（「全部」及单状态均为按报工时间倒序平铺，不按状态分组标题）；列表含产品缩略图；右下扫码 FAB → `worker-report-scan` → `worker-report-confirm`；无权限空态 |
 | 消息 | 蓝色顶栏（标题+未读数）+ 全宽搜索框；微信风格会话列表；详情页 `messages-chat` |
 | 我的 | `tab-shell` 自定义顶栏（头像 + 用户/企业）+ 菜单白卡片 + 退出按钮 |
+
+**报工待审**（审核员）：[`packageBusiness/production-report-pending/`](../miniprogram/packageBusiness/production-report-pending/)，应用中心入口需 `production:orders_report_records:edit`。连续扫码会话仍在 [`packageBusiness/scan-session/`](../miniprogram/packageBusiness/scan-session/)。
 
 ### A2. 扫码会话页壳（`pages/scan-session`）
 
@@ -150,7 +153,7 @@ RBAC 字段单一事实源：[`shared/workbenchShortcuts.ts`](../shared/workbenc
 | 页面 | 合作单位 | 产品 | 矩阵 | 键盘 |
 |------|:--------:|:----:|:----:|:----:|
 | 新建生产计划 | — | ✓ | ✓ | ✓ |
-| 工单报工 | — | — | ✓ | ✓ |
+| 工单报工 | — | — | ✓（含 Tab 自报工 `production-order-report?selfReport=1`） | ✓ |
 | 报工批次编辑 | — | — | ✓ | ✓ |
 | 待入库确认 | — | — | ✓ | ✓ |
 | 外协发出确认 | ✓ | — | ✓ | ✓ |
@@ -690,7 +693,10 @@ npm run miniprogram:icons
 
 | 页面 | 路径 | 职责 |
 |------|------|------|
-| 枢纽 | [`pages/scan/`](../miniprogram/pages/scan/) | 类型入口、最近记录 |
+| 报工 Tab | [`pages/scan/`](../miniprogram/pages/scan/) | 可报任务 + 我的报工（工人）；可报任务右下圆形「扫码报工」→ 工序选择弹层 → 工人扫码页 |
+| 工人扫码报工 | [`packageBusiness/worker-report-scan/`](../miniprogram/packageBusiness/worker-report-scan/) | 按预选工序模板批量扫码；可跨多张可报工单累加；确认后跳转确认页 |
+| 工人报工确认 | [`packageBusiness/worker-report-confirm/`](../miniprogram/packageBusiness/worker-report-confirm/) | 多工单数量核对 + 自定义字段；一次提交共用 `reportBatchId`（`PENDING`） |
+| 扫码会话 | [`packageBusiness/scan-session/`](../miniprogram/packageBusiness/scan-session/) | 连续扫码作业 |
 | 预备 | [`packageBusiness/scan-setup/`](../miniprogram/packageBusiness/scan-setup/) | 已废弃，自动跳转会话页 |
 | 会话 | [`packageBusiness/scan-session/`](../miniprogram/packageBusiness/scan-session/) | 条件选择 + 取景扫码 + 下方本次扫码记录 |
 
@@ -814,7 +820,7 @@ npm run miniprogram:icons
 | [`components/role-picker-sheet/`](../miniprogram/components/role-picker-sheet/) | 底栏单选分配已有角色 |
 | [`components/milestone-multi-select/`](../miniprogram/components/milestone-multi-select/) | 底栏多选工序节点（`planApi.fetchNodesAll`） |
 
-**权限**：`basic:members:view`（入口）· 审核需 owner/admin 或 `basic:members:create` · 分配角色/工序需 owner/admin · 移除仅 owner
+**权限**：`basic:members:view`（入口）· 审核需 owner 或 `basic:members:create` · 分配角色/工序仅 owner · 移除仅 owner · **企业创建者也可分配生产工序**（与成员相同，写入 `assignedMilestoneIds`）
 
 **留 Web**：角色 CRUD、细粒度权限树、直接编辑成员 `permissions`
 

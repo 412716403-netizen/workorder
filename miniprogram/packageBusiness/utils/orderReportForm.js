@@ -240,14 +240,47 @@ function buildReportQtySummary(stats, unitName) {
   };
 }
 
+function variantsHaveColorSizeStructure(product) {
+  const variants = (product && product.variants) || [];
+  if (variants.length < 2) return false;
+  return variants.some((v) => v && v.colorId) && variants.some((v) => v && v.sizeId);
+}
+
+function orderItemsImplyColorSizeMatrix(product, orderItems) {
+  const orderVariantIds = new Set((orderItems || []).map((it) => it && it.variantId).filter(Boolean));
+  if (orderVariantIds.size < 2) return false;
+  const variants = ((product && product.variants) || []).filter((v) => orderVariantIds.has(v.id));
+  if (variants.length < 2) return false;
+  return variants.some((v) => v.colorId) && variants.some((v) => v.sizeId);
+}
+
 function resolveReportFormMode(product, category, orderItems) {
   if (productHasColorSizeMatrix(product, category)) return 'matrix';
+  if (variantsHaveColorSizeStructure(product)) return 'matrix';
+  if (orderItemsImplyColorSizeMatrix(product, orderItems)) return 'matrix';
   const variantIds = new Set();
   (orderItems || []).forEach((it) => {
     if (it && it.variantId) variantIds.add(it.variantId);
   });
   if (variantIds.size > 1) return 'multi';
   return 'single';
+}
+
+/** 报工矩阵仅展示工单行内规格，避免整产品色码表与订单无关格干扰录入 */
+function subsetProductForOrderMatrix(product, orderItems) {
+  if (!product) return product;
+  const orderVariantIds = new Set((orderItems || []).map((it) => it && it.variantId).filter(Boolean));
+  if (!orderVariantIds.size) return product;
+  const subsetVariants = (product.variants || []).filter((v) => v && v.id && orderVariantIds.has(v.id));
+  if (!subsetVariants.length) return product;
+  const colorIds = [...new Set(subsetVariants.map((v) => v.colorId).filter(Boolean))];
+  const sizeIds = [...new Set(subsetVariants.map((v) => v.sizeId).filter(Boolean))];
+  return {
+    ...product,
+    variants: subsetVariants,
+    colorIds: colorIds.length ? colorIds : product.colorIds,
+    sizeIds: sizeIds.length ? sizeIds : product.sizeIds,
+  };
 }
 
 function buildVariantRemainingMap(orderItems, milestoneReports) {
@@ -315,8 +348,16 @@ function patchReportMatrixLayout(matrixLayout, quantities, defectiveQuantities, 
   };
 }
 
-function buildReportMatrixLayout(product, dictionaries, quantities, defectiveQuantities, layoutOpts) {
-  const matrix = buildVariantMatrixUiModel(product, dictionaries, quantities);
+function buildReportMatrixLayout(
+  product,
+  dictionaries,
+  quantities,
+  defectiveQuantities,
+  layoutOpts,
+  orderItems,
+) {
+  const targetProduct = subsetProductForOrderMatrix(product, orderItems);
+  const matrix = buildVariantMatrixUiModel(targetProduct, dictionaries, quantities);
   if (!matrix) return null;
   return patchReportMatrixLayout(matrix, quantities, defectiveQuantities, layoutOpts);
 }
@@ -458,6 +499,9 @@ module.exports = {
   buildQtyHintText,
   buildReportQtySummary,
   resolveReportFormMode,
+  variantsHaveColorSizeStructure,
+  orderItemsImplyColorSizeMatrix,
+  subsetProductForOrderMatrix,
   buildVariantRemainingMap,
   buildReportMatrixLayout,
   patchReportMatrixLayout,

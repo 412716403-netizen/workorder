@@ -1,7 +1,11 @@
-import type { CustomDocFieldType } from './shared/types';
+import type { CustomDocFieldType, ReportApprovalStatus } from './shared/types';
 
 export {
   MilestoneStatus,
+  ReportApprovalStatus,
+  REPORT_APPROVAL_STATUS_LABEL,
+  REPORT_QTY_OCCUPYING_STATUSES,
+  reportAllowsEditDelete,
   OrderStatus,
   PlanStatus,
   OrderDispatchStatus,
@@ -16,6 +20,8 @@ export {
   FINANCE_UNASSIGNED_ACCOUNT_KEY,
   PLAN_DOC_NO_PREFIX,
   WORK_ORDER_DOC_NO_PREFIX,
+  REPORT_NO_PREFIX,
+  WORKER_SELF_REPORT_NO_PREFIX,
   SCAN_ITEM_CODE_IDS_KEY,
   WEIGHT_TOLERANCE_PERCENT_KEY,
   DEFAULT_WEIGHT_TOLERANCE_PERCENT,
@@ -247,6 +253,8 @@ export {
   canViewWorkbenchPage,
   canEditWorkbenchPage,
   hasWorkbenchPageFullAccess,
+  hasWorkbenchModuleAccess,
+  hasWorkbenchNavAccess,
   filterWorkbenchPagesByVisibility,
   mergeSharedWorkbenchPages,
   type WorkbenchPageAccessOpts,
@@ -1559,6 +1567,11 @@ export interface MilestoneReport {
   rate?: number;
   /** 报工人员 id，用于报工结算按工人筛选 */
   workerId?: string;
+  /** 审核状态：PENDING 待审 / APPROVED 已审 / REJECTED 已驳回 */
+  approvalStatus?: ReportApprovalStatus | string;
+  approvedAt?: string | null;
+  approvedBy?: string | null;
+  rejectedReason?: string | null;
   /**
    * 报工录入的本次交货总重量（kg），仅当所属工序 `enableWeightOnReport` 为 true 时有值。
    * 用于按 BOM 占比派生各子物料实际消耗，替代传统的"件数 × BOM"理论口径。

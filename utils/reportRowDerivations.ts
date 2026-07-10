@@ -14,6 +14,7 @@ import {
   combinedCompletedAtTemplate,
 } from './productReportAggregates';
 import { findGatingPredecessorIndex, isProcessSequential } from '../shared/processSequence';
+import { sumPendingReportQty } from './reportQtyOccupies';
 
 export interface ReportRowDerivationsInput {
   productId: string;
@@ -214,7 +215,19 @@ export function computeReportRowDerivations(input: ReportRowDerivationsInput): R
         }, 0));
   const hintMaxReportable = Math.max(0, Math.round(Number(hintMaxReportableRaw) || 0));
   const hintCompletedDisplay = productCompletedQty ?? totalCompleted;
-  const hintRemaining = Math.max(0, hintMaxReportable - hintCompletedDisplay - totalOutsourcedAtNode);
+  const pendingOccupied = ordersInModal.reduce((s, o) => {
+    const ms = o.milestones.find((m) => m.templateId === tid);
+    return s + sumPendingReportQty(ms?.reports);
+  }, 0);
+  const hintRemaining = Math.max(
+    0,
+    hintMaxReportable - hintCompletedDisplay - pendingOccupied - totalOutsourcedAtNode,
+  );
+
+  const effectiveRemainingForModalAdjusted = Math.max(
+    0,
+    effectiveRemainingForModal - pendingOccupied,
+  );
 
   return {
     ordersInModal,
@@ -225,7 +238,7 @@ export function computeReportRowDerivations(input: ReportRowDerivationsInput): R
     hintRemaining,
     totalOutsourcedAtNode,
     outsourcedByVariantId,
-    effectiveRemainingForModal,
+    effectiveRemainingForModal: effectiveRemainingForModalAdjusted,
     defectiveQtyForHint,
     totalRework,
     totalCompleted,

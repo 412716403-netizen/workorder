@@ -2,7 +2,6 @@ const { TAB_MEMBERS, TAB_APPLICATIONS, TAB_INVITE } = require('../config/members
 
 function tenantRoleLabel(role) {
   if (role === 'owner') return '创建者';
-  if (role === 'admin') return '管理员';
   return '成员';
 }
 
@@ -57,11 +56,11 @@ function buildMemberListRows(members, rolesList, ctx) {
     const displayName = m.displayName || m.username || '未命名';
     const subline = m.phone || m.username || '';
     const milestoneCount = Array.isArray(m.assignedMilestoneIds) ? m.assignedMilestoneIds.length : 0;
-    const isOwner = m.role === 'owner';
+    const isOwnerMember = m.role === 'owner';
     const isSelf = m.userId === currentUserId;
-    const showManageActions = canManage && !isOwner && !isSelf;
-    const showRemove = tenantRole === 'owner' && !isOwner && !isSelf;
-    const showMilestone = showManageActions && memberHasReportPerm(m, rolesList);
+    const showAssignRole = canManage && !isOwnerMember && !isSelf;
+    const showRemove = tenantRole === 'owner' && !isOwnerMember && !isSelf;
+    const showMilestone = canManage && memberHasReportPerm(m, rolesList);
 
     return {
       id: m.id,
@@ -75,7 +74,7 @@ function buildMemberListRows(members, rolesList, ctx) {
       milestoneCount,
       milestoneText: `工序 ${milestoneCount} 个`,
       showMilestone,
-      showAssignRole: showManageActions,
+      showAssignRole: showAssignRole,
       showRemove,
       roleId: m.roleId || '',
       assignedMilestoneIds: Array.isArray(m.assignedMilestoneIds) ? m.assignedMilestoneIds : [],

@@ -34,7 +34,10 @@ export async function listTenants(userId: string, opts: { all?: boolean; page?: 
     return memberships.map((m) => {
       let perms: unknown = m.permissions;
       if (m.role === 'owner') { perms = [...ALL_PERMISSIONS]; }
-      else if (m.roleId && m.customRole) { perms = Array.isArray(m.customRole.permissions) ? m.customRole.permissions : []; }
+      else if (m.roleId) {
+        // 与 auth.resolveMemberPermissions 一致：绑定角色后不再回退 membership.permissions
+        perms = m.customRole && Array.isArray(m.customRole.permissions) ? m.customRole.permissions : [];
+      }
       return {
         id: m.tenant.id, name: m.tenant.name, logo: m.tenant.logo,
         inviteCode: m.tenant.inviteCode, status: m.tenant.status,
@@ -61,7 +64,9 @@ export async function listTenants(userId: string, opts: { all?: boolean; page?: 
   const data = memberships.map((m) => {
     let perms: unknown = m.permissions;
     if (m.role === 'owner') { perms = [...ALL_PERMISSIONS]; }
-    else if (m.roleId && m.customRole) { perms = Array.isArray(m.customRole.permissions) ? m.customRole.permissions : []; }
+    else if (m.roleId) {
+      perms = m.customRole && Array.isArray(m.customRole.permissions) ? m.customRole.permissions : [];
+    }
     return {
       id: m.tenant.id, name: m.tenant.name, logo: m.tenant.logo,
       inviteCode: m.tenant.inviteCode, status: m.tenant.status,
@@ -132,15 +137,16 @@ export async function updateMemberRole(
   const callerMembership = await prisma.tenantMembership.findUnique({
     where: { userId_tenantId: { userId: callerId, tenantId } },
   });
-  if (!callerMembership || !['owner', 'admin'].includes(callerMembership.role))
-    throw new AppError(403, '无权修改成员角色');
+  if (!callerMembership || callerMembership.role !== 'owner')
+    throw new AppError(403, '仅企业创建者可修改成员角色');
 
   const targetMembership = await prisma.tenantMembership.findUnique({
     where: { userId_tenantId: { userId: uid, tenantId } },
   });
   if (!targetMembership) throw new AppError(404, '成员不存在');
   if (targetMembership.role === 'owner') throw new AppError(403, '不能修改企业创建者的角色');
-  if (body.role === 'owner') throw new AppError(400, '不能将角色设为 owner');
+  if (body.role !== undefined && body.role !== 'worker')
+    throw new AppError(400, '企业成员身份只能是 worker');
 
   const data: Record<string, unknown> = {};
   if (body.role !== undefined) data.role = body.role;
@@ -150,6 +156,8 @@ export async function updateMemberRole(
       const roleExists = await prisma.role.findUnique({ where: { id: body.roleId } });
       if (!roleExists || roleExists.tenantId !== tenantId) throw new AppError(400, '角色不存在');
       data.roleId = body.roleId;
+      // 绑定自定义角色后权限以角色为准；清空 membership 上残留的直授权限，避免历史 workbench 等键干扰
+      data.permissions = [];
     }
   }
 
@@ -165,8 +173,8 @@ export async function updateMemberPermissions(
   const callerMembership = await prisma.tenantMembership.findUnique({
     where: { userId_tenantId: { userId: callerId, tenantId } },
   });
-  if (!callerMembership || !['owner', 'admin'].includes(callerMembership.role))
-    throw new AppError(403, '无权修改成员权限');
+  if (!callerMembership || callerMembership.role !== 'owner')
+    throw new AppError(403, '仅企业创建者可修改成员权限');
 
   const targetMembership = await prisma.tenantMembership.findUnique({
     where: { userId_tenantId: { userId: uid, tenantId } },
@@ -222,7 +230,7 @@ export async function applyToJoin(userId: string, tenantId: string, message?: st
 }
 
 /**
- * 成员审核权限：企业创建者 owner / 管理员 admin，
+ * 成员审核权限：企业创建者 owner，
  * 或被授予「成员管理 - 添加」细粒度权限（`basic:members:create`）的角色成员。
  */
 async function assertCanReviewApplications(callerId: string, tenantId: string) {
@@ -231,7 +239,7 @@ async function assertCanReviewApplications(callerId: string, tenantId: string) {
     include: { customRole: { select: { permissions: true } } },
   });
   if (!m) throw new AppError(403, '您不是该企业的成员');
-  if (m.role === 'owner' || m.role === 'admin') return;
+  if (m.role === 'owner') return;
   if (resolveMemberPerms(m).includes('basic:members:create')) return;
   throw new AppError(403, '无权审核成员申请');
 }
@@ -258,12 +266,15 @@ export async function reviewApplication(
   if (app.status !== 'PENDING') throw new AppError(400, '该申请已处理');
 
   if (body.action === 'APPROVED') {
+    if (body.role !== undefined && body.role !== 'worker') {
+      throw new AppError(400, '新加入企业的账号只能是成员');
+    }
     await prisma.joinApplication.update({
       where: { id: app.id },
       data: { status: 'APPROVED', reviewedBy: reviewerId, reviewedAt: new Date() },
     });
     await prisma.tenantMembership.create({
-      data: { userId: app.userId, tenantId: app.tenantId, role: body.role || 'worker', permissions: (body.permissions as any) || [] },
+      data: { userId: app.userId, tenantId: app.tenantId, role: 'worker', permissions: (body.permissions as any) || [] },
     });
     await prisma.user.update({ where: { id: app.userId }, data: { isEnterprise: true } });
     return { message: '已通过申请' };
@@ -290,13 +301,12 @@ function resolveMemberPerms(m: {
   role: string; permissions: unknown; roleId?: string | null;
   customRole?: { permissions: unknown } | null;
 }): string[] {
-  if (m.role === 'owner' || m.role === 'admin') return [...ALL_PERMISSIONS];
-  if (m.roleId && m.customRole) {
+  if (m.role === 'owner') return [...ALL_PERMISSIONS];
+  // 已绑定自定义角色：只认角色权限，禁止回退 membership.permissions
+  if (m.roleId) {
+    if (!m.customRole) return [];
     const rp = m.customRole.permissions;
-    const fromRole = Array.isArray(rp) ? (rp as string[]) : [];
-    if (fromRole.length > 0) return fromRole;
-    const fromMem = Array.isArray(m.permissions) ? (m.permissions as string[]) : [];
-    return fromMem.length > 0 ? fromMem : [];
+    return Array.isArray(rp) ? (rp as string[]) : [];
   }
   return Array.isArray(m.permissions) ? m.permissions as string[] : [];
 }
@@ -310,7 +320,11 @@ export async function getReportableMembers(tenantId: string) {
     },
   });
   return members
-    .filter((m) => m.role !== 'owner' && resolveMemberPerms(m).includes('process_report'))
+    .filter((m) => {
+      const assigned = Array.isArray(m.assignedMilestoneIds) ? m.assignedMilestoneIds : [];
+      if (m.role === 'owner') return assigned.length > 0;
+      return resolveMemberPerms(m).includes('process_report');
+    })
     .map((m) => ({
       id: m.userId, name: m.user.displayName || m.user.username,
       groupName: m.customRole?.name || '', role: m.role,
@@ -328,8 +342,8 @@ export async function updateMemberMilestones(
   const callerMembership = await prisma.tenantMembership.findUnique({
     where: { userId_tenantId: { userId: callerId, tenantId } },
   });
-  if (!callerMembership || !['owner', 'admin'].includes(callerMembership.role))
-    throw new AppError(403, '无权修改成员工序权限');
+  if (!callerMembership || callerMembership.role !== 'owner')
+    throw new AppError(403, '仅企业创建者可修改成员工序权限');
   const targetMembership = await prisma.tenantMembership.findUnique({
     where: { userId_tenantId: { userId: uid, tenantId } },
   });

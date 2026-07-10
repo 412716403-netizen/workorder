@@ -1,6 +1,7 @@
 const _require = require('../../utils/request.js'),request = _require.request;
 const { parseTenantListResponse } = require('../../utils/session.js');
 const { clearFeaturePluginsCache } = require('../../utils/featurePlugins.js');
+const { resolveDefaultTabPath } = require('../../utils/tabAccess.js');
 
 function appStatusLabel(status) {
   if (status === 'PENDING') return { label: '审核中', pill: 'pending' };
@@ -147,7 +148,10 @@ Page({
         expiresAt: (_d$expiresAt = d.expiresAt) != null ? _d$expiresAt : null
       })
     );
-    wx.switchTab({ url: '/pages/home/home' });
+    wx.switchTab({ url: resolveDefaultTabPath({
+      tenantRole: d.tenantRole,
+      permissions: d.permissions || [],
+    }) });
   },
 
   onSubmitCreate() {

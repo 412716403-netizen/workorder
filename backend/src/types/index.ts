@@ -1,5 +1,9 @@
 export {
   MilestoneStatus,
+  ReportApprovalStatus,
+  REPORT_APPROVAL_STATUS_LABEL,
+  REPORT_QTY_OCCUPYING_STATUSES,
+  reportAllowsEditDelete,
   OrderStatus,
   PlanStatus,
   OrderDispatchStatus,
@@ -17,6 +21,8 @@ export {
   FINANCE_UNASSIGNED_ACCOUNT_KEY,
   PLAN_DOC_NO_PREFIX,
   WORK_ORDER_DOC_NO_PREFIX,
+  REPORT_NO_PREFIX,
+  WORKER_SELF_REPORT_NO_PREFIX,
   PSI_PO_CUSTOM_DATA_SOURCE_PLAN_ID,
   PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER,
   BATCH_FIELD_MAX_LEN,
@@ -121,15 +127,15 @@ export {
 /**
  * JWT payload 只承载身份与少量上下文。
  *
- * 重要：`permissions` 不再放入 JWT。owner/admin 之外的细粒度权限在请求时
+ * 重要：`permissions` 不再放入 JWT。owner 之外的细粒度权限在请求时
  * 由 `requirePermission` / `requireSubPermission` 通过 `auth.service` 的
  * `loadEffectivePermissions(userId, tenantId)` 按需加载（Redis 5s 缓存）。
  *
- * 历史背景：早期把 ALL_PERMISSIONS（数百条）塞 JWT，导致 owner/admin 登录后
+ * 历史背景：早期把 ALL_PERMISSIONS（数百条）塞 JWT，导致 owner 登录后
  * Set-Cookie 头超过 nginx 默认 `proxy_buffer_size`（8K），nginx 报
  * "upstream sent too big header" 直接 502。
  *
- * `tenantRole` 保留：owner/admin 走 `isTenantElevatedRole` 快路径，
+ * `tenantRole` 保留：仅 owner 走 `isTenantElevatedRole` 快路径，
  * 完全不必触发权限加载。
  */
 export interface JwtPayload {
@@ -148,9 +154,9 @@ export const ALL_PERMISSIONS = [
 
 export type Permission = (typeof ALL_PERMISSIONS)[number];
 
-/** 企业成员 `tenant_memberships.role`：拥有者与租户管理员（admin）视为满权 */
+/** 企业成员 `tenant_memberships.role`：仅企业创建者 owner 视为满权。 */
 export function isTenantElevatedRole(role: string | undefined): boolean {
-  return role === 'owner' || role === 'admin';
+  return role === 'owner';
 }
 
 export const SETTINGS_SUB_MODULES = {

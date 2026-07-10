@@ -1,0 +1,7 @@
+{
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "page-header": "/components/page-header/page-header",
+    "scan-batch-modal": "/packageBusiness/components/scan-batch-modal/scan-batch-modal"
+  }
+}

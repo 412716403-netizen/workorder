@@ -124,6 +124,8 @@ async function findDuplicate(
         where: {
           milestoneId: scope.milestoneId,
           milestone: { productionOrder: { tenantId } },
+          // 驳回不占用扫码去重
+          approvalStatus: { not: 'REJECTED' },
           ...(scope.excludeRecordId ? { id: { not: scope.excludeRecordId } } : {}),
           ...idsFilter,
         },
@@ -148,6 +150,7 @@ async function findDuplicate(
       const hit = await basePrisma.productProgressReport.findFirst({
         where: {
           progressId: { in: progresses.map((p) => p.id) },
+          approvalStatus: { not: 'REJECTED' },
           ...(scope.excludeRecordId ? { id: { not: scope.excludeRecordId } } : {}),
           ...idsFilter,
         },

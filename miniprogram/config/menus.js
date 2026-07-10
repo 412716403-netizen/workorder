@@ -38,6 +38,15 @@ const LUCIDE_ICON_FILES = {
 const WORKBENCH_SHORTCUT_CATALOG = [
   { id: 'production-plans', label: '生产计划', group: '生产管理', icon: 'CalendarRange', module: 'production', path: '/packageBusiness/production-plans/production-plans' },
   { id: 'production-orders', label: '工单中心', group: '生产管理', icon: 'ClipboardList', module: 'production', path: '/packageBusiness/production-orders/production-orders' },
+  {
+    id: 'production-report-pending',
+    label: '报工待审',
+    group: '生产管理',
+    icon: 'ClipboardList',
+    module: 'production',
+    perm: 'production:orders_report_records:edit',
+    path: '/packageBusiness/production-report-pending/production-report-pending',
+  },
   { id: 'production-stock-out', label: '生产物料', group: '生产管理', icon: 'ArrowUpFromLine', module: 'production', perm: 'production:material_list:allow', path: '/packageBusiness/production-stock-out/production-stock-out' },
   { id: 'production-outsource', label: '外协管理', group: '生产管理', icon: 'Truck', module: 'production', perm: 'production:outsource:view', path: '/packageBusiness/production-outsource/production-outsource' },
   { id: 'production-rework', label: '返工管理', group: '生产管理', icon: 'RotateCcw', module: 'production', perm: 'production:rework:view', path: '/packageBusiness/production-rework/production-rework' },

@@ -1,5 +1,6 @@
 {
   "navigationStyle": "custom",
+  "enablePullDownRefresh": true,
   "usingComponents": {
     "tab-shell": "/components/tab-shell/tab-shell",
     "empty-state": "/components/empty-state/empty-state"

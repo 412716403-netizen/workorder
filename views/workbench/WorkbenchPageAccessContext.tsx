@@ -3,7 +3,7 @@ import React, { createContext, useContext } from 'react';
 /**
  * 当前工作台页面对查看者是否「完整授权」。
  *
- * 完整授权（创建者 / 被授予 `workbench:<pageId>` / 裸 `workbench` / owner·admin）时，
+ * 完整授权（owner / 被授予 `workbench:<pageId>` / 裸 `workbench`）时，
  * 该页 widget 不再按模块/金额权限掩码，金额等内容全部展示。
  */
 const WorkbenchPageFullAccessContext = createContext<boolean>(false);

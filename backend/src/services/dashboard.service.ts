@@ -40,6 +40,7 @@ import {
   normalizeWorkbenchConfig,
   filterWorkbenchPagesByVisibility,
   hasWorkbenchPageFullAccess,
+  hasWorkbenchNavAccess,
   mergeSharedWorkbenchPages,
 } from '../../../shared/workbenchValidate.js';
 import {
@@ -144,7 +145,7 @@ function filterShortcutIdsByAccess(
     .filter(item => {
       if (item.pluginId && featurePlugins[item.pluginId] === false) return false;
       if (isTenantElevatedRole(tenantRole)) return true;
-      if (!permissions || permissions.length === 0) return true;
+      if (!permissions || permissions.length === 0) return false;
       if (item.perm && !hasSubPermission(permissions, item.perm)) return false;
       if (item.module && !hasSubPermission(permissions, item.module)) {
         if (!permissions.some(p => p.startsWith(`${item.module}:`))) return false;
@@ -157,7 +158,7 @@ function filterShortcutIdsByAccess(
 /**
  * 工作台有效配置：
  * - 首页（HOME）= 当前用户的个人首页（membership.preferences）。
- * - 自定义页面 = 租户级共享池中「当前用户可见」的页面（创建者本人 / owner·admin / 角色被授予 `workbench:<pageId>`）。
+ * - 自定义页面 = 租户级共享池中「当前用户可见」的页面（owner / 成员角色被授予 `workbench:<pageId>`）。
  * 最终再按查看者权限做 widget 级过滤。
  */
 export async function getWorkbench(userId: string, tenantId: string, permissions: string[]) {
@@ -166,13 +167,25 @@ export async function getWorkbench(userId: string, tenantId: string, permissions
     settingsService.getConfig(tenantId),
   ]);
 
+  const canAccess = hasWorkbenchNavAccess(permissions, membership.role);
+  if (!canAccess) {
+    return {
+      canAccess: false,
+      effective: { version: 1 as const, activePageId: '', pages: [] },
+    };
+  }
+
   const featurePlugins = parseFeaturePlugins(config[DASHBOARD_SETTING_KEYS.featurePlugins]);
 
   const homePage = readUserHomePage(membership.preferences);
   const sharedPages = readSharedWorkbenchPages(config);
   const assembled = assembleWorkbench(homePage, sharedPages);
 
-  const visible = filterWorkbenchPagesByVisibility(assembled, { userId, permissions });
+  const visible = filterWorkbenchPagesByVisibility(assembled, {
+    userId,
+    permissions,
+    tenantRole: membership.role,
+  });
   const effective = filterWorkbenchByAccess(visible, {
     permissions,
     featurePlugins,
@@ -180,7 +193,7 @@ export async function getWorkbench(userId: string, tenantId: string, permissions
     userId,
   });
 
-  return { effective };
+  return { canAccess: true, effective };
 }
 
 export async function saveUserWorkbench(
@@ -190,6 +203,9 @@ export async function saveUserWorkbench(
   permissions: string[],
 ) {
   const membership = await getMembership(userId, tenantId);
+  if (membership.role !== 'owner') {
+    throw new AppError(403, '仅企业创建者可编辑工作台');
+  }
   const config = await settingsService.getConfig(tenantId);
   const featurePlugins = parseFeaturePlugins(config[DASHBOARD_SETTING_KEYS.featurePlugins]);
   // 自定义页面管理权限按业务约定＝企业创建者 owner
@@ -234,8 +250,16 @@ export async function saveUserWorkbench(
 
   // 3) 返回与 GET 一致的、当前用户可见且按权限过滤后的视图
   const assembled = assembleWorkbench(homePersisted, mergedShared);
-  const visible = filterWorkbenchPagesByVisibility(assembled, { userId, permissions });
-  return filterWorkbenchByAccess(visible, accessOpts);
+  const visible = filterWorkbenchPagesByVisibility(assembled, {
+    userId,
+    permissions,
+    tenantRole: membership.role,
+  });
+  const effective = filterWorkbenchByAccess(visible, accessOpts);
+  return {
+    canAccess: hasWorkbenchNavAccess(permissions, membership.role),
+    effective,
+  };
 }
 
 export interface WorkbenchPageSummary {
@@ -283,7 +307,7 @@ export async function listWorkbenchPages(tenantId: string): Promise<WorkbenchPag
 /**
  * 计算当前用户因「工作台页面完整授权」而获得的附加业务模块。
  *
- * 语义：当某工作台页面对用户完整可见（创建者 / 被授予 `workbench:<pageId>` / 裸 `workbench` / owner·admin）时，
+ * 语义：当某工作台页面对用户完整可见（owner / 被授予 `workbench:<pageId>` / 裸 `workbench`）时，
  * 该页所放置 widget 所需的模块（如 psi/production/finance）视为对该用户开放，
  * 以便统计接口为这些 widget 返回完整数据（前端再据页面授权解除金额掩码）。
  * 仅作用于统计数据读取，不影响其它业务接口的权限判定。
@@ -301,7 +325,11 @@ export async function resolveWorkbenchAccessModules(
   const homePage = readUserHomePage(membership.preferences);
   const sharedPages = readSharedWorkbenchPages(config);
   const assembled = assembleWorkbench(homePage, sharedPages);
-  const visible = filterWorkbenchPagesByVisibility(assembled, { userId, permissions });
+  const visible = filterWorkbenchPagesByVisibility(assembled, {
+    userId,
+    permissions,
+    tenantRole: membership.role,
+  });
 
   const modules = new Set<string>();
   for (const page of visible.pages) {
@@ -318,7 +346,7 @@ export async function resolveWorkbenchAccessModules(
 
 /**
  * 在统计接口读取数据前，按「工作台页面完整授权」为用户补齐附加模块权限。
- * owner/admin 已持全部模块权限，无需补齐。
+ * owner 已持全部模块权限，无需补齐。
  */
 export async function augmentPermissionsWithWorkbench(
   userId: string,
@@ -326,7 +354,7 @@ export async function augmentPermissionsWithWorkbench(
   permissions: string[],
   tenantRole?: string,
 ): Promise<string[]> {
-  if (tenantRole === 'owner' || tenantRole === 'admin') return permissions;
+  if (tenantRole === 'owner') return permissions;
   const extra = await resolveWorkbenchAccessModules(userId, tenantId, permissions, tenantRole);
   if (extra.length === 0) return permissions;
   return [...new Set([...permissions, ...extra])];

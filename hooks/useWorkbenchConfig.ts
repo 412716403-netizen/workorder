@@ -6,13 +6,13 @@ import { dashboardQueryKey } from './dashboardQueryKeys';
 import { useAuth } from '../contexts/AuthContext';
 import {
   normalizeWorkbenchConfig,
-  WORKBENCH_BUILTIN_DEFAULT,
   WORKBENCH_HOME_PAGE_ID,
   isWorkbenchHomePage,
   isHomePinnedWidgetType,
   mergeWorkbenchHomePinnedItems,
   canEditWorkbenchPage,
   hasWorkbenchPageFullAccess,
+  hasWorkbenchNavAccess,
   type WorkbenchConfig,
   type WorkbenchLayoutItem,
   type WorkbenchPage,
@@ -24,54 +24,74 @@ function newId(prefix: string): string {
   return `${prefix}-${crypto.randomUUID().slice(0, 8)}`;
 }
 
+/** 工作台相关权限摘要，纳入 queryKey 以便角色变更后重新拉取 */
+function workbenchPermKey(permissions: string[]): string {
+  return permissions
+    .filter(p => p === 'workbench' || p.startsWith('workbench:'))
+    .sort()
+    .join('|');
+}
+
 export function useWorkbenchConfig() {
   const qc = useQueryClient();
   const { tenantCtx, userId } = useAuth();
   const tenantId = tenantCtx?.tenantId;
   const tenantRole = tenantCtx?.tenantRole;
   const permissions = useMemo(() => tenantCtx?.permissions ?? [], [tenantCtx?.permissions]);
-  const workbenchKey = useMemo(() => dashboardQueryKey(tenantId, 'workbench'), [tenantId]);
+  /** 本地预判：用于决定是否发起请求；最终以服务端 canAccess 为准 */
+  const localNavAllowed = hasWorkbenchNavAccess(permissions, tenantRole);
+  const permKey = useMemo(() => workbenchPermKey(permissions), [permissions]);
+  const workbenchKey = useMemo(
+    () => dashboardQueryKey(tenantId, 'workbench', permKey),
+    [tenantId, permKey],
+  );
 
   const query = useQuery({
     queryKey: workbenchKey,
+    // 始终请求：避免 localStorage 残留 workbench 权限时误显示，或本地漏判导致不拉数
     queryFn: () => dashboard.getWorkbench(),
-    staleTime: 30_000,
+    staleTime: 0,
     enabled: !!tenantId,
   });
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<WorkbenchConfig | null>(null);
-  /** 当前 Tab 仅会话内有效；刷新后回到首页 */
+  /** 当前 Tab 仅会话内有效；刷新后回到首个可见页 */
   const [sessionActivePageId, setSessionActivePageId] = useState(WORKBENCH_HOME_PAGE_ID);
 
   useEffect(() => {
     setEditing(false);
     setDraft(null);
     setSessionActivePageId(WORKBENCH_HOME_PAGE_ID);
-  }, [tenantId]);
+  }, [tenantId, permKey]);
 
-  const effective = query.data?.effective ?? null;
+  /** 页面可见性与入口权限均以服务端为准 */
+  const serverCanAccess = query.data?.canAccess;
+  const navAllowed = serverCanAccess ?? localNavAllowed;
+  const effective =
+    navAllowed && query.data?.effective && Array.isArray(query.data.effective.pages)
+      ? query.data.effective
+      : navAllowed
+        ? null
+        : { version: 1 as const, activePageId: '', pages: [] };
+
   const loadError = query.error instanceof Error ? query.error.message : query.isError ? '加载失败' : null;
 
   useEffect(() => {
     if (!editing) {
-      if (effective) {
-        // ensureHome=false：服务端按角色权限可能已隐藏首页，前端不得重新注入
-        setDraft(normalizeWorkbenchConfig({ ...effective, activePageId: WORKBENCH_HOME_PAGE_ID }, false));
-      } else if (query.isError && !query.isLoading) {
-        setDraft(normalizeWorkbenchConfig(WORKBENCH_BUILTIN_DEFAULT));
+      if (effective && effective.pages.length > 0) {
+        const firstId = effective.pages[0]?.id ?? WORKBENCH_HOME_PAGE_ID;
+        setDraft(normalizeWorkbenchConfig({ ...effective, activePageId: firstId }, false));
+      } else if (!query.isLoading) {
+        setDraft(null);
       }
     }
-  }, [effective, editing, query.isError, query.isLoading]);
+  }, [effective, editing, query.isLoading]);
 
-  const layoutConfig =
-    draft
-    ?? effective
-    ?? (query.isError ? normalizeWorkbenchConfig(WORKBENCH_BUILTIN_DEFAULT) : null);
+  const layoutConfig = draft ?? effective ?? null;
 
   const config = useMemo(() => {
     if (!layoutConfig) return null;
-    // ensureHome=false：尊重服务端的可见性裁剪（首页可能因角色权限被隐藏）
     const normalized = normalizeWorkbenchConfig(layoutConfig, false);
     const pageIds = new Set(normalized.pages.map(p => p.id));
     const fallbackId = normalized.pages[0]?.id ?? WORKBENCH_HOME_PAGE_ID;
@@ -82,7 +102,7 @@ export function useWorkbenchConfig() {
   const saveMutation = useMutation({
     mutationFn: (config: WorkbenchConfig) => dashboard.saveWorkbench(config),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: workbenchKey });
+      void qc.invalidateQueries({ queryKey: ['dashboard', tenantId, 'workbench'] });
       toast.success('工作台布局已保存');
       setEditing(false);
     },
@@ -100,23 +120,28 @@ export function useWorkbenchConfig() {
   }, [config]);
 
   const startEdit = useCallback(() => {
-    if (layoutConfig) {
-      setDraft(normalizeWorkbenchConfig({ ...layoutConfig, activePageId: WORKBENCH_HOME_PAGE_ID }));
+    if (layoutConfig && layoutConfig.pages.length > 0) {
+      const firstId = layoutConfig.pages[0]?.id ?? WORKBENCH_HOME_PAGE_ID;
+      setDraft(normalizeWorkbenchConfig({ ...layoutConfig, activePageId: firstId }, false));
     }
     setEditing(true);
   }, [layoutConfig]);
 
   const cancelEdit = useCallback(() => {
-    if (effective) {
-      setDraft(normalizeWorkbenchConfig({ ...effective, activePageId: WORKBENCH_HOME_PAGE_ID }));
+    if (effective && effective.pages.length > 0) {
+      const firstId = effective.pages[0]?.id ?? WORKBENCH_HOME_PAGE_ID;
+      setDraft(normalizeWorkbenchConfig({ ...effective, activePageId: firstId }, false));
+    } else {
+      setDraft(null);
     }
     setEditing(false);
   }, [effective]);
 
   const save = useCallback(() => {
     if (!draft) return;
+    const firstId = draft.pages[0]?.id ?? WORKBENCH_HOME_PAGE_ID;
     saveMutation.mutate(
-      normalizeWorkbenchConfig({ ...draft, activePageId: WORKBENCH_HOME_PAGE_ID }),
+      normalizeWorkbenchConfig({ ...draft, activePageId: firstId }, false),
     );
   }, [draft, saveMutation]);
 
@@ -125,8 +150,12 @@ export function useWorkbenchConfig() {
   }, []);
 
   const focusHomePage = useCallback(() => {
-    setSessionActivePageId(WORKBENCH_HOME_PAGE_ID);
-  }, []);
+    if (effective?.pages.some(p => isWorkbenchHomePage(p.id))) {
+      setSessionActivePageId(WORKBENCH_HOME_PAGE_ID);
+      return;
+    }
+    setSessionActivePageId(effective?.pages[0]?.id ?? WORKBENCH_HOME_PAGE_ID);
+  }, [effective]);
 
   const addPage = useCallback((title: string) => {
     const page: WorkbenchPage = {
@@ -164,10 +193,12 @@ export function useWorkbenchConfig() {
       if (!prev || prev.pages.length <= 1) return prev;
       return { ...prev, pages: prev.pages.filter(p => p.id !== pageId) };
     });
-    setSessionActivePageId(prev =>
-      prev === pageId ? WORKBENCH_HOME_PAGE_ID : prev,
-    );
-  }, []);
+    setSessionActivePageId(prev => {
+      if (prev !== pageId) return prev;
+      const remaining = draft?.pages.filter(p => p.id !== pageId) ?? [];
+      return remaining[0]?.id ?? WORKBENCH_HOME_PAGE_ID;
+    });
+  }, [draft]);
 
   const reorderPages = useCallback((orderedIds: string[]) => {
     setDraft(prev => {
@@ -184,7 +215,7 @@ export function useWorkbenchConfig() {
           })
           .filter((p): p is WorkbenchPage => p != null),
       ];
-      return normalizeWorkbenchConfig({ ...prev, pages });
+      return normalizeWorkbenchConfig({ ...prev, pages }, false);
     });
   }, []);
 
@@ -249,13 +280,11 @@ export function useWorkbenchConfig() {
     });
   }, []);
 
-  // 自定义页面创建/管理权限按业务约定＝企业创建者 owner
   const canCreatePages = tenantRole === 'owner';
   const canEditPage = useCallback(
-    (page: WorkbenchPage) => canEditWorkbenchPage(page, { userId, permissions }),
-    [userId, permissions],
+    (page: WorkbenchPage) => canEditWorkbenchPage(page, { userId, permissions, tenantRole }),
+    [userId, permissions, tenantRole],
   );
-  /** 页面对当前用户是否「完整授权」（完整展示内容，含金额，跳过模块/金额掩码） */
   const hasFullAccess = useCallback(
     (page: WorkbenchPage) => hasWorkbenchPageFullAccess(page, { userId, permissions, tenantRole }),
     [userId, permissions, tenantRole],
@@ -264,7 +293,8 @@ export function useWorkbenchConfig() {
   return {
     isLoading: query.isLoading,
     error: loadError,
-    isFallback: query.isError && !effective,
+    isFallback: false,
+    navAllowed,
     canEditPage,
     hasFullAccess,
     canCreatePages,

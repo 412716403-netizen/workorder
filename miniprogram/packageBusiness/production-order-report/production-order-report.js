@@ -1,5 +1,5 @@
-const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx,readOperatorDisplayName = _require.readOperatorDisplayName;
-const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx,readOperatorDisplayName = _require.readOperatorDisplayName,readCurrentUserId = _require.readCurrentUserId;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission,hasPrefixPermission = _require2.hasPrefixPermission;
 const _require3 =
 
 
@@ -47,6 +47,10 @@ const _require1 = require('../utils/scanBatchController.js'),createScanBatchCont
 const _require10 = require('../utils/scanBatchApplyReport.js'),createReportScanBatchHandlers = _require10.createReportScanBatchHandlers;
 const _require13 = require('../utils/reportScanMeta.js'),resetReportScanMeta = _require13.resetReportScanMeta,buildReportScanPayloadFields = _require13.buildReportScanPayloadFields;
 const _require14 = require('../../utils/featurePlugins.js'),loadTraceabilityScanEnabled = _require14.loadTraceabilityScanEnabled;
+const {
+  readWorkerReportScanPrefill,
+  deserializeReportScanMeta,
+} = require('../../utils/workerReportScanPrefill.js');
 
 function computeHeaderBlockHeight(nav) {
   return computePlanCreateHeaderHeight(nav);
@@ -198,7 +202,9 @@ Page({
     navBarHeight: 44,
     headerBlockHeight: 88,
     scrollHeight: 500,
-    scanEnabled: false
+    scanEnabled: false,
+    /** 小程序 Tab 自报工：锁定本人 + requireApproval */
+    selfReport: false,
   },
 
   _quantities: {},
@@ -207,13 +213,20 @@ Page({
   onLoad(options) {
     const nav = readNavBarMetrics();
     this._matrixKbInput = createMatrixKeyboardInputSession();
+    const selfReport = options.selfReport === '1' || options.selfReport === 'true';
+    const fromWorkerScan = options.fromWorkerScan === '1' || options.fromWorkerScan === 'true';
+    const meId = readCurrentUserId();
+    this._fromWorkerScan = fromWorkerScan;
     this.setData({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
       headerBlockHeight: computeHeaderBlockHeight(nav),
       scrollHeight: computeScrollHeight(nav),
       orderId: options.orderId ? decodeURIComponent(options.orderId) : '',
-      milestoneId: options.milestoneId ? decodeURIComponent(options.milestoneId) : ''
+      milestoneId: options.milestoneId ? decodeURIComponent(options.milestoneId) : '',
+      selfReport,
+      workerId: selfReport && meId ? meId : '',
+      workerName: selfReport ? (readOperatorDisplayName() || '本人') : '',
     });
 
     if (!this.data.orderId || !this.data.milestoneId) {
@@ -221,18 +234,20 @@ Page({
       setTimeout(() => wx.navigateBack(), 800);
       return;
     }
-    const reportScan = createReportScanBatchHandlers(this);
-    resetReportScanMeta(this);
-    this._scanBatch = createScanBatchController(this, {
-      title: '报工 · 批量扫码',
-      showScanIntentToggle: true,
-      resolveRowPreview: (payload) => reportScan.resolveRowPreview(payload),
-      onConfirm: (payloads) => reportScan.onConfirm(payloads)
-    });
+    if (!selfReport) {
+      const reportScan = createReportScanBatchHandlers(this);
+      resetReportScanMeta(this);
+      this._scanBatch = createScanBatchController(this, {
+        title: '报工 · 批量扫码',
+        showScanIntentToggle: true,
+        resolveRowPreview: (payload) => reportScan.resolveRowPreview(payload),
+        onConfirm: (payloads) => reportScan.onConfirm(payloads),
+      });
+      loadTraceabilityScanEnabled().then((scanEnabled) => {
+        this.setData({ scanEnabled });
+      });
+    }
     this.bootstrap();
-    loadTraceabilityScanEnabled().then((scanEnabled) => {
-      this.setData({ scanEnabled });
-    });
   },
 
   onShow() {
@@ -245,7 +260,12 @@ Page({
       wx.reLaunch({ url: '/pages/tenant-select/tenant-select' });
       return;
     }
-    if (!hasPermission(ctx.permissions || [], 'production:orders_report_records:create')) {
+    const perms = ctx.permissions || [];
+    const canSelf =
+      this.data.selfReport &&
+      (hasPermission(perms, 'process_report') || hasPrefixPermission(perms, 'process_report'));
+    const canOrderCenter = hasPermission(perms, 'production:orders_report_records:create');
+    if (!canSelf && !canOrderCenter) {
       wx.showToast({ title: '无报工权限', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 800);
     }
@@ -312,7 +332,7 @@ Page({
       const customData = buildInitialReportCustomData(reportCustomFields, product);
       const unitName = getProductUnitName(product, dictionaries);
       const orderItems = order.items || [];
-      const formMode = resolveReportFormMode(product, category, orderItems);
+      let formMode = resolveReportFormMode(product, category, orderItems);
 
       const reportHints = computeOrderReportHints(
         order,
@@ -359,6 +379,7 @@ Page({
       const equipmentNames = equipment.map((e) => e.name || e.code || e.id);
 
       this._order = order;
+      this._orderItems = orderItems;
       this._milestone = milestone;
       this._product = product;
       this._category = category;
@@ -371,6 +392,21 @@ Page({
 
       this._quantities = {};
       this._defectiveQuantities = {};
+
+      const prefill = this._fromWorkerScan
+        ? readWorkerReportScanPrefill()
+        : null;
+      const prefillOk =
+        prefill &&
+        prefill.orderId === orderId &&
+        prefill.milestoneId === milestoneId;
+      if (prefillOk) {
+        this._quantities = { ...(prefill.quantities || {}) };
+        this._defectiveQuantities = { ...(prefill.defectiveQuantities || {}) };
+        if (prefill.scanMeta) {
+          this._reportScanMeta = deserializeReportScanMeta(prefill.scanMeta);
+        }
+      }
 
       let singleQuantity = remaining > 0 ? String(Math.min(1, remaining)) : '0';
       let variantOptions = [];
@@ -385,9 +421,15 @@ Page({
           dictionaries,
           this._quantities,
           this._defectiveQuantities,
-          layoutOpts
+          layoutOpts,
+          orderItems,
         );
-      } else if (formMode === 'multi' && product) {
+        if (!matrixLayout) {
+          formMode = 'multi';
+          matrixLayout = null;
+        }
+      }
+      if (formMode === 'multi' && product) {
         variantRows = buildMultiVariantRows(
           product,
           category,
@@ -398,7 +440,11 @@ Page({
           variantMaxGoodMap,
           unitName
         );
-      } else if (formMode === 'single') {
+        if (!variantRows.length) {
+          formMode = 'single';
+        }
+      }
+      if (formMode === 'single') {
         const uniqueVariantIds = [...new Set(orderItems.map((it) => it.variantId).filter(Boolean))];
         if (uniqueVariantIds.length === 1) {
           variantId = uniqueVariantIds[0];
@@ -412,6 +458,13 @@ Page({
           });
           variantId = variantOptions[0].id;
           variantLabelText = variantOptions[0].label;
+        }
+        if (prefillOk) {
+          const vid = variantId || '';
+          const fromPrefill = this._quantities[vid] ?? this._quantities[''];
+          if (fromPrefill != null && fromPrefill !== '') {
+            singleQuantity = String(fromPrefill);
+          }
         }
       }
 
@@ -446,8 +499,8 @@ Page({
         workers: workersNormalized,
         processNodes,
         currentNodeId: milestone.templateId,
-        workerId: '',
-        workerName: '',
+        workerId: this.data.selfReport ? (this.data.workerId || readCurrentUserId()) : '',
+        workerName: this.data.selfReport ? (this.data.workerName || readOperatorDisplayName() || '本人') : '',
         equipment,
         equipmentNames,
         equipmentPickerIndex: 0,
@@ -567,7 +620,8 @@ Page({
       this._dictionaries,
       this._quantities,
       this._defectiveQuantities,
-      this._layoutOpts
+      this._layoutOpts,
+      this._orderItems || (this._order && this._order.items) || [],
     ) :
     patchReportMatrixLayout(
       this.data.matrixLayout,
@@ -849,13 +903,21 @@ Page({
           operator,
           itemCodeId: scanFields.itemCodeId,
           virtualBatchId: scanFields.virtualBatchId,
+          requireApproval: this.data.selfReport ? true : undefined,
         });
       }
       wx.hideLoading();
-      afterSaveReturnToList({
-        listUrl: LIST_ROUTES.PRODUCTION_ORDERS,
-        toastTitle: '报工成功'
-      });
+      if (this.data.selfReport) {
+        wx.showToast({ title: '已提交，待审核', icon: 'success' });
+        setTimeout(() => {
+          wx.switchTab({ url: '/pages/scan/scan' });
+        }, 400);
+      } else {
+        afterSaveReturnToList({
+          listUrl: LIST_ROUTES.PRODUCTION_ORDERS,
+          toastTitle: '报工成功',
+        });
+      }
     } catch (err) {
       wx.showToast({ title: err && err.message || '报工失败', icon: 'none' });
     } finally {

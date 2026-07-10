@@ -1,5 +1,237 @@
-<tab-shell title="报工" subtitle="功能开发中，敬请期待">
-  <view class="report-placeholder">
-    <empty-state text="报工功能即将上线" />
-  </view>
+<tab-shell title="报工" subtitle="{{hasProcessReport ? '可报任务与我的报工' : ''}}">
+  <block wx:if="{{!hasProcessReport}}">
+    <empty-state text="未开通工序报工，请联系管理员开通" />
+  </block>
+  <block wx:else>
+    <view class="worker-report-seg">
+      <view
+        class="worker-report-seg__item {{segment === 'tasks' ? 'worker-report-seg__item--on' : ''}}"
+        data-segment="tasks"
+        bindtap="onSegmentTap"
+        hover-class="worker-report-seg__item--press"
+        hover-stay-time="80"
+      >
+        <text class="worker-report-seg__label">可报任务</text>
+        <text
+          wx:if="{{taskCount > 0}}"
+          class="worker-report-seg__badge {{segment === 'tasks' ? 'worker-report-seg__badge--on' : ''}}"
+        >{{taskCount}}</text>
+      </view>
+      <view
+        class="worker-report-seg__item {{segment === 'mine' ? 'worker-report-seg__item--on' : ''}}"
+        data-segment="mine"
+        bindtap="onSegmentTap"
+        hover-class="worker-report-seg__item--press"
+        hover-stay-time="80"
+      >
+        <text class="worker-report-seg__label">我的报工</text>
+        <text
+          wx:if="{{myReportPendingCount > 0}}"
+          class="worker-report-seg__badge worker-report-seg__badge--pending {{segment === 'mine' ? 'worker-report-seg__badge--on' : ''}}"
+        >{{myReportPendingCount}}</text>
+        <text
+          wx:elif="{{myReportCount > 0}}"
+          class="worker-report-seg__badge {{segment === 'mine' ? 'worker-report-seg__badge--on' : ''}}"
+        >{{myReportCount}}</text>
+      </view>
+    </view>
+
+    <view wx:if="{{loading}}" class="worker-report-loading">加载中…</view>
+
+    <block wx:elif="{{segment === 'tasks'}}">
+      <view wx:if="{{!tasks.length}}" class="worker-report-empty">
+        <empty-state text="{{emptyTasksText}}" />
+      </view>
+      <block wx:else>
+        <scroll-view
+          wx:if="{{milestoneFilters.length}}"
+          class="worker-report-milestone-filters"
+          scroll-x
+          enhanced
+          show-scrollbar="{{false}}"
+        >
+          <view class="worker-report-milestone-filters__inner">
+            <view
+              wx:for="{{milestoneFilters}}"
+              wx:key="id"
+              class="worker-report-milestone-filter {{activeMilestoneFilter === item.id ? 'worker-report-milestone-filter--on' : ''}}"
+              data-id="{{item.id}}"
+              bindtap="onMilestoneFilterTap"
+            >
+              <text>{{item.name}}</text>
+              <text class="worker-report-milestone-filter__count">{{item.count}}</text>
+            </view>
+          </view>
+        </scroll-view>
+
+        <block wx:for="{{visibleTaskGroups}}" wx:key="id">
+          <view
+            wx:if="{{showTaskGroupHeaders}}"
+            class="worker-report-milestone-section"
+          >
+            <text class="worker-report-milestone-section__title">{{item.name}}</text>
+            <text class="worker-report-milestone-section__count">{{item.count}} 项</text>
+          </view>
+          <view
+            wx:for="{{item.tasks}}"
+            wx:for-item="task"
+            wx:key="key"
+            class="worker-report-card"
+            data-order-id="{{task.orderId}}"
+            data-milestone-id="{{task.milestoneId}}"
+            bindtap="onTaskTap"
+          >
+            <view class="worker-report-card__thumb">
+              <image
+                wx:if="{{task.showProductImage}}"
+                class="worker-report-card__img"
+                src="{{task.productImageUrl}}"
+                mode="aspectFill"
+                data-key="{{task.key}}"
+                binderror="onProductImageError"
+              />
+              <view wx:else class="worker-report-card__img worker-report-card__img--placeholder">
+                <image class="worker-report-card__placeholder-icon" src="{{task.placeholderIconSrc}}" mode="aspectFit" />
+              </view>
+            </view>
+            <view class="worker-report-card__main">
+              <text class="worker-report-card__order">{{task.orderHeadline}}</text>
+              <view class="worker-report-card__product-line">
+                <text class="worker-report-card__product">{{task.productName}}</text>
+                <text wx:if="{{task.showProductSku}}" class="worker-report-card__sku">{{task.productSku}}</text>
+              </view>
+            </view>
+            <view class="worker-report-card__side">
+              <text class="worker-report-card__remain">{{task.remainingText}}</text>
+              <text class="worker-report-card__chevron">›</text>
+            </view>
+          </view>
+        </block>
+      </block>
+    </block>
+
+    <block wx:else>
+      <view wx:if="{{!myReports.length}}" class="worker-report-empty">
+        <empty-state text="{{emptyReportsText}}" />
+      </view>
+      <block wx:else>
+        <scroll-view
+          wx:if="{{myReportStatusFilters.length}}"
+          class="worker-report-milestone-filters worker-report-status-filters"
+          scroll-x
+          enhanced
+          show-scrollbar="{{false}}"
+        >
+          <view class="worker-report-milestone-filters__inner">
+            <view
+              wx:for="{{myReportStatusFilters}}"
+              wx:key="id"
+              class="worker-report-milestone-filter worker-report-status-filter {{activeMyReportStatusFilter === item.id ? 'worker-report-milestone-filter--on' : ''}} {{item.id === 'PENDING' ? 'worker-report-status-filter--pending' : ''}} {{item.id === 'REJECTED' ? 'worker-report-status-filter--rejected' : ''}} {{activeMyReportStatusFilter === item.id && item.id === 'PENDING' ? 'worker-report-status-filter--pending-on' : ''}} {{activeMyReportStatusFilter === item.id && item.id === 'REJECTED' ? 'worker-report-status-filter--rejected-on' : ''}}"
+              data-id="{{item.id}}"
+              bindtap="onMyReportStatusFilterTap"
+            >
+              <text>{{item.name}}</text>
+              <text class="worker-report-milestone-filter__count">{{item.count}}</text>
+            </view>
+          </view>
+        </scroll-view>
+
+        <view
+          wx:if="{{!visibleMyReportGroups.length}}"
+          class="worker-report-empty"
+        >
+          <empty-state text="{{emptyMyReportsFilterText}}" />
+        </view>
+
+        <block wx:for="{{visibleMyReportGroups}}" wx:key="id">
+          <view
+            wx:if="{{showMyReportGroupHeaders}}"
+            class="worker-report-milestone-section"
+          >
+            <text class="worker-report-milestone-section__title">{{item.name}}</text>
+            <text class="worker-report-milestone-section__count">{{item.count}} 条</text>
+          </view>
+          <view
+            wx:for="{{item.reports}}"
+            wx:for-item="report"
+            wx:key="id"
+            class="worker-report-card worker-report-card--mine"
+          >
+            <view class="worker-report-card__thumb">
+              <image
+                wx:if="{{report.showProductImage}}"
+                class="worker-report-card__img"
+                src="{{report.productImageUrl}}"
+                mode="aspectFill"
+                data-key="{{report.id}}"
+                binderror="onProductImageError"
+              />
+              <view wx:else class="worker-report-card__img worker-report-card__img--placeholder">
+                <image class="worker-report-card__placeholder-icon" src="{{report.placeholderIconSrc}}" mode="aspectFit" />
+              </view>
+            </view>
+            <view class="worker-report-card__main">
+              <view class="worker-report-card__meta">
+                <text class="worker-report-card__time">{{report.timeLabel}}</text>
+                <text wx:if="{{report.showReportNo}}" class="worker-report-card__report-no">{{report.reportNo}}</text>
+                <text class="worker-report-badge {{report.approvalClass}}">{{report.approvalLabel}}</text>
+              </view>
+              <text class="worker-report-card__order">{{report.orderHeadline}}</text>
+              <view class="worker-report-card__product-line">
+                <text class="worker-report-card__product">{{report.productName}}</text>
+                <text wx:if="{{report.showProductSku}}" class="worker-report-card__sku">{{report.productSku}}</text>
+              </view>
+            </view>
+            <view class="worker-report-card__side worker-report-card__side--mine">
+              <text class="worker-report-card__qty">{{report.goodQtyText}}</text>
+              <text wx:if="{{report.showDefective}}" class="worker-report-card__defective">{{report.defectiveText}}</text>
+              <view
+                class="worker-report-card__detail-btn"
+                catchtap="onMyReportDetailTap"
+                data-batch-key="{{report.id}}"
+              >详情</view>
+            </view>
+          </view>
+        </block>
+      </block>
+    </block>
+
+    <view
+      wx:if="{{showScanFab}}"
+      class="worker-report-scan-fab"
+      catchtap="onScanReportFabTap"
+      hover-class="worker-report-scan-fab--active"
+    >
+      <view class="worker-report-scan-fab__circle">
+        <image
+          class="worker-report-scan-fab__icon"
+          src="/assets/icons/scan-line.png"
+          mode="aspectFit"
+        />
+      </view>
+    </view>
+
+    <view
+      wx:if="{{milestonePickerOpen}}"
+      class="worker-report-milestone-mask"
+      catchtap="onMilestonePickerClose"
+    >
+      <view class="worker-report-milestone-sheet" catchtap="">
+        <view class="worker-report-milestone-sheet__head">
+          <text class="worker-report-milestone-sheet__title">选择工序</text>
+          <view class="worker-report-milestone-sheet__close" catchtap="onMilestonePickerClose">×</view>
+        </view>
+        <scroll-view class="worker-report-milestone-sheet__list" scroll-y enhanced show-scrollbar="{{false}}">
+          <view
+            wx:for="{{assignedMilestoneOptions}}"
+            wx:key="id"
+            class="worker-report-milestone-sheet__item"
+            catchtap="onMilestonePickerSelect"
+            data-id="{{item.id}}"
+            data-name="{{item.name}}"
+          >{{item.name}}</view>
+        </scroll-view>
+      </view>
+    </view>
+  </block>
 </tab-shell>

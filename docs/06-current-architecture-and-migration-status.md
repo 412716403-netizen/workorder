@@ -44,6 +44,7 @@
 |------|------|
 | 业务主数据 | 后端 API + 数据库 |
 | 租户/登录态恢复 | 浏览器 `localStorage` + httpOnly Cookie + 内存 token |
+| 企业成员身份 | `tenant_memberships.role`：仅 `owner`（创建者）/ `worker`（成员）；成员业务权限由 `roleId` 绑定的自定义角色提供，空权限不再默认全权 |
 | 页面聚合状态 | `AppDataContext` |
 | 打印模板 / 表单配置 | 已进入聚合状态与后端配置并存阶段，需持续收口 |
 | 待办提醒（`todo_reminder` 插件） | 后端 `TodoItem` 表 + `/api/todos`（个人区，按 `userId` 隔离，不挂 `requireSubPermission`）；提醒经 `dashboard.getNotifications` 注入工作台消息中心，无业务字段落本地 |
@@ -111,6 +112,7 @@
 ### 3.6 生产关联模式：读口径混读 + 后端硬校验（现状要点）
 
 - **读口径双路求和**：`order` 与 `product` 模式切换时为防数据"看起来消失"，前后端报工口径统一为 `combinedCompletedAtTemplate = PMP(同 product+template) + milestone.completedQuantity`。
+- **小程序自报工审核**：`MilestoneReport` / `ProductProgressReport.approvalStatus`；进度只计 `APPROVED`；可报 `remaining` 扣 `PENDING`；审核 API 与 Web 流水 / 小程序待审列表已通。
   - 已对齐：`ReportModal`、`OrderDetailModal` 工序表、`OrderListView` 产品组卡、后端 `GET /orders/:id/reportable`。
   - 工单卡圆心采用 `items.quantity` 比例摊回 PMP 的**估算值**（hover tip 已标注），精确数字以产品维度详情为准。
 - **列表小卡 hover tooltip 增补外协未收回**：`OrderListView` 工单卡 / 产品组卡圆下数字保持原口径（`可报 - 已报`，不扣外协，避免日常列表数字反复跳动），**hover tooltip** 上额外追加「外协剩余 Z 件」作为补充信息，与 `ReportModal` 的"扣外协剩余"口径互补。产品模式下工单卡的外协未收回按 `items.quantity` 比例摊回（与 PMP 摊回对称），产品组卡合并产品维度 + 旗下所有工单维度的外协。

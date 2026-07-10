@@ -1,0 +1,73 @@
+@import "/styles/tokens.wxss";
+@import "/styles/plan-list-shell.wxss";
+
+.pending-page {
+  padding: 16rpx 24rpx 48rpx;
+}
+
+.pending-row {
+  background: #fff;
+  border-radius: var(--radius-card, 24rpx);
+  padding: 28rpx;
+  margin-bottom: 16rpx;
+  box-shadow: 0 2rpx 12rpx rgba(15, 23, 42, 0.04);
+}
+
+.pending-row__main {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  margin-bottom: 20rpx;
+}
+
+.pending-row__time {
+  font-size: 24rpx;
+  color: var(--color-text-tertiary, #a0a4ab);
+}
+
+.pending-row__order {
+  font-size: 26rpx;
+  color: var(--color-primary, #2f6bff);
+  font-weight: 500;
+}
+
+.pending-row__product {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--color-text-primary, #1f2329);
+}
+
+.pending-row__sku,
+.pending-row__node,
+.pending-row__op {
+  font-size: 24rpx;
+  color: var(--color-text-secondary, #8f959e);
+}
+
+.pending-row__actions {
+  display: flex;
+  gap: 16rpx;
+}
+
+.pending-btn {
+  flex: 1;
+  text-align: center;
+  padding: 16rpx 0;
+  border-radius: 12rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+.pending-btn--ok {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.pending-btn--no {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.pending-btn--disabled {
+  opacity: 0.5;
+}

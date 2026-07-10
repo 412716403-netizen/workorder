@@ -37,6 +37,7 @@ import { ConfirmProvider } from './contexts/ConfirmContext';
 import { MainScrollSegmentProvider } from './contexts/MainScrollSegmentContext';
 import { BRAND_LOGO_PATH, BRAND_NAME } from './constants/branding';
 import { isPlatformAdmin } from './utils/isPlatformAdmin';
+import { useWorkbenchAccess } from './hooks/useWorkbenchAccess';
 
 const AnnouncementPublishView = lazyWithReloadOnChunkError(() => import('./views/announcements/AnnouncementPublishView'));
 
@@ -171,6 +172,7 @@ function AppLayout() {
   const showDevNav = hasPerm('development') && isPluginEnabled('development');
   const showKnowledgeNav = hasPerm('knowledge_base') && isPluginEnabled('knowledge_base');
   const showCollabNavWithPlugin = showCollabNav && isPluginEnabled('collaboration');
+  const showWorkbenchNav = useWorkbenchAccess();
 
   if (dataLoading) {
     return (
@@ -234,6 +236,7 @@ function AppLayout() {
             </>
           ) : (
             <>
+          {showWorkbenchNav ? (
           <Link
             to="/workbench"
             onClick={e => {
@@ -247,6 +250,7 @@ function AppLayout() {
           >
             <LayoutDashboard className="w-5 h-5 shrink-0 text-slate-300 group-hover:text-indigo-600" /> 工作台
           </Link>
+          ) : null}
           {showDevNav && (
             <Link to="/development" className="flex items-center gap-3 px-5 py-3 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
               <FlaskConical className="w-5 h-5 shrink-0 text-slate-300 group-hover:text-indigo-600" /> 开发管理
@@ -359,13 +363,35 @@ function AppLayout() {
 
 // ── Route wrappers: each subscribes only to the domains it needs ──
 
-/** 根路径与通配：平台管理员进信息发布，其余进工作台 */
+/** 登录后默认落地页：按侧栏可见模块顺序选取首个可访问路由 */
+function resolveDefaultHomePath(
+  hasPerm: (mod: string) => boolean,
+  workbenchAllowed: boolean,
+): string {
+  if (workbenchAllowed) return '/workbench';
+  if (hasPerm('development')) return '/development';
+  if (hasPerm('production')) return '/production';
+  if (hasPerm('psi')) return '/psi';
+  if (hasPerm('finance')) return '/finance';
+  if (hasPerm('collaboration')) return '/collaboration';
+  if (hasPerm('knowledge_base')) return '/knowledge-base';
+  if (hasPerm('basic')) return '/basic';
+  if (hasPerm('settings')) return '/settings';
+  return '/no-access';
+}
+
+/** 根路径与通配：平台管理员进信息发布，其余进首个可访问业务模块 */
 function DefaultHomeRedirect() {
-  const { currentUser } = useAuth();
+  const { currentUser, hasPerm } = useAuth();
+  const workbenchAllowed = useWorkbenchAccess();
   if (isPlatformAdmin(currentUser as Record<string, unknown>)) {
     return <Navigate to="/announcements" replace />;
   }
-  return <Navigate to="/workbench" replace state={{ workbenchHome: Date.now() }} />;
+  const target = resolveDefaultHomePath(hasPerm, workbenchAllowed);
+  if (target === '/workbench') {
+    return <Navigate to="/workbench" replace state={{ workbenchHome: Date.now() }} />;
+  }
+  return <Navigate to={target} replace />;
 }
 
 /** 平台管理员不可访问业务模块，统一重定向到信息发布 */
@@ -375,6 +401,15 @@ function PlatformAdminBusinessGuard({ children }: { children: React.ReactNode })
     return <Navigate to="/announcements" replace />;
   }
   return <>{children}</>;
+}
+
+function NoAccessRoute() {
+  return (
+    <div className="max-w-md mx-auto mt-24 p-8 bg-white rounded-2xl border border-slate-200 text-center shadow-sm">
+      <p className="text-slate-700 font-bold mb-2">暂无可访问的功能</p>
+      <p className="text-sm text-slate-500">请联系企业创建者为当前成员配置角色与页面权限。</p>
+    </div>
+  );
 }
 
 function AnnouncementsRoute() {
@@ -391,6 +426,8 @@ function AnnouncementsRoute() {
 }
 
 function WorkbenchRoute() {
+  // 入口与页面列表以服务端 GET /dashboard/workbench 的 canAccess/effective 为准，
+  // 避免 localStorage 残留权限导致误拦或误放行。
   return <WorkbenchView />;
 }
 
@@ -475,6 +512,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={<DefaultHomeRedirect />} />
       <Route path="/announcements" element={<AnnouncementsRoute />} />
+      <Route path="/no-access" element={<PlatformAdminBusinessGuard><NoAccessRoute /></PlatformAdminBusinessGuard>} />
       <Route path="/workbench" element={<PlatformAdminBusinessGuard><WorkbenchRoute /></PlatformAdminBusinessGuard>} />
       <Route path="/development" element={<PlatformAdminBusinessGuard><DevelopmentRoute /></PlatformAdminBusinessGuard>} />
       <Route path="/production" element={<PlatformAdminBusinessGuard><ProductionRoute /></PlatformAdminBusinessGuard>} />

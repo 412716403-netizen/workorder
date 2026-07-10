@@ -16,9 +16,9 @@ import { loadEffectivePermissions } from '../services/auth.service.js';
  *    工单 / 生产报工 / 进销存 / 财务 等路由仍使用入口级 `requirePermission` + 前端细粒度控制；后续可按资源域拆到各 `routes/*.ts`。
  *
  * 实现说明（2026-05 重构）：
- * - JWT 不再携带 `permissions`（owner/admin 全权时 ALL_PERMISSIONS 上百条会撑爆 nginx
+ * - JWT 不再携带 `permissions`（owner 全权时 ALL_PERMISSIONS 上百条会撑爆 nginx
  *   `proxy_buffer_size`，导致 502 "upstream sent too big header"）。
- * - owner/admin 走 `isTenantElevatedRole` 快路径，零 IO 直接放行。
+ * - owner 走 `isTenantElevatedRole` 快路径，零 IO 直接放行。
  * - 其他角色按需调 `loadEffectivePermissions(userId, tenantId)`，命中 Redis 5s
  *   缓存（`buildTenantPayload`）时不查 DB；缓存失效后查一次 DB 再缓存。
  */
@@ -30,6 +30,17 @@ export function requireTenant(req: Request, res: Response, next: NextFunction) {
   }
   (req as any).tenantId = req.user.tenantId;
   next();
+}
+
+/** 企业级管理操作：仅企业创建者 owner 可执行。 */
+export function requireTenantOwner(): RequestHandler {
+  return (req, res, next) => {
+    if (req.user?.tenantRole === 'owner') {
+      next();
+      return;
+    }
+    res.status(403).json({ error: '仅企业创建者可执行此操作' });
+  };
 }
 
 async function resolvePermissions(req: Request): Promise<string[]> {
@@ -98,7 +109,7 @@ export function requireSubPermission(required: string): RequestHandler {
  * - 这些路由历史上要求 `psi:records:view` 或 `psi:purchase_order:view`，但权限树 `PSI_SUB_MODULES`
  *   里并没有 `records` 子模块，细粒度配置产生不出 `psi:records:*` 键；而 `purchase_order:view`
  *   对「只配了销售订单」的角色又过窄。
- * - 唯一能满足 `psi:records:view` 的（非 owner/admin）只有裸的顶级 `psi` 键，而角色编辑器
+ * - 唯一能满足 `psi:records:view` 的（非 owner）只有裸的顶级 `psi` 键，而角色编辑器
  *   在存在任意 `psi:*` 细粒度键时会主动剥离裸 `psi`，导致细粒度 PSI 角色读不到这些基础数据。
  * - 这些都是生产计划 / 工单 / 物料 / 进销存多处面板共用的**只读基础数据**，
  *   因此放宽为：拥有进销存任意权限，或生产模块任意权限即可读取。
@@ -261,6 +272,15 @@ function guardAny(check: (perms: string[]) => boolean): RequestHandler {
 /** 生产域只读端点（工单列表/详情、生产流水、报工进度等）：持有 production / process_report 任一权限即可。 */
 export function requireProductionRead(): RequestHandler {
   return guardAny(perms => hasAnyPermUnder(perms, ['production', 'process_report']));
+}
+
+/**
+ * 生产 API 模块入口（`app.ts` 挂载 `/api/orders`、`/api/production`）。
+ * 仅持有 `process_report`（工序报工）的工人须能访问工人自报工相关 orders 端点；
+ * 若入口仍用 `requirePermission('production')` 会在路由层 403，到不了 `requireProductionRead`。
+ */
+export function requireProductionModuleAccess(): RequestHandler {
+  return requireProductionRead();
 }
 
 /**
