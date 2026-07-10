@@ -15,6 +15,7 @@ export interface ReportableMilestoneReport {
   quantity?: number;
   defectiveQuantity?: number;
   variantId?: string | null;
+  approvalStatus?: string | null;
 }
 
 export interface ReportableMilestone {
@@ -57,6 +58,7 @@ export interface ReportableProdRecord {
   sourceNodeId?: string | null;
   sourceReworkId?: string | null;
   reworkNodeIds?: string[] | null;
+  status?: string | null;
 }
 
 export type DefectiveReworkEntry = {

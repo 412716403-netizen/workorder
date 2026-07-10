@@ -160,6 +160,12 @@
     }
   ],
   "preloadRule": {
+    "pages/scan/scan": {
+      "network": "all",
+      "packages": [
+        "business"
+      ]
+    },
     "pages/apps/apps": {
       "network": "all",
       "packages": [

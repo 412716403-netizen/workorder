@@ -1,80 +1,35 @@
-@import "/styles/tokens.wxss";
+@import '../production-order-report/production-order-report.wxss';
 
-.worker-report-confirm-summary {
-  display: flex;
-  flex-direction: column;
-  gap: 8rpx;
+.report-matrix--readonly .plan-create-matrix__input {
+  pointer-events: none;
 }
 
-.worker-report-confirm-summary__title {
-  font-size: 32rpx;
-  font-weight: 700;
-  color: var(--color-text-primary, #1f2329);
-}
-
-.worker-report-confirm-summary__meta {
-  font-size: 24rpx;
-  color: var(--color-text-secondary, #646a73);
-  line-height: 1.5;
-}
-
-.worker-report-confirm-line__head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 8rpx;
-  margin-bottom: 12rpx;
-}
-
-.worker-report-confirm-line__title {
-  font-size: 30rpx;
-  font-weight: 600;
-  color: var(--color-primary, #2f6bff);
-}
-
-.worker-report-confirm-line__sku {
-  font-size: 24rpx;
-  color: var(--color-text-secondary, #8f959e);
-}
-
-.worker-report-confirm-line__total {
-  font-size: 26rpx;
-  font-weight: 600;
-  color: var(--color-text-primary, #1f2329);
-  margin-bottom: 12rpx;
-}
-
-.worker-report-confirm-line__row {
+.report-matrix__input--readonly {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16rpx;
-  padding: 10rpx 0;
-  border-top: 1rpx solid var(--color-border, #f0f1f3);
+  justify-content: center;
 }
 
-.worker-report-confirm-line__spec {
-  flex: 1;
-  min-width: 0;
-  font-size: 26rpx;
-  color: var(--color-text-secondary, #646a73);
-}
-
-.worker-report-confirm-line__qty-wrap {
+.report-stepper--readonly {
+  min-width: 200rpx;
+  height: 64rpx;
+  padding: 0 24rpx;
+  border: 1rpx solid var(--color-border);
+  border-radius: 12rpx;
+  background: #fff;
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4rpx;
-  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
 }
 
-.worker-report-confirm-line__qty {
-  font-size: 28rpx;
+.report-stepper__readonly-value {
+  font-size: 30rpx;
   font-weight: 600;
-  color: var(--color-text-primary, #1f2329);
+  color: var(--color-text-primary);
 }
 
-.worker-report-confirm-line__defective {
-  font-size: 22rpx;
-  color: #b45309;
+.report-stepper-field__input--readonly {
+  color: var(--color-text-primary);
+  font-weight: 600;
+  background: var(--color-bg-page);
 }

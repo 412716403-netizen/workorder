@@ -21,6 +21,35 @@
   flex-direction: column;
   gap: 16rpx;
   overflow: hidden;
+  position: relative;
+}
+
+.scan-batch-feedback {
+  position: absolute;
+  left: 24rpx;
+  right: 24rpx;
+  top: 96rpx;
+  z-index: 20;
+  padding: 18rpx 24rpx;
+  border-radius: 14rpx;
+  font-size: 26rpx;
+  line-height: 1.45;
+  text-align: center;
+  font-weight: 600;
+  box-shadow: 0 8rpx 24rpx rgba(15, 23, 42, 0.12);
+  pointer-events: none;
+}
+
+.scan-batch-feedback--error {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1rpx solid #fecaca;
+}
+
+.scan-batch-feedback--success {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1rpx solid #a7f3d0;
 }
 
 .scan-batch-panel__head {

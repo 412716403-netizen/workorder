@@ -49,6 +49,8 @@
     processing="{{scanBatchProcessing}}"
     show-intent-toggle="{{scanBatchShowIntentToggle}}"
     scan-intent="{{scanBatchIntent}}"
+    scan-feedback-text="{{scanFeedbackText}}"
+    scan-feedback-type="{{scanFeedbackType}}"
     scan-disabled="{{!scanPartnerName}}"
     scan-disabled-hint="请先选择加工厂"
     bind:close="onScanBatchClose"

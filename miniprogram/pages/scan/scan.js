@@ -6,6 +6,7 @@ const {
   listMyReportHistory,
   fetchProductsAll,
   fetchNodesAll,
+  fetchCategoriesAll,
 } = require('../../utils/workerReportApi.js');
 const { loadTraceabilityScanEnabled } = require('../../utils/featurePlugins.js');
 const {
@@ -17,6 +18,7 @@ const {
 const {
   listProductDisplayFieldsFromMap,
 } = require('../../utils/listProductThumb.js');
+const { enrichReportableTasksRemaining } = require('../../utils/enrichReportableTasks.js');
 
 const APPROVAL_LABEL = {
   PENDING: '未审核',
@@ -429,17 +431,25 @@ Page({
   },
 
   async loadTasks() {
-    const [res, nodesRaw, productsRaw] = await Promise.all([
+    const [res, nodesRaw, productsRaw, categoriesRaw] = await Promise.all([
       listMyReportableTasks(),
       fetchNodesAll(),
       fetchProductsAll().catch(() => []),
+      fetchCategoriesAll().catch(() => []),
     ]);
-    const rawTasks = res.tasks || [];
+    const productMap = new Map((productsRaw || []).map((p) => [p.id, p]));
+    const categoryMap = new Map((categoriesRaw || []).map((c) => [c.id, c]));
+    let rawTasks = res.tasks || [];
+    try {
+      rawTasks = await enrichReportableTasksRemaining(rawTasks, productMap, categoryMap);
+    } catch {
+      /* 分包未就绪时沿用 API 口径 */
+    }
     const assignedIds = res.assignedMilestoneIds || [];
     const nodeMap = new Map(
       (Array.isArray(nodesRaw) ? nodesRaw : []).map((n) => [n.id, n.name || n.id]),
     );
-    this._productMap = new Map((productsRaw || []).map((p) => [p.id, p]));
+    this._productMap = productMap;
     const grouping = this.applyTaskGrouping(
       rawTasks,
       assignedIds,

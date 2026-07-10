@@ -207,6 +207,8 @@
     processing="{{scanBatchProcessing}}"
     show-intent-toggle="{{scanBatchShowIntentToggle}}"
     scan-intent="{{scanBatchIntent}}"
+    scan-feedback-text="{{scanFeedbackText}}"
+    scan-feedback-type="{{scanFeedbackType}}"
     bind:close="onScanBatchClose"
     bind:scan="onScanBatchScan"
     bind:confirm="onScanBatchConfirm"

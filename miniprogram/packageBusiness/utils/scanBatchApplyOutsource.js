@@ -9,6 +9,7 @@ const {
 const { findReceiveRowByProduct } = require('./outsourceReceiveAggregates.js');
 const { outsourceReceiveBaseKey } = require('./outsourceReceiveKeys.js');
 const { receiveVariantQuantityKey } = require('./outsourceReceiveMatrix.js');
+const { scanFail } = require('./scanFeedback.js');
 
 function createOutsourceReceiveScanBatchHandlers(page) {
   const preparedByToken = new Map();
@@ -27,30 +28,30 @@ function createOutsourceReceiveScanBatchHandlers(page) {
 
     const partnerName = page.data.scanPartnerName || '';
     if (!partnerName) {
-      wx.showToast({ title: '请先选择加工厂', icon: 'none' });
+      scanFail(page, '请先选择加工厂');
       return null;
     }
 
     try {
       const res = await fetchScanByPayload(payload);
       if (res.status === 'VOIDED') {
-        wx.showToast({ title: res.message || '码不可用', icon: 'none' });
+        scanFail(page, res.message || '码不可用');
         return null;
       }
       const productId = res.productId;
       if (!productId) {
-        wx.showToast({ title: '扫码结果缺少产品信息', icon: 'none' });
+        scanFail(page, '扫码结果缺少产品信息');
         return null;
       }
 
       const rows = pendingRows();
       let row = findReceiveRowByProduct(rows, productId);
       if (!row) {
-        wx.showToast({ title: `此码对应产品未外发给「${partnerName}」或已全部收回`, icon: 'none' });
+        scanFail(page, `此码对应产品未外发给「${partnerName}」或已全部收回`);
         return null;
       }
       if (!row.orderId) {
-        wx.showToast({ title: '产品级外协收回请使用电脑端操作', icon: 'none' });
+        scanFail(page, '产品级外协收回请使用电脑端操作');
         return null;
       }
 
@@ -61,7 +62,7 @@ function createOutsourceReceiveScanBatchHandlers(page) {
       if (payload.kind === 'BATCH') {
         addQty = Number(res.quantity) || 0;
         if (addQty <= 0) {
-          wx.showToast({ title: '批次数量无效', icon: 'none' });
+          scanFail(page, '批次数量无效');
           return null;
         }
         virtualBatchId = res.batchId || null;
@@ -84,11 +85,11 @@ function createOutsourceReceiveScanBatchHandlers(page) {
         addQty,
       }).catch(() => ({ code: 'ALLOWED' }));
       if (validation.code === 'DUPLICATE_SAVED') {
-        wx.showToast({ title: validation.message || '该码已被使用', icon: 'none' });
+        scanFail(page, validation.message || '该码已被使用');
         return null;
       }
       if (validation.code === 'EXCEEDS_MAX') {
-        wx.showToast({ title: validation.message || '超过可收上限', icon: 'none' });
+        scanFail(page, validation.message || '超过可收上限');
         return null;
       }
 
@@ -103,7 +104,7 @@ function createOutsourceReceiveScanBatchHandlers(page) {
       preparedByToken.set(cacheKey, prepared);
       return prepared;
     } catch (e) {
-      wx.showToast({ title: (e && e.message) || '扫码查询失败', icon: 'none' });
+      scanFail(page, (e && e.message) || '扫码查询失败');
       return null;
     }
   }
@@ -115,7 +116,7 @@ function createOutsourceReceiveScanBatchHandlers(page) {
 
   async function onConfirm(payloads) {
     if (!page.data.scanPartnerName) {
-      wx.showToast({ title: '请先选择加工厂', icon: 'none' });
+      scanFail(page, '请先选择加工厂');
       return false;
     }
 
@@ -129,7 +130,7 @@ function createOutsourceReceiveScanBatchHandlers(page) {
 
       if (lockedNodeId == null) lockedNodeId = prepared.row.nodeId;
       else if (prepared.row.nodeId !== lockedNodeId) {
-        wx.showToast({ title: '本次扫码命中多个工序，请分批收货', icon: 'none' });
+        scanFail(page, '本次扫码命中多个工序，请分批收货');
         return false;
       }
 
@@ -144,7 +145,7 @@ function createOutsourceReceiveScanBatchHandlers(page) {
 
     const selectedRows = [...rowMap.values()];
     if (!selectedRows.length) {
-      wx.showToast({ title: '没有命中的扫码明细', icon: 'none' });
+      scanFail(page, '没有命中的扫码明细');
       return false;
     }
 

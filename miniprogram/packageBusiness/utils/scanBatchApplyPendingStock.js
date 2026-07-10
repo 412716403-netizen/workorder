@@ -8,6 +8,7 @@ const {
 } = require('./scanBatchRowDetail.js');
 const { productHasColorSizeMatrix } = require('./productionPlans.js');
 const { expandPendingByVariantForMatrix } = require('./stockInForm.js');
+const { scanFail } = require('./scanFeedback.js');
 
 function tryAddQty(formSlice, opts) {
   const {
@@ -80,16 +81,16 @@ function createPendingStockScanBatchHandlers(page) {
     try {
       const res = await fetchScanByPayload(payload);
       if (res.status === 'VOIDED') {
-        wx.showToast({ title: res.message || '码不可用', icon: 'none' });
+        scanFail(page, res.message || '码不可用');
         return null;
       }
       const row = findRowForScan(res);
       if (!row) {
-        wx.showToast({ title: '扫码未匹配到待入库清单', icon: 'none' });
+        scanFail(page, '扫码未匹配到待入库清单');
         return null;
       }
       if (row.error === 'MULTIPLE_ORDERS') {
-        wx.showToast({ title: '匹配到多个工单，请分开扫码', icon: 'none' });
+        scanFail(page, '匹配到多个工单，请分开扫码');
         return null;
       }
 
@@ -107,7 +108,7 @@ function createPendingStockScanBatchHandlers(page) {
       if (payload.kind === 'BATCH') {
         addQty = Number(res.quantity) || 0;
         if (addQty <= 0) {
-          wx.showToast({ title: '批次数量无效', icon: 'none' });
+          scanFail(page, '批次数量无效');
           return null;
         }
         virtualBatchId = res.batchId || null;
@@ -119,7 +120,7 @@ function createPendingStockScanBatchHandlers(page) {
       }
 
       if (hasColorSize && !vid) {
-        wx.showToast({ title: '产品按规格管理，码未带规格', icon: 'none' });
+        scanFail(page, '产品按规格管理，码未带规格');
         return null;
       }
 
@@ -132,11 +133,11 @@ function createPendingStockScanBatchHandlers(page) {
         addQty,
       }).catch(() => ({ code: 'ALLOWED' }));
       if (validation.code === 'DUPLICATE_SAVED') {
-        wx.showToast({ title: validation.message || '该码已入库', icon: 'none' });
+        scanFail(page, validation.message || '该码已入库');
         return null;
       }
       if (validation.code === 'EXCEEDS_MAX') {
-        wx.showToast({ title: validation.message || '超过待入库上限', icon: 'none' });
+        scanFail(page, validation.message || '超过待入库上限');
         return null;
       }
 
@@ -152,7 +153,7 @@ function createPendingStockScanBatchHandlers(page) {
       preparedByToken.set(cacheKey, prepared);
       return prepared;
     } catch (e) {
-      wx.showToast({ title: (e && e.message) || '扫码查询失败', icon: 'none' });
+      scanFail(page, (e && e.message) || '扫码查询失败');
       return null;
     }
   }
@@ -164,7 +165,7 @@ function createPendingStockScanBatchHandlers(page) {
 
   async function onConfirm(payloads) {
     if (!payloads.length) {
-      wx.showToast({ title: '请先扫码', icon: 'none' });
+      scanFail(page, '请先扫码');
       return false;
     }
 
@@ -178,7 +179,7 @@ function createPendingStockScanBatchHandlers(page) {
       if (!payload.token) continue;
       const key = `${payload.kind}:${payload.token}`;
       if (seen.has(key)) {
-        wx.showToast({ title: '列表中存在重复扫码', icon: 'none' });
+        scanFail(page, '列表中存在重复扫码');
         return false;
       }
       seen.add(key);
@@ -189,7 +190,7 @@ function createPendingStockScanBatchHandlers(page) {
       if (!targetRow) {
         targetRow = prepared.row;
       } else if (targetRow.rowKey !== prepared.row.rowKey) {
-        wx.showToast({ title: '本次扫码对应多个不同待入库工单，请分开扫码', icon: 'none' });
+        scanFail(page, '本次扫码对应多个不同待入库工单，请分开扫码');
         return false;
       }
 
@@ -208,7 +209,7 @@ function createPendingStockScanBatchHandlers(page) {
         allowExceed: page._allowExceedMaxStockInQty === true,
       });
       if (!tryResult.ok) {
-        wx.showToast({ title: tryResult.message || '超过待入库上限', icon: 'none' });
+        scanFail(page, tryResult.message || '超过待入库上限');
         return false;
       }
       formSlice = tryResult.form;
@@ -225,7 +226,7 @@ function createPendingStockScanBatchHandlers(page) {
     }
 
     if (!targetRow) {
-      wx.showToast({ title: '扫码未匹配到待入库清单', icon: 'none' });
+      scanFail(page, '扫码未匹配到待入库清单');
       return false;
     }
 

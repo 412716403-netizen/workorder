@@ -15,11 +15,85 @@ import {
   ReportApprovalStatus,
 } from '../types/index.js';
 import {
-  getReportable,
+  type ReportableOrder,
+  type ReportableProdRecord,
+} from '../../../shared/orderReportableAggregates.js';
+import { computeWorkerReportTaskDisplayRemaining } from '../../../shared/workerReportTaskRemaining.js';
+import {
   recalcMilestoneCompleted,
   recalcProgressCompleted,
 } from './orders.service.js';
 import * as settingsService from './settings.service.js';
+
+function mapOrderForReportableRemaining(row: {
+  id: string;
+  productId: string;
+  parentOrderId?: string | null;
+  items: { quantity: unknown; variantId: string | null }[];
+  milestones: {
+    id: string;
+    templateId: string;
+    completedQuantity: unknown;
+    reports: {
+      quantity: unknown;
+      defectiveQuantity: unknown;
+      variantId: string | null;
+      approvalStatus: string | null;
+    }[];
+  }[];
+}): ReportableOrder {
+  return {
+    id: row.id,
+    productId: row.productId,
+    parentOrderId: row.parentOrderId ?? null,
+    items: row.items.map((i) => ({
+      quantity: Number(i.quantity ?? 0),
+      variantId: i.variantId,
+    })),
+    milestones: row.milestones.map((m) => ({
+      id: m.id,
+      templateId: m.templateId,
+      completedQuantity: Number(m.completedQuantity ?? 0),
+      reports: m.reports.map((r) => ({
+        quantity: Number(r.quantity ?? 0),
+        defectiveQuantity: Number(r.defectiveQuantity ?? 0),
+        variantId: r.variantId,
+        approvalStatus: r.approvalStatus,
+      })),
+    })),
+  };
+}
+
+function mapProdRecordForReportableRemaining(row: {
+  id: string;
+  type: string;
+  orderId: string | null;
+  productId: string;
+  variantId: string | null;
+  quantity: unknown;
+  nodeId: string | null;
+  sourceNodeId: string | null;
+  sourceReworkId: string | null;
+  reworkNodeIds: unknown;
+  status: string | null;
+}): ReportableProdRecord {
+  const reworkNodeIds = Array.isArray(row.reworkNodeIds)
+    ? row.reworkNodeIds.filter((v): v is string => typeof v === 'string')
+    : null;
+  return {
+    id: row.id,
+    type: row.type,
+    orderId: row.orderId,
+    productId: row.productId,
+    variantId: row.variantId,
+    quantity: Number(row.quantity ?? 0),
+    nodeId: row.nodeId,
+    sourceNodeId: row.sourceNodeId,
+    sourceReworkId: row.sourceReworkId,
+    reworkNodeIds,
+    status: row.status,
+  };
+}
 
 export async function getMemberAssignedMilestoneIds(
   tenantId: string,
@@ -86,7 +160,7 @@ type OrderForWorkerTasks = {
   productId: string;
   productName: string | null;
   sku: string | null;
-  items: { quantity: unknown }[];
+  items: { quantity: unknown; variantId?: string | null }[];
   milestones: OrderMilestoneRow[];
 };
 
@@ -183,20 +257,60 @@ export async function listMyReportableTasks(
       productId: true,
       productName: true,
       sku: true,
-      items: { select: { quantity: true } },
+      parentOrderId: true,
+      items: { select: { quantity: true, variantId: true } },
       milestones: {
         select: {
           id: true,
           templateId: true,
           name: true,
           completedQuantity: true,
-          reports: { select: { defectiveQuantity: true, approvalStatus: true } },
+          reports: {
+            select: {
+              quantity: true,
+              defectiveQuantity: true,
+              variantId: true,
+              approvalStatus: true,
+            },
+          },
         },
         orderBy: { sortOrder: 'asc' },
       },
     },
     orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
     take: 500,
+  });
+
+  const orderIds = orders.map((o) => o.id);
+  const prodRecordsRaw =
+    orderIds.length === 0
+      ? []
+      : await db.productionOpRecord.findMany({
+          where: {
+            orderId: { in: orderIds },
+            type: { in: ['OUTSOURCE', 'REWORK', 'REWORK_REPORT'] },
+          },
+          select: {
+            id: true,
+            type: true,
+            orderId: true,
+            productId: true,
+            variantId: true,
+            quantity: true,
+            nodeId: true,
+            sourceNodeId: true,
+            sourceReworkId: true,
+            reworkNodeIds: true,
+            status: true,
+          },
+        });
+  const prodRecords = prodRecordsRaw.map(mapProdRecordForReportableRemaining);
+  const prodRecordsByOrder = new Map<string, ReportableProdRecord[]>();
+  prodRecords.forEach((r) => {
+    if (!r.orderId) return;
+    const list = prodRecordsByOrder.get(r.orderId) ?? [];
+    list.push(r);
+    prodRecordsByOrder.set(r.orderId, list);
   });
 
   for (const order of orders) {
@@ -206,15 +320,8 @@ export async function listMyReportableTasks(
       .filter(({ m }) => assignedSet.has(m.templateId));
     if (relevantIdx.length === 0) continue;
 
-    let reportableRows: Awaited<ReturnType<typeof getReportable>> | null = null;
-    try {
-      reportableRows = await getReportable(db, order.id);
-    } catch {
-      reportableRows = null;
-    }
-    const byMs = reportableRows
-      ? new Map(reportableRows.map((r) => [r.milestoneId, r]))
-      : null;
+    const reportableOrder = mapOrderForReportableRemaining(order);
+    const orderProdRecords = prodRecordsByOrder.get(order.id) ?? [];
 
     for (const { m, idx } of relevantIdx) {
       const chip = chipRemainingAtMilestone(
@@ -223,9 +330,13 @@ export async function listMyReportableTasks(
         processSequenceMode,
         outOfSequenceTemplateIds,
       );
-      const row = byMs?.get(m.id);
-      const remaining =
-        row != null ? Math.max(0, row.remaining) : Math.max(0, chip.remaining);
+      const remaining = computeWorkerReportTaskDisplayRemaining({
+        order: reportableOrder,
+        milestoneTemplateId: m.templateId,
+        processSequenceMode,
+        outOfSequenceTemplateIds,
+        prodRecords: orderProdRecords,
+      });
       if (!(remaining > 0)) continue;
       tasks.push({
         mode: 'order',
@@ -238,9 +349,9 @@ export async function listMyReportableTasks(
         milestoneTemplateId: m.templateId,
         milestoneName: m.name,
         remaining,
-        maxReportable: row?.maxReportable ?? chip.maxReportable,
-        totalQty: row?.totalQty ?? chip.totalQty,
-        reported: row?.reported ?? chip.reported,
+        maxReportable: chip.maxReportable,
+        totalQty: chip.totalQty,
+        reported: chip.reported,
       });
     }
   }

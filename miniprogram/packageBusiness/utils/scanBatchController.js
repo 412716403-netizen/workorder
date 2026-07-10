@@ -4,7 +4,10 @@
 const { parseScanPayload, getUnrecognizedScanImeHint } = require('./scanPayload.js');
 const { normalizeScanPayloadForIntent } = require('./scanBatchIntent.js');
 const { rowDisplayLine } = require('./scanBatchRowDetail.js');
-const { vibrateOnScan } = require('./scanCamera.js');
+const {
+  notifyScanFail,
+  notifyScanSuccess,
+} = require('./scanFeedback.js');
 
 function rowKey(payload) {
   return `${payload.kind}:${payload.token || ''}`;
@@ -43,7 +46,16 @@ function createScanBatchController(page, options) {
     scanIntent: defaultScanIntent,
     processing: false,
     scanning: false,
+    lastNotifyAt: 0,
   };
+
+  page._scanNotify = (message, type) => {
+    state.lastNotifyAt = Date.now();
+    if (type === 'success') notifyScanSuccess(page, message);
+    else notifyScanFail(page, message);
+  };
+
+  page.setData({ scanFeedbackText: '', scanFeedbackType: '' });
 
   function syncToPage() {
     page.setData({
@@ -59,16 +71,20 @@ function createScanBatchController(page, options) {
     });
   }
 
+  function markNotified() {
+    state.lastNotifyAt = Date.now();
+  }
+
   function open() {
     state.rows = [];
     state.keys.clear();
     state.scanIntent = defaultScanIntent;
-    page.setData({ scanBatchOpen: true });
+    page.setData({ scanBatchOpen: true, scanFeedbackText: '', scanFeedbackType: '' });
     syncToPage();
   }
 
   function close() {
-    page.setData({ scanBatchOpen: false, scanBatchProcessing: false });
+    page.setData({ scanBatchOpen: false, scanBatchProcessing: false, scanFeedbackText: '', scanFeedbackType: '' });
   }
 
   function removeRow(id) {
@@ -93,10 +109,11 @@ function createScanBatchController(page, options) {
 
     const parsed = parseScanPayload(code);
     if (parsed.kind === 'UNKNOWN' || !parsed.token) {
-      wx.showToast({ title: '无法识别扫码内容', icon: 'none' });
+      markNotified();
+      notifyScanFail(page, '无法识别扫码内容');
       const imeHint = getUnrecognizedScanImeHint(code);
       if (imeHint) {
-        setTimeout(() => wx.showToast({ title: imeHint, icon: 'none', duration: 3000 }), 2600);
+        setTimeout(() => notifyScanFail(page, imeHint), 2100);
       }
       return;
     }
@@ -107,22 +124,30 @@ function createScanBatchController(page, options) {
     try {
       const normalized = await normalizeScanPayloadForIntent(state.scanIntent, parsed);
       if (!normalized.ok) {
-        wx.showToast({ title: normalized.message || '扫码失败', icon: 'none' });
+        markNotified();
+        notifyScanFail(page, normalized.message || '扫码失败');
         return;
       }
       const payload = normalized.payload;
       const key = rowKey(payload);
       if (state.keys.has(key)) {
-        wx.showToast({ title: '该码已在列表中', icon: 'none' });
+        markNotified();
+        notifyScanFail(page, '该码已在列表中');
         return;
       }
 
+      const notifyBefore = state.lastNotifyAt;
       const detail = await resolveRowPreview(payload);
-      if (!detail) return;
+      if (!detail) {
+        if (state.lastNotifyAt === notifyBefore) {
+          notifyScanFail(page, '扫码失败');
+        }
+        return;
+      }
 
       state.keys.add(key);
       state.rows.push({ id: nextRowId(), payload, detail });
-      vibrateOnScan();
+      notifyScanSuccess(page);
       syncToPage();
     } finally {
       state.processing = false;
@@ -133,7 +158,7 @@ function createScanBatchController(page, options) {
   async function confirm() {
     if (state.processing) return false;
     if (!state.rows.length) {
-      wx.showToast({ title: '请先扫码', icon: 'none' });
+      notifyScanFail(page, '请先扫码');
       return false;
     }
     state.processing = true;
@@ -161,7 +186,7 @@ function createScanBatchController(page, options) {
     wx.scanCode({
       onlyFromCamera: false,
       success: (res) => ingestRaw(res.result || ''),
-      fail: () => wx.showToast({ title: '扫码已取消', icon: 'none' }),
+      fail: () => {},
       complete: () => {
         state.scanning = false;
       },

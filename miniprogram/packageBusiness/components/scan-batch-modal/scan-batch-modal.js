@@ -12,6 +12,8 @@ Component({
     scanIntent: { type: String, value: 'BATCH' },
     scanDisabled: { type: Boolean, value: false },
     scanDisabledHint: { type: String, value: '' },
+    scanFeedbackText: { type: String, value: '' },
+    scanFeedbackType: { type: String, value: '' },
   },
   methods: {
     preventMove() {},

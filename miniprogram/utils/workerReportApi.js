@@ -42,10 +42,15 @@ function fetchNodesAll() {
   return request({ path: '/settings/nodes?all=true', method: 'GET', timeout: 60000 }).catch(() => []);
 }
 
+function fetchCategoriesAll() {
+  return request({ path: '/settings/categories?all=true', method: 'GET', timeout: 60000 }).catch(() => []);
+}
+
 module.exports = {
   listMyReportableTasks,
   listMyReportHistory,
   fetchProductsAll,
   fetchDictionaries,
   fetchNodesAll,
+  fetchCategoriesAll,
 };

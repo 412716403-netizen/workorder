@@ -104,6 +104,11 @@ RBAC 字段单一事实源：[`shared/workbenchShortcuts.ts`](../shared/workbenc
 
 - **分流**：枢纽选类型 → **直达会话页**；报工/返工在页内点击行打开底部弹窗选工序，外协在页内搜索选加工厂（弹窗更高）；入库/查询无预备条件
 - **连续扫码**：默认开启，无开关；识别后自动继续，结果累积显示在取景框下方
+- **批量扫码弹层反馈**（`scan-batch-modal` + [`utils/scanFeedback.js`](../miniprogram/packageBusiness/utils/scanFeedback.js)）：
+  - **失败**：弹层顶部红色提示条显示原因，**2 秒后自动消失**；同时播放错误提示音（`assets/sounds/scan-error.wav`）+ 短震动
+  - **成功**：不显示文字条，仅播放成功提示音（`assets/sounds/scan-success.wav`）+ 短震动
+  - 业务层统一调用 `scanFail(page, message)` 或 `page._scanNotify`（由 `scanBatchController` 挂载）
+  - 真机静音模式下可能无声音，震动为降级；开发者工具音频可能受限
 
 ## 新页面 Checklist
 
@@ -693,9 +698,9 @@ npm run miniprogram:icons
 
 | 页面 | 路径 | 职责 |
 |------|------|------|
-| 报工 Tab | [`pages/scan/`](../miniprogram/pages/scan/) | 可报任务 + 我的报工（工人）；可报任务右下圆形「扫码报工」→ 工序选择弹层 → 工人扫码页 |
+| 报工 Tab | [`pages/scan/`](../miniprogram/pages/scan/) | 可报任务 + 我的报工（工人）；列表「可报 N」与报工详情一致（[`utils/enrichReportableTasks.js`](../miniprogram/utils/enrichReportableTasks.js) 本地重算，扣外协/待审）；可报任务右下圆形「扫码报工」→ 工序选择弹层 → 工人扫码页 |
 | 工人扫码报工 | [`packageBusiness/worker-report-scan/`](../miniprogram/packageBusiness/worker-report-scan/) | 按预选工序模板批量扫码；可跨多张可报工单累加；确认后跳转确认页 |
-| 工人报工确认 | [`packageBusiness/worker-report-confirm/`](../miniprogram/packageBusiness/worker-report-confirm/) | 多工单数量核对 + 自定义字段；一次提交共用 `reportBatchId`（`PENDING`） |
+| 工人报工确认 | [`packageBusiness/worker-report-confirm/`](../miniprogram/packageBusiness/worker-report-confirm/) | 布局对齐 `production-order-report`（工单信息卡、生产人员、报工数量矩阵只读、良品/不良品切换）；多工单逐张展示；一次提交共用 `reportBatchId`（`PENDING`） |
 | 扫码会话 | [`packageBusiness/scan-session/`](../miniprogram/packageBusiness/scan-session/) | 连续扫码作业 |
 | 预备 | [`packageBusiness/scan-setup/`](../miniprogram/packageBusiness/scan-setup/) | 已废弃，自动跳转会话页 |
 | 会话 | [`packageBusiness/scan-session/`](../miniprogram/packageBusiness/scan-session/) | 条件选择 + 取景扫码 + 下方本次扫码记录 |

@@ -8,6 +8,7 @@ const {
 } = require('./scanBatchRowDetail.js');
 const { productHasColorSizeMatrix } = require('./productionPlans.js');
 const { recordReportScanMeta } = require('./reportScanMeta.js');
+const { scanFail } = require('./scanFeedback.js');
 
 function createReportScanBatchHandlers(page) {
   const preparedByToken = new Map();
@@ -25,7 +26,7 @@ function createReportScanBatchHandlers(page) {
 
     const anchorPlanOrderId = order.planOrderId || null;
     if (!anchorPlanOrderId) {
-      wx.showToast({ title: '当前工单未关联计划，无法校验扫码', icon: 'none' });
+      scanFail(page, '当前工单未关联计划，无法校验扫码');
       return null;
     }
 
@@ -33,21 +34,21 @@ function createReportScanBatchHandlers(page) {
       if (payload.kind === 'ITEM') {
         const res = await fetchScanByPayload(payload);
         if (res.status === 'VOIDED') {
-          wx.showToast({ title: res.message || '单品码已作废', icon: 'none' });
+          scanFail(page, res.message || '单品码已作废');
           return null;
         }
         if (res.productId !== order.productId) {
-          wx.showToast({ title: '此码产品与当前工单不一致', icon: 'none' });
+          scanFail(page, '此码产品与当前工单不一致');
           return null;
         }
         const codePlanId = (res.callerContext && res.callerContext.callerPlanOrderId) || res.planOrderId;
         if (codePlanId && codePlanId !== anchorPlanOrderId) {
-          wx.showToast({ title: '此码不属于当前工单所在计划', icon: 'none' });
+          scanFail(page, '此码不属于当前工单所在计划');
           return null;
         }
         const vid = res.variantId || '';
         if (productHasColorSizeMatrix(product, category) && !vid) {
-          wx.showToast({ title: '单品码未带规格，无法在按规格模式下累加', icon: 'none' });
+          scanFail(page, '单品码未带规格，无法在按规格模式下累加');
           return null;
         }
         const validation = await validateScanUsage({
@@ -58,11 +59,11 @@ function createReportScanBatchHandlers(page) {
           addQty: 1,
         }).catch(() => ({ code: 'ALLOWED' }));
         if (validation.code === 'DUPLICATE_SAVED') {
-          wx.showToast({ title: validation.message || '该码已被使用', icon: 'none' });
+          scanFail(page, validation.message || '该码已被使用');
           return null;
         }
         if (validation.code === 'EXCEEDS_MAX') {
-          wx.showToast({ title: validation.message || '超过可报上限', icon: 'none' });
+          scanFail(page, validation.message || '超过可报上限');
           return null;
         }
         const prepared = {
@@ -78,26 +79,26 @@ function createReportScanBatchHandlers(page) {
       if (payload.kind === 'BATCH') {
         const res = await fetchScanByPayload(payload);
         if (res.status === 'VOIDED') {
-          wx.showToast({ title: res.message || '批次码已作废', icon: 'none' });
+          scanFail(page, res.message || '批次码已作废');
           return null;
         }
         if (res.productId !== order.productId) {
-          wx.showToast({ title: '此码产品与当前工单不一致', icon: 'none' });
+          scanFail(page, '此码产品与当前工单不一致');
           return null;
         }
         const codePlanId = (res.callerContext && res.callerContext.callerPlanOrderId) || res.planOrderId;
         if (codePlanId && codePlanId !== anchorPlanOrderId) {
-          wx.showToast({ title: '此码不属于当前工单所在计划', icon: 'none' });
+          scanFail(page, '此码不属于当前工单所在计划');
           return null;
         }
         const qty = Number(res.quantity) || 0;
         if (qty <= 0) {
-          wx.showToast({ title: '批次数量无效', icon: 'none' });
+          scanFail(page, '批次数量无效');
           return null;
         }
         const vid = res.variantId || '';
         if (productHasColorSizeMatrix(product, category) && !vid) {
-          wx.showToast({ title: '批次码未带规格，无法在按规格模式下累加', icon: 'none' });
+          scanFail(page, '批次码未带规格，无法在按规格模式下累加');
           return null;
         }
         const validation = await validateScanUsage({
@@ -108,11 +109,11 @@ function createReportScanBatchHandlers(page) {
           addQty: qty,
         }).catch(() => ({ code: 'ALLOWED' }));
         if (validation.code === 'DUPLICATE_SAVED') {
-          wx.showToast({ title: validation.message || '该码已被使用', icon: 'none' });
+          scanFail(page, validation.message || '该码已被使用');
           return null;
         }
         if (validation.code === 'EXCEEDS_MAX') {
-          wx.showToast({ title: validation.message || '超过可报上限', icon: 'none' });
+          scanFail(page, validation.message || '超过可报上限');
           return null;
         }
         const prepared = {
@@ -125,7 +126,7 @@ function createReportScanBatchHandlers(page) {
         return prepared;
       }
     } catch (e) {
-      wx.showToast({ title: (e && e.message) || '扫码查询失败', icon: 'none' });
+      scanFail(page, (e && e.message) || '扫码查询失败');
       return null;
     }
     return null;

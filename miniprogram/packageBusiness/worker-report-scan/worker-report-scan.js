@@ -26,6 +26,8 @@ Page({
     scanBatchProcessing: false,
     scanBatchShowIntentToggle: true,
     scanBatchIntent: 'BATCH',
+    scanFeedbackText: '',
+    scanFeedbackType: '',
     statusBarHeight: 20,
     navBarHeight: 44,
   },

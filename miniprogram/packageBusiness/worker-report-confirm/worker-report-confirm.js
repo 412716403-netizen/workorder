@@ -2,7 +2,7 @@ const { readTenantCtx, readOperatorDisplayName, readCurrentUserId } = require('.
 const { hasPermission, hasPrefixPermission } = require('../../utils/permissions.js');
 const { readNavBarMetrics, readWindowMetrics, computePlanCreateHeaderHeight } = require('../../utils/windowMetrics.js');
 const { readWorkerReportScanPrefill, deserializeReportScanMeta } = require('../../utils/workerReportScanPrefill.js');
-const { createOrderReport, fetchTenantConfig, fetchProductsAll, fetchCategoriesAll, fetchNodesAll } = require('../utils/orderApi.js');
+const { createOrderReport, fetchTenantConfig, fetchProductsAll, fetchCategoriesAll, fetchNodesAll, getOrder, fetchProductionRecords } = require('../utils/orderApi.js');
 const { fetchDictionaries } = require('../utils/planApi.js');
 const { normalizeMasterList, normalizeAppDictionaries } = require('../utils/productionPlans.js');
 const {
@@ -13,7 +13,7 @@ const {
   validateReportCustomFields,
 } = require('../utils/orderReportForm.js');
 const { buildReportScanPayloadFields } = require('../utils/reportScanMeta.js');
-const { buildWorkerReportLineCards, entriesFromQuantities } = require('../utils/workerReportConfirmView.js');
+const { buildWorkerReportDisplayLines, entriesFromQuantities } = require('../utils/workerReportConfirmView.js');
 
 function computeScrollHeight(nav) {
   const win = readWindowMetrics();
@@ -27,10 +27,10 @@ Page({
   data: {
     loading: true,
     submitting: false,
-    pageTitle: '确认报工',
+    pageTitle: '报工',
     templateName: '',
-    summaryMeta: '',
     lineCards: [],
+    qtyInputMode: 'good',
     workerName: '',
     reportCustomFields: [],
     customData: {},
@@ -58,15 +58,13 @@ Page({
     this._lines = prefill.lines;
     const meId = readCurrentUserId();
     const templateName = prefill.templateName || '';
-    const orderCount = prefill.lines.length;
     this.setData({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
       headerBlockHeight: computePlanCreateHeaderHeight(nav),
       scrollHeight: computeScrollHeight(nav),
-      pageTitle: templateName ? `${templateName} · 确认报工` : '确认报工',
+      pageTitle: templateName ? `${templateName} · 报工` : '报工',
       templateName,
-      summaryMeta: `共 ${orderCount} 张工单 · 提交后合并为一条待审`,
       workerName: readOperatorDisplayName() || '本人',
       selfReport,
       workerId: selfReport && meId ? meId : '',
@@ -112,6 +110,12 @@ Page({
     return !err;
   },
 
+  onQtyModeTap(e) {
+    const mode = e.currentTarget.dataset.mode;
+    if (!mode || mode === this.data.qtyInputMode) return;
+    this.setData({ qtyInputMode: mode });
+  },
+
   async bootstrap() {
     this.setData({ loading: true });
     try {
@@ -135,10 +139,31 @@ Page({
       const customData = buildInitialReportCustomData(reportCustomFields);
       this._reportCustomFields = reportCustomFields;
 
-      const lineCards = buildWorkerReportLineCards(this._lines, {
+      const orderIds = [...new Set(this._lines.map((line) => line.orderId).filter(Boolean))];
+      const [ordersRaw, prodRecordsRaw] = await Promise.all([
+        Promise.all(orderIds.map((id) => getOrder(id).catch(() => null))),
+        orderIds.length
+          ? fetchProductionRecords({
+            orderIds: orderIds.join(','),
+            types: 'OUTSOURCE,REWORK,REWORK_REPORT',
+            all: 'true',
+          }).catch(() => [])
+          : Promise.resolve([]),
+      ]);
+      const orderMap = new Map();
+      orderIds.forEach((id, index) => {
+        if (ordersRaw[index]) orderMap.set(id, ordersRaw[index]);
+      });
+      const prodRecords = Array.isArray(prodRecordsRaw) ? prodRecordsRaw : [];
+
+      const lineCards = buildWorkerReportDisplayLines(this._lines, {
+        orderMap,
         productMap,
         categoryMap,
         dictionaries,
+        config,
+        prodRecords,
+        globalNodes,
       });
 
       this.setData({

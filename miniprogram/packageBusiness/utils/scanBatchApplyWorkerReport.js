@@ -18,6 +18,7 @@ const {
   writeWorkerReportScanPrefill,
   serializeReportScanMeta,
 } = require('../../utils/workerReportScanPrefill.js');
+const { scanFail } = require('./scanFeedback.js');
 
 function sessionTargetKey(orderId, milestoneId) {
   return `${orderId}:${milestoneId}`;
@@ -77,17 +78,17 @@ function createWorkerReportScanHandlers(page) {
     try {
       const res = await fetchScanByPayload(payload);
       if (res.status === 'VOIDED') {
-        wx.showToast({ title: res.message || '码已作废', icon: 'none' });
+        scanFail(page, res.message || '码已作废');
         return null;
       }
 
       const resolved = resolveReportTarget(res, templateId, orders);
       if (!resolved) {
-        wx.showToast({ title: '无法根据此码匹配到工单与工序', icon: 'none' });
+        scanFail(page, '无法根据此码匹配到工单与工序');
         return null;
       }
       if (resolved.error === 'MULTIPLE_ORDERS') {
-        wx.showToast({ title: '匹配到多个工单，请分开扫码', icon: 'none' });
+        scanFail(page, '匹配到多个工单，请分开扫码');
         return null;
       }
 
@@ -95,20 +96,20 @@ function createWorkerReportScanHandlers(page) {
       const order = orders.find((o) => o.id === orderId);
       const milestone = order && (order.milestones || []).find((m) => m.id === milestoneId);
       if (!order || !milestone) {
-        wx.showToast({ title: '工单或工序不存在', icon: 'none' });
+        scanFail(page, '工单或工序不存在');
         return null;
       }
 
       const targetKey = sessionTargetKey(orderId, milestoneId);
       const reportableKeys = page._reportableKeys;
       if (!reportableKeys || !reportableKeys.has(targetKey)) {
-        wx.showToast({ title: '该工单工序暂不可报', icon: 'none' });
+        scanFail(page, '该工单工序暂不可报');
         return null;
       }
 
       const anchorPlanOrderId = order.planOrderId || null;
       if (!anchorPlanOrderId) {
-        wx.showToast({ title: '当前工单未关联计划，无法校验扫码', icon: 'none' });
+        scanFail(page, '当前工单未关联计划，无法校验扫码');
         return null;
       }
 
@@ -124,12 +125,12 @@ function createWorkerReportScanHandlers(page) {
       if (payload.kind === 'ITEM') {
         const codePlanId = (res.callerContext && res.callerContext.callerPlanOrderId) || res.planOrderId;
         if (codePlanId && codePlanId !== anchorPlanOrderId) {
-          wx.showToast({ title: '此码不属于当前工单所在计划', icon: 'none' });
+          scanFail(page, '此码不属于当前工单所在计划');
           return null;
         }
         const vid = res.variantId || '';
         if (productHasColorSizeMatrix(product, category) && !vid) {
-          wx.showToast({ title: '单品码未带规格，无法在按规格模式下累加', icon: 'none' });
+          scanFail(page, '单品码未带规格，无法在按规格模式下累加');
           return null;
         }
         qty = 1;
@@ -138,17 +139,17 @@ function createWorkerReportScanHandlers(page) {
       } else if (payload.kind === 'BATCH') {
         const codePlanId = (res.callerContext && res.callerContext.callerPlanOrderId) || res.planOrderId;
         if (codePlanId && codePlanId !== anchorPlanOrderId) {
-          wx.showToast({ title: '此码不属于当前工单所在计划', icon: 'none' });
+          scanFail(page, '此码不属于当前工单所在计划');
           return null;
         }
         qty = Number(res.quantity) || 0;
         if (qty <= 0) {
-          wx.showToast({ title: '批次数量无效', icon: 'none' });
+          scanFail(page, '批次数量无效');
           return null;
         }
         const vid = res.variantId || '';
         if (productHasColorSizeMatrix(product, category) && !vid) {
-          wx.showToast({ title: '批次码未带规格，无法在按规格模式下累加', icon: 'none' });
+          scanFail(page, '批次码未带规格，无法在按规格模式下累加');
           return null;
         }
         detail = scanVirtualBatchResultToRowDetail(res);
@@ -166,11 +167,11 @@ function createWorkerReportScanHandlers(page) {
       }).catch(() => ({ code: 'ALLOWED' }));
 
       if (validation.code === 'DUPLICATE_SAVED') {
-        wx.showToast({ title: validation.message || '该码已被使用', icon: 'none' });
+        scanFail(page, validation.message || '该码已被使用');
         return null;
       }
       if (validation.code === 'EXCEEDS_MAX') {
-        wx.showToast({ title: validation.message || '超过可报上限', icon: 'none' });
+        scanFail(page, validation.message || '超过可报上限');
         return null;
       }
 
@@ -192,7 +193,7 @@ function createWorkerReportScanHandlers(page) {
       preparedByToken.set(payload.token, prepared);
       return prepared;
     } catch (e) {
-      wx.showToast({ title: (e && e.message) || '扫码查询失败', icon: 'none' });
+      scanFail(page, (e && e.message) || '扫码查询失败');
       return null;
     }
   }
@@ -220,7 +221,7 @@ function createWorkerReportScanHandlers(page) {
 
     const lines = groupsToPrefillLines(page._targetGroups);
     if (!lines.length) {
-      wx.showToast({ title: '未匹配到可报工单', icon: 'none' });
+      scanFail(page, '未匹配到可报工单');
       return false;
     }
 

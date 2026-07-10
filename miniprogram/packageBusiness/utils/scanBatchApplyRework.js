@@ -12,6 +12,7 @@ const {
   collectReworkOrderIdsForProduct,
   reworkQtyKey,
 } = require('./reworkReportGroupLite.js');
+const { scanFail } = require('./scanFeedback.js');
 
 function productIdFromScan(scanRes) {
   return scanRes.productId || null;
@@ -41,19 +42,19 @@ function createReworkReportScanBatchHandlers(page) {
     try {
       const res = await fetchScanByPayload(payload);
       if (res.status === 'VOIDED') {
-        wx.showToast({ title: res.message || '码不可用', icon: 'none' });
+        scanFail(page, res.message || '码不可用');
         return null;
       }
       const productId = productIdFromScan(res);
       if (!productId) {
-        wx.showToast({ title: '扫码结果缺少产品信息', icon: 'none' });
+        scanFail(page, '扫码结果缺少产品信息');
         return null;
       }
       const paths = getPaths();
       const variantId = res.variantId || '';
       const path = findReworkPathForScan(paths, productId, variantId);
       if (!path) {
-        wx.showToast({ title: '此码对应该工序下无待返工数量', icon: 'none' });
+        scanFail(page, '此码对应该工序下无待返工数量');
         return null;
       }
 
@@ -64,7 +65,7 @@ function createReworkReportScanBatchHandlers(page) {
       if (payload.kind === 'BATCH') {
         addQty = Number(res.quantity) || 0;
         if (addQty <= 0) {
-          wx.showToast({ title: '批次数量无效', icon: 'none' });
+          scanFail(page, '批次数量无效');
           return null;
         }
         virtualBatchId = res.batchId || null;
@@ -85,11 +86,11 @@ function createReworkReportScanBatchHandlers(page) {
         addQty,
       }).catch(() => ({ code: 'ALLOWED' }));
       if (validation.code === 'DUPLICATE_SAVED') {
-        wx.showToast({ title: validation.message || '该码已被使用', icon: 'none' });
+        scanFail(page, validation.message || '该码已被使用');
         return null;
       }
       if (validation.code === 'EXCEEDS_MAX') {
-        wx.showToast({ title: validation.message || '超过可报上限', icon: 'none' });
+        scanFail(page, validation.message || '超过可报上限');
         return null;
       }
 
@@ -103,7 +104,7 @@ function createReworkReportScanBatchHandlers(page) {
       preparedByToken.set(payload.token, prepared);
       return prepared;
     } catch (e) {
-      wx.showToast({ title: (e && e.message) || '扫码查询失败', icon: 'none' });
+      scanFail(page, (e && e.message) || '扫码查询失败');
       return null;
     }
   }

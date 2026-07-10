@@ -18,41 +18,153 @@
     <view wx:if="{{loading}}" class="plan-create-muted">加载中…</view>
 
     <view wx:else class="plan-create-page">
-      <view class="plan-form-card worker-report-confirm-summary">
-        <text class="worker-report-confirm-summary__title">{{templateName || '扫码报工'}}</text>
-        <text class="worker-report-confirm-summary__meta">{{summaryMeta}}</text>
-      </view>
-
-      <view class="plan-form-card">
-        <view class="plan-form-cell plan-form-cell--last">
-          <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>生产人员</text>
-          <text class="plan-form-cell__value">{{workerName || '本人'}}</text>
-        </view>
-      </view>
-
-      <view
-        wx:for="{{lineCards}}"
-        wx:key="key"
-        class="plan-form-card worker-report-confirm-line"
-      >
-        <view class="worker-report-confirm-line__head">
-          <text class="worker-report-confirm-line__title">{{item.headline}}</text>
-          <text wx:if="{{item.showProductSku}}" class="worker-report-confirm-line__sku">{{item.productSku}}</text>
-        </view>
-        <view class="worker-report-confirm-line__total">合计 {{item.totalGoodText}}</view>
-        <view
-          wx:for="{{item.qtyRows}}"
-          wx:for-item="qtyRow"
-          wx:key="label"
-          class="worker-report-confirm-line__row"
-        >
-          <text class="worker-report-confirm-line__spec">{{qtyRow.label}}</text>
-          <view class="worker-report-confirm-line__qty-wrap">
-            <text class="worker-report-confirm-line__qty">{{qtyRow.goodText}}</text>
-            <text wx:if="{{qtyRow.showDefective}}" class="worker-report-confirm-line__defective">{{qtyRow.defectiveText}}</text>
+      <block wx:for="{{lineCards}}" wx:for-item="line" wx:for-index="lineIndex" wx:key="key">
+        <view class="plan-form-card report-context-card">
+          <view class="report-context-card__row">
+            <view class="report-context-card__main">
+              <view class="report-context-card__head">
+                <text class="report-context-card__order">{{line.orderNumber}}</text>
+                <text wx:if="{{line.orderNumber && line.productName}}" class="report-context-card__dot">·</text>
+                <text class="report-context-card__product">{{line.productName}}</text>
+              </view>
+              <text wx:if="{{line.qtyHint}}" class="report-context-card__hint">{{line.qtyHint}}</text>
+            </view>
           </view>
         </view>
-      </view>
+
+        <view wx:if="{{lineIndex === 0}}" class="plan-form-card">
+          <view class="plan-form-cell plan-form-cell--last">
+            <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>生产人员</text>
+            <text class="plan-form-cell__value">{{workerName || '本人'}}</text>
+          </view>
+        </view>
+
+        <view class="plan-form-card">
+          <view class="plan-form-cell plan-form-cell--matrix-head report-qty-head">
+            <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>报工数量</text>
+            <view class="report-qty-toggle">
+              <view
+                class="report-qty-toggle__item {{qtyInputMode === 'good' ? 'report-qty-toggle__item--active' : ''}}"
+                data-mode="good"
+                bindtap="onQtyModeTap"
+              >良品</view>
+              <view
+                class="report-qty-toggle__item {{qtyInputMode === 'defective' ? 'report-qty-toggle__item--active' : ''}}"
+                data-mode="defective"
+                bindtap="onQtyModeTap"
+              >不良品</view>
+            </view>
+          </view>
+
+          <view wx:if="{{line.formMode === 'matrix' && line.qtyHint}}" class="report-qty-summary report-qty-summary--compact">
+            <text class="report-qty-summary__detail">{{line.qtyHint}}</text>
+          </view>
+
+          <block wx:if="{{line.formMode === 'matrix' && line.matrixLayout}}">
+            <scroll-view class="plan-create-matrix-scroll" scroll-x enhanced show-scrollbar="{{false}}">
+              <view class="plan-create-matrix report-matrix report-matrix--readonly">
+                <view class="plan-create-matrix__head">
+                  <view class="plan-create-matrix__corner">颜色</view>
+                  <view
+                    wx:for="{{line.matrixLayout.sizeColumns}}"
+                    wx:key="id"
+                    class="plan-create-matrix__size"
+                  >{{item.header}}</view>
+                </view>
+                <view
+                  wx:for="{{line.matrixLayout.colorRows}}"
+                  wx:for-item="row"
+                  wx:key="key"
+                  class="plan-create-matrix__row"
+                >
+                  <view class="plan-create-matrix__color">
+                    <view
+                      wx:if="{{row.colorSwatch}}"
+                      class="plan-create-matrix__swatch"
+                      style="background-color: {{row.colorSwatch}};"
+                    />
+                    <text class="plan-create-matrix__color-text">{{row.colorLabel}}</text>
+                  </view>
+                  <view
+                    wx:for="{{row.cells}}"
+                    wx:for-item="cell"
+                    wx:key="index"
+                    class="plan-create-matrix__cell report-matrix__cell"
+                  >
+                    <view wx:if="{{cell.variantId}}" class="report-matrix__cell-inner">
+                      <view
+                        class="plan-create-matrix__input report-matrix__input--readonly {{(qtyInputMode === 'good' ? cell.quantity : cell.defectiveQty) ? 'plan-create-matrix__input--filled' : 'plan-create-matrix__input--empty'}}"
+                      >{{qtyInputMode === 'good' ? cell.quantity : cell.defectiveQty}}</view>
+                      <text
+                        wx:if="{{qtyInputMode === 'good' && cell.maxQtyLabel}}"
+                        class="report-matrix__max"
+                      >{{cell.maxQtyLabel}}</text>
+                      <text wx:else class="report-matrix__max report-matrix__max--placeholder"> </text>
+                    </view>
+                    <view wx:else class="report-matrix__cell-inner report-matrix__cell-inner--empty">
+                      <text class="plan-create-matrix__dash">—</text>
+                      <text class="report-matrix__max report-matrix__max--placeholder"> </text>
+                    </view>
+                  </view>
+                </view>
+              </view>
+            </scroll-view>
+          </block>
+
+          <block wx:elif="{{line.formMode === 'multi' && line.variantRows.length}}">
+            <view
+              wx:for="{{line.variantRows}}"
+              wx:for-item="variantRow"
+              wx:key="variantId"
+              class="report-variant-row"
+            >
+              <view class="report-variant-row__head">
+                <text class="report-variant-row__label">{{variantRow.label}}</text>
+                <text class="report-variant-row__meta">工单 {{variantRow.orderQty}} {{line.unitName}} · {{variantRow.remainingMeta}}</text>
+              </view>
+              <view class="report-variant-row__inputs">
+                <view class="report-stepper-field__input report-stepper-field__input--full report-stepper-field__input--readonly">
+                  {{qtyInputMode === 'good' ? variantRow.quantity : variantRow.defectiveQty}}
+                </view>
+              </view>
+            </view>
+          </block>
+
+          <block wx:elif="{{line.formMode === 'single'}}">
+            <view class="plan-form-cell plan-form-cell--input plan-form-cell--last report-qty-cell">
+              <text class="plan-form-cell__label">
+                <text wx:if="{{qtyInputMode === 'good'}}" class="plan-form-cell__req">*</text>
+                {{qtyInputMode === 'good' ? '良品数量' : '不良品数量'}}
+              </text>
+              <view class="report-qty-cell__body">
+                <view class="report-stepper report-stepper--readonly">
+                  <text class="report-stepper__readonly-value">
+                    {{qtyInputMode === 'good' ? line.singleQuantity : line.singleDefectiveQty}}
+                  </text>
+                </view>
+              </view>
+            </view>
+          </block>
+
+          <block wx:else>
+            <view
+              wx:for="{{line.qtyRows}}"
+              wx:for-item="qtyRow"
+              wx:key="label"
+              class="report-variant-row"
+            >
+              <view class="report-variant-row__head">
+                <text class="report-variant-row__label">{{qtyRow.label}}</text>
+              </view>
+              <view class="report-variant-row__inputs">
+                <view class="report-stepper-field__input report-stepper-field__input--full report-stepper-field__input--readonly">
+                  {{qtyInputMode === 'good' ? qtyRow.goodText : (qtyRow.showDefective ? qtyRow.defectiveText : '0 件')}}
+                </view>
+              </view>
+            </view>
+          </block>
+        </view>
+      </block>
 
       <view wx:if="{{reportCustomFields.length}}" class="plan-form-card">
         <plan-form-custom-field
@@ -70,6 +182,6 @@
       loading="{{submitting}}"
       disabled="{{submitting || !canSubmit}}"
       bindtap="onSubmit"
-    >{{submitting ? '提交中…' : '提交待审'}}</button>
+    >{{submitting ? '提交中…' : '确认报工'}}</button>
   </view>
 </view>
