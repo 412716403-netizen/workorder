@@ -172,20 +172,24 @@ function buildQtyHintText(stats, unitName) {
   const defective = Number(stats.defective) || 0;
   const totalOutsourcedAtNode = Number(stats.totalOutsourcedAtNode) || 0;
   const totalRework = Number(stats.totalRework) || 0;
+  const pendingApprovalQty = Number(stats.pendingApprovalQty) || 0;
+  const reworkRemaining = Number(stats.reworkRemaining) >= 0
+    ? Number(stats.reworkRemaining)
+    : Math.max(0, defective - totalRework);
 
   if (totalQty <= 0 && maxReportable <= 0 && remaining <= 0) return '';
   const head = maxReportable !== totalQty && totalQty > 0
     ? `可报 ${maxReportable}/${totalQty} ${unit}`
     : (totalQty > 0 ? `合计 ${totalQty} ${unit}` : `最多可报 ${remaining} ${unit}`);
   let text = `${head} · 已报 ${reported} · 剩 ${remaining} ${unit}`;
+  if (pendingApprovalQty > 0) {
+    text += ` · 待审 ${pendingApprovalQty} ${unit}`;
+  }
   if (totalOutsourcedAtNode > 0) {
     text += ` · 外协剩余 ${totalOutsourcedAtNode} ${unit}`;
   }
-  if (defective > 0) {
-    text += ` · 返工 ${defective} ${unit}`;
-  }
-  if (totalRework > 0) {
-    text += ` ·${defective > 0 ? ' 返工完成' : ' 返工'} ${totalRework}`;
+  if (reworkRemaining > 0) {
+    text += ` · 返工剩余 ${reworkRemaining} ${unit}`;
   }
   return text;
 }

@@ -268,6 +268,7 @@ function computeOrderReportHints(order, milestone, globalNodes, config, prodReco
   const rework = getDr(bucketId, tid).rework;
   const defectiveQtyForHint = defective;
   const totalRework = rework;
+  const reworkRemainingQty = Math.max(0, defectiveQtyForHint - totalRework);
   const hintMaxReportable = Math.max(0, Math.round(base - defective + rework));
   const hintCompletedDisplay = Math.max(0, Number(milestone.completedQuantity) || 0);
   const pendingOccupied = sumPendingReportQty(milestone.reports);
@@ -289,6 +290,8 @@ function computeOrderReportHints(order, milestone, globalNodes, config, prodReco
     defectiveQtyForHint,
     totalOutsourcedAtNode,
     totalRework,
+    pendingApprovalQty: pendingOccupied,
+    reworkRemainingQty,
     effectiveRemainingForModal,
     processSequenceMode,
     outOfSequenceTemplateIds,

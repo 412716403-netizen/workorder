@@ -535,7 +535,7 @@
 - **小程序 Tab「报工」自报工审核**（`pages/scan`）：
   - 可见性：账号持有顶级模块键 `process_report`（工序报工）。
   - **可报任务** = 成员「生产工序分配」`assignedMilestoneIds` ∩ 当前 `remaining > 0` 的工单工序（`GET /api/orders/my-reportable-tasks`）；**须已分配对应工序**，工单中心可见全部工序卡但仅已分配工序进入可报任务；**余量口径**与报工详情一致（扣 **PENDING**、**外协未收回**、按规格顺控）；查询范围与工单中心相同（未发货），且仅含含已分配工序的工单（**无 500 条截断**）。
-  - Tab 手输提交带 `requireApproval: true` → 落库 `approvalStatus=PENDING`；**不计入** `completedQuantity` / 顺控上游，但 **占用可报额度**（下次可报须扣 PENDING）。报工单号前缀 **`ZBG`**（自报工专用），与工单中心即时报工的 **`BG`** 分池取号，避免重号。
+  - Tab 手输提交带 `requireApproval: true` → 落库 `approvalStatus=PENDING`；**不计入** `completedQuantity` / 顺控上游，但 **占用可报额度**（下次可报须扣 PENDING）。**工单中心工序卡**圆心与下方可报数字不扣待审（与 Web 一致）；报工详情 hint 单独展示「待审 N」。报工单号前缀 **`ZBG`**（自报工专用），与工单中心即时报工的 **`BG`** 分池取号，避免重号。
   - **可报任务「扫码报工」**（`pages/scan` 右下圆形 FAB → `worker-report-scan` → `worker-report-confirm`）：前置与 Tab 一致（`process_report` + 追溯码插件）；工序范围仅限成员 `assignedMilestoneIds`；**仅 1 个分配工序时点击 FAB 直达扫码页**，多个则底部弹层选择；进入批量扫码页后按 `templateId` 用 `resolveReportTarget` 反查工单+工序，**同一会话可跨多张工单累加**（按 `orderId + milestoneId` 分行，同产品不同工单不合并）；扫码目标须落在 `my-reportable-tasks` 且 `remaining > 0`；一码匹配多工单仍拒绝；确认后跳转多工单确认页，一次提交共用 `reportBatchId` / `ZBG` 报工单号 → 各工单逐规格 `requireApproval: true` → `PENDING`（「我的报工」聚为一行待审）。
   - 工单中心报工（Web / 小程序工单点按）与扫码报工 **不传** `requireApproval`，仍即时 `APPROVED`。
   - 审核：`production:orders_report_records:edit`；Web 工单中心工具栏「报工审核」（与报工流水同级）与小程序「报工待审」；**通过后才进入报工流水**；流水不展示审核状态；驳回后释放额度。Web 报工审核弹窗**默认不限日期**（展示全部待审），可选手动收窄日期；支持勾选**批量通过/驳回**；有待审时工具栏按钮显示待审条数（与弹窗列表行数一致，按 `reportBatchId` 聚合）。

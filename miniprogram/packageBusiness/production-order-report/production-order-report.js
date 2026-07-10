@@ -86,7 +86,9 @@ function buildReportQtyHint(reportHints, unitName) {
     remaining: reportHints.hintRemaining,
     defective: reportHints.defectiveQtyForHint,
     totalOutsourcedAtNode: reportHints.totalOutsourcedAtNode,
-    totalRework: reportHints.totalRework
+    totalRework: reportHints.totalRework,
+    pendingApprovalQty: reportHints.pendingApprovalQty,
+    reworkRemaining: reportHints.reworkRemainingQty,
   }, unitName);
 }
 
@@ -365,7 +367,9 @@ Page({
         remaining: reportHints.hintRemaining,
         defective: reportHints.defectiveQtyForHint,
         totalOutsourcedAtNode: reportHints.totalOutsourcedAtNode,
-        totalRework: reportHints.totalRework
+        totalRework: reportHints.totalRework,
+        pendingApprovalQty: reportHints.pendingApprovalQty,
+        reworkRemaining: reportHints.reworkRemainingQty,
       }, unitName);
       const qtyHint = buildReportQtyHint(reportHints, unitName);
 

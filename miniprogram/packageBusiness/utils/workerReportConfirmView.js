@@ -43,6 +43,8 @@ function buildReportQtyHint(reportHints, unitName) {
     defective: reportHints.defectiveQtyForHint,
     totalOutsourcedAtNode: reportHints.totalOutsourcedAtNode,
     totalRework: reportHints.totalRework,
+    pendingApprovalQty: reportHints.pendingApprovalQty,
+    reworkRemaining: reportHints.reworkRemainingQty,
   }, unitName);
 }
 

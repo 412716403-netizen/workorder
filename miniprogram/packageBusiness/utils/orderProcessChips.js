@@ -33,6 +33,19 @@ function sumDefectiveAtMilestone(ms) {
   return (ms.reports || []).reduce((s, r) => s + (Number(r.defectiveQuantity) || 0), 0);
 }
 
+/** 已审核良品（待审/驳回不计入工序卡已报与可报） */
+function sumApprovedGoodAtMilestone(ms) {
+  const reports = ms.reports || [];
+  if (!reports.length) {
+    return Math.round(Number(ms.completedQuantity) || 0);
+  }
+  return reports.reduce((s, r) => {
+    const st = r.approvalStatus;
+    if (st === 'PENDING' || st === 'REJECTED') return s;
+    return s + (Number(r.quantity) || 0);
+  }, 0);
+}
+
 /**
  * 单工单工序卡 UI 模型
  * @param {object} order
@@ -52,13 +65,13 @@ function buildOrderProcessChips(order, opts = {}) {
   const templateIds = milestones.map((m) => m.templateId);
 
   return milestones.map((ms, idx) => {
-    const completed = Math.round(Number(ms.completedQuantity) || 0);
+    const completed = sumApprovedGoodAtMilestone(ms);
     let baseQty = orderTotalQty;
     if (isProcessSequential(processSequenceMode, ms.templateId, outOfSequenceTemplateIds)) {
       const gateIdx = findGatingPredecessorIndex(templateIds, idx, outOfSequenceTemplateIds);
       if (gateIdx >= 0) {
         const prev = milestones[gateIdx];
-        baseQty = Number(prev == null ? void 0 : prev.completedQuantity) || 0;
+        baseQty = sumApprovedGoodAtMilestone(prev);
       }
     }
     let defective;
@@ -71,6 +84,7 @@ function buildOrderProcessChips(order, opts = {}) {
       defective = sumDefectiveAtMilestone(ms);
     }
     const availableQty = Math.max(0, Math.round(baseQty - defective + rework));
+    // 工序卡可报不扣待审占用（与 Web 工单中心圆下数字一致；待审在报工详情 hint 单独展示）
     const remaining = availableQty - completed;
     const progress = availableQty > 0 ?
     Math.min(100, Math.round(completed / availableQty * 100)) :
