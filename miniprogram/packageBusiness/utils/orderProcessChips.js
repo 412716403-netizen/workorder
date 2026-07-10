@@ -1,5 +1,5 @@
 /**
- * 工单工序进度卡计算（对齐 shared/processSequence.ts + OrderListView 列表工序圈）
+ * 工单工序进度卡计算（对齐 Web OrderListView 列表工序圈：base − 不良 + 返工完成）
  */
 
 function isProcessSequential(processSequenceMode, nodeId, outOfSequenceTemplateIds) {
@@ -43,7 +43,7 @@ function buildOrderProcessChips(order, opts = {}) {
 
 
 
-    opts.processSequenceMode,processSequenceMode = _opts$processSequence === void 0 ? 'sequential' : _opts$processSequence,_opts$outOfSequenceTe = opts.outOfSequenceTemplateIds,outOfSequenceTemplateIds = _opts$outOfSequenceTe === void 0 ? new Set() : _opts$outOfSequenceTe,_opts$canReport = opts.canReport,canReport = _opts$canReport === void 0 ? false : _opts$canReport;
+    opts.processSequenceMode,processSequenceMode = _opts$processSequence === void 0 ? 'sequential' : _opts$processSequence,_opts$outOfSequenceTe = opts.outOfSequenceTemplateIds,outOfSequenceTemplateIds = _opts$outOfSequenceTe === void 0 ? new Set() : _opts$outOfSequenceTe,_opts$canReport = opts.canReport,canReport = _opts$canReport === void 0 ? false : _opts$canReport,_opts$getDefectiveRew = opts.getDefectiveRework,getDefectiveRework = _opts$getDefectiveRew === void 0 ? null : _opts$getDefectiveRew;
 
   const milestones = order.milestones || [];
   if (!milestones.length) return [];
@@ -61,8 +61,16 @@ function buildOrderProcessChips(order, opts = {}) {
         baseQty = Number(prev == null ? void 0 : prev.completedQuantity) || 0;
       }
     }
-    const defective = sumDefectiveAtMilestone(ms);
-    const availableQty = Math.max(0, Math.round(baseQty - defective));
+    let defective;
+    let rework = 0;
+    if (getDefectiveRework) {
+      const dr = getDefectiveRework(order.id, ms.templateId) || {};
+      defective = Number(dr.defective) || 0;
+      rework = Number(dr.rework) || 0;
+    } else {
+      defective = sumDefectiveAtMilestone(ms);
+    }
+    const availableQty = Math.max(0, Math.round(baseQty - defective + rework));
     const remaining = availableQty - completed;
     const progress = availableQty > 0 ?
     Math.min(100, Math.round(completed / availableQty * 100)) :

@@ -87,28 +87,140 @@ function buildDefectiveReworkByOrderMilestone(orders, prodRecords) {
   const reworkReports = (prodRecords || []).filter((r) => r.type === 'REWORK_REPORT');
   if (!reworkReports.length) return map;
 
+  const ordersById = new Map((orders || []).map((o) => [o.id, o]));
   const recordById = new Map((prodRecords || []).map((r) => [r.id, r]));
   const reworkRecords = (prodRecords || []).filter((r) => r.type === 'REWORK');
   const reworkByOrderSource = new Map();
-  reworkRecords.forEach((r) => {var _ref2, _r$sourceNodeId;
-    if (!r.orderId) return;
-    const src = (_ref2 = (_r$sourceNodeId = r.sourceNodeId) != null ? _r$sourceNodeId : r.nodeId) != null ? _ref2 : '';
-    const k = `${r.orderId}|${src}`;
-    const arr = reworkByOrderSource.get(k) || [];
-    arr.push(r);
-    reworkByOrderSource.set(k, arr);
+  const reworkByProductSource = new Map();
+  reworkRecords.forEach((r) => {
+    const src = r.sourceNodeId != null ? r.sourceNodeId : r.nodeId != null ? r.nodeId : '';
+    if (r.orderId) {
+      const k = `${r.orderId}|${src}`;
+      const arr = reworkByOrderSource.get(k) || [];
+      arr.push(r);
+      reworkByOrderSource.set(k, arr);
+    } else if (r.productId) {
+      const k = `${r.productId}|${src}`;
+      const arr = reworkByProductSource.get(k) || [];
+      arr.push(r);
+      reworkByProductSource.set(k, arr);
+    }
   });
 
-  reworkReports.forEach((rr) => {
-    const orderId = rr.orderId;
-    const nodeId = rr.nodeId;
-    if (!orderId || !nodeId) return;
-    const key = `${orderId}|${nodeId}`;
-    const entry = map.get(key) || { defective: 0, rework: 0, reworkByVariant: {} };
-    entry.rework += Number(rr.quantity) || 0;
-    const vid = rr.variantId || '';
-    entry.reworkByVariant[vid] = (entry.reworkByVariant[vid] || 0) + (Number(rr.quantity) || 0);
-    map.set(key, entry);
+  const orderIdToParent = new Map();
+  (orders || []).forEach((o) => {
+    if (o.parentOrderId) orderIdToParent.set(o.id, o.parentOrderId);
+  });
+
+  const getParentOrderId = (orderId) => orderIdToParent.get(orderId) || orderId;
+  const orderProduct = (oid) => {
+    const o = ordersById.get(oid);
+    return o && o.productId;
+  };
+  const getOriginalSourceNodeId = (r) => {
+    const pid = orderProduct(r.orderId || '');
+    const nodeId = r.nodeId || '';
+    const parentOid = orderIdToParent.get(r.orderId || '');
+    const candidates = [
+      ...(reworkByOrderSource.get(`${r.orderId}|${nodeId}`) || []),
+      ...(parentOid ? (reworkByOrderSource.get(`${parentOid}|${nodeId}`) || []) : []),
+      ...(pid ? (reworkByProductSource.get(`${pid}|${nodeId}`) || []) : []),
+    ];
+    const pathIncludes = (x, node) => {
+      const path = x.reworkNodeIds && x.reworkNodeIds.length
+        ? x.reworkNodeIds
+        : x.nodeId ? [x.nodeId] : [];
+      return path.includes(node);
+    };
+    const rework = candidates.find((x) => pathIncludes(x, nodeId));
+    return (rework && rework.sourceNodeId) || r.sourceNodeId || r.nodeId || undefined;
+  };
+  const getReworkNodeIdsForOrder = (orderId, sourceNodeId) => {
+    const o = ordersById.get(orderId);
+    const byOrder = reworkByOrderSource.get(`${orderId}|${sourceNodeId}`);
+    let rw = byOrder && byOrder[0];
+    if (!rw && o) {
+      rw = (reworkByProductSource.get(`${o.productId}|${sourceNodeId}`) || [])[0];
+    }
+    if (rw && rw.reworkNodeIds && rw.reworkNodeIds.length) return rw.reworkNodeIds;
+    if (rw && rw.nodeId) return [rw.nodeId];
+    return [];
+  };
+  const getReworkNodeIds = (parentOrderId, sourceNodeId, orderIdsInGroup) => {
+    const tried = new Set([parentOrderId, ...orderIdsInGroup]);
+    for (const oid of tried) {
+      const ids = getReworkNodeIdsForOrder(oid, sourceNodeId);
+      if (ids.length > 0) return ids;
+    }
+    return [];
+  };
+
+  const bySourceKey = new Map();
+
+  const ensureEntry = (key, oid) => {
+    if (!bySourceKey.has(key)) bySourceKey.set(key, { byVariant: {}, orderIds: new Set() });
+    const e = bySourceKey.get(key);
+    e.orderIds.add(oid);
+    return e;
+  };
+
+  reworkReports.forEach((r) => {
+    const rwCandidate = r.sourceReworkId ? recordById.get(r.sourceReworkId) : undefined;
+    const rw = rwCandidate && rwCandidate.type === 'REWORK' ? rwCandidate : undefined;
+    let parentOrderId;
+    let originalSourceNodeId;
+    let reworkNodeIdsFromRw;
+
+    if (rw) {
+      parentOrderId = rw.orderId ? getParentOrderId(rw.orderId) : getParentOrderId(r.orderId || '');
+      originalSourceNodeId = (rw.sourceNodeId || r.sourceNodeId || r.nodeId) || '';
+      const nodes = rw.reworkNodeIds && rw.reworkNodeIds.length
+        ? rw.reworkNodeIds
+        : rw.nodeId ? [rw.nodeId] : [];
+      reworkNodeIdsFromRw = nodes.length > 0 ? nodes : undefined;
+    } else {
+      originalSourceNodeId = getOriginalSourceNodeId(r) || r.sourceNodeId || r.nodeId || '';
+      if (!originalSourceNodeId) return;
+      parentOrderId = getParentOrderId(r.orderId || '');
+      reworkNodeIdsFromRw = undefined;
+    }
+    if (!originalSourceNodeId) return;
+
+    const key = `${parentOrderId}|${originalSourceNodeId}`;
+    const entry = ensureEntry(key, r.orderId || parentOrderId);
+    if (reworkNodeIdsFromRw && reworkNodeIdsFromRw.length
+      && (!entry.reworkNodeIds || !entry.reworkNodeIds.length)) {
+      entry.reworkNodeIds = reworkNodeIdsFromRw;
+    }
+    const byVariant = entry.byVariant;
+    const vid = r.variantId || '';
+    if (!byVariant[vid]) byVariant[vid] = {};
+    const nodeId = r.nodeId || '';
+    byVariant[vid][nodeId] = (byVariant[vid][nodeId] || 0) + (Number(r.quantity) || 0);
+  });
+
+  bySourceKey.forEach((entry, key) => {
+    const parts = key.split('|');
+    const parentOrderId = parts[0];
+    const sourceNodeId = parts[1];
+    const reworkNodeIds = entry.reworkNodeIds && entry.reworkNodeIds.length
+      ? entry.reworkNodeIds
+      : getReworkNodeIds(parentOrderId, sourceNodeId, [...entry.orderIds]);
+    const reworkByVariant = {};
+    Object.entries(entry.byVariant).forEach(([vid, byNode]) => {
+      const contribution = reworkNodeIds.length > 0
+        ? Math.min(...reworkNodeIds.map((nid) => byNode[nid] || 0))
+        : Object.values(byNode).reduce((s, q) => s + q, 0);
+      reworkByVariant[vid] = contribution;
+    });
+    const rework = Object.values(reworkByVariant).reduce((s, q) => s + q, 0);
+    const existing = map.get(`${parentOrderId}|${sourceNodeId}`);
+    if (existing) {
+      existing.rework = rework;
+      existing.reworkByVariant = reworkByVariant;
+    } else {
+      map.set(`${parentOrderId}|${sourceNodeId}`, { defective: 0, rework, reworkByVariant });
+    }
   });
 
   return map;

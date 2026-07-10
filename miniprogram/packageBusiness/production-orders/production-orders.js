@@ -10,6 +10,7 @@ const _require4 =
 
   require('../utils/productionOrders.js'),parseOrderSearch = _require4.parseOrderSearch,buildOrderListBlocks = _require4.buildOrderListBlocks,flattenBlockOrders = _require4.flattenBlockOrders,mapOrderListRow = _require4.mapOrderListRow,normalizeMasterList = _require4.normalizeMasterList,productNameSkuParts = _require4.productNameSkuParts;
 const _require5 = require('../utils/orderProcessChips.js'),buildOrderProcessChips = _require5.buildOrderProcessChips,buildOutOfSequenceTemplateIds = _require5.buildOutOfSequenceTemplateIds;
+const { buildDefectiveReworkByOrderMilestone } = require('../utils/outsourceDispatchMatrix.js');
 const _require6 =
 
 
@@ -17,7 +18,7 @@ const _require6 =
 
 
 
-  require('../utils/orderApi.js'),listOrdersPaginated = _require6.listOrdersPaginated,fetchTenantConfig = _require6.fetchTenantConfig,fetchProductsAll = _require6.fetchProductsAll,fetchCategoriesAll = _require6.fetchCategoriesAll,fetchNodesAll = _require6.fetchNodesAll,listReportHistory = _require6.listReportHistory;
+  require('../utils/orderApi.js'),listOrdersPaginated = _require6.listOrdersPaginated,fetchTenantConfig = _require6.fetchTenantConfig,fetchProductsAll = _require6.fetchProductsAll,fetchCategoriesAll = _require6.fetchCategoriesAll,fetchNodesAll = _require6.fetchNodesAll,listReportHistory = _require6.listReportHistory,fetchProductionRecords = _require6.fetchProductionRecords;
 const _require7 = require('../utils/reportCustomDocField.js'),mapProductCustomTags = _require7.mapProductCustomTags;
 const _require8 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require8.readNavBarMetrics,readWindowMetrics = _require8.readWindowMetrics;
 const _require9 = require('../utils/pendingStockBadge.js'),computePendingStockCount = _require9.computePendingStockCount,loadPendingStockRows = _require9.loadPendingStockRows,fetchAllOrdersPaginated = _require9.fetchAllOrdersPaginated;
@@ -647,6 +648,11 @@ Page({
       this._productMap
     );
     const canReport = this.data.canReport;
+    const getDefectiveRework = this._getDefectiveReworkForChips || (() => ({
+      defective: 0,
+      rework: 0,
+      reworkByVariant: {},
+    }));
     const out = [];
 
     blocks.forEach((block) => {var _flat$;
@@ -665,7 +671,8 @@ Page({
         const chips = buildOrderProcessChips(item.order, {
           processSequenceMode: this._processSequenceMode || 'sequential',
           outOfSequenceTemplateIds: this._outOfSequenceIds || new Set(),
-          canReport
+          canReport,
+          getDefectiveRework,
         });
         const row = mapOrderListRow(item.order, {
           productName: meta.name,
@@ -692,6 +699,33 @@ Page({
     });
 
     return out;
+  },
+
+  async ensureChipProdContext(orders) {
+    const list = orders || [];
+    const ids = list.map((o) => o.id).filter(Boolean);
+    if (!ids.length) {
+      this._chipDrMap = new Map();
+      this._getDefectiveReworkForChips = null;
+      return;
+    }
+    const cacheKey = ids.slice().sort().join(',');
+    if (this._chipProdCacheKey === cacheKey && this._chipDrMap) return;
+
+    const prodRecords = await fetchProductionRecords({
+      orderIds: ids.join(','),
+      types: 'REWORK,REWORK_REPORT',
+      all: 'true',
+    }).catch(() => []);
+
+    this._chipDrMap = buildDefectiveReworkByOrderMilestone(list, prodRecords);
+    this._getDefectiveReworkForChips = (orderId, templateId) =>
+      this._chipDrMap.get(`${orderId}|${templateId}`) || {
+        defective: 0,
+        rework: 0,
+        reworkByVariant: {},
+      };
+    this._chipProdCacheKey = cacheKey;
   },
 
   async bootstrap() {
@@ -770,6 +804,8 @@ Page({
       } else {
         this._allOrders = pageOrders;
       }
+
+      await this.ensureChipProdContext(this._allOrders);
 
       const rows = this.buildRowsFromOrders(pageOrders);
       const loaded = append ? this.data.rows.length + rows.length : rows.length;
