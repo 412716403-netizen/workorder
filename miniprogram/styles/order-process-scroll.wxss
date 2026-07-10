@@ -142,6 +142,10 @@
   font-size: 26rpx;
 }
 
+.order-process-chip__meta-outsource {
+  color: #059669;
+}
+
 .order-process-chip__meta {
   font-size: 20rpx;
   font-weight: 600;

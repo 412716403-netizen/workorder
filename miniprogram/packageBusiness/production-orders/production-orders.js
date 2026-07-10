@@ -9,7 +9,7 @@ const _require4 =
 
 
   require('../utils/productionOrders.js'),parseOrderSearch = _require4.parseOrderSearch,buildOrderListBlocks = _require4.buildOrderListBlocks,flattenBlockOrders = _require4.flattenBlockOrders,mapOrderListRow = _require4.mapOrderListRow,normalizeMasterList = _require4.normalizeMasterList,productNameSkuParts = _require4.productNameSkuParts;
-const _require5 = require('../utils/orderProcessChips.js'),buildOrderProcessChips = _require5.buildOrderProcessChips,buildOutOfSequenceTemplateIds = _require5.buildOutOfSequenceTemplateIds,applyReportRemainingToChips = _require5.applyReportRemainingToChips;
+const _require5 = require('../utils/orderProcessChips.js'),buildOrderProcessChips = _require5.buildOrderProcessChips,buildOutOfSequenceTemplateIds = _require5.buildOutOfSequenceTemplateIds,applyOrderCenterChipOutsource = _require5.applyOrderCenterChipOutsource,buildProductOrdersTotalQtyMap = _require5.buildProductOrdersTotalQtyMap;
 const { buildDefectiveReworkByOrderMilestone } = require('../utils/outsourceDispatchMatrix.js');
 const _require6 =
 
@@ -653,6 +653,9 @@ Page({
       rework: 0,
       reworkByVariant: {},
     }));
+    const productQtyMap = buildProductOrdersTotalQtyMap(
+      this._allOrders && this._allOrders.length ? this._allOrders : orders,
+    );
     const out = [];
 
     blocks.forEach((block) => {var _flat$;
@@ -674,16 +677,10 @@ Page({
           canReport,
           getDefectiveRework,
         });
-        const product = this._productMap.get(item.order.productId);
-        const category = product && product.categoryId
-          ? this._categoryMap.get(product.categoryId)
-          : null;
-        chips = applyReportRemainingToChips(item.order, chips, {
+        chips = applyOrderCenterChipOutsource(item.order, chips, {
           prodRecords: this._chipProdRecords || [],
-          config: this._chipConfig || {},
-          globalNodes: this._chipGlobalNodes || [],
-          product,
-          category,
+          productionLinkMode: this._productionLinkMode || 'order',
+          productOrdersTotalQtyByPid: productQtyMap,
         });
         const row = mapOrderListRow(item.order, {
           productName: meta.name,
@@ -730,8 +727,6 @@ Page({
     }).catch(() => []);
 
     this._chipProdRecords = prodRecords;
-    this._chipConfig = this._chipConfig || {};
-    this._chipGlobalNodes = this._chipGlobalNodes || [];
     this._chipDrMap = buildDefectiveReworkByOrderMilestone(list, prodRecords);
     this._getDefectiveReworkForChips = (orderId, templateId) =>
       this._chipDrMap.get(`${orderId}|${templateId}`) || {
@@ -777,8 +772,6 @@ Page({
       this._productMap = new Map(products.map((p) => [p.id, p]));
       this._categoryMap = new Map(categories.map((c) => [c.id, c]));
       this._outOfSequenceIds = buildOutOfSequenceTemplateIds(nodes);
-      this._chipConfig = config;
-      this._chipGlobalNodes = nodes;
     } catch {
       this._productionLinkMode = 'order';
       this._processSequenceMode = 'sequential';

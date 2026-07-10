@@ -90,65 +90,90 @@ function buildOrderProcessChips(order, opts = {}) {
       isCompleted,
       canReport: canReportThis,
       disabled: !canReportThis,
-      toneIndex: idx % 6
+      toneIndex: idx % 6,
+      outsourceRemaining: 0,
+      metaText: `${availableQty} / ${remaining}`,
     };
   });
 }
 
+function buildOutsourceNetByOrderTemplate(prodRecords) {
+  const m = new Map();
+  (prodRecords || []).forEach((r) => {
+    if (r.type !== 'OUTSOURCE' || r.sourceReworkId || !r.orderId || !r.nodeId) return;
+    const k = `${r.orderId}|${r.nodeId}`;
+    const cur = m.get(k) || 0;
+    const q = Number(r.quantity) || 0;
+    if (r.status === '加工中') m.set(k, cur + q);
+    else if (r.status === '已收回') m.set(k, cur - q);
+  });
+  m.forEach((v, k) => {
+    m.set(k, Math.max(0, Math.round(v)));
+  });
+  return m;
+}
+
+function buildOutsourceNetByProductTemplate(prodRecords) {
+  const m = new Map();
+  (prodRecords || []).forEach((r) => {
+    if (r.type !== 'OUTSOURCE' || r.sourceReworkId || r.orderId || !r.productId || !r.nodeId) return;
+    const k = `${r.productId}|${r.nodeId}`;
+    const cur = m.get(k) || 0;
+    const q = Number(r.quantity) || 0;
+    if (r.status === '加工中') m.set(k, cur + q);
+    else if (r.status === '已收回') m.set(k, cur - q);
+  });
+  m.forEach((v, k) => {
+    m.set(k, Math.max(0, Math.round(v)));
+  });
+  return m;
+}
+
+function buildProductOrdersTotalQtyMap(orders) {
+  const m = new Map();
+  (orders || []).forEach((o) => {
+    const q = sumOrderQty(o);
+    m.set(o.productId, (m.get(o.productId) || 0) + q);
+  });
+  return m;
+}
+
+function formatOrderCenterChipMeta(availableQty, remaining, outsourceRemaining) {
+  const base = `${availableQty} / ${remaining}`;
+  if (outsourceRemaining > 0) return `${base} · 外协${outsourceRemaining}`;
+  return base;
+}
+
 /**
- * 工序卡下方「可报上限 / 剩余」与报工详情、可报任务列表一致（扣外协、待审、按规格）。
+ * 工单中心工序卡下方数字对齐 Web：可报上限/剩余不扣外协、不扣待审；
+ * 外协剩余单独追加展示（Web 为 hover tooltip，小程序写在标签上）。
  */
-function applyReportRemainingToChips(order, chips, opts) {
+function applyOrderCenterChipOutsource(order, chips, opts) {
   const {
     prodRecords,
-    config,
-    globalNodes,
-    product,
-    category,
+    productionLinkMode,
+    productOrdersTotalQtyByPid,
   } = opts || {};
-  if (!prodRecords || !globalNodes || !globalNodes.length) return chips;
+  if (!prodRecords) return chips;
 
-  const { computeOrderReportHints, buildVariantMaxGoodMap } = require('./reportVariantMaxQty.js');
-  const { productHasColorSizeMatrix } = require('./productionPlans.js');
+  const byOrder = buildOutsourceNetByOrderTemplate(prodRecords);
+  const byProduct = buildOutsourceNetByProductTemplate(prodRecords);
+  const orderQty = sumOrderQty(order);
+  const productTotal = (productOrdersTotalQtyByPid && productOrdersTotalQtyByPid.get(order.productId)) || orderQty;
+  const shareRatio = productTotal > 0 ? orderQty / productTotal : 1;
 
   return (chips || []).map((chip) => {
-    const ms = (order.milestones || []).find((m) => m.id === chip.milestoneId);
-    if (!ms) return chip;
-
-    const hints = computeOrderReportHints(order, ms, globalNodes, config || {}, prodRecords);
-    let reportRemaining = Math.max(0, Number(hints.hintRemaining) || 0);
-    if (product && productHasColorSizeMatrix(product, category)) {
-      const variantMaxGoodMap = buildVariantMaxGoodMap(
-        order,
-        ms,
-        product,
-        hints.opts,
-        prodRecords,
-      );
-      const variantSum = Object.values(variantMaxGoodMap).reduce(
-        (s, v) => s + (Math.max(0, Number(v) || 0)),
-        0,
-      );
-      reportRemaining = Math.max(0, Math.min(variantSum, reportRemaining));
-    }
-
-    const maxReportable = Math.max(0, Number(hints.hintMaxReportable) || chip.availableQty);
-    const completed = chip.completed;
-    const progress = maxReportable > 0
-      ? Math.min(100, Math.round((completed / maxReportable) * 100))
-      : (completed > 0 ? 100 : 0);
-    const isCompleted = ms.status === 'COMPLETED'
-      || (maxReportable > 0 && completed >= maxReportable);
-    const canReportThis = chip.canReport && reportRemaining > 0 && maxReportable > 0;
-
+    const tid = chip.templateId;
+    const outsourceRaw =
+      (byOrder.get(`${order.id}|${tid}`) || 0) +
+      (productionLinkMode === 'product'
+        ? (byProduct.get(`${order.productId}|${tid}`) || 0) * shareRatio
+        : 0);
+    const outsourceRemaining = Math.max(0, Math.round(outsourceRaw));
     return {
       ...chip,
-      availableQty: maxReportable,
-      remaining: reportRemaining,
-      progress,
-      isCompleted,
-      canReport: canReportThis,
-      disabled: !canReportThis,
+      outsourceRemaining,
+      metaText: formatOrderCenterChipMeta(chip.availableQty, chip.remaining, outsourceRemaining),
     };
   });
 }
@@ -159,5 +184,8 @@ module.exports = {
   buildOutOfSequenceTemplateIds,
   sumOrderQty,
   buildOrderProcessChips,
-  applyReportRemainingToChips,
+  buildOutsourceNetByOrderTemplate,
+  buildOutsourceNetByProductTemplate,
+  buildProductOrdersTotalQtyMap,
+  applyOrderCenterChipOutsource,
 };

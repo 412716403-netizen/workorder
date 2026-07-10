@@ -378,7 +378,7 @@ npm run miniprogram:icons
 | [`utils/orderReportHistory.js`](../miniprogram/utils/orderReportHistory.js) | 报工流水行模型、日期转换、客户端筛选 |
 | [`utils/reportBatchDetail.js`](../miniprogram/utils/reportBatchDetail.js) | 报工批次分组、详情视图、编辑时间工具 |
 | [`utils/pendingStockBadge.js`](../miniprogram/utils/pendingStockBadge.js) | 待入库角标与清单数据加载 |
-| [`utils/orderProcessChips.js`](../miniprogram/packageBusiness/utils/orderProcessChips.js) | 工序进度卡：`applyReportRemainingToChips` 与可报任务/报工详情同口径（扣外协、待审） |
+| [`utils/orderProcessChips.js`](../miniprogram/packageBusiness/utils/orderProcessChips.js) | 工序进度卡：对齐 Web `可报上限/剩余`（扣不良、加返工完成，不扣外协/待审）；标签追加「外协 N」 |
 | [`utils/orderApi.js`](../miniprogram/utils/orderApi.js) | `/orders`、`/production/records` 等 API |
 | [`components/report-sheet/`](../miniprogram/components/report-sheet/) | 手输报工底部弹层 |
 | [`components/order-process-scroll/`](../miniprogram/components/order-process-scroll/) | 列表行内工序横向卡 |
