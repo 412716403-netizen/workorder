@@ -242,6 +242,24 @@ describe('normalizeDecimals', () => {
     expect(result[0].name).toBe('123');
     expect(result[0].productId).toBe('456');
   });
+
+  it('syncs milestone completedQuantity from APPROVED reports only', () => {
+    const input = [{
+      milestones: [{
+        completedQuantity: 0,
+        reports: [
+          { quantity: '45', approvalStatus: 'APPROVED' },
+          { quantity: '20', approvalStatus: 'REJECTED' },
+          { quantity: '10', approvalStatus: 'PENDING' },
+          { quantity: '5' },
+        ],
+      }],
+    }];
+    const result = normalizeDecimals(input);
+    // APPROVED 45 + 无状态历史 5；不含 REJECTED/PENDING
+    expect(result[0].milestones[0].completedQuantity).toBe(50);
+    expect(result[0].milestones[0].reports[0].quantity).toBe(45);
+  });
 });
 
 describe('normalizeMaterialFormSettings materialCenterPrint', () => {

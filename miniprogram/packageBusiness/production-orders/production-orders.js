@@ -22,6 +22,7 @@ const _require6 =
 const _require7 = require('../utils/reportCustomDocField.js'),mapProductCustomTags = _require7.mapProductCustomTags;
 const _require8 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require8.readNavBarMetrics,readWindowMetrics = _require8.readWindowMetrics;
 const _require9 = require('../utils/pendingStockBadge.js'),computePendingStockCount = _require9.computePendingStockCount,loadPendingStockRows = _require9.loadPendingStockRows,fetchAllOrdersPaginated = _require9.fetchAllOrdersPaginated;
+const _require11 = require('../utils/pendingApprovalBadge.js'),computePendingApprovalCount = _require11.computePendingApprovalCount;
 const _require0 =
 
 
@@ -35,10 +36,17 @@ const _require10 =
 
   require('../utils/orderReportHistory.js'),defaultDateRange = _require10.defaultDateRange,dateInputToIsoStart = _require10.dateInputToIsoStart,dateInputToIsoEndExclusive = _require10.dateInputToIsoEndExclusive;
 
-function buildFilterShortcuts(permissions, pendingStockCount) {
+function buildFilterShortcuts(permissions, badgeCounts) {
+  const pendingStockCount = (badgeCounts && badgeCounts.pendingStockCount) || 0;
+  const pendingApprovalCount = (badgeCounts && badgeCounts.pendingApprovalCount) || 0;
   return filterByPermission(ORDER_CENTER_SHORTCUTS, permissions || []).map((item) => ({
     ...item,
-    badgeText: item.showBadge && pendingStockCount > 0 ? `(${pendingStockCount})` : ''
+    badgeText:
+      item.id === 'pending-stock' && pendingStockCount > 0
+        ? `(${pendingStockCount})`
+        : item.id === 'report-pending' && pendingApprovalCount > 0
+          ? `(${pendingApprovalCount})`
+          : '',
   }));
 }
 
@@ -183,6 +191,7 @@ Page({
     filterActive: false,
     filterShortcuts: [],
     pendingStockCount: 0,
+    pendingApprovalCount: 0,
     // 面板内嵌功能：null | 'order-flow' | 'report-history' | 'pending-stock'
     activeShortcut: null,
     // 工单流水内嵌数据
@@ -246,13 +255,16 @@ Page({
       canViewDetail: hasPermission(permissions, 'production:orders_detail:view'),
       canMaterial: hasPermission(permissions, 'production:orders_material:allow'),
       canRework: hasPermission(permissions, 'production:orders_rework:allow'),
-      filterShortcuts: buildFilterShortcuts(permissions, this.data.pendingStockCount)
+      filterShortcuts: buildFilterShortcuts(permissions, {
+        pendingStockCount: this.data.pendingStockCount,
+        pendingApprovalCount: this.data.pendingApprovalCount,
+      })
     });
     if (!this._initialized) {
       this.bootstrap();
     } else {
       this.reloadList();
-      this.refreshPendingStockBadge();
+      this.refreshFilterShortcutBadges();
     }
   },
 
@@ -274,7 +286,7 @@ Page({
       this.closeFilterPanel();
       return;
     }
-    this.refreshPendingStockBadge();
+    this.refreshFilterShortcutBadges();
     this.setData({ showFilterPanel: true });
   },
 
@@ -302,6 +314,10 @@ Page({
     }
     if (id === 'pending-stock') {
       wx.navigateTo({ url: '/packageBusiness/production-order-pending-stock/production-order-pending-stock' });
+      return;
+    }
+    if (id === 'report-pending') {
+      wx.navigateTo({ url: '/packageBusiness/production-report-pending/production-report-pending' });
     }
   },
 
@@ -515,20 +531,26 @@ Page({
     });
   },
 
-  refreshPendingStockBadge() {
+  refreshFilterShortcutBadges() {
     const permissions = this._tenantCtx && this._tenantCtx.permissions || [];
     const shortcuts = filterByPermission(ORDER_CENTER_SHORTCUTS, permissions);
-    const needsBadge = shortcuts.some((item) => item.showBadge);
-    if (!needsBadge) return;
+    const needsStockBadge = shortcuts.some((item) => item.id === 'pending-stock' && item.showBadge);
+    const needsApprovalBadge = shortcuts.some((item) => item.id === 'report-pending' && item.showBadge);
+    if (!needsStockBadge && !needsApprovalBadge) return;
 
-    computePendingStockCount().
-    then((count) => {
+    const tasks = [];
+    if (needsStockBadge) tasks.push(computePendingStockCount().catch(() => 0));
+    else tasks.push(Promise.resolve(this.data.pendingStockCount || 0));
+    if (needsApprovalBadge) tasks.push(computePendingApprovalCount().catch(() => 0));
+    else tasks.push(Promise.resolve(this.data.pendingApprovalCount || 0));
+
+    Promise.all(tasks).then(([pendingStockCount, pendingApprovalCount]) => {
       this.setData({
-        pendingStockCount: count,
-        filterShortcuts: buildFilterShortcuts(permissions, count)
+        pendingStockCount,
+        pendingApprovalCount,
+        filterShortcuts: buildFilterShortcuts(permissions, { pendingStockCount, pendingApprovalCount }),
       });
-    }).
-    catch(() => {});
+    });
   },
 
   onExcludeToggle() {
@@ -770,7 +792,7 @@ Page({
     }
 
     await this.reloadList();
-    this.refreshPendingStockBadge();
+    this.refreshFilterShortcutBadges();
   },
 
   async reloadList() {

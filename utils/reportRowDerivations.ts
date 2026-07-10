@@ -48,6 +48,7 @@ export interface ReportRowDerivations {
   hintMaxReportable: number;
   hintCompletedDisplay: number;
   hintRemaining: number;
+  pendingApprovalQty: number;
   totalOutsourcedAtNode: number;
   outsourcedByVariantId: Record<string, number>;
   effectiveRemainingForModal: number;
@@ -215,10 +216,15 @@ export function computeReportRowDerivations(input: ReportRowDerivationsInput): R
         }, 0));
   const hintMaxReportable = Math.max(0, Math.round(Number(hintMaxReportableRaw) || 0));
   const hintCompletedDisplay = productCompletedQty ?? totalCompleted;
-  const pendingOccupied = ordersInModal.reduce((s, o) => {
+  let pendingOccupied = ordersInModal.reduce((s, o) => {
     const ms = o.milestones.find((m) => m.templateId === tid);
     return s + sumPendingReportQty(ms?.reports);
   }, 0);
+  if (useProductPmp) {
+    pendingOccupied += productMilestoneProgresses
+      .filter((p) => p.productId === productId && p.milestoneTemplateId === tid)
+      .reduce((s, p) => s + sumPendingReportQty(p.reports), 0);
+  }
   const hintRemaining = Math.max(
     0,
     hintMaxReportable - hintCompletedDisplay - pendingOccupied - totalOutsourcedAtNode,
@@ -236,6 +242,7 @@ export function computeReportRowDerivations(input: ReportRowDerivationsInput): R
     hintMaxReportable,
     hintCompletedDisplay,
     hintRemaining,
+    pendingApprovalQty: pendingOccupied,
     totalOutsourcedAtNode,
     outsourcedByVariantId,
     effectiveRemainingForModal: effectiveRemainingForModalAdjusted,

@@ -40,20 +40,22 @@ export interface WorkbenchShortcutDefinition {
   pluginId?: string;
   /** 细粒度 view 权限；缺省仅校验 module */
   perm?: string;
+  /** 任一子模块权限即可见（与模块 Tab permGroups 一致）；值为 module 后的段，如 outsource_list */
+  permAnyOf?: string[];
 }
 
 export const WORKBENCH_SHORTCUT_CATALOG: WorkbenchShortcutDefinition[] = [
   { id: 'production-plans', label: '生产计划', group: '生产管理', href: '/production', tab: 'plans', icon: 'CalendarRange', module: 'production' },
   { id: 'production-orders', label: '工单中心', group: '生产管理', href: '/production', tab: 'orders', icon: 'ClipboardList', module: 'production' },
   { id: 'production-stock-out', label: '生产物料', group: '生产管理', href: '/production', tab: 'STOCK_OUT', icon: 'ArrowUpFromLine', module: 'production', perm: 'production:material_list:allow' },
-  { id: 'production-outsource', label: '外协管理', group: '生产管理', href: '/production', tab: 'OUTSOURCE', icon: 'Truck', module: 'production', perm: 'production:outsource:view' },
-  { id: 'production-rework', label: '返工管理', group: '生产管理', href: '/production', tab: 'REWORK', icon: 'RotateCcw', module: 'production', perm: 'production:rework:view' },
+  { id: 'production-outsource', label: '外协管理', group: '生产管理', href: '/production', tab: 'OUTSOURCE', icon: 'Truck', module: 'production', permAnyOf: ['outsource_form_config', 'outsource_list', 'outsource_send', 'outsource_receive', 'outsource_records', 'outsource_material'] },
+  { id: 'production-rework', label: '返工管理', group: '生产管理', href: '/production', tab: 'REWORK', icon: 'RotateCcw', module: 'production', permAnyOf: ['rework_list', 'rework_defective', 'rework_records', 'rework_report_records', 'rework_outsource', 'rework_detail', 'rework_material', 'rework_form_config'] },
 
   { id: 'psi-purchase-order', label: '采购订单', group: '进销存', href: '/psi', tab: 'PURCHASE_ORDER', icon: 'ClipboardList', module: 'psi', perm: 'psi:purchase_order:view' },
   { id: 'psi-purchase-bill', label: '采购入库', group: '进销存', href: '/psi', tab: 'PURCHASE_BILL', icon: 'Receipt', module: 'psi', perm: 'psi:purchase_bill:view' },
   { id: 'psi-sales-order', label: '销售订单', group: '进销存', href: '/psi', tab: 'SALES_ORDER', icon: 'ShoppingBag', module: 'psi', perm: 'psi:sales_order:view' },
   { id: 'psi-sales-bill', label: '销售单', group: '进销存', href: '/psi', tab: 'SALES_BILL', icon: 'CreditCard', module: 'psi', perm: 'psi:sales_bill:view' },
-  { id: 'psi-warehouse', label: '仓库管理', group: '进销存', href: '/psi', tab: 'WAREHOUSE_MGMT', icon: 'Warehouse', module: 'psi', perm: 'psi:warehouse_list:view' },
+  { id: 'psi-warehouse', label: '仓库管理', group: '进销存', href: '/psi', tab: 'WAREHOUSE_MGMT', icon: 'Warehouse', module: 'psi', permAnyOf: ['warehouse_list', 'warehouse_stocktake', 'warehouse_transfer', 'warehouse_flow'] },
 
   { id: 'finance-receipt', label: '收款单', group: '财务结算', href: '/finance', tab: 'RECEIPT', icon: 'ArrowDownCircle', module: 'finance', perm: 'finance:receipt:view' },
   { id: 'finance-payment', label: '付款单', group: '财务结算', href: '/finance', tab: 'PAYMENT', icon: 'ArrowUpCircle', module: 'finance', perm: 'finance:payment:view' },

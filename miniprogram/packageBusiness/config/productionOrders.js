@@ -63,6 +63,14 @@ const ORDER_CENTER_SHORTCUTS = [
     permission: 'production:orders_pending_stock_in',
     showBadge: true,
   },
+  {
+    id: 'report-pending',
+    label: '报工审核',
+    icon: '/assets/icons/circle-check.png',
+    path: '/packageBusiness/production-report-pending/production-report-pending',
+    permission: 'production:orders_report_records:edit',
+    showBadge: true,
+  },
 ];
 
 module.exports = {

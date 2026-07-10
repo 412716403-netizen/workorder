@@ -73,7 +73,38 @@ function mapTaskRow(task, options) {
   };
 }
 
-function buildTaskGroups(tasks, assignedIds, nodeMap) {
+function buildNodeIndexMap(globalNodes) {
+  const map = new Map();
+  (globalNodes || []).forEach((n, i) => {
+    if (n && n.id) map.set(n.id, i);
+  });
+  return map;
+}
+
+/** 按系统设置「工序节点库」顺序排列 templateId（与 Web globalNodes / sortOrder 一致） */
+function orderTemplateIdsByNodeLibrary(templateIds, globalNodes) {
+  const nodeIndexMap = buildNodeIndexMap(globalNodes);
+  return [...templateIds].sort((a, b) => {
+    const ia = nodeIndexMap.has(a) ? nodeIndexMap.get(a) : 9999;
+    const ib = nodeIndexMap.has(b) ? nodeIndexMap.get(b) : 9999;
+    if (ia !== ib) return ia - ib;
+    return String(a).localeCompare(String(b));
+  });
+}
+
+function orderAssignedMilestoneIds(assignedIds, globalNodes) {
+  const assignedSet = new Set((assignedIds || []).filter(Boolean));
+  const ordered = [];
+  (globalNodes || []).forEach((n) => {
+    if (n && n.id && assignedSet.has(n.id)) ordered.push(n.id);
+  });
+  (assignedIds || []).forEach((id) => {
+    if (id && !ordered.includes(id)) ordered.push(id);
+  });
+  return ordered;
+}
+
+function buildTaskGroups(tasks, nodeMap, globalNodes) {
   const byTemplate = new Map();
   (tasks || []).forEach((task) => {
     const templateId = task.milestoneTemplateId || task.milestoneName || 'unknown';
@@ -82,23 +113,9 @@ function buildTaskGroups(tasks, assignedIds, nodeMap) {
   });
 
   const groups = [];
-  const seen = new Set();
-  const orderIds = (assignedIds || []).filter(Boolean);
-
-  orderIds.forEach((templateId) => {
+  orderTemplateIdsByNodeLibrary([...byTemplate.keys()], globalNodes).forEach((templateId) => {
     const items = byTemplate.get(templateId);
     if (!items || !items.length) return;
-    seen.add(templateId);
-    groups.push({
-      id: templateId,
-      name: nodeMap.get(templateId) || items[0].milestoneName || templateId,
-      count: items.length,
-      tasks: items,
-    });
-  });
-
-  byTemplate.forEach((items, templateId) => {
-    if (seen.has(templateId)) return;
     groups.push({
       id: templateId,
       name: nodeMap.get(templateId) || items[0].milestoneName || templateId,
@@ -403,8 +420,8 @@ Page({
     });
   },
 
-  applyTaskGrouping(rawTasks, assignedIds, nodeMap, productMap) {
-    const taskGroups = buildTaskGroups(rawTasks, assignedIds, nodeMap);
+  applyTaskGrouping(rawTasks, nodeMap, globalNodes, productMap) {
+    const taskGroups = buildTaskGroups(rawTasks, nodeMap, globalNodes);
     const milestoneFilters = buildMilestoneFilters(taskGroups, rawTasks.length);
     const activeMilestoneFilter = milestoneFilters.length
       ? (this.data.activeMilestoneFilter || 'all')
@@ -446,17 +463,19 @@ Page({
       /* 分包未就绪时沿用 API 口径 */
     }
     const assignedIds = res.assignedMilestoneIds || [];
+    const globalNodes = Array.isArray(nodesRaw) ? nodesRaw : [];
     const nodeMap = new Map(
-      (Array.isArray(nodesRaw) ? nodesRaw : []).map((n) => [n.id, n.name || n.id]),
+      globalNodes.map((n) => [n.id, n.name || n.id]),
     );
     this._productMap = productMap;
     const grouping = this.applyTaskGrouping(
       rawTasks,
-      assignedIds,
       nodeMap,
+      globalNodes,
       this._productMap,
     );
-    const assignedMilestoneOptions = assignedIds.map((id) => ({
+    const orderedAssignedIds = orderAssignedMilestoneIds(assignedIds, globalNodes);
+    const assignedMilestoneOptions = orderedAssignedIds.map((id) => ({
       id,
       name: nodeMap.get(id) || id,
     }));

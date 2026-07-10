@@ -55,6 +55,7 @@ interface Props {
   hintMaxReportable: number;
   hintCompletedDisplay: number;
   hintRemaining: number;
+  pendingApprovalQty: number;
   totalOutsourcedAtNode: number;
   defectiveQtyForHint: number;
   totalRework: number;
@@ -91,6 +92,7 @@ const ReportVariantMatrixInput: React.FC<Props> = ({
   hintMaxReportable,
   hintCompletedDisplay,
   hintRemaining,
+  pendingApprovalQty,
   totalOutsourcedAtNode,
   defectiveQtyForHint,
   totalRework,
@@ -242,6 +244,7 @@ const ReportVariantMatrixInput: React.FC<Props> = ({
           hintMaxReportable,
           hintCompletedDisplay,
           hintRemaining,
+          pendingApprovalQty,
           totalOutsourcedAtNode,
           defectiveQtyForHint,
           totalRework,

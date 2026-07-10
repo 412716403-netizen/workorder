@@ -14,7 +14,7 @@
  * - 编排子组件 + 提交按钮
  */
 import React, { useMemo, useCallback, useRef } from 'react';
-import { FileText, X, Check, UserPlus } from 'lucide-react';
+import { useConfigData, useAppActions } from '../../contexts/AppDataContext';
 import {
   ProductionOrder,
   Milestone,
@@ -44,8 +44,9 @@ import ReportRouteDisplaySection from './report/ReportRouteDisplaySection';
 import ReportVariantMatrixInput from './report/ReportVariantMatrixInput';
 import ReportSingleVariantInput from './report/ReportSingleVariantInput';
 import ReportWeightBomSection from './report/ReportWeightBomSection';
+import { useRefreshReportScopeWhileActive } from '../../hooks/useRefreshReportScopeWhileActive';
+import { FileText, X, Check, UserPlus } from 'lucide-react';
 import { formStandardLabelClass } from '../../styles/uiDensity';
-import { useConfigData } from '../../contexts/AppDataContext';
 import { getVariantNodeUnitWeightKg } from '../../utils/variantNodeUnitWeight';
 import { computeReportRowDerivations } from '../../utils/reportRowDerivations';
 import { ScanBatchTrigger } from '../../components/scan/ScanBatchTrigger';
@@ -107,6 +108,8 @@ const ReportModal: React.FC<ReportModalProps> = ({
   plans = [],
 }) => {
   const { weightTolerancePercent } = useConfigData();
+  const { refreshOrders, refreshPMP } = useAppActions();
+  useRefreshReportScopeWhileActive(open, { productionLinkMode, refreshOrders, refreshPMP });
   const equipmentFeaturesOn = useEquipmentFeaturesEffective();
   const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
   const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
@@ -424,6 +427,7 @@ const ReportModal: React.FC<ReportModalProps> = ({
                       hintMaxReportable={row.hintMaxReportable}
                       hintCompletedDisplay={row.hintCompletedDisplay}
                       hintRemaining={row.hintRemaining}
+                      pendingApprovalQty={row.pendingApprovalQty}
                       totalOutsourcedAtNode={row.totalOutsourcedAtNode}
                       defectiveQtyForHint={row.defectiveQtyForHint}
                       totalRework={row.totalRework}
@@ -454,6 +458,7 @@ const ReportModal: React.FC<ReportModalProps> = ({
                       hintMaxReportable={row.hintMaxReportable}
                       hintCompletedDisplay={row.hintCompletedDisplay}
                       hintRemaining={row.hintRemaining}
+                      pendingApprovalQty={row.pendingApprovalQty}
                       totalOutsourcedAtNode={row.totalOutsourcedAtNode}
                       defectiveQtyForHint={row.defectiveQtyForHint}
                       totalRework={row.totalRework}

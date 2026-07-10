@@ -124,7 +124,10 @@ Page({
       return;
     }
     const ctx = readTenantCtx();
-    if (!hasPermission(ctx && ctx.permissions || [], 'psi:warehouse_list:view')) {
+    const { hasAnySubModulePerm } = require('../../utils/accessControl.js');
+    const { WORKBENCH_SHORTCUT_CATALOG } = require('../../config/menus.js');
+    const hub = WORKBENCH_SHORTCUT_CATALOG.find((i) => i.id === 'psi-warehouse');
+    if (!hasAnySubModulePerm((ctx && ctx.permissions) || [], 'psi', (hub && hub.permAnyOf) || [])) {
       wx.showToast({ title: '无权限', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 800);
       return;

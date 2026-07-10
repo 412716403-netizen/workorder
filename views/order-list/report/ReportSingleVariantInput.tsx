@@ -31,6 +31,7 @@ interface Props {
   hintMaxReportable: number;
   hintCompletedDisplay: number;
   hintRemaining: number;
+  pendingApprovalQty: number;
   totalOutsourcedAtNode: number;
   defectiveQtyForHint: number;
   totalRework: number;
@@ -55,6 +56,7 @@ const ReportSingleVariantInput: React.FC<Props> = ({
   hintMaxReportable,
   hintCompletedDisplay,
   hintRemaining,
+  pendingApprovalQty,
   totalOutsourcedAtNode,
   defectiveQtyForHint,
   totalRework,
@@ -78,6 +80,7 @@ const ReportSingleVariantInput: React.FC<Props> = ({
     hintMaxReportable,
     hintCompletedDisplay,
     hintRemaining,
+    pendingApprovalQty,
     totalOutsourcedAtNode,
     defectiveQtyForHint,
     totalRework,

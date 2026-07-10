@@ -62,7 +62,11 @@ Page({
   onLoad() {
     const nav = readNavBarMetrics();
     const ctx = readTenantCtx();
-    if (!hasPermission(ctx && ctx.permissions || [], 'production:outsource:view')) {
+    const permissions = (ctx && ctx.permissions) || [];
+    const { hasAnySubModulePerm } = require('../../utils/accessControl.js');
+    const { WORKBENCH_SHORTCUT_CATALOG } = require('../../config/menus.js');
+    const hub = WORKBENCH_SHORTCUT_CATALOG.find((i) => i.id === 'production-outsource');
+    if (!hasAnySubModulePerm(permissions, 'production', (hub && hub.permAnyOf) || [])) {
       wx.showToast({ title: '无权限', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 800);
       return;
@@ -71,8 +75,8 @@ Page({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
       headerBlockHeight: computeHeaderBlockHeight(nav),
-      canViewList: hasPermission(ctx && ctx.permissions || [], 'production:outsource_list:allow'),
-      canMaterial: hasPermission(ctx && ctx.permissions || [], 'production:outsource_material:allow')
+      canViewList: hasPermission(permissions, 'production:outsource_list:allow'),
+      canMaterial: hasPermission(permissions, 'production:outsource_material:allow')
     });
   },
 

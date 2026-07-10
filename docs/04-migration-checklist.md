@@ -149,7 +149,7 @@
 | **工单中心** | **部分落地（P2+）** | 列表（搜索/仅未完成/分组/工序卡）+ 详情 + 手输报工 + 编辑 + 报工流水 + 待入库 + 领料；`packageBusiness/production-orders` 及子页 | 删除/打印/表单配置/矩阵报工留 Web |
 | **外协管理** | **部分落地（P2+）** | Hub 主列表 + 待发/待收回/流水 + 发出/收回录入 + 往来明细 + 物料外发/退回（复用 stock-out-confirm）；`packageBusiness/production-outsource` 及子页 | 表单配置/流水编辑删除/打印/色码矩阵/协作同步留 Web |
 | **返工管理** | **部分落地（P2+）** | Hub 主列表 + 待处理不良 + 处理/报工 + 流水编辑删除 + 详情 + 返工领料；`packageBusiness/production-rework` 及子页 | 表单配置/打印留 Web |
-| **报工 Tab** | **已落地** | TabBar 居中「报工」=`pages/scan`：可报任务 + 我的报工；`selfReport` 提交 PENDING；应用入口「报工待审」 | 原生 tabBar 无法按权限隐藏项（无 `process_report` 时页内空态） |
+| **报工 Tab** | **已落地** | TabBar 居中「报工」=`pages/scan`：可报任务 + 我的报工；`selfReport` 提交 PENDING；工单中心筛选面板「报工审核」 | 原生 tabBar 无法按权限隐藏项（无 `process_report` 时页内空态） |
 | **扫码会话** | **部分落地** | 分包 `scan-session` 连续扫码；报工/返工页内选工序；外协可选加工厂 | 产品关联模式外协/外协返工；待入库合并行 `orderIds` |
 | **消息 Tab** | **部分落地** | 聊天式 UI：会话列表（系统消息/待办事项/协作合作单位）+ 聊天详情气泡（`pages/messages-chat`）；融合 `/dashboard/notifications` + `/todos` + `/collaboration/subcontract-transfers`；本地已读；Tab 角标 | 协作单据详情/操作仍依赖电脑端 |
 | **产品与 BOM** | **部分落地** | 档案列表（分类 Tab/搜索/分页/启用切换）+ 产品编辑（基本信息/颜色尺码）；`packageBusiness/basic-products` / `basic-product-edit`；**不含**工序/BOM 配置、批量导入 | 工序路线、工价、BOM、分类/报工 file·knowledge 附件上传留 Web |

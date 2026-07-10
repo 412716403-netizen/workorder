@@ -25,8 +25,15 @@ import {
   DEFAULT_REWORK_FORM_SETTINGS,
 } from '../types';
 import { applyTraceabilityLabelPrintDefaults } from '../shared/traceabilityLabelPrintDefaults';
+import { ReportApprovalStatus } from '../shared/types';
 import { normalizePlanFormFieldConfigArray } from '../utils/planFormCustomField';
 // ── Decimal normalizer ──
+
+/** 与后端 recalcMilestoneCompleted 一致：仅 APPROVED 计入已报；无状态视为历史已生效报工 */
+function reportCountsTowardCompleted(approvalStatus: unknown): boolean {
+  if (approvalStatus == null || approvalStatus === '') return true;
+  return approvalStatus === ReportApprovalStatus.APPROVED;
+}
 
 const DECIMAL_KEYS = new Set([
   'quantity', 'purchasePrice', 'salesPrice', 'amount', 'actualQuantity',
@@ -58,7 +65,10 @@ export function normalizeDecimals<T>(arr: T[]): T[] {
             for (const k2 of DECIMAL_KEYS) { if (k2 in rc && rc[k2] != null && typeof rc[k2] === 'string') rc[k2] = Number(rc[k2]) || 0; }
             return rc;
           });
-          const reportsSum = m.reports.reduce((s: number, r: any) => s + (Number(r.quantity) || 0), 0);
+          // 勿把 PENDING/REJECTED 加进已报：否则工单中心圆心会大于报工流水（仅展示 APPROVED）
+          const reportsSum = m.reports
+            .filter((r: { approvalStatus?: string | null }) => reportCountsTowardCompleted(r.approvalStatus))
+            .reduce((s: number, r: any) => s + (Number(r.quantity) || 0), 0);
           if (m.completedQuantity !== reportsSum) m.completedQuantity = reportsSum;
         }
         return m;

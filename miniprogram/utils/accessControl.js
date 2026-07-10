@@ -63,6 +63,16 @@ function readItemModule(item) {
   return item && item.module ? item.module : '';
 }
 
+/** 与 Web workbenchShortcutsFilter hasAnySubModulePerm 一致 */
+function hasAnySubModulePerm(permissions, module, subKeys) {
+  if (!module || !Array.isArray(subKeys) || subKeys.length === 0) return false;
+  return subKeys.some((k) => {
+    const base = `${module}:${k}`;
+    if (hasSubPermission(permissions, base)) return true;
+    return permissions.some((p) => String(p).startsWith(`${base}:`));
+  });
+}
+
 /**
  * 快捷入口 / 应用中心项过滤（RBAC + 插件 + 协作特例）
  * @param {Array} items catalog 或 menu 项（支持 perm/permission、module、pluginId、id/key）
@@ -84,7 +94,9 @@ function filterShortcutsByAccess(items, plugins, tenantRole, permissions) {
     if (!perms.length) return false;
 
     const itemPerm = readItemPerm(item);
-    if (itemPerm && !hasSubPermission(perms, itemPerm)) return false;
+    if (Array.isArray(item.permAnyOf) && item.permAnyOf.length > 0 && item.module) {
+      if (!hasAnySubModulePerm(perms, item.module, item.permAnyOf)) return false;
+    } else if (itemPerm && !hasSubPermission(perms, itemPerm)) return false;
 
     const itemModule = readItemModule(item);
     if (itemModule && !hasModulePerm(tenantRole, perms, itemModule, itemModule)) return false;
@@ -114,4 +126,5 @@ module.exports = {
   canViewCollaborationList,
   filterShortcutsByAccess,
   canViewSettingsTab,
+  hasAnySubModulePerm,
 };

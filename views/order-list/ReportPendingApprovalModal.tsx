@@ -20,6 +20,7 @@ import {
 } from '../../utils/buildPendingApprovalDetailBatch';
 import type { ReportDetailBatch } from '../../hooks/useReportBatchDetail';
 import { orders as ordersApi } from '../../services/api';
+import { useAppActions } from '../../contexts/AppDataContext';
 import {
   dateInputToIsoEndExclusive,
   dateInputToIsoStart,
@@ -106,6 +107,7 @@ const ReportPendingApprovalModal: React.FC<ReportPendingApprovalModalProps> = ({
   productionLinkMode,
 }) => {
   const queryClient = useQueryClient();
+  const { refreshOrders, refreshPMP } = useAppActions();
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [actingKeys, setActingKeys] = useState<Set<string>>(new Set());
@@ -176,6 +178,14 @@ const ReportPendingApprovalModal: React.FC<ReportPendingApprovalModalProps> = ({
     );
   }, [pendingQuery.data, globalNodes]);
 
+  const syncAfterReview = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['flow.reportPendingApproval'] }),
+      queryClient.invalidateQueries({ queryKey: ['flow.reportHistory'] }),
+      Promise.allSettled([refreshOrders(), refreshPMP()]),
+    ]);
+  }, [queryClient, refreshOrders, refreshPMP]);
+
   const runAction = useCallback(
     async (batch: PendingBatch, action: 'approve' | 'reject') => {
       setActingKeys((prev) => new Set(prev).add(batch.key));
@@ -191,10 +201,7 @@ const ReportPendingApprovalModal: React.FC<ReportPendingApprovalModalProps> = ({
           next.delete(batch.key);
           return next;
         });
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ['flow.reportPendingApproval'] }),
-          queryClient.invalidateQueries({ queryKey: ['flow.reportHistory'] }),
-        ]);
+        await syncAfterReview();
       } catch (err) {
         window.alert(err instanceof Error ? err.message : '审核失败');
       } finally {
@@ -205,7 +212,7 @@ const ReportPendingApprovalModal: React.FC<ReportPendingApprovalModalProps> = ({
         });
       }
     },
-    [queryClient, detailBatch?.key],
+    [syncAfterReview, detailBatch?.key],
   );
 
   const runBatchAction = useCallback(
@@ -239,17 +246,14 @@ const ReportPendingApprovalModal: React.FC<ReportPendingApprovalModalProps> = ({
           processed.forEach((key) => next.delete(key));
           return next;
         });
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ['flow.reportPendingApproval'] }),
-          queryClient.invalidateQueries({ queryKey: ['flow.reportHistory'] }),
-        ]);
+        await syncAfterReview();
       } catch (err) {
         window.alert(err instanceof Error ? err.message : `批量${verb}失败`);
       } finally {
         setBatchActing(false);
       }
     },
-    [rows, selectedKeys, actingKeys, queryClient, detailBatch?.key],
+    [rows, selectedKeys, actingKeys, syncAfterReview, detailBatch?.key],
   );
 
   const selectableRows = useMemo(

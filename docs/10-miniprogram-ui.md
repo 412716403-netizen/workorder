@@ -88,11 +88,11 @@ RBAC 字段单一事实源：[`shared/workbenchShortcuts.ts`](../shared/workbenc
 |------|----------|
 | 首页 | **蓝色顶栏**：头像 + 用户名 + 企业名；单行白色快捷图标；**白色圆角内容区**含数据看板；下拉刷新 |
 | 应用 | `tab-shell`：标题「应用」+ 分组宫格卡片（左侧色条分区标题） |
-| 报工 | `tab-shell`：需 `process_report`；双段「可报任务 / 我的报工」；**可报任务**按工序 Chip 筛选 + 分组；**我的报工**按审核状态 Chip 筛选（「全部」及单状态均为按报工时间倒序平铺，不按状态分组标题）；列表含产品缩略图；右下扫码 FAB → `worker-report-scan` → `worker-report-confirm`；无权限空态 |
+| 报工 | `tab-shell`：需 `process_report`；双段「可报任务 / 我的报工」；**可报任务**按工序 Chip 筛选 + 分组（**工序顺序 = 系统设置工序节点库 sortOrder**）；**我的报工**按审核状态 Chip 筛选（「全部」及单状态均为按报工时间倒序平铺，不按状态分组标题）；列表含产品缩略图；右下扫码 FAB → `worker-report-scan` → `worker-report-confirm`；无权限空态 |
 | 消息 | 蓝色顶栏（标题+未读数）+ 全宽搜索框；微信风格会话列表；详情页 `messages-chat` |
 | 我的 | `tab-shell` 自定义顶栏（头像 + 用户/企业）+ 菜单白卡片 + 退出按钮 |
 
-**报工待审**（审核员）：[`packageBusiness/production-report-pending/`](../miniprogram/packageBusiness/production-report-pending/)，应用中心入口需 `production:orders_report_records:edit`。连续扫码会话仍在 [`packageBusiness/scan-session/`](../miniprogram/packageBusiness/scan-session/)。
+**报工审核**（审核员）：[`packageBusiness/production-report-pending/`](../miniprogram/packageBusiness/production-report-pending/)，入口在**工单中心**筛选面板（与「待入库清单」并列），需 `production:orders_report_records:edit`；有待审时显示角标。连续扫码会话仍在 [`packageBusiness/scan-session/`](../miniprogram/packageBusiness/scan-session/)。
 
 ### A2. 扫码会话页壳（`pages/scan-session`）
 
@@ -618,7 +618,7 @@ npm run miniprogram:icons
 
 **API**：`GET /psi/stock-snapshot` · `GET /psi/stock/batches` · `GET /psi/records?type=TRANSFER|STOCKTAKE` · `POST /psi/records/batch` · `PUT /psi/records/replace` · `GET /psi/next-doc-number` · `GET /production/records?types=STOCK_*` · `GET /settings/warehouses?all=true`
 
-**权限**：`psi:warehouse_list:view` · `psi:warehouse_transfer:view/create/edit/delete` · `psi:warehouse_stocktake:view/create/edit/delete` · `psi:warehouse_flow:allow`
+**权限**：`permAnyOf` 含 `warehouse_list` / `warehouse_stocktake` / `warehouse_transfer` / `warehouse_flow` 任一子键（如 `psi:warehouse_list:allow`）· 各子页另按 `psi:warehouse_*` 细粒度控制
 
 入口：[`menus.js`](../miniprogram/config/menus.js) `psi-warehouse` → `/packageBusiness/psi-warehouses/psi-warehouses`（应用中心）。
 
@@ -652,7 +652,7 @@ npm run miniprogram:icons
 
 **API**：`GET /production/records`（`types=REWORK,REWORK_REPORT,SCRAP,OUTSOURCE`）· `POST /production/records` · `POST /production/records/batch` · `PUT/DELETE /production/records/:id` · `POST /item-codes/scan/validate-usage`（`purpose: REWORK_REPORT`）· `GET /settings/config`（`productionLinkMode` / `reworkFormSettings` 只读）
 
-**权限**：`production:rework:view`（入口）· `production:rework_list:allow` · `production:rework_defective:allow` · `production:rework_records:view/edit/delete` · `production:rework_report_records:view/edit/delete` · `production:rework_outsource:allow` · `production:rework_detail:allow` · `production:rework_material:allow`
+**权限**：应用中心入口 `permAnyOf` 含 `rework_list` 等返工子模块任一（如 `production:rework_list:allow`）· 各子页按 `production:rework_*` 细粒度控制
 
 **深链**：`/packageBusiness/production-rework/production-rework?reworkOrderId=<id>` 重定向至详情。
 
@@ -688,7 +688,7 @@ npm run miniprogram:icons
 
 **API**：`GET /production/records`（`types=OUTSOURCE` / 物料 `STOCK_OUT,STOCK_RETURN`）· `POST /production/records/batch` · `GET /settings/config`（`productionLinkMode` / `outsourceFormSettings`）
 
-**权限**：`production:outsource:view`（入口）· `production:outsource_list:allow` · `production:outsource_send:allow` · `production:outsource_receive:allow` · `production:outsource_records:view` · `production:outsource_material:allow` · `production:outsource_amount:allow`
+**权限**：应用中心入口 `permAnyOf` 含 `outsource_list` 等外协子模块任一（如 `production:outsource_list:allow`）· 各子页按 `production:outsource_*` 细粒度控制
 
 **留 Web**：外协表单配置、流水编辑/删除/打印、协作链同步、外协收回派生报工编辑/删除。
 

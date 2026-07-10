@@ -171,12 +171,14 @@
               </view>
             </view>
             <view class="worker-report-card__main">
-              <view class="worker-report-card__meta">
-                <text class="worker-report-card__time">{{report.timeLabel}}</text>
-                <text wx:if="{{report.showReportNo}}" class="worker-report-card__report-no">{{report.reportNo}}</text>
+              <view class="worker-report-card__meta worker-report-card__meta--mine">
                 <text class="worker-report-badge {{report.approvalClass}}">{{report.approvalLabel}}</text>
+                <text class="worker-report-card__time">{{report.timeLabel}}</text>
               </view>
-              <text class="worker-report-card__order">{{report.orderHeadline}}</text>
+              <view class="worker-report-card__order-line">
+                <text class="worker-report-card__order">{{report.orderHeadline}}</text>
+                <text wx:if="{{report.showReportNo}}" class="worker-report-card__report-no">{{report.reportNo}}</text>
+              </view>
               <view class="worker-report-card__product-line">
                 <text class="worker-report-card__product">{{report.productName}}</text>
                 <text wx:if="{{report.showProductSku}}" class="worker-report-card__sku">{{report.productSku}}</text>

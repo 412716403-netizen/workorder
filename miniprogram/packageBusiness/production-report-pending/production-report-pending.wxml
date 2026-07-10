@@ -2,7 +2,7 @@
   <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
     <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
       <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
-      <text class="plan-header__title">报工待审</text>
+      <text class="plan-header__title">报工审核</text>
       <view class="plan-header__back plan-header__back--placeholder"></view>
     </view>
   </view>
@@ -12,28 +12,84 @@
     <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
     <empty-state wx:elif="{{!rows.length}}" text="暂无待审核报工" />
     <view wx:else>
-      <view wx:for="{{rows}}" wx:key="reportId" class="pending-row">
-        <view class="pending-row__main">
-          <text class="pending-row__time">{{item.timeLabel}}</text>
-          <text wx:if="{{item.showOrderNumber}}" class="pending-row__order">{{item.orderNumber}}</text>
-          <text class="pending-row__product">{{item.productName}}</text>
-          <text wx:if="{{item.showProductSku}}" class="pending-row__sku">{{item.productSku}}</text>
-          <text class="pending-row__node">{{item.milestoneName}} · {{item.goodQtyText}}</text>
-          <text wx:if="{{item.showOperator}}" class="pending-row__op">{{item.operatorLine}}</text>
+      <view wx:for="{{rows}}" wx:key="batchKey" class="pending-batch-row">
+        <view class="pending-batch-row__check" catchtap="onToggleSelect" data-batch-key="{{item.batchKey}}">
+          <view class="pending-batch-row__checkbox {{item.checked ? 'pending-batch-row__checkbox--on' : ''}}"></view>
         </view>
-        <view class="pending-row__actions">
-          <view
-            class="pending-btn pending-btn--ok {{actingId === item.reportId ? 'pending-btn--disabled' : ''}}"
-            data-id="{{item.reportId}}"
-            bindtap="onApprove"
-          >通过</view>
-          <view
-            class="pending-btn pending-btn--no {{actingId === item.reportId ? 'pending-btn--disabled' : ''}}"
-            data-id="{{item.reportId}}"
-            bindtap="onReject"
-          >驳回</view>
+        <view class="pending-batch-card">
+          <view class="pending-batch-card__main">
+            <view class="worker-report-card__thumb">
+              <image
+                wx:if="{{item.showProductImage}}"
+                class="worker-report-card__img"
+                src="{{item.productImageUrl}}"
+                mode="aspectFill"
+                data-key="{{item.batchKey}}"
+                binderror="onProductImageError"
+              />
+              <view wx:else class="worker-report-card__img worker-report-card__img--placeholder">
+                <image class="worker-report-card__placeholder-icon" src="{{item.placeholderIconSrc}}" mode="aspectFit" />
+              </view>
+            </view>
+            <view class="worker-report-card__main">
+              <view class="worker-report-card__meta">
+                <text class="worker-report-card__time">{{item.timeLabel}}</text>
+              </view>
+              <view class="worker-report-card__order-line">
+                <text class="worker-report-card__order">{{item.orderHeadline}}</text>
+                <text wx:if="{{item.showReportNo}}" class="worker-report-card__report-no">{{item.reportNo}}</text>
+              </view>
+              <view class="worker-report-card__product-line">
+                <text class="worker-report-card__product">{{item.productName}}</text>
+                <text wx:if="{{item.showProductSku}}" class="worker-report-card__sku">{{item.productSku}}</text>
+              </view>
+            </view>
+            <view class="worker-report-card__side worker-report-card__side--mine">
+              <text class="worker-report-card__qty">{{item.goodQtyText}}</text>
+              <text wx:if="{{item.showDefective}}" class="worker-report-card__defective">{{item.defectiveText}}</text>
+              <view
+                class="worker-report-card__detail-btn"
+                catchtap="onDetailTap"
+                data-batch-key="{{item.batchKey}}"
+              >详情</view>
+            </view>
+          </view>
+          <view class="pending-batch-card__actions">
+            <view
+              class="pending-btn pending-btn--no {{actingBatchKey === item.batchKey || batchActing ? 'pending-btn--disabled' : ''}}"
+              data-batch-key="{{item.batchKey}}"
+              catchtap="onReject"
+            >驳回</view>
+            <view
+              class="pending-btn pending-btn--ok {{actingBatchKey === item.batchKey || batchActing ? 'pending-btn--disabled' : ''}}"
+              data-batch-key="{{item.batchKey}}"
+              catchtap="onApprove"
+            >通过</view>
+          </view>
         </view>
       </view>
+    </view>
+  </view>
+
+  <view wx:if="{{rows.length}}" class="pending-footer">
+    <view class="pending-footer__left" bindtap="onToggleSelectAll">
+      <view class="pending-batch-row__checkbox {{allSelected ? 'pending-batch-row__checkbox--on' : ''}}"></view>
+      <text class="pending-footer__all-label">全选</text>
+    </view>
+    <view class="pending-footer__hint">
+      <text class="pending-footer__hint-label">已选</text>
+      <text class="pending-footer__hint-count {{selectedCount > 0 ? 'pending-footer__hint-count--active' : ''}}">{{selectedCount}}</text>
+      <text class="pending-footer__hint-label">项</text>
+    </view>
+    <view class="pending-footer__btns">
+      <view
+        class="pending-footer__btn pending-footer__btn--no {{batchActing || selectedCount === 0 ? 'pending-footer__btn--disabled' : ''}}"
+        bindtap="onBatchReject"
+      >批量驳回</view>
+      <view
+        class="pending-footer__btn pending-footer__btn--ok {{batchActing || selectedCount === 0 ? 'pending-footer__btn--disabled' : ''}}"
+        bindtap="onBatchApprove"
+      >批量通过</view>
     </view>
   </view>
 </view>

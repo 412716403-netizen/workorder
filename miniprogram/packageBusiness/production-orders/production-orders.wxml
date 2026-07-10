@@ -36,7 +36,7 @@
       <text class="plan-filter-back__text">返回</text>
     </view>
 
-    <!-- 三个入口按钮：仅当 activeShortcut 为空时显示 -->
+    <!-- 筛选快捷入口：仅当 activeShortcut 为空时显示 -->
     <view wx:if="{{!activeShortcut && filterShortcuts.length}}" class="plan-filter-actions">
       <view
         wx:for="{{filterShortcuts}}"

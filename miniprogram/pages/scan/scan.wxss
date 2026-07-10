@@ -252,6 +252,17 @@
   gap: 12rpx;
 }
 
+.worker-report-card__meta--mine {
+  flex-wrap: nowrap;
+  min-width: 0;
+  gap: 10rpx;
+}
+
+.worker-report-card__meta--mine .worker-report-card__time {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .worker-report-card__time {
   font-size: 24rpx;
   color: var(--color-text-tertiary, #a0a4ab);
@@ -261,6 +272,18 @@
   font-size: 22rpx;
   color: var(--color-text-secondary, #646a73);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.worker-report-card__order-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8rpx;
+  min-width: 0;
+}
+
+.worker-report-card__order-line .worker-report-card__report-no {
+  font-size: 20rpx;
 }
 
 .worker-report-card__order {

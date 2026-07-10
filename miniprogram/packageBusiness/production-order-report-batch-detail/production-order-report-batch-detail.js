@@ -12,7 +12,7 @@ const _require3 =
 
 
 
-  require('../utils/orderApi.js'),listReportHistory = _require3.listReportHistory,fetchTenantConfig = _require3.fetchTenantConfig,fetchProductsAll = _require3.fetchProductsAll,fetchCategoriesAll = _require3.fetchCategoriesAll,fetchNodesAll = _require3.fetchNodesAll,updateOrderReport = _require3.updateOrderReport,deleteOrderReport = _require3.deleteOrderReport,updateProductReport = _require3.updateProductReport,deleteProductReport = _require3.deleteProductReport,createOrderReport = _require3.createOrderReport,createProductReport = _require3.createProductReport;
+  require('../utils/orderApi.js'),listReportHistory = _require3.listReportHistory,fetchTenantConfig = _require3.fetchTenantConfig,fetchProductsAll = _require3.fetchProductsAll,fetchCategoriesAll = _require3.fetchCategoriesAll,fetchNodesAll = _require3.fetchNodesAll,updateOrderReport = _require3.updateOrderReport,deleteOrderReport = _require3.deleteOrderReport,updateProductReport = _require3.updateProductReport,deleteProductReport = _require3.deleteProductReport,createOrderReport = _require3.createOrderReport,createProductReport = _require3.createProductReport,approveReport = _require3.approveReport,rejectReport = _require3.rejectReport;
 const _require4 = require('../utils/planApi.js'),fetchDictionaries = _require4.fetchDictionaries;
 const _require5 = require('../utils/productionPlans.js'),normalizeMasterList = _require5.normalizeMasterList,normalizeAppDictionaries = _require5.normalizeAppDictionaries;
 const _require6 =
@@ -65,6 +65,12 @@ function emptyMatrixKeyboardState() {
   };
 }
 
+function shouldShowReviewFooter(reviewMode, batch, editing) {
+  if (!reviewMode || editing || !batch) return false;
+  const status = batch.first && batch.first.approvalStatus;
+  return status === 'PENDING';
+}
+
 Page({
   data: {
     loading: true,
@@ -85,7 +91,9 @@ Page({
     activeMatrixVariantId: '',
     matrixKeyboardLabel: '',
     matrixKeyboardValue: '',
-    matrixScrollTop: 0
+    matrixScrollTop: 0,
+    reviewMode: false,
+    reviewActing: false,
   },
 
   _quantities: {},
@@ -98,6 +106,7 @@ Page({
     this._dateFrom = options.dateFrom ? decodeURIComponent(options.dateFrom) : '';
     this._dateTo = options.dateTo ? decodeURIComponent(options.dateTo) : '';
     this._orderId = options.orderId ? decodeURIComponent(options.orderId) : '';
+    this._reviewMode = options.review === '1';
 
     const ctx = readTenantCtx() || {};
     const perms = ctx.permissions || [];
@@ -110,6 +119,7 @@ Page({
       navBarHeight: nav.navBarHeight,
       headerBlockHeight: computeHeaderBlockHeight(nav),
       scrollHeight: computeScrollHeight(nav, false),
+      reviewMode: this._reviewMode,
     });
     this.loadDetail();
   },
@@ -165,10 +175,13 @@ Page({
       first.approvalStatus,
       this._batch.reportNo || first.reportNo,
     );
-    const showFooter = !detail.isOutsourceReceive
+    const showReviewFooter = shouldShowReviewFooter(this._reviewMode, this._batch, this.data.editing);
+    const showFooter = showReviewFooter || (
+      !detail.isOutsourceReceive
       && (this._canEdit || this._canDelete)
       && canMutate
-      && !this.data.editing;
+      && !this.data.editing
+    );
     this.setData({
       detail,
       canEdit: this._canEdit && canMutate,
@@ -207,10 +220,13 @@ Page({
       first.approvalStatus,
       this._batch.reportNo || first.reportNo,
     );
-    const showFooter = !detail.isOutsourceReceive
+    const showReviewFooter = shouldShowReviewFooter(this._reviewMode, this._batch, this.data.editing);
+    const showFooter = showReviewFooter || (
+      !detail.isOutsourceReceive
       && (this._canEdit || this._canDelete)
       && canMutate
-      && !this.data.editing;
+      && !this.data.editing
+    );
     this.setData({
       loading: false,
       editing: false,
@@ -244,11 +260,13 @@ Page({
         fetchDictionaries().catch(() => [])]
         ),config = _await$Promise$all[0],productsRaw = _await$Promise$all[1],categoriesRaw = _await$Promise$all[2],nodesRaw = _await$Promise$all[3],dictionariesRaw = _await$Promise$all[4];
       const productionLinkMode = config && config.productionLinkMode || 'order';
-      const params = {
-        startDate: dateInputToIsoStart(this._dateFrom),
-        endDate: dateInputToIsoEndExclusive(this._dateTo),
-        productionLinkMode
-      };
+      const params = { productionLinkMode };
+      if (this._reviewMode) {
+        params.approvalStatus = 'PENDING';
+      } else {
+        params.startDate = dateInputToIsoStart(this._dateFrom);
+        params.endDate = dateInputToIsoEndExclusive(this._dateTo);
+      }
       if (this._orderId) params.orderIds = this._orderId;
 
       const res = await listReportHistory(params);
@@ -612,5 +630,40 @@ Page({
 
   onProductImageError() {
     this.setData({ 'detail.showProductImage': false });
-  }
+  },
+
+  async runReviewAction(action) {
+    if (!this._batch || this.data.reviewActing) return;
+    const reportIds = this._batch.rows
+      .map((row) => row.raw && row.raw.reportId)
+      .filter(Boolean);
+    if (!reportIds.length) {
+      wx.showToast({ title: '报工记录无效', icon: 'none' });
+      return;
+    }
+    this.setData({ reviewActing: true });
+    try {
+      for (const reportId of reportIds) {
+        if (action === 'approve') await approveReport(reportId);
+        else await rejectReport(reportId);
+      }
+      wx.showToast({
+        title: action === 'approve' ? '已通过' : '已驳回',
+        icon: 'success',
+      });
+      setTimeout(() => wx.navigateBack(), 500);
+    } catch (err) {
+      wx.showToast({ title: (err && err.message) || '审核失败', icon: 'none' });
+    } finally {
+      this.setData({ reviewActing: false });
+    }
+  },
+
+  onReviewApprove() {
+    void this.runReviewAction('approve');
+  },
+
+  onReviewReject() {
+    void this.runReviewAction('reject');
+  },
 });

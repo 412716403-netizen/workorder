@@ -6,6 +6,7 @@ import {
   resolveTargetOrderForReport,
 } from './reportRowDerivations';
 import type { ProductionOrder } from '../types';
+import { ReportApprovalStatus } from '../types';
 
 const tid = 'node-cut';
 const order1: ProductionOrder = {
@@ -104,6 +105,58 @@ describe('reportRowDerivations', () => {
       reworkMergeBucketOrderId: id => id,
     });
     expect(unscoped.hintTotalQty).toBe(1700);
+  });
+
+  it('pendingApprovalQty sums PENDING reports on milestone and PMP', () => {
+    const orderWithPending: ProductionOrder = {
+      ...order1,
+      milestones: [
+        {
+          ...order1.milestones[0]!,
+          reports: [
+            { id: 'r1', quantity: 10, approvalStatus: ReportApprovalStatus.PENDING, timestamp: '', operator: '' },
+          ],
+        },
+      ],
+    } as ProductionOrder;
+    const orderMode = computeReportRowDerivations({
+      productId: 'p1',
+      milestoneTemplateId: tid,
+      productionLinkMode: 'order',
+      processSequenceMode: 'free',
+      outOfSequenceTemplateIds: new Set(),
+      orders: [orderWithPending],
+      productMilestoneProgresses: [],
+      prodRecords: [],
+      getDefectiveRework: () => ({ defective: 0, rework: 0, reworkByVariant: {} }),
+      reworkMergeBucketOrderId: id => id,
+    });
+    expect(orderMode.pendingApprovalQty).toBe(10);
+    expect(orderMode.hintRemaining).toBe(orderMode.effectiveRemainingForModal);
+
+    const productMode = computeReportRowDerivations({
+      productId: 'p1',
+      milestoneTemplateId: tid,
+      productionLinkMode: 'product',
+      processSequenceMode: 'free',
+      outOfSequenceTemplateIds: new Set(),
+      orders: [orderWithPending],
+      productMilestoneProgresses: [
+        {
+          id: 'pmp1',
+          productId: 'p1',
+          milestoneTemplateId: tid,
+          completedQuantity: 10,
+          reports: [
+            { id: 'r2', quantity: 5, approvalStatus: ReportApprovalStatus.PENDING, timestamp: '', operator: '' },
+          ],
+        },
+      ],
+      prodRecords: [],
+      getDefectiveRework: () => ({ defective: 0, rework: 0, reworkByVariant: {} }),
+      reworkMergeBucketOrderId: id => id,
+    });
+    expect(productMode.pendingApprovalQty).toBe(15);
   });
 
   it('resolveTargetOrderForReport picks order with variant', () => {
