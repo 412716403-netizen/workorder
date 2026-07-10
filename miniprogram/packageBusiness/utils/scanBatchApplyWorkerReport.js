@@ -17,7 +17,7 @@ const {
 const {
   writeWorkerReportScanPrefill,
   serializeReportScanMeta,
-} = require('../../utils/workerReportScanPrefill.js');
+} = require('./workerReportScanPrefill.js');
 const { scanFail } = require('./scanFeedback.js');
 
 function sessionTargetKey(orderId, milestoneId) {

@@ -50,7 +50,7 @@ const _require14 = require('../../utils/featurePlugins.js'),loadTraceabilityScan
 const {
   readWorkerReportScanPrefill,
   deserializeReportScanMeta,
-} = require('../../utils/workerReportScanPrefill.js');
+} = require('../utils/workerReportScanPrefill.js');
 
 function computeHeaderBlockHeight(nav) {
   return computePlanCreateHeaderHeight(nav);

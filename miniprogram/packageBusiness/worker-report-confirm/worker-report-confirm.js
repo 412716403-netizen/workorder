@@ -1,7 +1,7 @@
 const { readTenantCtx, readOperatorDisplayName, readCurrentUserId } = require('../../utils/session.js');
 const { hasPermission, hasPrefixPermission } = require('../../utils/permissions.js');
 const { readNavBarMetrics, readWindowMetrics, computePlanCreateHeaderHeight } = require('../../utils/windowMetrics.js');
-const { readWorkerReportScanPrefill, deserializeReportScanMeta } = require('../../utils/workerReportScanPrefill.js');
+const { readWorkerReportScanPrefill, deserializeReportScanMeta } = require('../utils/workerReportScanPrefill.js');
 const { createOrderReport, fetchTenantConfig, fetchProductsAll, fetchCategoriesAll, fetchNodesAll, getOrder, fetchProductionRecords } = require('../utils/orderApi.js');
 const { fetchDictionaries } = require('../utils/planApi.js');
 const { normalizeMasterList, normalizeAppDictionaries } = require('../utils/productionPlans.js');

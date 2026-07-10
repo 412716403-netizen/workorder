@@ -41,7 +41,7 @@ const _require0 =
 const _require1 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require1.readNavBarMetrics,readWindowMetrics = _require1.readWindowMetrics,computePlanCreateHeaderHeight = _require1.computePlanCreateHeaderHeight;
 const _require10 = require('../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require10.afterMatrixKeyboardOpen;
 const _require11 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require11.LIST_ROUTES,buildReportHistoryListUrl = _require11.buildReportHistoryListUrl,afterSaveReturnToList = _require11.afterSaveReturnToList;
-const { reportAllowsEditDelete } = require('../../utils/reportApprovalMutability.js');
+const { reportAllowsEditDelete } = require('../utils/reportApprovalMutability.js');
 
 function computeHeaderBlockHeight(nav) {
   return computePlanCreateHeaderHeight(nav);
