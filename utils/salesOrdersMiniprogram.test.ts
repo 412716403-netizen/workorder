@@ -32,9 +32,10 @@ describe('salesOrderDocFullyShipped', () => {
 });
 
 describe('resolveSalesOrderLineFlowStatus (销售订单流水)', () => {
-  it('未配货', () => {
+  it('未发货', () => {
     const st = resolveSalesOrderLineFlowStatus([{ id: 'r1', quantity: 10 } as PsiRecord]);
-    expect(st.statusKey).toBe('unallocated');
+    expect(st.statusKey).toBe('not_shipped');
+    expect(st.statusLabel).toBe('未发货');
   });
 
   it('已发齐', () => {
@@ -44,17 +45,18 @@ describe('resolveSalesOrderLineFlowStatus (销售订单流水)', () => {
     expect(st.statusKey).toBe('fully_shipped');
   });
 
-  it('有待发', () => {
+  it('发部分', () => {
     const st = resolveSalesOrderLineFlowStatus([
       { id: 'r1', quantity: 10, allocatedQuantity: 8, shippedQuantity: 3 } as PsiRecord,
     ]);
-    expect(st.statusKey).toBe('pending_ship');
+    expect(st.statusKey).toBe('partial_shipped');
+    expect(st.statusLabel).toBe('发部分');
   });
 
-  it('超配', () => {
+  it('超发并入已发齐', () => {
     const st = resolveSalesOrderLineFlowStatus([
-      { id: 'r1', quantity: 5, allocatedQuantity: 8 } as PsiRecord,
+      { id: 'r1', quantity: 5, allocatedQuantity: 8, shippedQuantity: 6 } as PsiRecord,
     ]);
-    expect(st.statusKey).toBe('over_allocated');
+    expect(st.statusKey).toBe('fully_shipped');
   });
 });

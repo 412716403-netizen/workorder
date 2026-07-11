@@ -37,6 +37,7 @@
       value="{{partnerName}}"
       placeholder="搜索加工厂名称"
       bind:change="onPartnerChange"
+      bind:created="onPartnerCreated"
       bind:sheetopen="onConditionSheetOpen"
       bind:sheetclose="onConditionSheetClose"
     />

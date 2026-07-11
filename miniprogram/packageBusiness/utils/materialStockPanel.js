@@ -3,6 +3,7 @@
  */
 
 const _require = require('../config/productionOrders.js'),OrderDispatchStatus = _require.OrderDispatchStatus;
+const _requireOrderSort = require('./productionOrders.js'),orderCreatedMs = _requireOrderSort.orderCreatedMs;
 const _require2 = require('./listProductThumb.js'),listProductNameSkuFields = _require2.listProductNameSkuFields;
 const _require3 =
 
@@ -172,7 +173,17 @@ function buildPartnerGroupCards(partnerGroup, params) {
   });
 
   if (productionLinkMode === 'product') {
-    cards.sort((a, b) => (a.productName || '').localeCompare(b.productName || '', 'zh-CN'));
+    cards.sort((a, b) => {
+      const ordersA = idx.ordersByProductId.get(a.scopeKey) || [];
+      const ordersB = idx.ordersByProductId.get(b.scopeKey) || [];
+      const aMax = Math.max(0, ...ordersA.map(orderCreatedMs));
+      const bMax = Math.max(0, ...ordersB.map(orderCreatedMs));
+      return bMax - aMax;
+    });
+  } else {
+    cards.sort(
+      (a, b) => orderCreatedMs(idx.ordersById.get(b.scopeKey)) - orderCreatedMs(idx.ordersById.get(a.scopeKey)),
+    );
   }
   return cards.filter(Boolean);
 }
@@ -322,11 +333,61 @@ function paginatePartnerGroups(groups, page, pageSize) {
   };
 }
 
-function decoratePartnerGroups(groups, selectState) {
-  return (groups || []).map((group) => ({
-    ...group,
-    cards: decorateCards(group.cards, selectState)
-  }));
+function aggregateCardMaterialRows(cards) {
+  const acc = new Map();
+  for (const card of cards || []) {
+    for (const mat of card.materialRows || []) {
+      const pid = mat.productId;
+      const prev = acc.get(pid);
+      if (prev) {
+        const issue = roundQty(prev.issue + mat.issue);
+        const returnQty = roundQty(prev.returnQty + mat.returnQty);
+        const reportCost = roundQty(prev.reportCost + mat.reportCost);
+        const net = roundQty(issue - returnQty);
+        const surplus = roundQty(net - reportCost);
+        acc.set(pid, {
+          productId: pid,
+          name: prev.name,
+          sku: prev.sku,
+          issue,
+          returnQty,
+          net,
+          reportCost,
+          surplus,
+          issueText: String(issue),
+          returnText: String(returnQty),
+          netText: String(net),
+          reportCostText: String(reportCost),
+          surplusText: String(surplus),
+          selected: false
+        });
+      } else {
+        acc.set(pid, { ...mat, selected: false });
+      }
+    }
+  }
+  return Array.from(acc.values()).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'zh-CN'));
+}
+
+function decoratePartnerGroups(groups, selectState, listViewMode) {
+  const viewMode = listViewMode === 'material' ? 'material' : 'order';
+  return (groups || []).map((group) => {
+    if (viewMode === 'material') {
+      const materialRows = aggregateCardMaterialRows(group.cards);
+      return {
+        ...group,
+        viewMode: 'material',
+        materialRows,
+        cards: []
+      };
+    }
+    return {
+      ...group,
+      viewMode: 'order',
+      materialRows: [],
+      cards: decorateCards(group.cards, selectState)
+    };
+  });
 }
 
 function decorateCards(cards, selectState) {
@@ -585,6 +646,7 @@ module.exports = {
   paginatePartnerGroups,
   decorateCards,
   decoratePartnerGroups,
+  aggregateCardMaterialRows,
   flattenPartnerGroups,
   findCardInPartnerGroups,
   matRowToUiRow,

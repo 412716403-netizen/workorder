@@ -8,7 +8,6 @@ import { useAuthOptional } from '../contexts/AuthContext';
 import { useAppActionsOptional } from '../contexts/AppDataContext';
 import { hasSubPermission } from '../utils/hasSubPermission';
 import { effectiveCustomDocFieldType, formatReportCustomDataForList } from '../utils/reportCustomDocField';
-import { getSupplierCategoryId } from '../utils/resolvePartnerCategoryId';
 import { findPartnerByName } from '../utils/partnerNormalize';
 import { psiOrderBillCompactLineInputClass, psiOrderBillCompactLineLabelClass } from '../styles/uiDensity';
 
@@ -17,15 +16,6 @@ import { psiOrderBillCompactLineInputClass, psiOrderBillCompactLineLabelClass } 
  * onChange 始终回传 (名称, id)。value 可用名称或 id，由 valueMode 指定。
  */
 const DEFAULT_PARTNER_DROPDOWN_Z = 10050;
-
-function resolveQuickCreateFormCategoryId(
-  categories: PartnerCategory[],
-  explicit?: string
-): string | undefined {
-  const ex = explicit?.trim();
-  if (ex) return ex;
-  return getSupplierCategoryId(categories);
-}
 
 export function SearchablePartnerSelect({
   options,
@@ -42,7 +32,7 @@ export function SearchablePartnerSelect({
   portalZIndex = DEFAULT_PARTNER_DROPDOWN_Z,
   /** 为 true 时在下拉内显示「新建」入口（需具备合作单位新建权限且至少有一个合作单位分类） */
   allowQuickCreate = false,
-  /** 快捷新建表单中分类的默认值（id）；不传时尝试匹配名称「供应商」 */
+  /** 快捷新建表单中分类的预填 id；不传时留空，由用户手动选择 */
   quickCreateCategoryId,
   /** 有值时仅允许选择该分类下合作单位；分类 Tab 仍显示，点其它分类时列表会为空或不含可选项 */
   onlyCategoryId,
@@ -243,7 +233,7 @@ export function SearchablePartnerSelect({
             type="button"
             onClick={() => {
               setQuickName('');
-              setQuickFormCategoryId(resolveQuickCreateFormCategoryId(categories, quickCreateCategoryId) ?? '');
+              setQuickFormCategoryId(quickCreateCategoryId?.trim() ?? '');
               setIsOpen(false);
               setQuickCreateOpen(true);
             }}

@@ -10,6 +10,7 @@ const _require2 = require('../../utils/listResponse.js'),normalizeListBody = _re
 const _require3 = require('./reportCustomDocField.js'),mapProductCustomTags = _require3.mapProductCustomTags;
 const _require4 = require('./variantQtyMatrix.js'),buildVariantMatrixUiModel = _require4.buildVariantMatrixUiModel;
 const _require5 = require('./dateYmd.js'),localTodayYmd = _require5.localTodayYmd;
+const _requireResolveOrder = require('./resolvePrimaryOrderIdForPlan.js'),resolvePrimaryOrderIdForPlan = _requireResolveOrder.resolvePrimaryOrderIdForPlan;
 const _require6 =
 
 
@@ -611,10 +612,66 @@ function normalizeMasterList(body) {
   return normalizeListBody(body);
 }
 
-function canConvertPlan(plan) {
+function hasUnconvertedChildPlans(planId, allPlans) {
+  return (allPlans || []).some(
+    (p) => p && p.parentPlanId === planId && p.status !== PlanStatus.CONVERTED
+  );
+}
+
+function isPlanWorkOrdersDispatched(plan, orders) {
   if (!plan) return false;
+  if (orders && orders.length) {
+    return orders.some((o) => o && o.planOrderId === plan.id);
+  }
+  if (plan.status === PlanStatus.CONVERTED) return true;
   const status = plan.derivedStatus || PlanDispatchStatus.NOT_DISPATCHED;
-  return status === PlanDispatchStatus.NOT_DISPATCHED;
+  return status !== PlanDispatchStatus.NOT_DISPATCHED;
+}
+
+function canConvertPlan(plan) {
+  if (!plan || plan.parentPlanId) return false;
+  return plan.status !== PlanStatus.CONVERTED;
+}
+
+/** 列表行操作区：对齐 Web PlanOrderListView 详情 / 下达 / 补充下达 / 工单详情 */
+function buildPlanListActionFlags(plan, opts) {
+  const {
+    allPlans = [],
+    orders = [],
+    canEdit = false,
+    canViewOrderDetail = false
+  } = opts || {};
+  if (!plan || !plan.id) {
+    return {
+      showDetailBtn: false,
+      showConvertBtn: false,
+      showSupplementConvertBtn: false,
+      showOrderDetailBtn: false,
+      showActions: false,
+      linkedOrderId: ''
+    };
+  }
+  const isRoot = !plan.parentPlanId;
+  const hasUnconvertedChildren = isRoot ? hasUnconvertedChildPlans(plan.id, allPlans) : false;
+  const linkedOrderId = isRoot ? resolvePrimaryOrderIdForPlan(plan.id, orders) : null;
+  const showConvertBtn = canEdit && isRoot && plan.status !== PlanStatus.CONVERTED;
+  const showSupplementConvertBtn =
+    canEdit && isRoot && plan.status === PlanStatus.CONVERTED && hasUnconvertedChildren;
+  const showOrderDetailBtn =
+    canViewOrderDetail &&
+    isRoot &&
+    plan.status === PlanStatus.CONVERTED &&
+    !hasUnconvertedChildren;
+  const showDetailBtn = true;
+  const showActions = showDetailBtn || showConvertBtn || showSupplementConvertBtn || showOrderDetailBtn;
+  return {
+    showDetailBtn,
+    showConvertBtn,
+    showSupplementConvertBtn,
+    showOrderDetailBtn,
+    showActions,
+    linkedOrderId: linkedOrderId || ''
+  };
 }
 
 module.exports = {
@@ -640,6 +697,9 @@ module.exports = {
   normalizeMasterList,
   normalizeAppDictionaries,
   canConvertPlan,
+  hasUnconvertedChildPlans,
+  isPlanWorkOrdersDispatched,
+  buildPlanListActionFlags,
   planListPlaceholderIcon,
   planListPlaceholderIconSrc,
   productNameSkuParts,

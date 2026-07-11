@@ -9,17 +9,15 @@ const DEFAULT_PAGE_SIZE = 20;
 
 const SALES_ORDER_FLOW_STATUS_OPTIONS = [
   { value: 'all', label: '全部' },
-  { value: 'unallocated', label: '未配货' },
-  { value: 'allocated', label: '已配货' },
+  { value: 'not_shipped', label: '未发货' },
+  { value: 'partial_shipped', label: '发部分' },
   { value: 'fully_shipped', label: '已发齐' },
 ];
 
 const SALES_ORDER_FLOW_STATUS_PILL = {
-  unallocated: 'st-pill--pending',
-  allocated: 'st-pill--primary',
-  pending_ship: 'st-pill--primary',
+  not_shipped: 'st-pill--pending',
+  partial_shipped: 'st-pill--primary',
   fully_shipped: 'st-pill--success',
-  over_allocated: 'st-pill--rejected',
 };
 
 const SALES_ORDER_SHORTCUTS = [

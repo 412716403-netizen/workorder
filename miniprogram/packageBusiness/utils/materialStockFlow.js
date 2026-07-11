@@ -6,6 +6,7 @@ const { productMetaFromMap } = require('./orderReportHistory.js');
 const { formatStockInTime, resolveWarehouseName } = require('./stockInFlow.js');
 const { getProductUnitName } = require('./planFormCustomField.js');
 const { BATCH_NO_UNTAGGED } = require('./materialStockConfirm.js');
+const { categoryUsesBatchManagement } = require('./materialIssueBatch.js');
 
 const TYPE_LABELS = {
   STOCK_OUT: '领料发出',
@@ -226,6 +227,7 @@ function buildMaterialFlowDetailView(rows, opts) {
   const productMap = (opts && opts.productMap) || new Map();
   const warehouseMap = (opts && opts.warehouseMap) || new Map();
   const orderMap = (opts && opts.orderMap) || new Map();
+  const categoryMap = (opts && opts.categoryMap) || new Map();
   const productionLinkMode = (opts && opts.productionLinkMode) || 'order';
   const dictionaries = (opts && opts.dictionaries) || {};
   const list = (rows || []).map(normalizeMaterialRecord);
@@ -247,9 +249,12 @@ function buildMaterialFlowDetailView(rows, opts) {
     const meta = productMetaFromMap(productMap, r.productId, r.productName, '');
     const qty = Number(r.quantity) || 0;
     const unitName = resolveUnitName(productMap, r.productId, dictionaries);
+    const product = productMap.get(r.productId);
+    const category = product && product.categoryId ? categoryMap.get(product.categoryId) : null;
+    const usesBatch = categoryUsesBatchManagement(category);
     const batchLabel = displayBatchNo(r.batchNo);
     const qtyText = buildQtyText(prefix, qty, unitName);
-    const docHasBatch = list.some((x) => normalizeBatchNo(x.batchNo));
+    const showBatch = usesBatch || Boolean(normalizeBatchNo(r.batchNo));
     return {
       id: r.id || `line-${r.productId || 'p'}-${r.variantId || '-'}-${index}`,
       productId: r.productId,
@@ -257,11 +262,13 @@ function buildMaterialFlowDetailView(rows, opts) {
       sku: meta.sku,
       showSku: meta.showSku,
       batchNo: batchLabel,
-      showBatch: docHasBatch,
+      showBatch,
       quantity: qty,
-      quantityText: docHasBatch ? `${batchLabel} · ${qtyText}` : qtyText,
+      quantityText: qtyText,
     };
   });
+
+  const showBatchColumn = lineItems.some((item) => item.showBatch);
 
   const finishedProductId = first.sourceProductId || (order && order.productId) || '';
   const finishedMeta = productMetaFromMap(
@@ -291,6 +298,7 @@ function buildMaterialFlowDetailView(rows, opts) {
     showPartner: Boolean(first.partner),
     totalQty,
     totalQtyText: buildQtyText(prefix, totalQty, totalUnitName),
+    showBatchColumn,
     lineItems,
   };
 }

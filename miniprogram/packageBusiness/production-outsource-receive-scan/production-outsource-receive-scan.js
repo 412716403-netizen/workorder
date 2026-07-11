@@ -5,6 +5,7 @@ const { normalizeListBody } = require('../../utils/listResponse.js');
 const { readNavBarMetrics, readWindowMetrics, computeFixedFooterInsetPx } = require('../../utils/windowMetrics.js');
 const { buildOutsourceReceiveAggregates } = require('../utils/outsourceReceiveAggregates.js');
 const { buildOutsourcePartnerOptions } = require('../utils/outsourcePartnerOptions.js');
+const { mergePartnerIntoList } = require('../utils/mergePartnerList.js');
 const { fetchOutsourceRecordsForPanel } = require('../utils/outsourceRecordsLoad.js');
 const { fetchAllOrdersPaginated } = require('../utils/pendingStockBadge.js');
 const {
@@ -96,6 +97,14 @@ Page({
     });
   },
 
+  onPartnerCreated(e) {
+    const partner = e.detail && e.detail.partner;
+    if (!partner || !partner.id) return;
+    this._masterPartners = mergePartnerIntoList(this._masterPartners || [], partner);
+    const partnerOptions = buildOutsourcePartnerOptions(this._allRows || [], this._masterPartners);
+    this.setData({ partnerOptions });
+  },
+
   onOpenScanTap() {
     if (!this.data.scanPartnerName) {
       wx.showToast({ title: '请先选择加工厂', icon: 'none' });
@@ -132,9 +141,11 @@ Page({
       ]);
       const partners = results[0];
       const categories = results[1];
+      const master = normalizeListBody(partners);
+      this._masterPartners = master;
       const partnerOptions = buildOutsourcePartnerOptions(
         this._allRows || [],
-        normalizeListBody(partners),
+        master,
       );
       this.setData({
         partnerOptions,

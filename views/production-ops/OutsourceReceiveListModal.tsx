@@ -94,7 +94,7 @@ const OutsourceReceiveListModal: React.FC<OutsourceReceiveListModalProps> = ({
   onClose,
 }) => {
   const { weightTolerancePercent } = useConfigData();
-  const { globalNodes } = useMasterData();
+  const { globalNodes, partnerCategories } = useMasterData();
   const { scanEnabled, weightEnabled } = useTraceabilityPlugin();
   // 外协收货扫码弹窗在首扫前未锁定工序，故按待收回行涉及的工序是否开启「扫码称重」决定是否显示秤框
   const scanWeighingEnabled = useMemo(() => {
@@ -364,10 +364,12 @@ const OutsourceReceiveListModal: React.FC<OutsourceReceiveListModalProps> = ({
       </div>
       <SearchablePartnerSelect
         options={scanPartnerSelectOptions}
+        categories={partnerCategories}
         value={scanPartner}
         onChange={(name) => setScanPartner(name)}
         placeholder="搜索加工厂名称"
         compact
+        allowQuickCreate
         showCategoryHint={false}
         portalZIndex={10100}
         triggerClassName="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-bold text-slate-800"

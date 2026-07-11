@@ -51,6 +51,8 @@ import {
   visibleMaterialRowsForList,
   resolveBomItems,
   applyMaterialBreakdown,
+  aggregatePartnerMaterialsByProduct,
+  INTERNAL_PARTNER_KEY,
   type MatRow,
 } from './stockMaterialPanelHelpers';
 import { MaterialStatsTable } from './MaterialStatsTable';
@@ -189,6 +191,8 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [materialFormConfigEntryTab, setMaterialFormConfigEntryTab] = useState<'fields' | 'print' | 'list'>('fields');
   const [stockSelectPartner, setStockSelectPartner] = useState<string | null>(null);
+  /** 列表视图：按工单 / 按物料（全局，含按加工厂分组与平铺列表） */
+  const [listViewMode, setListViewMode] = useState<'order' | 'material'>('order');
   const [materialSearch, setMaterialSearch] = useState('');
   const debouncedMaterialSearch = useDebouncedValue(materialSearch, 300);
 
@@ -198,7 +202,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
   const [stockPage, setStockPage] = useState(1);
   useEffect(() => {
     setStockPage(1);
-  }, [productionLinkMode, materialPanelSettings.groupByOutsourcePartner, materialPanelSettings.onlyShowNotCompletedOrder, debouncedMaterialSearch]);
+  }, [productionLinkMode, materialPanelSettings.groupByOutsourcePartner, materialPanelSettings.onlyShowNotCompletedOrder, debouncedMaterialSearch, listViewMode]);
 
   const idx = useDataIndexes(orders, products, boms, [] /* no globalNodes needed */, productMilestoneProgresses);
   const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
@@ -500,11 +504,65 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
     );
   }, [parentOrders, parentMaterialStats, materialKw, idx, onlyShowIncompleteOrders]);
 
+  /** 未按加工厂分组 · 按物料：跨全部工单/产品汇总 */
+  const flatMaterialViewRows = useMemo(() => {
+    if (materialPanelSettings.groupByOutsourcePartner || listViewMode !== 'material') return [];
+    const sources: MatRow[][] = [];
+    if (productionLinkMode === 'product' && productEntriesForDisplay) {
+      for (const [, materials] of productEntriesForDisplay) sources.push(materials);
+    } else {
+      for (const order of parentOrdersForDisplay) {
+        sources.push(parentMaterialStats.get(order.id) ?? []);
+      }
+    }
+    const aggregated = displayMaterialsForKeyword(
+      aggregatePartnerMaterialsByProduct(sources),
+      materialKw,
+      idx.productsById,
+    );
+    return filterMaterialRowsWithActivity(aggregated);
+  }, [
+    materialPanelSettings.groupByOutsourcePartner,
+    listViewMode,
+    productionLinkMode,
+    productEntriesForDisplay,
+    parentOrdersForDisplay,
+    parentMaterialStats,
+    materialKw,
+    idx.productsById,
+  ]);
+
   /** 有搜索词时表格内只显示名称/SKU 含关键词的物料行；若当前卡片因工单/产品名等命中、但物料名都不含关键词，则仍显示全部行 */
   const displayMaterialsForSearch = useCallback(
     (materials: MatRow[]): MatRow[] => displayMaterialsForKeyword(materials, materialKw, idx.productsById),
     [materialKw, idx.productsById],
   );
+
+  /** 按委外加工厂展示时，组内 scope 按工单创建时间倒序（新建在前） */
+  const sortPartnerScopeEntries = useCallback(
+    (entries: [string, MatRow[]][]): [string, MatRow[]][] => {
+      if (productionLinkMode === 'product') {
+        return [...entries].sort((a, b) => {
+          const aMax = Math.max(0, ...(idx.ordersByProductId.get(a[0]) ?? []).map(orderCreatedMs));
+          const bMax = Math.max(0, ...(idx.ordersByProductId.get(b[0]) ?? []).map(orderCreatedMs));
+          return bMax - aMax;
+        });
+      }
+      return [...entries].sort(
+        (a, b) => orderCreatedMs(idx.ordersById.get(b[0])) - orderCreatedMs(idx.ordersById.get(a[0])),
+      );
+    },
+    [productionLinkMode, idx],
+  );
+
+  const handleListViewMode = useCallback((mode: 'order' | 'material') => {
+    setListViewMode(mode);
+    setStockSelectOrderId(null);
+    setStockSelectSourceProductId(null);
+    setStockSelectPartner(null);
+    setStockSelectMode(null);
+    setStockSelectedIds(new Set());
+  }, []);
 
   /**
    * Phase 3.E follow-up：领料/退料的 docNo 不再前端自算。
@@ -741,6 +799,24 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
               />
             </div>
         )}
+        {!showModal && (
+            <div className="flex bg-slate-100 p-1 rounded-xl shrink-0">
+              <button
+                type="button"
+                onClick={() => handleListViewMode('order')}
+                className={`px-3 py-2 rounded-lg text-xs font-bold transition-all ${listViewMode === 'order' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                按工单
+              </button>
+              <button
+                type="button"
+                onClick={() => handleListViewMode('material')}
+                className={`px-3 py-2 rounded-lg text-xs font-bold transition-all ${listViewMode === 'material' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                按物料
+              </button>
+            </div>
+        )}
         <div className="flex flex-wrap items-center gap-2 justify-end sm:justify-start">
         {!showModal && hasOpsPerm(tenantRole, userPermissions, 'production:material_form_config:allow') && (
             <button
@@ -791,26 +867,55 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
 
               return (<>
                 {pagedPartners.map(({ partnerKey, partnerLabel, data }) => {
-                  const entries = Array.from(data.entries());
-                  const visibleEntryCount = entries.filter(([, materials]) => {
-                    const searched = displayMaterialsForSearch(materials);
-                    const rows =
-                      partnerKey === '__internal__' ? filterMaterialRowsWithActivity(searched) : searched;
-                    return rows.length > 0;
-                  }).length;
+                  const isInternal = partnerKey === INTERNAL_PARTNER_KEY;
+                  const isMaterialView = listViewMode === 'material';
+                  const entries = sortPartnerScopeEntries(Array.from(data.entries()));
+
+                  const materialViewRows = isMaterialView
+                    ? (() => {
+                        const aggregated = displayMaterialsForSearch(
+                          aggregatePartnerMaterialsByProduct(data.values()),
+                        );
+                        return isInternal ? filterMaterialRowsWithActivity(aggregated) : aggregated;
+                      })()
+                    : [];
+
+                  const visibleEntryCount = isMaterialView
+                    ? materialViewRows.length
+                    : entries.filter(([, materials]) => {
+                        const searched = displayMaterialsForSearch(materials);
+                        const rows =
+                          isInternal ? filterMaterialRowsWithActivity(searched) : searched;
+                        return rows.length > 0;
+                      }).length;
+
                   if (visibleEntryCount === 0) return null;
                   return (
                     <div key={partnerKey} className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
-                      <div className={`px-6 py-3 border-b border-slate-100 flex items-center gap-3 ${partnerKey === '__internal__' ? 'bg-slate-50' : 'bg-gradient-to-r from-indigo-50/80 to-white'}`}>
-                        <Building2 className={`w-5 h-5 ${partnerKey === '__internal__' ? 'text-slate-400' : 'text-indigo-500'}`} />
+                      <div className={`px-6 py-3 border-b border-slate-100 flex items-center gap-3 ${isInternal ? 'bg-slate-50' : 'bg-gradient-to-r from-indigo-50/80 to-white'}`}>
+                        <Building2 className={`w-5 h-5 shrink-0 ${isInternal ? 'text-slate-400' : 'text-indigo-500'}`} />
                         <span className="text-sm font-black text-slate-700">{partnerLabel}</span>
                         <span className="text-[10px] text-slate-400 font-medium">({visibleEntryCount} 项)</span>
                       </div>
                       <div className="p-4 space-y-3">
-                        {entries.flatMap(([scopeKey, materials]) => {
+                        {isMaterialView ? (
+                          <div className="rounded-2xl border border-slate-100 overflow-hidden">
+                            <MaterialStatsTable
+                              materials={materialViewRows}
+                              selecting={false}
+                              compact
+                              selectedIds={stockSelectedIds}
+                              onSelectAll={setStockSelectedIds}
+                              onToggleSelect={toggleSelect}
+                              productsById={idx.productsById}
+                              categoryMap={categoryMap}
+                            />
+                          </div>
+                        ) : (
+                        entries.flatMap(([scopeKey, materials]) => {
                           const searched = displayMaterialsForSearch(materials);
                           const displayMaterials =
-                            partnerKey === '__internal__' ? filterMaterialRowsWithActivity(searched) : searched;
+                            isInternal ? filterMaterialRowsWithActivity(searched) : searched;
                           if (displayMaterials.length === 0) return [];
                           if (productionLinkMode === 'product') {
                             const fp = idx.productsById.get(scopeKey);
@@ -893,7 +998,8 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                                 <MaterialStatsTable materials={displayMaterials} selecting={selecting} compact selectedIds={stockSelectedIds} onSelectAll={setStockSelectedIds} onToggleSelect={toggleSelect} productsById={idx.productsById} categoryMap={categoryMap} />
                               </div>,
                           ];
-                        })}
+                        })
+                        )}
                       </div>
                     </div>
                   );
@@ -907,6 +1013,39 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                 )}
               </>);
             })()
+          ) : !materialPanelSettings.groupByOutsourcePartner && listViewMode === 'material' ? (
+            flatMaterialViewRows.length === 0 ? (
+              <div className="bg-white rounded-[32px] border border-slate-200 p-12 text-center">
+                <p className="text-slate-400 text-sm">
+                  {materialKw
+                    ? '无匹配项，请调整搜索条件'
+                    : productionLinkMode === 'product'
+                      ? '无可展示物料（领料、退料、报工耗材均为 0 的关联产品已隐藏）'
+                      : parentOrders.length === 0
+                        ? '暂无工单，请先在「生产计划」下达工单'
+                        : '无可展示物料（领料、退料、报工耗材均为 0 的工单已隐藏）'}
+                </p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
+                <div className="px-6 py-3 border-b border-slate-100 flex items-center gap-3 bg-slate-50">
+                  <Package className="w-5 h-5 text-indigo-500 shrink-0" />
+                  <span className="text-sm font-black text-slate-700">全部物料汇总</span>
+                  <span className="text-[10px] text-slate-400 font-medium">({flatMaterialViewRows.length} 项)</span>
+                </div>
+                <div className="p-4">
+                  <MaterialStatsTable
+                    materials={flatMaterialViewRows}
+                    selecting={false}
+                    selectedIds={stockSelectedIds}
+                    onSelectAll={setStockSelectedIds}
+                    onToggleSelect={toggleSelect}
+                    productsById={idx.productsById}
+                    categoryMap={categoryMap}
+                  />
+                </div>
+              </div>
+            )
           ) : productionLinkMode === 'product' && productMaterialStatsByProduct ? (
             (() => {
               const pEntries = productEntriesForDisplay ?? [];
@@ -1175,6 +1314,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
         orders={orders}
         products={products}
         warehouses={warehouses}
+        categories={categories}
         dictionaries={dictionaries}
         materialFormSettings={materialFormSettings}
         printTemplates={printTemplates}

@@ -175,7 +175,7 @@
                         <text class="plan-detail-bom-th">缺料数</text>
                       </view>
                       <view class="plan-detail-bom-col plan-detail-bom-col--plan">
-                        <text class="plan-detail-bom-th">计划用量</text>
+                        <text class="plan-detail-bom-th">计划采购量</text>
                       </view>
                       <view class="plan-detail-bom-col plan-detail-bom-col--status">
                         <text class="plan-detail-bom-th">状态</text>
@@ -267,12 +267,20 @@
     </view>
   </scroll-view>
 
-  <view wx:if="{{showConvertBtn}}" class="plan-detail-footer">
+  <view wx:if="{{showFooter}}" class="plan-detail-footer">
     <button
+      wx:if="{{showConvertBtn}}"
       class="plan-detail-submit"
       loading="{{converting}}"
       disabled="{{converting}}"
       bindtap="onConvertTap"
     >下达工单</button>
+    <button
+      wx:elif="{{showSupplementConvertBtn}}"
+      class="plan-detail-submit plan-detail-submit--amber"
+      loading="{{converting}}"
+      disabled="{{converting}}"
+      bindtap="onConvertTap"
+    >补充下达子工单</button>
   </view>
 </view>

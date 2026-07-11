@@ -1692,6 +1692,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
         orders={orders}
         products={products}
         warehouses={warehouses}
+        categories={categories}
         dictionaries={dictionaries}
         materialFormSettings={DEFAULT_MATERIAL_FORM_SETTINGS}
         printTemplates={printTemplates}

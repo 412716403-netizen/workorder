@@ -16,6 +16,7 @@ import {
   Printer,
   Search,
   CalendarClock,
+  ClipboardList,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { comparePlansNewestFirst, planNumberSeqForSort, planOrderListSortMs } from '../utils/planOrderSort';
@@ -36,8 +37,13 @@ import {
   PartnerCategory,
   PrintTemplate,
   ProductionOrder,
+  ProductionOpRecord,
+  OrderFormSettings,
+  OutsourceFormSettings,
+  ProductMilestoneProgress,
   PrintRenderContext,
   PlanFormFieldConfig,
+  DEFAULT_OUTSOURCE_FORM_SETTINGS,
 } from '../types';
 import { parsePlanSearch } from '../utils/parsePlanSearch';
 import { getPlanDispatchStatusStyle } from '../utils/dispatchStatusStyle';
@@ -66,6 +72,12 @@ import { usePlanPurchaseProgress, type PlanPurchaseProgress } from '../hooks/use
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { formatPlanOrderCreatedAtForList, toLocalDateYmd } from '../utils/localDateTime';
 import { getProductCategoryCustomFieldEntries } from '../utils/reportCustomDocField';
+import { resolvePrimaryOrderIdForPlan } from '../utils/resolvePrimaryOrderIdForPlan';
+import { hasOpsPerm, getOrderFamilyIds } from './production-ops/types';
+import OrderDetailModal from './OrderDetailModal';
+import { production as productionApi } from '../services/api';
+import { useQuery } from '@tanstack/react-query';
+import { normalizeDecimals } from '../contexts/formSettingsDefaults';
 
 interface PlanOrderListViewProps {
   productionLinkMode?: 'order' | 'product';
@@ -87,6 +99,16 @@ interface PlanOrderListViewProps {
   onRefreshPrintTemplates?: () => void | Promise<void>;
   /** 用于打印模板预览示例数据 */
   orders?: ProductionOrder[];
+  orderFormSettings?: OrderFormSettings;
+  outsourceFormSettings?: OutsourceFormSettings;
+  productMilestoneProgresses?: ProductMilestoneProgress[];
+  onAddRecord?: (record: ProductionOpRecord) => void;
+  onAddRecordBatch?: (records: ProductionOpRecord[]) => Promise<void | ProductionOpRecord[]>;
+  onUpdateRecord?: (record: ProductionOpRecord) => void;
+  onDeleteRecord?: (recordId: string) => void;
+  onDeleteOrder?: (orderId: string) => void;
+  userPermissions?: string[];
+  tenantRole?: string;
   onCreatePlan: (plan: PlanOrder) => void | Promise<void>;
   onConvertToOrder: (planId: string) => void;
   onDeletePlan?: (planId: string) => void;
@@ -237,8 +259,80 @@ function renderPlanListCustomFieldValue(
   );
 }
 
-const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMode = 'order', plans, products, categories, dictionaries, workers, equipment, globalNodes, boms, partners, partnerCategories = [], planFormSettings, onUpdatePlanFormSettings, printTemplates, onUpdatePrintTemplates, onRefreshPrintTemplates, orders = [], onCreatePlan, onConvertToOrder, onDeletePlan, onUpdateProduct, onUpdatePlan, onUpdateOrder, onAddPSIRecord, onAddPSIRecordBatch, onCreateSubPlan, onCreateSubPlans, onSplitPlan, initialDetailPlanId, onClearDetailPlanIdFromState }) => {
+function PlanLinkedOrderDetailButton({
+  planId,
+  orders,
+  canView,
+  onOpen,
+}: {
+  planId: string;
+  orders: ProductionOrder[];
+  canView: boolean;
+  onOpen: (orderId: string) => void;
+}) {
+  if (!canView) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        const orderId = resolvePrimaryOrderIdForPlan(planId, orders);
+        if (!orderId) {
+          toast.warning('未找到关联工单，请刷新列表后重试');
+          return;
+        }
+        onOpen(orderId);
+      }}
+      className="flex items-center gap-1.5 px-4 py-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-xl text-xs font-bold transition-all border border-indigo-100"
+    >
+      <ClipboardList className="w-3.5 h-3.5" /> 工单详情
+    </button>
+  );
+}
+
+const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMode = 'order', plans, products, categories, dictionaries, workers, equipment, globalNodes, boms, partners, partnerCategories = [], planFormSettings, onUpdatePlanFormSettings, printTemplates, onUpdatePrintTemplates, onRefreshPrintTemplates, orders = [], orderFormSettings, outsourceFormSettings = DEFAULT_OUTSOURCE_FORM_SETTINGS, productMilestoneProgresses = [], onAddRecord, onAddRecordBatch, onUpdateRecord, onDeleteRecord, onDeleteOrder, userPermissions, tenantRole, onCreatePlan, onConvertToOrder, onDeletePlan, onUpdateProduct, onUpdatePlan, onUpdateOrder, onAddPSIRecord, onAddPSIRecordBatch, onCreateSubPlan, onCreateSubPlans, onSplitPlan, initialDetailPlanId, onClearDetailPlanIdFromState }) => {
   const { tenantCtx } = useAuth();
+  const [orderDetailId, setOrderDetailId] = useState<string | null>(null);
+  const canViewOrderDetail = hasOpsPerm(tenantRole, userPermissions, 'production:orders_detail:view');
+  const canEditOrderDetail = hasOpsPerm(tenantRole, userPermissions, 'production:orders_detail:edit');
+  const canDeleteOrderDetail = hasOpsPerm(tenantRole, userPermissions, 'production:orders_detail:delete');
+  const orderDetailFamilyIds = useMemo(() => {
+    if (!orderDetailId) return [] as string[];
+    return getOrderFamilyIds(orders, orderDetailId);
+  }, [orderDetailId, orders]);
+  const orderDetailProdQuery = useQuery({
+    queryKey: ['planOrderDetailProdNarrow', orderDetailId, orderDetailFamilyIds.join(',')],
+    enabled: !!orderDetailId && orderDetailFamilyIds.length > 0,
+    queryFn: async (): Promise<ProductionOpRecord[]> => {
+      const acc: ProductionOpRecord[] = [];
+      let page = 1;
+      const pageSize = 200;
+      const types = 'REWORK,OUTSOURCE,REWORK_REPORT,STOCK_IN';
+      for (;;) {
+        const res = await productionApi.listPage({
+          page,
+          pageSize,
+          types,
+          orderIds: orderDetailFamilyIds.join(','),
+        });
+        const chunk = Array.isArray(res) ? (res as ProductionOpRecord[]) : ((res?.data ?? []) as ProductionOpRecord[]);
+        acc.push(...chunk);
+        const total = Array.isArray(res) ? chunk.length : (res?.total ?? 0);
+        if (chunk.length < pageSize || acc.length >= total) break;
+        page += 1;
+        if (page > 40) break;
+      }
+      return normalizeDecimals(acc);
+    },
+    staleTime: 15_000,
+  });
+  const orderDetailProdRecords = orderDetailProdQuery.data ?? [];
+  const openOrderDetail = useCallback((orderId: string) => {
+    if (!canViewOrderDetail) {
+      toast.warning('无工单详情查看权限');
+      return;
+    }
+    setOrderDetailId(orderId);
+  }, [canViewOrderDetail]);
   const [showModal, setShowModal] = useState(false);
   const [viewDetailPlanId, setViewDetailPlanId] = useState<string | null>(initialDetailPlanId ?? null);
   // 深链同步：已停留在计划单 tab 时，从消息中心/待办再次深链到某计划单，
@@ -732,9 +826,12 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                         <ArrowRightCircle className="w-3.5 h-3.5" /> 补充下达子工单
                       </button>
                     ) : (
-                      <span className="flex items-center px-4 py-2 bg-slate-50 text-slate-600 rounded-xl text-xs font-bold border border-slate-100 select-none" aria-hidden>
-                        已转正式工单
-                      </span>
+                      <PlanLinkedOrderDetailButton
+                        planId={plan.id}
+                        orders={orders}
+                        canView={canViewOrderDetail}
+                        onOpen={openOrderDetail}
+                      />
                     )}
                     </div>
                   </div>
@@ -826,9 +923,12 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                                 <button onClick={() => onConvertToOrder(plan.id)} className="flex items-center gap-1.5 px-4 py-2 bg-amber-500 text-white hover:bg-amber-600 rounded-xl text-xs font-bold border border-amber-400"><ArrowRightCircle className="w-3.5 h-3.5" /> 补充下达子工单</button>
                               )}
                               {!isChild && plan.status === PlanStatus.CONVERTED && !hasUnconvertedSubPlans(plan.id) && (
-                                <span className="flex items-center px-4 py-2 bg-slate-50 text-slate-600 rounded-xl text-xs font-bold border border-slate-100 select-none" aria-hidden>
-                                  已转工单
-                                </span>
+                                <PlanLinkedOrderDetailButton
+                                  planId={plan.id}
+                                  orders={orders}
+                                  canView={canViewOrderDetail}
+                                  onOpen={openOrderDetail}
+                                />
                               )}
                             </div>
                           </div>
@@ -934,9 +1034,12 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                                 <button onClick={() => onConvertToOrder(plan.id)} className="flex items-center gap-1.5 px-4 py-2 bg-amber-500 text-white hover:bg-amber-600 rounded-xl text-xs font-bold border border-amber-400"><ArrowRightCircle className="w-3.5 h-3.5" /> 补充下达子工单</button>
                               )}
                               {!isChild && plan.status === PlanStatus.CONVERTED && !hasUnconvertedSubPlans(plan.id) && (
-                                <span className="flex items-center px-4 py-2 bg-slate-50 text-slate-600 rounded-xl text-xs font-bold border border-slate-100 select-none" aria-hidden>
-                                  已转工单
-                                </span>
+                                <PlanLinkedOrderDetailButton
+                                  planId={plan.id}
+                                  orders={orders}
+                                  canView={canViewOrderDetail}
+                                  onOpen={openOrderDetail}
+                                />
                               )}
                             </div>
                           </div>
@@ -1002,6 +1105,8 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
           onCreateSubPlan={onCreateSubPlan}
           onCreateSubPlans={onCreateSubPlans}
           onSplitPlan={onSplitPlan}
+          onOpenOrderDetail={openOrderDetail}
+          canViewOrderDetail={canViewOrderDetail}
           onImagePreview={(url) => setImagePreviewUrl(url)}
           onFilePreview={(url, type) => { setFilePreviewUrl(url); setFilePreviewType(type); }}
           onPrintRun={setPlanListPrintRun}
@@ -1179,6 +1284,40 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
           products={products}
         />
       )}
+
+      <OrderDetailModal
+        orderId={orderDetailId}
+        onClose={() => setOrderDetailId(null)}
+        orders={orders}
+        products={products}
+        boms={boms}
+        prodRecords={orderDetailProdRecords}
+        dictionaries={dictionaries}
+        categories={categories}
+        orderFormSettings={orderFormSettings}
+        printTemplates={printTemplates}
+        productionLinkMode={productionLinkMode}
+        productMilestoneProgresses={productMilestoneProgresses}
+        outsourceFormSettings={outsourceFormSettings}
+        planFormSettings={planFormSettings}
+        partners={partners}
+        partnerCategories={partnerCategories}
+        userPermissions={userPermissions}
+        tenantRole={tenantRole}
+        onAddRecord={onAddRecord}
+        onAddRecordBatch={onAddRecordBatch
+          ? async (records) => { await onAddRecordBatch(records); }
+          : undefined}
+        onUpdateRecord={onUpdateRecord}
+        onDeleteRecord={onDeleteRecord}
+        onUpdateOrder={canEditOrderDetail ? onUpdateOrder : undefined}
+        onDeleteOrder={canDeleteOrderDetail && onDeleteOrder
+          ? (id) => {
+              onDeleteOrder(id);
+              setOrderDetailId(null);
+            }
+          : undefined}
+      />
 
       {viewProductId && (
         <PlanProductDetail

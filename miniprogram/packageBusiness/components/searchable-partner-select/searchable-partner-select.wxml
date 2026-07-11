@@ -40,15 +40,22 @@
       <text class="sps__sheet-close" bindtap="onClose">关闭</text>
     </view>
 
-    <view class="sps__search-wrap">
-      <image class="sps__search-icon" src="/assets/icons/search.png" mode="aspectFit" />
-      <input
-        class="sps__search-input"
-        value="{{search}}"
-        bindinput="onSearchInput"
-        placeholder="搜索单位名称、联系人..."
-        confirm-type="search"
-      />
+    <view class="sps__search-row">
+      <view class="sps__search-wrap">
+        <image class="sps__search-icon" src="/assets/icons/search.png" mode="aspectFit" />
+        <input
+          class="sps__search-input"
+          value="{{search}}"
+          bindinput="onSearchInput"
+          placeholder="搜索单位名称、联系人..."
+          confirm-type="search"
+        />
+      </view>
+      <view
+        wx:if="{{canQuickCreate}}"
+        class="sps__quick-create-btn"
+        bindtap="onQuickCreateOpen"
+      >+ 新建</view>
     </view>
 
     <scroll-view
@@ -91,6 +98,47 @@
         <text wx:if="{{item.contact}}" class="sps__row-contact">{{item.contact}}</text>
       </view>
     </scroll-view>
+    </view>
+  </view>
+
+  <view wx:if="{{quickCreateOpen}}" class="sps__qc-overlay" catchtouchmove="noop">
+    <view class="sps__qc-mask" bindtap="onQuickCreateClose" catchtouchmove="noop" />
+    <view class="sps__qc-panel" catchtap="noop">
+      <text class="sps__qc-title">快捷新建合作单位</text>
+      <text class="sps__qc-hint">保存后将自动选中；与「基础信息 → 合作单位」使用相同接口。</text>
+
+      <view class="sps__qc-field">
+        <text class="sps__qc-label">单位名称</text>
+        <input
+          class="sps__qc-input"
+          value="{{quickName}}"
+          bindinput="onQuickNameInput"
+          placeholder="请输入单位名称"
+          maxlength="120"
+        />
+      </view>
+
+      <view class="sps__qc-field">
+        <text class="sps__qc-label">合作单位分类</text>
+        <picker
+          mode="selector"
+          range="{{quickCategoryNames}}"
+          value="{{quickCategoryIndex}}"
+          bindchange="onQuickCategoryChange"
+        >
+          <view class="sps__qc-picker {{quickCategoryName ? '' : 'sps__qc-picker--ph'}}">
+            {{quickCategoryName || '请选择分类'}}
+          </view>
+        </picker>
+      </view>
+
+      <view class="sps__qc-actions">
+        <view class="sps__qc-btn sps__qc-btn--ghost" bindtap="onQuickCreateClose">取消</view>
+        <view
+          class="sps__qc-btn sps__qc-btn--primary {{quickSubmitting ? 'sps__qc-btn--disabled' : ''}}"
+          bindtap="onQuickCreateSubmit"
+        >{{quickSubmitting ? '保存中…' : '保存并选用'}}</view>
+      </view>
     </view>
   </view>
 </view>

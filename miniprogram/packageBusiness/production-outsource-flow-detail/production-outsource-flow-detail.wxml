@@ -87,6 +87,7 @@
             placeholder="{{partners.length ? '请选择合作单位' : '暂无合作单位'}}"
             disabled="{{!partners.length}}"
             bind:change="onPartnerChange"
+            bind:created="onPartnerCreated"
           />
           <view class="plan-form-cell">
             <text class="plan-form-cell__label">外协时间</text>

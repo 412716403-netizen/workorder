@@ -651,6 +651,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
                       value={reconPartnerId}
                       onChange={(_, id) => setReconPartnerId(id)}
                       valueMode="id"
+                      allowQuickCreate={false}
                       placeholder="请选择合作单位"
                       triggerClassName={`${psiOrderBillFormPartnerTriggerClassCompact} bg-white border border-slate-200`}
                     />

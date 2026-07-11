@@ -1,13 +1,13 @@
 const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
 const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
-const _require3 = require('../config/productionPlans.js'),PlanDispatchStatus = _require3.PlanDispatchStatus;
+const _require3 = require('../config/productionPlans.js'),PlanStatus = _require3.PlanStatus;
 const _require4 =
 
 
 
 
 
-  require('../utils/productionPlans.js'),mapPlanDetailView = _require4.mapPlanDetailView,planNumbersWithAncestors = _require4.planNumbersWithAncestors,canConvertPlan = _require4.canConvertPlan,normalizeMasterList = _require4.normalizeMasterList,normalizeAppDictionaries = _require4.normalizeAppDictionaries;
+  require('../utils/productionPlans.js'),mapPlanDetailView = _require4.mapPlanDetailView,planNumbersWithAncestors = _require4.planNumbersWithAncestors,canConvertPlan = _require4.canConvertPlan,hasUnconvertedChildPlans = _require4.hasUnconvertedChildPlans,isPlanWorkOrdersDispatched = _require4.isPlanWorkOrdersDispatched,normalizeMasterList = _require4.normalizeMasterList,normalizeAppDictionaries = _require4.normalizeAppDictionaries;
 const _require5 =
 
 
@@ -82,6 +82,8 @@ Page({
     sections: [],
     canConvert: false,
     showConvertBtn: false,
+    showSupplementConvertBtn: false,
+    showFooter: false,
     converting: false,
     statusBarHeight: 20,
     navBarHeight: 44,
@@ -155,22 +157,14 @@ Page({
       const listDisplay = planFormSettings.listDisplay || {};
       const productionLinkMode = config && config.productionLinkMode || 'order';
       const showDeliveryDate = listDisplay.showDeliveryDate === true;
-      const planWorkOrdersDispatched = (plan.derivedStatus || PlanDispatchStatus.NOT_DISPATCHED) !==
-      PlanDispatchStatus.NOT_DISPATCHED;
 
-      const _await$Promise$all2 =
-
-
-
-
-
-        await Promise.all([
+      const _await$Promise$all2 = await Promise.all([
         plan.productId ? getProduct(plan.productId).catch(() => null) : Promise.resolve(null),
         fetchCategoriesAll().then(normalizeMasterList),
         fetchNodesAll().then(normalizeMasterList),
         fetchEquipmentAll().then(normalizeMasterList),
         fetchDictionaries()]
-        ),product = _await$Promise$all2[0],categories = _await$Promise$all2[1],nodes = _await$Promise$all2[2],equipment = _await$Promise$all2[3],dictionariesRaw = _await$Promise$all2[4];
+      ),product = _await$Promise$all2[0],categories = _await$Promise$all2[1],nodes = _await$Promise$all2[2],equipment = _await$Promise$all2[3],dictionariesRaw = _await$Promise$all2[4];
 
       const category = product ? categories.find((c) => c.id === product.categoryId) : null;
       const dictionaries = normalizeAppDictionaries(dictionariesRaw);
@@ -178,6 +172,12 @@ Page({
       const planById = buildPlanById(plan, allPlans);
       const planNumbersForPO = planNumbersWithAncestors(plan, planById);
       const workers = [];
+      const planWorkOrdersDispatched = isPlanWorkOrdersDispatched(plan);
+      const hasUnconvertedChildren = hasUnconvertedChildPlans(plan.id, allPlans);
+      const showConvertBtn = canEdit && canConvertPlan(plan);
+      const showSupplementConvertBtn =
+        canEdit && !plan.parentPlanId && plan.status === PlanStatus.CONVERTED && hasUnconvertedChildren;
+      const showFooter = showConvertBtn || showSupplementConvertBtn;
 
       const view = mapPlanDetailView(plan, {
         product,
@@ -200,8 +200,6 @@ Page({
         planWorkOrdersDispatched,
         materialLoading: true
       });
-
-      const showConvertBtn = canEdit && canConvertPlan(plan);
 
       this._detailCtx = {
         plan,
@@ -228,9 +226,11 @@ Page({
         productHero: view.productHero,
         sections: view.sections,
         canConvert: showConvertBtn,
-        showConvertBtn
+        showConvertBtn,
+        showSupplementConvertBtn,
+        showFooter
       });
-      this.updateScrollHeight(showConvertBtn);
+      this.updateScrollHeight(showFooter);
       wx.setNavigationBarTitle({ title: plan.planNumber || '计划详情' });
 
       this.loadMaterials();
@@ -327,10 +327,14 @@ Page({
   },
 
   onConvertTap() {
-    if (this.data.converting || !this.data.showConvertBtn) return;
+    if (this.data.converting) return;
+    if (!this.data.showConvertBtn && !this.data.showSupplementConvertBtn) return;
+    const isSupplement = this.data.showSupplementConvertBtn;
     wx.showModal({
-      title: '下达工单',
-      content: `确定将计划 ${this.data.planNumber} 下达为生产工单？`,
+      title: isSupplement ? '补充下达子工单' : '下达工单',
+      content: isSupplement ?
+        `确定为计划 ${this.data.planNumber} 补充下达子工单？` :
+        `确定将计划 ${this.data.planNumber} 下达为生产工单？`,
       confirmText: '下达',
       success: (res) => {
         if (res.confirm) this.doConvert();
@@ -341,15 +345,8 @@ Page({
   async doConvert() {
     this.setData({ converting: true });
     try {
-      const result = await convertPlan(this._planId);
+      await convertPlan(this._planId);
       wx.showToast({ title: '已下达工单', icon: 'success' });
-      const firstOrderId = result && result.orderIds && result.orderIds[0];
-      if (firstOrderId) {
-        wx.redirectTo({
-          url: `/packageBusiness/production-order-detail/production-order-detail?id=${encodeURIComponent(firstOrderId)}`
-        });
-        return;
-      }
       await this.loadDetail();
     } catch (err) {
       wx.showToast({

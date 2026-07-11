@@ -12,6 +12,7 @@ const _require0 =
 
   require('../utils/outsourceReceiveAggregates.js'),buildOutsourceReceiveAggregates = _require0.buildOutsourceReceiveAggregates,filterAggregatesByPartner = _require0.filterAggregatesByPartner;
 const _require1 = require('../utils/outsourcePartnerOptions.js'),buildOutsourcePartnerOptions = _require1.buildOutsourcePartnerOptions;
+const { mergePartnerIntoList } = require('../utils/mergePartnerList.js');
 const _require10 = require('../utils/reworkReportPathsLite.js'),listReworkNodeIdsWithPending = _require10.listReworkNodeIdsWithPending;
 const _require11 =
 
@@ -167,6 +168,17 @@ Page({
       this.updatePageTitle();
       this.refreshOutsourcePending();
     });
+  },
+
+  onPartnerCreated(e) {
+    const partner = e.detail && e.detail.partner;
+    if (!partner || !partner.id) return;
+    this._allPartners = mergePartnerIntoList(this._allPartners || [], partner);
+    const partnerOptions = buildOutsourcePartnerOptions(
+      this._allOutsourceAggregates,
+      this._allPartners
+    );
+    this.setData({ partnerOptions });
   },
 
   guardScanConditions() {

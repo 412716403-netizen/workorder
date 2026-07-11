@@ -71,6 +71,7 @@ import PlanPrintOverlays from './PlanPrintOverlays';
 import PlanSplitModal from './PlanSplitModal';
 import PlanProcessRouteModal from './PlanProcessRouteModal';
 import { SupplierSelect } from '../../components/SupplierSelect';
+import { resolvePrimaryOrderIdForPlan } from '../../utils/resolvePrimaryOrderIdForPlan';
 import {
   formStandardControlClass,
   formStandardLabelClass,
@@ -145,6 +146,9 @@ export interface PlanDetailPanelProps {
     planId: string,
     items: Array<{ variantId?: string; quantity: number }>,
   ) => Promise<{ sourcePlan: PlanOrder; newPlan: PlanOrder } | null>;
+  /** 已下达工单：打开关联工单详情 */
+  onOpenOrderDetail?: (orderId: string) => void;
+  canViewOrderDetail?: boolean;
 
   // Shared UI actions
   onImagePreview: (url: string) => void;
@@ -188,6 +192,8 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   onCreateSubPlan,
   onCreateSubPlans,
   onSplitPlan,
+  onOpenOrderDetail,
+  canViewOrderDetail = false,
   onImagePreview,
   onFilePreview,
   onPrintRun,
@@ -1581,7 +1587,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                               </div>
                             </th>
                             <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">计算缺料数</th>
-                            <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center min-w-[140px]">计划用量</th>
+                            <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center min-w-[140px]">计划采购量</th>
                             <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center min-w-[220px]">状态</th>
                          </tr>
                       </thead>
@@ -2090,6 +2096,22 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                      className="px-4 py-2 text-sm font-black text-white bg-amber-500 hover:bg-amber-600 rounded-xl flex items-center gap-2 shadow-md active:scale-[0.98] transition-all"
                    >
                      <ArrowRightCircle className="w-4 h-4" /> 补充下达子工单
+                   </button>
+                 )}
+                 {planWorkOrdersDispatched && canViewOrderDetail && onOpenOrderDetail && !hasUnconvertedSubPlans(viewPlan.id) && (
+                   <button
+                     type="button"
+                     onClick={() => {
+                       const orderId = resolvePrimaryOrderIdForPlan(viewPlan.id, orders);
+                       if (!orderId) {
+                         toast.warning('未找到关联工单，请刷新后重试');
+                         return;
+                       }
+                       onOpenOrderDetail(orderId);
+                     }}
+                     className="px-4 py-2 text-sm font-black text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl flex items-center gap-2 border border-indigo-200 active:scale-[0.98] transition-all"
+                   >
+                     <FileText className="w-4 h-4" /> 工单详情
                    </button>
                  )}
                  <button

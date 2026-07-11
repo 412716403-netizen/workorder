@@ -306,14 +306,12 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
   const [matDispatchPartnerOptions, setMatDispatchPartnerOptions] = useState<string[]>([]);
   const [matDispatchPartner, setMatDispatchPartner] = useState('');
   const [matDispatchWarehouseId, setMatDispatchWarehouseId] = useState('');
-  const [matDispatchRemark, setMatDispatchRemark] = useState('');
   const [matDispatchQty, setMatDispatchQty] = useState<Record<string, number>>({});
   const [matReturnOrderId, setMatReturnOrderId] = useState<string | null>(null);
   const [matReturnProductId, setMatReturnProductId] = useState<string | null>(null);
   const [matReturnPartnerOptions, setMatReturnPartnerOptions] = useState<string[]>([]);
   const [matReturnPartner, setMatReturnPartner] = useState('');
   const [matReturnWarehouseId, setMatReturnWarehouseId] = useState('');
-  const [matReturnRemark, setMatReturnRemark] = useState('');
   const [matReturnQty, setMatReturnQty] = useState<Record<string, number>>({});
   /** 外协物料发出/退回保存后，与「生产物料」页一致的物料单据详情 */
   const [stockDocDetail, setStockDocDetail] = useState<StockDocDetail | null>(null);
@@ -1493,7 +1491,6 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
                               warehouses[0]?.id ?? '',
                             ) || '',
                           );
-                          setMatDispatchRemark('');
                           setMatDispatchQty({});
                           if (productionLinkMode === 'product') {
                             setMatDispatchProductId(productId);
@@ -1531,7 +1528,6 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
                               warehouses[0]?.id ?? '',
                             ) || '',
                           );
-                          setMatReturnRemark('');
                           setMatReturnQty({});
                           if (productionLinkMode === 'product') {
                             setMatReturnProductId(productId);
@@ -1573,8 +1569,6 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
           setMatDispatchPartner={setMatDispatchPartner}
           matDispatchWarehouseId={matDispatchWarehouseId}
           setMatDispatchWarehouseId={setMatDispatchWarehouseId}
-          matDispatchRemark={matDispatchRemark}
-          setMatDispatchRemark={setMatDispatchRemark}
           matDispatchQty={matDispatchQty}
           setMatDispatchQty={setMatDispatchQty}
           orders={orders}
@@ -1593,7 +1587,6 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
             setMatDispatchProductId(null);
             setMatDispatchQty({});
             setMatDispatchPartner('');
-            setMatDispatchRemark('');
           }}
           psiRecords={psiRecords}
         />
@@ -1610,8 +1603,6 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
           setMatReturnPartner={setMatReturnPartner}
           matReturnWarehouseId={matReturnWarehouseId}
           setMatReturnWarehouseId={setMatReturnWarehouseId}
-          matReturnRemark={matReturnRemark}
-          setMatReturnRemark={setMatReturnRemark}
           matReturnQty={matReturnQty}
           setMatReturnQty={setMatReturnQty}
           orders={orders}
@@ -1629,7 +1620,6 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
             setMatReturnProductId(null);
             setMatReturnQty({});
             setMatReturnPartner('');
-            setMatReturnRemark('');
           }}
           psiRecords={psiRecords}
         />
@@ -1643,6 +1633,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
         orders={orders}
         products={products}
         warehouses={warehouses}
+        categories={categories}
         dictionaries={dictionaries}
         materialFormSettings={materialFormSettings}
         printTemplates={printTemplates}

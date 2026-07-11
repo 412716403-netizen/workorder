@@ -32,6 +32,7 @@ const _require6 = require('../utils/orderApi.js'),fetchWorkersAll = _require6.fe
 const _require7 = require('../utils/productionPlans.js'),normalizeList = _require7.normalizeMasterList;
 const _require8 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require8.readNavBarMetrics,readWindowMetrics = _require8.readWindowMetrics,computePlanCreateHeaderHeight = _require8.computePlanCreateHeaderHeight;
 const _require9 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require9.LIST_ROUTES,afterSaveReturnToList = _require9.afterSaveReturnToList;
+const { applyPartnerCreatedOnPage } = require('../utils/mergePartnerList.js');
 
 function findIndexById(ids, id) {
   if (!id) return 0;
@@ -221,6 +222,10 @@ Page({
   onPartnerChange(e) {
     const detail = e.detail || {};
     this.patchForm({ partner: detail.name || detail.value || '' });
+  },
+
+  onPartnerCreated(e) {
+    applyPartnerCreatedOnPage(this, e);
   },
 
   onWorkerChange(e) {

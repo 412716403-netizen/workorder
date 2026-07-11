@@ -63,6 +63,7 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
   const [stockFlowFilterOrderKeyword, setStockFlowFilterOrderKeyword] = useState('');
   const [stockFlowFilterProductKeyword, setStockFlowFilterProductKeyword] = useState('');
   const [stockFlowFilterDocNo, setStockFlowFilterDocNo] = useState('');
+  const [stockFlowFilterPartner, setStockFlowFilterPartner] = useState('');
   const [stockFlowFilterDateFrom, setStockFlowFilterDateFrom] = useState(todayDate);
   const [stockFlowFilterDateTo, setStockFlowFilterDateTo] = useState(todayDate);
   const [scopedOrderIds, setScopedOrderIds] = useState('');
@@ -75,6 +76,7 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
       setStockFlowFilterOrderKeyword(initialSeed.orderKeyword ?? initialSeed.productKeyword ?? '');
       setStockFlowFilterProductKeyword('');
       setStockFlowFilterDocNo('');
+      setStockFlowFilterPartner('');
       setStockFlowFilterType('all');
       setStockFlowFilterDateFrom(initialSeed.dateFrom ?? (scoped ? '' : todayDate));
       setStockFlowFilterDateTo(initialSeed.dateTo ?? (scoped ? '' : todayDate));
@@ -84,6 +86,7 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
       setStockFlowFilterOrderKeyword('');
       setStockFlowFilterProductKeyword('');
       setStockFlowFilterDocNo('');
+      setStockFlowFilterPartner('');
       setStockFlowFilterType('all');
       setStockFlowFilterDateFrom(todayDate);
       setStockFlowFilterDateTo(todayDate);
@@ -153,6 +156,10 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
       const kw = stockFlowFilterDocNo.trim().toLowerCase();
       list = list.filter(r => ((r.docNo ?? '').toLowerCase()).includes(kw));
     }
+    if (stockFlowFilterPartner.trim()) {
+      const kw = stockFlowFilterPartner.trim().toLowerCase();
+      list = list.filter(r => ((r.partner ?? '').toLowerCase()).includes(kw));
+    }
     if (stockFlowFilterDateFrom) {
       const from = stockFlowFilterDateFrom;
       list = list.filter(r => {
@@ -182,6 +189,7 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
     stockFlowFilterOrderKeyword,
     stockFlowFilterProductKeyword,
     stockFlowFilterDocNo,
+    stockFlowFilterPartner,
     stockFlowFilterDateFrom,
     stockFlowFilterDateTo,
     scopedOrderIds,
@@ -213,7 +221,7 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
             <span className="text-xs font-bold text-slate-500 uppercase">筛选</span>
             <span className="text-[10px] text-slate-400">{filterHint}</span>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
             <div>
               <label className="text-[10px] font-bold text-slate-400 block mb-1">日期起</label>
               <input
@@ -291,6 +299,16 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
                 className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200"
               />
             </div>
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 block mb-1">外协工厂</label>
+              <input
+                type="text"
+                value={stockFlowFilterPartner}
+                onChange={e => setStockFlowFilterPartner(e.target.value)}
+                placeholder="模糊搜索"
+                className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200"
+              />
+            </div>
           </div>
           {stockFlowQuery.isFetching && (
           <div className="mt-2 flex items-center gap-4">
@@ -336,7 +354,6 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
                     <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">物料</th>
                     <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap">数量</th>
                     <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">外协工厂</th>
-                    <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">原因/备注</th>
                     <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap w-24">操作</th>
                   </tr>
                 </thead>
@@ -397,7 +414,6 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
                         </td>
                         <td className="px-4 py-3 text-right font-black text-indigo-600">{rec.quantity}</td>
                         <td className="px-4 py-3 text-xs font-bold text-teal-700 whitespace-nowrap">{rec.partner ?? '—'}</td>
-                        <td className="px-4 py-3 text-xs text-slate-500 max-w-[180px] truncate">{rec.reason ?? '—'}</td>
                         <td className="px-4 py-3">
                           {docNo && hasOpsPerm(tenantRole, userPermissions, 'production:material_records:view') ? (
                             <button

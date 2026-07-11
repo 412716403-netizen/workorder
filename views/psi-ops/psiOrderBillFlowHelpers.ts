@@ -17,12 +17,7 @@ export const PSI_ORDER_BILL_FLOW_LABELS: Record<PsiRecordType, string> = {
 };
 
 export type PurchaseOrderLineFlowStatus = 'none' | 'partial' | 'completed' | 'over_received';
-export type SalesOrderLineFlowStatus =
-  | 'unallocated'
-  | 'allocated'
-  | 'pending_ship'
-  | 'fully_shipped'
-  | 'over_allocated';
+export type SalesOrderLineFlowStatus = 'not_shipped' | 'partial_shipped' | 'fully_shipped';
 
 export const PURCHASE_ORDER_FLOW_STATUS_FILTER_OPTIONS = [
   { value: 'all', label: '全部' },
@@ -33,8 +28,8 @@ export const PURCHASE_ORDER_FLOW_STATUS_FILTER_OPTIONS = [
 
 export const SALES_ORDER_FLOW_STATUS_FILTER_OPTIONS = [
   { value: 'all', label: '全部' },
-  { value: 'unallocated', label: '未配货' },
-  { value: 'allocated', label: '已配货' },
+  { value: 'not_shipped', label: '未发货' },
+  { value: 'partial_shipped', label: '发部分' },
   { value: 'fully_shipped', label: '已发齐' },
 ] as const;
 
@@ -46,11 +41,9 @@ export const PURCHASE_ORDER_FLOW_STATUS_BADGE_CLASS: Record<PurchaseOrderLineFlo
 };
 
 export const SALES_ORDER_FLOW_STATUS_BADGE_CLASS: Record<SalesOrderLineFlowStatus, string> = {
-  unallocated: 'bg-slate-100 text-slate-600',
-  allocated: 'bg-indigo-100 text-indigo-800',
-  pending_ship: 'bg-sky-100 text-sky-800',
+  not_shipped: 'bg-slate-100 text-slate-600',
+  partial_shipped: 'bg-indigo-100 text-indigo-800',
   fully_shipped: 'bg-emerald-100 text-emerald-800',
-  over_allocated: 'bg-rose-100 text-rose-800',
 };
 
 export interface PsiOrderBillFlowSummaryRow {
@@ -142,28 +135,20 @@ export function resolvePurchaseOrderLineFlowStatus(
   return { statusKey: 'none', statusLabel: '未入库' };
 }
 
-/** 销售订单行组配货/发货状态（与 PSIOpsView 配货进度列口径一致） */
+/** 销售订单行组发货状态（流水列表/筛选：按已发相对订货；超发并入已发齐） */
 export function resolveSalesOrderLineFlowStatus(
   items: PsiRecord[],
 ): { statusKey: SalesOrderLineFlowStatus; statusLabel: string } {
   const orderQty = lineGroupTotalQty(items);
-  const allocatedQty = items.reduce((s, i) => s + formatPsiQtyDisplay(i.allocatedQuantity), 0);
   const shippedQty = items.reduce((s, i) => s + formatPsiQtyDisplay(i.shippedQuantity), 0);
-  const allocPendingQty = Math.max(0, allocatedQty - shippedQty);
 
-  if (orderQty > 0 && allocatedQty > orderQty) {
-    return { statusKey: 'over_allocated', statusLabel: '超配' };
-  }
   if (orderQty > 0 && shippedQty >= orderQty) {
     return { statusKey: 'fully_shipped', statusLabel: '已发齐' };
   }
-  if (allocPendingQty > 0) {
-    return { statusKey: 'pending_ship', statusLabel: '有待发' };
+  if (shippedQty > 0) {
+    return { statusKey: 'partial_shipped', statusLabel: '发部分' };
   }
-  if (allocatedQty > 0) {
-    return { statusKey: 'allocated', statusLabel: '已配货' };
-  }
-  return { statusKey: 'unallocated', statusLabel: '未配货' };
+  return { statusKey: 'not_shipped', statusLabel: '未发货' };
 }
 
 function buildRowFromLineGroup(

@@ -1,7 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { ScrollText, FileText, Filter } from 'lucide-react';
 import { ProductionOrder, Product, PlanFormSettings } from '../types';
-import { STATUS_COLORS, ORDER_STATUS_MAP } from '../constants';
 import { formatOrderFlowPlacedDisplay, localTodayYmd, toLocalDateYmd, YMD_ONLY } from '../utils/localDateTime';
 import FlowListSummaryFooter from '../components/flow/FlowListSummaryFooter';
 import FlowListTableShell from '../components/flow/FlowListTableShell';
@@ -35,7 +34,6 @@ interface OrderFlowViewProps {
   products: Product[];
   /** 嵌入弹窗时隐藏主标题，避免重复 */
   embedded?: boolean;
-  /** 关联产品模式下隐藏单据状态列 */
   productionLinkMode?: 'order' | 'product';
   /** 从产品卡片打开时传入，用于预填产品名称筛选 */
   initialProductId?: string | null;
@@ -55,7 +53,6 @@ const OrderFlowView: React.FC<OrderFlowViewProps> = ({
   planFormSettings,
 }) => {
   const todayDate = useMemo(() => localTodayYmd(), []);
-  const showStatus = productionLinkMode !== 'product';
   const showDueDate =
     productionLinkMode !== 'product' && planFormSettings?.listDisplay?.showDeliveryDate === true;
 
@@ -197,9 +194,6 @@ const OrderFlowView: React.FC<OrderFlowViewProps> = ({
                 <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">工单号</th>
                 <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">产品</th>
                 <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap">数量</th>
-                {showStatus && (
-                  <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">状态</th>
-                )}
                 {showDueDate && (
                   <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">交期</th>
                 )}
@@ -225,17 +219,6 @@ const OrderFlowView: React.FC<OrderFlowViewProps> = ({
                       />
                     </td>
                     <td className="px-4 py-3 text-right font-black text-indigo-600 whitespace-nowrap">{totalQty}</td>
-                    {showStatus && (
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            STATUS_COLORS[order.status] || 'bg-slate-100 text-slate-600'
-                          }`}
-                        >
-                          {ORDER_STATUS_MAP[order.status]?.label ?? order.status}
-                        </span>
-                      </td>
-                    )}
                     {showDueDate && (
                       <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
                         {order.dueDate ? toLocalDateYmd(order.dueDate) || order.dueDate : '—'}

@@ -21,7 +21,7 @@ const _require6 =
 
 
 
-  require('../utils/materialStockPanel.js'),buildMaterialPanelCards = _require6.buildMaterialPanelCards,paginateCards = _require6.paginateCards,paginatePartnerGroups = _require6.paginatePartnerGroups,decorateCards = _require6.decorateCards,decoratePartnerGroups = _require6.decoratePartnerGroups,findCardInPartnerGroups = _require6.findCardInPartnerGroups,DEFAULT_PAGE_SIZE = _require6.DEFAULT_PAGE_SIZE,PARTNER_PAGE_SIZE = _require6.PARTNER_PAGE_SIZE,INTERNAL_PARTNER_KEY = _require6.INTERNAL_PARTNER_KEY,hasMaterialModuleAccess = _require6.hasMaterialModuleAccess;
+  require('../utils/materialStockPanel.js'),buildMaterialPanelCards = _require6.buildMaterialPanelCards,paginateCards = _require6.paginateCards,paginatePartnerGroups = _require6.paginatePartnerGroups,decorateCards = _require6.decorateCards,decoratePartnerGroups = _require6.decoratePartnerGroups,aggregateCardMaterialRows = _require6.aggregateCardMaterialRows,findCardInPartnerGroups = _require6.findCardInPartnerGroups,DEFAULT_PAGE_SIZE = _require6.DEFAULT_PAGE_SIZE,PARTNER_PAGE_SIZE = _require6.PARTNER_PAGE_SIZE,INTERNAL_PARTNER_KEY = _require6.INTERNAL_PARTNER_KEY,hasMaterialModuleAccess = _require6.hasMaterialModuleAccess;
 const _require7 =
 
 
@@ -48,6 +48,8 @@ Page({
     canViewFlow: false,
     hasMore: false,
     totalCards: 0,
+    listViewMode: 'order',
+    flatMaterialRows: [],
     statusBarHeight: 20,
     navBarHeight: 44,
     headerBlockHeight: 88
@@ -72,6 +74,7 @@ Page({
     }
     this._page = 1;
     this._selectState = { partnerKey: '', scopeKey: '', mode: '', selectedIds: new Set() };
+    this._listViewMode = 'order';
     this.setData({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
@@ -128,6 +131,15 @@ Page({
     this.setData({ searchKeyword: '' });
     this._page = 1;
     this.rebuildCards();
+  },
+
+  onListViewModeTap(e) {
+    const mode = e.currentTarget.dataset.mode;
+    if (mode !== 'order' && mode !== 'material') return;
+    this._listViewMode = mode;
+    this._page = 1;
+    this._selectState = { partnerKey: '', scopeKey: '', mode: '', selectedIds: new Set() };
+    this.applyPagination();
   },
 
   onStartSelectTap(e) {
@@ -323,16 +335,34 @@ Page({
 
   applyPagination() {
     const emptyText = this.data.searchKeyword ? '无匹配项' : '暂无物料数据';
+    const listViewMode = this._listViewMode || 'order';
     if (this._groupByPartner) {
       const paginated = paginatePartnerGroups(this._allPartnerGroups, this._page, PARTNER_PAGE_SIZE);
-      const partnerGroups = decoratePartnerGroups(paginated.rows, this._selectState);
+      const partnerGroups = decoratePartnerGroups(paginated.rows, this._selectState, listViewMode);
       this.setData({
         loading: false,
         groupByPartner: true,
+        listViewMode,
+        flatMaterialRows: [],
         partnerGroups,
         cards: [],
         hasMore: paginated.hasMore,
         totalCards: paginated.total,
+        emptyText
+      });
+      return;
+    }
+    if (listViewMode === 'material') {
+      const flatMaterialRows = aggregateCardMaterialRows(this._allCards || []);
+      this.setData({
+        loading: false,
+        groupByPartner: false,
+        listViewMode: 'material',
+        flatMaterialRows,
+        partnerGroups: [],
+        cards: [],
+        hasMore: false,
+        totalCards: flatMaterialRows.length,
         emptyText
       });
       return;
@@ -342,6 +372,8 @@ Page({
     this.setData({
       loading: false,
       groupByPartner: false,
+      listViewMode: 'order',
+      flatMaterialRows: [],
       partnerGroups: [],
       cards,
       hasMore: paginated.hasMore,

@@ -275,6 +275,16 @@ const ProductionManagementView: React.FC = () => {
             onUpdatePrintTemplates={onUpdatePrintTemplates}
             onRefreshPrintTemplates={onRefreshPrintTemplates}
             orders={orders}
+            orderFormSettings={orderFormSettings}
+            outsourceFormSettings={outsourceFormSettings}
+            productMilestoneProgresses={productMilestoneProgresses}
+            onAddRecord={hasProdPerm('production:material_records:create') ? onAddRecord : undefined}
+            onAddRecordBatch={hasProdPerm('production:material_records:create') ? onAddRecordBatch : undefined}
+            onUpdateRecord={hasProdPerm('production:material_records:edit') ? onUpdateRecord : undefined}
+            onDeleteRecord={hasProdPerm('production:material_records:delete') ? onDeleteRecord : undefined}
+            onDeleteOrder={hasProdPerm('production:orders_detail:delete') ? onDeleteOrder : undefined}
+            userPermissions={userPermissions}
+            tenantRole={tenantRole}
             onCreatePlan={hasProdPerm('production:plans:create') ? onCreatePlan : undefined as any}
             onUpdateProduct={onUpdateProduct}
             onUpdatePlan={hasProdPerm('production:plans:edit') ? onUpdatePlan : undefined}

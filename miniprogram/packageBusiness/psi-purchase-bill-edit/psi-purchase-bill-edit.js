@@ -37,6 +37,7 @@ const _require9 =
   require('../utils/planApi.js'),fetchProductsAll = _require9.fetchProductsAll,fetchCategoriesAll = _require9.fetchCategoriesAll,fetchPartnersAll = _require9.fetchPartnersAll,fetchPartnerCategoriesAll = _require9.fetchPartnerCategoriesAll,fetchDictionaries = _require9.fetchDictionaries;
 const _require0 = require('../utils/orderApi.js'),fetchWarehousesAll = _require0.fetchWarehousesAll;
 const _require1 = require('../utils/productionPlans.js'),normalizeAppDictionaries = _require1.normalizeAppDictionaries,normalizeMasterList = _require1.normalizeMasterList;
+const { applyPartnerCreatedOnPage } = require('../utils/mergePartnerList.js');
 const _require10 =
 
 
@@ -294,6 +295,10 @@ Page({
     const _ref = e.detail || {},name = _ref.name,id = _ref.id;
     this._form = { ...this._form, partner: name || '', partnerId: id || '' };
     this.refreshLinesUi();
+  },
+
+  onPartnerCreated(e) {
+    applyPartnerCreatedOnPage(this, e);
   },
 
   onAddLine() {

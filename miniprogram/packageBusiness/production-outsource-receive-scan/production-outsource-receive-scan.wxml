@@ -21,6 +21,7 @@
           value="{{scanPartnerName}}"
           placeholder="请选择加工厂"
           bind:change="onScanPartnerChange"
+          bind:created="onPartnerCreated"
         />
       </view>
 

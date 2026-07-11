@@ -38,6 +38,7 @@ const _require11 =
   require('../utils/matrixQtyKeyboard.js'),activateMatrixKeyboardCell = _require11.activateMatrixKeyboardCell,applyMatrixKeyboardKey = _require11.applyMatrixKeyboardKey,buildMatrixKeyboardPreview = _require11.buildMatrixKeyboardPreview,createMatrixKeyboardInputSession = _require11.createMatrixKeyboardInputSession,getNextMatrixVariantIdInColumn = _require11.getNextMatrixVariantIdInColumn,getNextMatrixVariantIdInRow = _require11.getNextMatrixVariantIdInRow;
 const _require12 = require('../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require12.afterMatrixKeyboardOpen;
 const _require13 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require13.LIST_ROUTES,afterSaveReturnToList = _require13.afterSaveReturnToList;
+const { applyPartnerCreatedOnPage } = require('../utils/mergePartnerList.js');
 const _require14 =
 
 
@@ -227,6 +228,10 @@ Page({
   onPartnerChange(e) {
     const name = e.detail && e.detail.name ? String(e.detail.name) : '';
     this.setData({ partnerName: name });
+  },
+
+  onPartnerCreated(e) {
+    applyPartnerCreatedOnPage(this, e, { cacheKey: '_partners' });
   },
 
   onQtyInput(e) {

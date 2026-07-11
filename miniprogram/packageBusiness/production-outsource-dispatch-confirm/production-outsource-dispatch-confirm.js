@@ -29,6 +29,7 @@ const _require1 = require('../utils/pendingStockBadge.js'),fetchAllOrdersPaginat
 const _require10 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require10.readNavBarMetrics,readWindowMetrics = _require10.readWindowMetrics,computeSimplePlanHeaderHeight = _require10.computeSimplePlanHeaderHeight,computeFixedFooterInsetPx = _require10.computeFixedFooterInsetPx;
 const _require11 = require('../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require11.afterMatrixKeyboardOpen;
 const _require12 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require12.LIST_ROUTES,afterSaveReturnToList = _require12.afterSaveReturnToList;
+const { applyPartnerCreatedOnPage } = require('../utils/mergePartnerList.js');
 
 function computeScrollHeight(nav) {
   const win = readWindowMetrics();
@@ -193,6 +194,10 @@ Page({
   onPartnerChange(e) {
     const name = e.detail && e.detail.name ? String(e.detail.name) : '';
     this.setData({ partnerName: name });
+  },
+
+  onPartnerCreated(e) {
+    applyPartnerCreatedOnPage(this, e, { cacheKey: '_partners' });
   },
 
   onDeliveryDateChange(e) {

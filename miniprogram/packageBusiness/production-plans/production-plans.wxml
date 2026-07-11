@@ -147,7 +147,35 @@
             <text class="plan-list-progress__text {{item.progressComplete || item.progressOverReceived ? 'plan-list-progress__text--done' : ''}}">{{item.progressLabel}}</text>
           </view>
         </view>
-        <text class="st-chevron plan-list-row__chevron">›</text>
+        <view wx:if="{{item.showActions}}" class="plan-list-row__actions">
+          <view
+            wx:if="{{item.showDetailBtn}}"
+            class="plan-list-row__action plan-list-row__action--detail"
+            catchtap="onDetailTap"
+            data-id="{{item.id}}"
+          >详情</view>
+          <view
+            wx:if="{{item.showConvertBtn}}"
+            class="plan-list-row__action plan-list-row__action--convert"
+            catchtap="onConvertTap"
+            data-id="{{item.id}}"
+          >下达工单</view>
+          <view
+            wx:if="{{item.showSupplementConvertBtn}}"
+            class="plan-list-row__action plan-list-row__action--supplement"
+            catchtap="onConvertTap"
+            data-id="{{item.id}}"
+          >补充下达</view>
+          <view
+            wx:if="{{item.showOrderDetailBtn}}"
+            class="plan-list-row__action plan-list-row__action--order"
+            catchtap="onOrderDetailTap"
+            data-id="{{item.id}}"
+            data-order-id="{{item.linkedOrderId}}"
+            data-plan-id="{{item.id}}"
+          >工单详情</view>
+        </view>
+        <text wx:else class="st-chevron plan-list-row__chevron">›</text>
       </view>
     </view>
 

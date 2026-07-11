@@ -52,7 +52,6 @@ import {
 import { toast } from 'sonner';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { isProductProcessLocked, milestoneNodeIdsEqual } from '../../shared/productProcessLock';
-import { sortNodeIdsByGlobalOrder } from '../../utils/globalNodeOrder';
 import { isProductEnabled } from '../../utils/productEnabled';
 import * as api from '../../services/api';
 import { SearchableProductSelect } from '../../components/SearchableProductSelect';
@@ -1045,7 +1044,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
     }
     setWorkingProduct({
       ...workingProduct,
-      milestoneNodeIds: sortNodeIdsByGlobalOrder(current, globalNodes),
+      milestoneNodeIds: current,
     });
   };
 

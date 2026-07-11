@@ -28,6 +28,7 @@
           placeholder="{{partners.length ? '请选择合作单位' : '暂无合作单位'}}"
           disabled="{{!partners.length}}"
           bind:change="onPartnerChange"
+          bind:created="onPartnerCreated"
         />
         <picker wx:if="{{showDeliveryDate}}" mode="date" value="{{deliveryDate}}" bindchange="onDeliveryDateChange">
           <view class="plan-form-cell plan-form-cell--last">

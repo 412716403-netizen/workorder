@@ -35,8 +35,6 @@ export interface OutsourceMaterialReturnModalProps {
   setMatReturnPartner: React.Dispatch<React.SetStateAction<string>>;
   matReturnWarehouseId: string;
   setMatReturnWarehouseId: React.Dispatch<React.SetStateAction<string>>;
-  matReturnRemark: string;
-  setMatReturnRemark: React.Dispatch<React.SetStateAction<string>>;
   matReturnQty: Record<string, number>;
   setMatReturnQty: React.Dispatch<React.SetStateAction<Record<string, number>>>;
   orders: ProductionOrder[];
@@ -63,8 +61,6 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
   setMatReturnPartner,
   matReturnWarehouseId,
   setMatReturnWarehouseId,
-  matReturnRemark,
-  setMatReturnRemark,
   matReturnQty,
   setMatReturnQty,
   orders,
@@ -350,7 +346,6 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
         partner: matReturnPartner,
         warehouseId: matReturnWarehouseId || undefined,
         docNo,
-        reason: matReturnRemark.trim() || undefined,
         sourceProductId: isProductMode ? (targetProductId ?? undefined) : undefined,
         ...(bn ? { batchNo: bn } : {}),
         ...collabExtra,
@@ -387,7 +382,6 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
         const bn = categoryUsesBatchManagement(c) ? clampBatchNoInput(lineBatchByProduct[m.productId] ?? '') : '';
         return { productId: m.productId, quantity: matReturnQty[m.productId], ...(bn ? { batchNo: bn } : {}) };
       }),
-      reason: matReturnRemark.trim() || undefined,
       operator: docOperator,
       partner: matReturnPartner,
     };
@@ -467,16 +461,6 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
                 </select>
               </div>
             )}
-          </div>
-          <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">备注说明</label>
-            <input
-              type="text"
-              value={matReturnRemark}
-              onChange={e => setMatReturnRemark(e.target.value)}
-              placeholder="选填"
-              className={`${psiOrderBillCompactLineInputClass} bg-white placeholder:text-slate-400`}
-            />
           </div>
           {materialCustomFieldDefs.length > 0 ? (
             <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-4">

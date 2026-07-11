@@ -1,4 +1,4 @@
-const _require = require('../utils/planApi.js'),fetchDictionaries = _require.fetchDictionaries;
+const _require = require('../utils/planApi.js'),fetchDictionaries = _require.fetchDictionaries,fetchCategoriesAll = _require.fetchCategoriesAll;
 const _require2 = require('../../utils/session.js'),readTenantCtx = _require2.readTenantCtx;
 const _require3 = require('../../utils/permissions.js'),hasPermission = _require3.hasPermission;
 const _require4 =
@@ -101,6 +101,7 @@ Page({
       productMap: this._productMap,
       warehouseMap: this._warehouseMap,
       orderMap: this._orderMap,
+      categoryMap: this._categoryMap,
       productionLinkMode: this._productionLinkMode,
       dictionaries: this._dictionaries
     });
@@ -122,17 +123,20 @@ Page({
         fetchTenantConfig().catch(() => ({})),
         fetchAllOrdersPaginated({}).catch(() => []),
         fetchProductsAll().catch(() => []),
+        fetchCategoriesAll().catch(() => []),
         fetchWarehousesAll().catch(() => []),
         fetchDictionaries().catch(() => ({})),
         fetchProductionRecords({
           docNo: this._docNo,
           types: 'STOCK_OUT,STOCK_RETURN'
         }).catch(() => [])]
-        ),config = _await$Promise$all[0],orders = _await$Promise$all[1],productsRaw = _await$Promise$all[2],warehousesRaw = _await$Promise$all[3],dictionariesRaw = _await$Promise$all[4],recordsRaw = _await$Promise$all[5];
+        ),config = _await$Promise$all[0],orders = _await$Promise$all[1],productsRaw = _await$Promise$all[2],categoriesRaw = _await$Promise$all[3],warehousesRaw = _await$Promise$all[4],dictionariesRaw = _await$Promise$all[5],recordsRaw = _await$Promise$all[6];
 
       this._productionLinkMode = config && config.productionLinkMode || 'order';
       const products = normalizeMasterList(productsRaw);
       this._productMap = new Map(products.map((p) => [p.id, p]));
+      const categories = normalizeMasterList(categoriesRaw);
+      this._categoryMap = new Map(categories.map((c) => [c.id, c]));
       this._orderMap = new Map((orders || []).map((o) => [o.id, o]));
       const warehouses = Array.isArray(warehousesRaw) ? warehousesRaw : warehousesRaw.data || [];
       this._warehouseMap = new Map(warehouses.map((w) => [w.id, w]));

@@ -1,6 +1,5 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { SearchablePartnerSelect } from './SearchablePartnerSelect';
-import { getSupplierCategoryId } from '../utils/resolvePartnerCategoryId';
 import { formStandardPartnerTriggerClass } from '../styles/uiDensity';
 import type { Partner, PartnerCategory } from '../types';
 
@@ -16,7 +15,7 @@ export type SupplierSelectProps = Omit<BaseProps, 'placeholder'> & {
 /**
  * 采购/外协/产品档案默认供应商等场景入口：列表与 `PartnerSelect` 相同，**展示全部分类的合作单位**（下拉里「全部 + 各分类」Tab）。
  * 需要仅某一分类时，可给底层传 `onlyCategoryId`。
- * `allowQuickCreate` 时，未指定 `quickCreateCategoryId` 则默认落在 `getSupplierCategoryId` 解析的「供应商」分类。
+ * `allowQuickCreate` 时可在下拉内快捷新建；分类由用户在弹窗内手动选择（除非显式传入 `quickCreateCategoryId`）。
  *
  * 样式默认与进销存「采购订单」合作单位一致：`compact` + `psiOrderBillFormPartnerTriggerClassCompact`。
  */
@@ -31,13 +30,12 @@ export function SupplierSelect({
   triggerClassName = formStandardPartnerTriggerClass,
   ...rest
 }: SupplierSelectProps) {
-  const supplierCategoryId = useMemo(() => getSupplierCategoryId(categories), [categories]);
   return (
     <SearchablePartnerSelect
       options={options}
       categories={categories}
       allowQuickCreate={allowQuickCreate}
-      quickCreateCategoryId={quickCreateCategoryId ?? supplierCategoryId}
+      quickCreateCategoryId={quickCreateCategoryId}
       placeholder={placeholder ?? '选择供应商…'}
       compact={compact}
       showCategoryHint={showCategoryHint}

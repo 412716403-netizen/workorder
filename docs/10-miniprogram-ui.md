@@ -431,7 +431,7 @@ npm run miniprogram:icons
 | 销售订单 Hub | [`packageBusiness/psi-sales-orders/`](../miniprogram/packageBusiness/psi-sales-orders/) | 按单号分组卡片列表、搜索/仅未发齐筛选、行级配货/发货进度预览、新建入口 |
 | 销售订单详情 | [`packageBusiness/psi-sales-order-detail/`](../miniprogram/packageBusiness/psi-sales-order-detail/) | 客户/单号/明细/行级进度；配货入口；编辑/删除 |
 | 登记/编辑 | [`packageBusiness/psi-sales-order-edit/`](../miniprogram/packageBusiness/psi-sales-order-edit/) | 客户、多行明细、色码矩阵、销售价、保存/删除 |
-| 订单流水 | [`packageBusiness/psi-sales-order-flow/`](../miniprogram/packageBusiness/psi-sales-order-flow/) | 行级配货/发货流水（未配货/已配货/已发齐筛选） |
+| 订单流水 | [`packageBusiness/psi-sales-order-flow/`](../miniprogram/packageBusiness/psi-sales-order-flow/) | 行级发货流水（未发货/发部分/已发齐筛选） |
 | 配货 | [`packageBusiness/psi-sales-order-allocate/`](../miniprogram/packageBusiness/psi-sales-order-allocate/) | 按行组配货、出库仓库、色码矩阵 |
 | 待发货清单 | [`packageBusiness/psi-sales-order-pending-ship/`](../miniprogram/packageBusiness/psi-sales-order-pending-ship/) | 已配未发汇总、多选生成销售单 |
 

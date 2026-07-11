@@ -43,6 +43,7 @@
           categories="{{partnerCategories}}"
           value="{{partnerName}}"
           placeholder="请选择合作单位"
+          allow-quick-create="{{false}}"
           bind:change="onPartnerChange"
         />
       </view>

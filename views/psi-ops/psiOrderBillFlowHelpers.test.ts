@@ -163,7 +163,8 @@ describe('filterPsiOrderBillFlowRows', () => {
       'SALES_ORDER',
     );
     expect(filterPsiOrderBillFlowRows(rows, { status: 'fully_shipped' })).toHaveLength(1);
-    expect(filterPsiOrderBillFlowRows(rows, { status: 'unallocated' })).toHaveLength(1);
+    expect(filterPsiOrderBillFlowRows(rows, { status: 'partial_shipped' })).toHaveLength(1);
+    expect(filterPsiOrderBillFlowRows(rows, { status: 'not_shipped' })).toHaveLength(0);
   });
 });
 
@@ -176,18 +177,31 @@ describe('resolvePurchaseOrderLineFlowStatus', () => {
 });
 
 describe('resolveSalesOrderLineFlowStatus', () => {
-  it('识别有待发与已发齐', () => {
-    const items: PsiRecord[] = [{
+  it('按已发数量识别未发货、发部分、已发齐', () => {
+    expect(resolveSalesOrderLineFlowStatus([
+      { id: 's0', type: 'SALES_ORDER', productId: 'p1', quantity: 10 } as PsiRecord,
+    ]).statusKey).toBe('not_shipped');
+
+    const partial: PsiRecord = {
       id: 's1',
       type: 'SALES_ORDER',
       productId: 'p1',
       quantity: 10,
       allocatedQuantity: 8,
       shippedQuantity: 5,
-    }];
-    expect(resolveSalesOrderLineFlowStatus(items).statusKey).toBe('pending_ship');
+    };
+    expect(resolveSalesOrderLineFlowStatus([partial]).statusKey).toBe('partial_shipped');
+
     expect(
-      resolveSalesOrderLineFlowStatus([{ ...items[0], shippedQuantity: 10 }]).statusKey,
+      resolveSalesOrderLineFlowStatus([{ ...partial, shippedQuantity: 10 }]).statusKey,
     ).toBe('fully_shipped');
+  });
+
+  it('超发并入已发齐', () => {
+    const st = resolveSalesOrderLineFlowStatus([
+      { id: 's1', type: 'SALES_ORDER', productId: 'p1', quantity: 5, shippedQuantity: 8 } as PsiRecord,
+    ]);
+    expect(st.statusKey).toBe('fully_shipped');
+    expect(st.statusLabel).toBe('已发齐');
   });
 });

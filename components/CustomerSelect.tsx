@@ -15,12 +15,14 @@ export type CustomerSelectProps = Omit<BaseProps, 'placeholder'> & {
 /**
  * 销售/计划客户等：列表与 `PartnerSelect` 相同，**展示全部分类的合作单位**；命名强调「客户」场景，可通过 Tab 切到任意分类。
  * 需要仅「客户」分类时，可给底层传 `onlyCategoryId={getCustomerCategoryId(categories)}` 等。
+ * 默认开启下拉内「新建」快捷添加（`allowQuickCreate`）。
  *
  * 样式默认与进销存「采购订单」合作单位一致：`compact` + `psiOrderBillFormPartnerTriggerClassCompact`。
  */
 export function CustomerSelect({
   options,
   categories = [],
+  allowQuickCreate = true,
   placeholder,
   compact = true,
   showCategoryHint = false,
@@ -31,6 +33,7 @@ export function CustomerSelect({
     <SearchablePartnerSelect
       options={options}
       categories={categories}
+      allowQuickCreate={allowQuickCreate}
       placeholder={placeholder ?? '选择客户…'}
       compact={compact}
       showCategoryHint={showCategoryHint}

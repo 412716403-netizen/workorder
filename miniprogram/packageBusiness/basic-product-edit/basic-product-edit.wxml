@@ -72,6 +72,7 @@
           value="{{supplierName}}"
           placeholder="请选择"
           bind:change="onSupplierChange"
+          bind:created="onPartnerCreated"
         />
 
         <block wx:for="{{customFields}}" wx:key="id">

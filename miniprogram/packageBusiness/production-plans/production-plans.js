@@ -11,17 +11,18 @@ const _require5 =
 
 
 
-  require('../utils/productionPlans.js'),parsePlanSearch = _require5.parsePlanSearch,mapPlanListRow = _require5.mapPlanListRow,buildPurchaseProgressRequest = _require5.buildPurchaseProgressRequest,normalizeMasterList = _require5.normalizeMasterList,productNameSkuParts = _require5.productNameSkuParts;
+  require('../utils/productionPlans.js'),parsePlanSearch = _require5.parsePlanSearch,mapPlanListRow = _require5.mapPlanListRow,buildPurchaseProgressRequest = _require5.buildPurchaseProgressRequest,normalizeMasterList = _require5.normalizeMasterList,productNameSkuParts = _require5.productNameSkuParts,buildPlanListActionFlags = _require5.buildPlanListActionFlags;
 const _require6 =
 
 
 
 
 
-  require('../utils/planApi.js'),listPlansPaginated = _require6.listPlansPaginated,fetchPlansPurchaseProgress = _require6.fetchPlansPurchaseProgress,fetchTenantConfig = _require6.fetchTenantConfig,fetchProductsAll = _require6.fetchProductsAll,fetchCategoriesAll = _require6.fetchCategoriesAll;
+  require('../utils/planApi.js'),listPlansPaginated = _require6.listPlansPaginated,fetchPlansPurchaseProgress = _require6.fetchPlansPurchaseProgress,fetchTenantConfig = _require6.fetchTenantConfig,fetchProductsAll = _require6.fetchProductsAll,fetchCategoriesAll = _require6.fetchCategoriesAll,convertPlan = _require6.convertPlan;
 const _require7 = require('../utils/planOrderSort.js'),sortPlansNewestFirst = _require7.sortPlansNewestFirst;
 const _require8 = require('../utils/reportCustomDocField.js'),mapProductCustomTags = _require8.mapProductCustomTags;
 const _require9 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require9.readNavBarMetrics,readWindowMetrics = _require9.readWindowMetrics;
+const _require10 = require('../utils/pendingStockBadge.js'),fetchAllOrdersPaginated = _require10.fetchAllOrdersPaginated;
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
@@ -68,7 +69,13 @@ function slimPlanListRow(row) {
     progressOverReceived: row.progressOverReceived,
     progressOrderedBarPct: row.progressOrderedBarPct,
     progressOverBarPct: row.progressOverBarPct,
-    showProgress: row.showProgress
+    showProgress: row.showProgress,
+    showDetailBtn: row.showDetailBtn,
+    showConvertBtn: row.showConvertBtn,
+    showSupplementConvertBtn: row.showSupplementConvertBtn,
+    showOrderDetailBtn: row.showOrderDetailBtn,
+    showActions: row.showActions,
+    linkedOrderId: row.linkedOrderId
   };
 }
 
@@ -115,6 +122,9 @@ Page({
     total: 0,
     hasMore: false,
     canCreate: false,
+    canEdit: false,
+    canViewOrderDetail: false,
+    convertingPlanId: '',
     emptyText: '暂无生产计划',
     statusBarHeight: 20,
     navBarHeight: 44,
@@ -158,7 +168,9 @@ Page({
     this._tenantCtx = ctx;
     this.setData({
       canCreate: hasPermission(ctx.permissions || [], 'production:plans:create') &&
-      hasPermission(ctx.permissions || [], 'basic:products:view')
+      hasPermission(ctx.permissions || [], 'basic:products:view'),
+      canEdit: hasPermission(ctx.permissions || [], 'production:plans:edit'),
+      canViewOrderDetail: hasPermission(ctx.permissions || [], 'production:orders_detail:view')
     });
     if (!this._initialized) {
       this.bootstrap();
@@ -291,8 +303,69 @@ Page({
     this.closeFilterPanel();
     const id = e.currentTarget.dataset.id;
     if (!id) return;
+    this.openPlanDetail(id);
+  },
+
+  onDetailTap(e) {
+    const id = e.currentTarget.dataset.id;
+    if (!id) return;
+    this.openPlanDetail(id);
+  },
+
+  openPlanDetail(id) {
     wx.navigateTo({
       url: `/packageBusiness/production-plan-detail/production-plan-detail?id=${encodeURIComponent(id)}`
+    });
+  },
+
+  onConvertTap(e) {
+    const id = e.currentTarget.dataset.id;
+    if (!id || this.data.convertingPlanId) return;
+    const plan = (this._allPlans || []).find((p) => p.id === id);
+    const planNumber = plan && plan.planNumber ? plan.planNumber : '';
+    wx.showModal({
+      title: '下达工单',
+      content: planNumber ?
+        `确定将计划 ${planNumber} 下达为生产工单？` :
+        '确定将该计划下达为生产工单？',
+      confirmText: '下达',
+      success: (res) => {
+        if (res.confirm) this.doConvertPlan(id);
+      }
+    });
+  },
+
+  async doConvertPlan(planId) {
+    this.setData({ convertingPlanId: planId });
+    try {
+      await convertPlan(planId);
+      wx.showToast({ title: '已下达工单', icon: 'success' });
+      this._orders = await fetchAllOrdersPaginated({}).catch(() => this._orders || []);
+      await this.reloadList();
+    } catch (err) {
+      wx.showToast({
+        title: err && err.message || '下达失败',
+        icon: 'none'
+      });
+    } finally {
+      this.setData({ convertingPlanId: '' });
+    }
+  },
+
+  onOrderDetailTap(e) {
+    const orderId = e.currentTarget.dataset.orderId;
+    const planId = e.currentTarget.dataset.planId;
+    let resolvedId = orderId;
+    if (!resolvedId && planId) {
+      const { resolvePrimaryOrderIdForPlan } = require('../utils/resolvePrimaryOrderIdForPlan.js');
+      resolvedId = resolvePrimaryOrderIdForPlan(planId, this._orders || []);
+    }
+    if (!resolvedId) {
+      wx.showToast({ title: '未找到关联工单，请刷新后重试', icon: 'none' });
+      return;
+    }
+    wx.navigateTo({
+      url: `/packageBusiness/production-order-detail/production-order-detail?id=${encodeURIComponent(resolvedId)}`
     });
   },
 
@@ -313,6 +386,10 @@ Page({
   },
 
   mapRowsFromPlans(plans) {
+    const allPlans = this._allPlans || plans || [];
+    const orders = this._orders || [];
+    const canEdit = this.data.canEdit;
+    const canViewOrderDetail = this.data.canViewOrderDetail;
     return (plans || []).map((plan) => {
       const meta = this.productMetaForPlan(plan);
       const row = mapPlanListRow(plan, {
@@ -325,7 +402,13 @@ Page({
         purchaseProgress: this._progressMap.get(plan.id),
         showDeliveryDate: this.data.showDeliveryDate
       });
-      return slimPlanListRow(row);
+      const actions = buildPlanListActionFlags(plan, {
+        allPlans,
+        orders,
+        canEdit,
+        canViewOrderDetail
+      });
+      return slimPlanListRow({ ...row, ...actions });
     });
   },
 
@@ -368,10 +451,12 @@ Page({
       const categories = normalizeMasterList(categoriesRaw);
       this._productMap = new Map(products.map((p) => [p.id, p]));
       this._categoryMap = new Map(categories.map((c) => [c.id, c]));
+      this._orders = await fetchAllOrdersPaginated({}).catch(() => []);
     } catch {
       this._productionLinkMode = 'order';
       this._showPurchaseProgress = false;
       this._categoryMap = new Map();
+      this._orders = [];
     }
     await this.reloadList();
   },
@@ -379,6 +464,9 @@ Page({
   async reloadList() {
     this._allPlans = [];
     this._progressMap = new Map();
+    if (!this._orders) {
+      this._orders = await fetchAllOrdersPaginated({}).catch(() => []);
+    }
     this.setData({ page: 1, rows: [], hasMore: false, loading: true });
     await this.loadPage(1, false);
   },

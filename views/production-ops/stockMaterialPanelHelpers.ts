@@ -12,6 +12,30 @@ import type { Product, BOM, MaterialBreakdownRow } from '../../types';
  */
 export type MatRow = { productId: string; issue: number; returnQty: number; theoryCost: number; actualCost: number };
 
+/** 生产物料「按委外加工厂」分桶时，本厂记录的 partner 键 */
+export const INTERNAL_PARTNER_KEY = '__internal__';
+
+/** 外协加工厂「按物料」视图：跨工单/产品按 productId 汇总领退料与报工耗材 */
+export function aggregatePartnerMaterialsByProduct(
+  data: Iterable<MatRow[]>,
+): MatRow[] {
+  const acc = new Map<string, MatRow>();
+  for (const materials of data) {
+    for (const row of materials) {
+      const prev = acc.get(row.productId);
+      if (prev) {
+        prev.issue += row.issue;
+        prev.returnQty += row.returnQty;
+        prev.theoryCost += row.theoryCost;
+        prev.actualCost += row.actualCost;
+      } else {
+        acc.set(row.productId, { ...row });
+      }
+    }
+  }
+  return Array.from(acc.values());
+}
+
 /** 报工耗材展示值 = 理论口径 + 实际口径（与表格同精度） */
 export function matRowReportCost(row: Pick<MatRow, 'theoryCost' | 'actualCost'>): number {
   return Math.round((Number(row.theoryCost) + Number(row.actualCost)) * 100) / 100;

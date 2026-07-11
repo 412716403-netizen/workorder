@@ -31,6 +31,7 @@ const _require9 =
 const _require0 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require0.readNavBarMetrics,readWindowMetrics = _require0.readWindowMetrics,computePlanCreateHeaderHeight = _require0.computePlanCreateHeaderHeight;
 const _require1 = require('../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require1.afterMatrixKeyboardOpen;
 const _require10 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require10.LIST_ROUTES,afterSaveReturnToList = _require10.afterSaveReturnToList;
+const { applyPartnerCreatedOnPage } = require('../utils/mergePartnerList.js');
 
 function computeHeaderBlockHeight(nav) {
   return computePlanCreateHeaderHeight(nav);
@@ -316,8 +317,12 @@ Page({
   },
 
   onPartnerChange(e) {
-    const name = e.detail && e.detail.value || '';
+    const name = e.detail && (e.detail.name || e.detail.value) || '';
     this.setData({ partnerName: name });
+  },
+
+  onPartnerCreated(e) {
+    applyPartnerCreatedOnPage(this, e);
   },
 
   onEditDateChange(e) {

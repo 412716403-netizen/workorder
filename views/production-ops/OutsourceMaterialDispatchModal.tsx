@@ -84,8 +84,6 @@ export interface OutsourceMaterialDispatchModalProps {
   setMatDispatchPartner: React.Dispatch<React.SetStateAction<string>>;
   matDispatchWarehouseId: string;
   setMatDispatchWarehouseId: React.Dispatch<React.SetStateAction<string>>;
-  matDispatchRemark: string;
-  setMatDispatchRemark: React.Dispatch<React.SetStateAction<string>>;
   matDispatchQty: Record<string, number>;
   setMatDispatchQty: React.Dispatch<React.SetStateAction<Record<string, number>>>;
   orders: ProductionOrder[];
@@ -115,8 +113,6 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
   setMatDispatchPartner,
   matDispatchWarehouseId,
   setMatDispatchWarehouseId,
-  matDispatchRemark,
-  setMatDispatchRemark,
   matDispatchQty,
   setMatDispatchQty,
   orders,
@@ -463,7 +459,6 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
         partner: matDispatchPartner,
         warehouseId: matDispatchWarehouseId || undefined,
         docNo,
-        reason: matDispatchRemark.trim() || undefined,
         sourceProductId: isProductMode ? (targetProductId ?? undefined) : undefined,
         ...(bn ? { batchNo: bn } : {}),
         ...collabExtra,
@@ -500,7 +495,6 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
         const bn = categoryUsesBatchManagement(c) ? clampBatchNoInput(lineBatchByProduct[m.productId] ?? '') : '';
         return { productId: m.productId, quantity: matDispatchQty[m.productId], ...(bn ? { batchNo: bn } : {}) };
       }),
-      reason: matDispatchRemark.trim() || undefined,
       operator: docOperator,
       partner: matDispatchPartner,
     };
@@ -578,16 +572,6 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
                 </select>
               </div>
             )}
-          </div>
-          <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">备注说明</label>
-            <input
-              type="text"
-              value={matDispatchRemark}
-              onChange={e => setMatDispatchRemark(e.target.value)}
-              placeholder="选填"
-              className={`${psiOrderBillCompactLineInputClass} bg-white placeholder:text-slate-400`}
-            />
           </div>
           {materialCustomFieldDefs.length > 0 ? (
             <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-4">

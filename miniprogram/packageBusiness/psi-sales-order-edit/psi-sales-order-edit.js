@@ -40,6 +40,7 @@ const _require1 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _r
 const _require10 = require('../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require10.afterMatrixKeyboardOpen;
 const _require11 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require11.LIST_ROUTES,afterSaveReturnToList = _require11.afterSaveReturnToList;
 const _require12 = require('../utils/psiPartnerProductLastPrice.js'),resolveDefaultSalesPrice = _require12.resolveDefaultSalesPrice;
+const { applyPartnerCreatedOnPage } = require('../utils/mergePartnerList.js');
 
 function computeHeaderBlockHeight(nav) {
   return computePlanCreateHeaderHeight(nav);
@@ -222,6 +223,10 @@ Page({
         }
       }).catch(() => {});
     }
+  },
+
+  onPartnerCreated(e) {
+    applyPartnerCreatedOnPage(this, e);
   },
 
   onAddLine() {

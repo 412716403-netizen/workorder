@@ -58,6 +58,7 @@
             value="{{form.partner}}"
             placeholder="请选择"
             bind:change="onPartnerChange"
+            bind:created="onPartnerCreated"
           />
           <view wx:if="{{form.docNumber}}" class="plan-form-cell">
             <text class="plan-form-cell__label">单号</text>

@@ -9,10 +9,11 @@ import type {
   ProductionOpRecord,
   ProductionOrder,
   Product,
+  ProductCategory,
   Warehouse,
   AppDictionaries,
 } from '../../types';
-import { BATCH_NO_UNTAGGED, DEFAULT_MATERIAL_FORM_SETTINGS } from '../../types';
+import { batchNoForDisplay, categoryUsesBatchManagement, DEFAULT_MATERIAL_FORM_SETTINGS } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { hasOpsPerm, type StockDocDetail } from './types';
 import { formatLocalDateTimeZh, parseProductionOpTimestampMs } from '../../utils/localDateTime';
@@ -61,6 +62,7 @@ export interface StockDocDetailModalProps {
   orders: ProductionOrder[];
   products: Product[];
   warehouses: Warehouse[];
+  categories?: ProductCategory[];
   dictionaries?: AppDictionaries;
   materialFormSettings?: MaterialFormSettings;
   printTemplates?: PrintTemplate[];
@@ -79,6 +81,7 @@ const StockDocDetailModal: React.FC<StockDocDetailModalProps> = ({
   orders,
   products,
   warehouses,
+  categories = [],
   dictionaries,
   materialFormSettings = DEFAULT_MATERIAL_FORM_SETTINGS,
   printTemplates = [],
@@ -126,6 +129,45 @@ const StockDocDetailModal: React.FC<StockDocDetailModalProps> = ({
     return records.filter(r => r.docNo === detail.docNo && r.type === detail.type);
   }, [detail, records]);
 
+  const categoryById = useMemo(
+    () => new Map(categories.map(c => [c.id, c])),
+    [categories],
+  );
+
+  const detailLines = useMemo(() => {
+    if (!detail) return [] as { lineKey: string; productId: string; quantity: number; batchNo?: string }[];
+    if (docRecordsForDetail.length > 0) {
+      return docRecordsForDetail.map(r => ({
+        lineKey: r.id,
+        productId: r.productId,
+        quantity: r.quantity,
+        batchNo: r.batchNo ?? undefined,
+      }));
+    }
+    return detail.lines.map((l, i) => ({
+      lineKey: `${l.productId}-${l.batchNo ?? ''}-${i}`,
+      productId: l.productId,
+      quantity: l.quantity,
+      batchNo: l.batchNo,
+    }));
+  }, [detail, docRecordsForDetail]);
+
+  const showBatchColumn = useMemo(() => {
+    if (!detail) return false;
+    return detailLines.some(line => {
+      const p = products.find(x => x.id === line.productId);
+      const usesBatch = categoryUsesBatchManagement(categoryById.get(p?.categoryId ?? ''));
+      return usesBatch || Boolean(line.batchNo?.trim());
+    });
+  }, [detail, detailLines, products, categoryById]);
+
+  const formatLineBatch = (productId: string, batchNo?: string): string | null => {
+    const p = products.find(x => x.id === productId);
+    const usesBatch = categoryUsesBatchManagement(categoryById.get(p?.categoryId ?? ''));
+    if (!usesBatch && !batchNo?.trim()) return null;
+    return batchNoForDisplay(batchNo);
+  };
+
   if (!detail) return null;
 
   const stockDocDetail = detail;
@@ -140,12 +182,11 @@ const StockDocDetailModal: React.FC<StockDocDetailModalProps> = ({
   };
   const isReturn = stockDocDetail.type === 'STOCK_RETURN';
   const isEditing = stockDocEditForm !== null;
-  const showBatchColumn = stockDocDetail.lines.some(l => Boolean(l.batchNo?.trim()));
   const startEdit = () => {
     const snap = { ...materialCustomSnapshot };
     setStockDocEditForm({
       warehouseId: stockDocDetail.warehouseId,
-      lines: stockDocDetail.lines.map(l => ({
+      lines: detailLines.map(l => ({
         productId: l.productId,
         quantity: l.quantity,
         ...(l.batchNo ? { batchNo: l.batchNo } : {}),
@@ -210,11 +251,11 @@ const StockDocDetailModal: React.FC<StockDocDetailModalProps> = ({
     return uniq.length ? uniq.join('、') : '—';
   })();
 
-  const totalQty = stockDocDetail.lines.reduce((s, l) => s + (l.quantity ?? 0), 0);
+  const totalQty = detailLines.reduce((s, l) => s + (l.quantity ?? 0), 0);
   const productTitle =
     sourceProd?.name ??
     (order ? products.find(p => p.id === order.productId)?.name ?? order.productName ?? '—' : '—');
-  const summaryUnit = stockDocDetail.lines[0] ? getUnitName(stockDocDetail.lines[0].productId) : '件';
+  const summaryUnit = detailLines[0] ? getUnitName(detailLines[0].productId) : '件';
 
   const deleteMsg = `确定要删除该张${isReturn ? '退料' : '领料'}单的所有记录吗？此操作不可恢复。`;
 
@@ -364,14 +405,15 @@ const StockDocDetailModal: React.FC<StockDocDetailModalProps> = ({
                       </tr>
                     </thead>
                     <tbody>
-                      {stockDocDetail.lines.map(({ productId, quantity, batchNo }) => {
+                      {detailLines.map(({ lineKey, productId, quantity, batchNo }) => {
                         const prod = products.find(p => p.id === productId);
+                        const batchLabel = formatLineBatch(productId, batchNo);
                         return (
-                          <tr key={productId} className="border-b border-slate-100">
+                          <tr key={lineKey} className="border-b border-slate-100">
                             <td className="px-4 py-3 font-medium text-slate-800">{prod?.name ?? productId}</td>
                             {showBatchColumn ? (
                               <td className="px-4 py-3 text-sm font-mono font-bold text-slate-700">
-                                {batchNo?.trim() || BATCH_NO_UNTAGGED}
+                                {batchLabel ?? '—'}
                               </td>
                             ) : null}
                             <td className="px-4 py-3 font-bold text-indigo-600 text-right">{quantity}</td>
@@ -470,13 +512,14 @@ const StockDocDetailModal: React.FC<StockDocDetailModalProps> = ({
                         </tr>
                       </thead>
                       <tbody>
-                        {editForm.lines.map(({ productId, quantity, batchNo }) => {
+                        {editForm.lines.map(({ productId, quantity, batchNo }, lineIdx) => {
                           const prod = products.find(p => p.id === productId);
+                          const batchLabel = formatLineBatch(productId, batchNo);
                           return (
-                            <tr key={productId} className="border-b border-slate-100">
+                            <tr key={`${productId}-${batchNo ?? ''}-${lineIdx}`} className="border-b border-slate-100">
                               <td className="px-4 py-3 font-medium text-slate-800">{prod?.name ?? productId}</td>
                               {showBatchColumn ? (
-                                <td className="px-4 py-3 text-xs font-mono text-slate-500">{batchNo?.trim() || BATCH_NO_UNTAGGED}</td>
+                                <td className="px-4 py-3 text-xs font-mono text-slate-500">{batchLabel ?? '—'}</td>
                               ) : null}
                               <td className="px-4 py-3 text-right">
                                 <input

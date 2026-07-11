@@ -44,7 +44,7 @@
         </picker>
       </view>
       <view class="po-flow-filter-section">
-        <text class="plan-filter-panel__label">配货/发货状态</text>
+        <text class="plan-filter-panel__label">发货状态</text>
         <view class="po-flow-status-chips">
           <view
             wx:for="{{statusOptions}}"

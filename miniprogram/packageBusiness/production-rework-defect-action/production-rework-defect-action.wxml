@@ -46,6 +46,7 @@
           placeholder="{{partners.length ? '请选择合作单位' : '暂无合作单位'}}"
           disabled="{{!partners.length}}"
           bind:change="onPartnerChange"
+          bind:created="onPartnerCreated"
         />
       </view>
 

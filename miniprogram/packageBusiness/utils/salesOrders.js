@@ -108,23 +108,15 @@ function shipmentProgressMeta(ordered, shipped, allocatedEff) {
 
 function resolveSalesOrderLineFlowStatus(items) {
   const orderQty = lineGroupTotalQty(items);
-  const allocatedQty = (items || []).reduce((s, i) => s + formatPsiQtyDisplay(i.allocatedQuantity), 0);
   const shippedQty = lineGroupShippedQty(items);
-  const allocPendingQty = Math.max(0, allocatedQty - shippedQty);
 
-  if (orderQty > 0 && allocatedQty > orderQty) {
-    return { statusKey: 'over_allocated', statusLabel: '超配', pillClass: SALES_ORDER_FLOW_STATUS_PILL.over_allocated };
-  }
   if (orderQty > 0 && shippedQty >= orderQty) {
     return { statusKey: 'fully_shipped', statusLabel: '已发齐', pillClass: SALES_ORDER_FLOW_STATUS_PILL.fully_shipped };
   }
-  if (allocPendingQty > 0) {
-    return { statusKey: 'pending_ship', statusLabel: '有待发', pillClass: SALES_ORDER_FLOW_STATUS_PILL.pending_ship };
+  if (shippedQty > 0) {
+    return { statusKey: 'partial_shipped', statusLabel: '发部分', pillClass: SALES_ORDER_FLOW_STATUS_PILL.partial_shipped };
   }
-  if (allocatedQty > 0) {
-    return { statusKey: 'allocated', statusLabel: '已配货', pillClass: SALES_ORDER_FLOW_STATUS_PILL.allocated };
-  }
-  return { statusKey: 'unallocated', statusLabel: '未配货', pillClass: SALES_ORDER_FLOW_STATUS_PILL.unallocated };
+  return { statusKey: 'not_shipped', statusLabel: '未发货', pillClass: SALES_ORDER_FLOW_STATUS_PILL.not_shipped };
 }
 
 function parseSalesOrderSearch(raw) {
@@ -464,9 +456,7 @@ function mapSalesOrderFlowRow(docNumber, lineGroupId, items, ctx) {
     statusKey: flow.statusKey,
     statusLabel: flow.statusLabel,
     statusPillClass: flow.pillClass,
-    statusAsideClass: flow.statusKey === 'over_allocated'
-      ? 'so-flow-row__status--over'
-      : (flow.statusKey === 'pending_ship' ? 'so-flow-row__status--partial' : ''),
+    statusAsideClass: flow.statusKey === 'partial_shipped' ? 'so-flow-row__status--partial' : '',
     ...display,
   };
 }
@@ -506,11 +496,7 @@ function filterSalesOrderFlowRows(rows, filters) {
     });
   }
   if (status && status !== 'all') {
-    if (status === 'allocated') {
-      list = list.filter((row) => row.statusKey === 'allocated' || row.statusKey === 'pending_ship');
-    } else {
-      list = list.filter((row) => row.statusKey === status);
-    }
+    list = list.filter((row) => row.statusKey === status);
   }
   return list;
 }
