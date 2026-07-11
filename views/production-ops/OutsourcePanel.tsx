@@ -965,11 +965,18 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
       const productIds = Array.from(
         new Set(batch.map(r => (r.productId ?? '').trim()).filter(Boolean)),
       );
+      const productMilestoneNodeIdsByProductId = Object.fromEntries(
+        productIds.map(pid => [
+          pid,
+          products.find(p => p.id === pid)?.milestoneNodeIds ?? [],
+        ]),
+      );
       setCollabSyncConfirm({
         partnerName,
         collaborationTenantId: collabTenantId,
         recordIds: batch.map(r => r.id),
         productIds,
+        productMilestoneNodeIdsByProductId,
       });
       api.collaboration.listOutsourceRoutes().then(setCollabRoutes).catch(() => setCollabRoutes([]));
     }

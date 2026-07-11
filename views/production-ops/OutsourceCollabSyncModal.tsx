@@ -7,13 +7,16 @@ import {
   resolvePreferredOutsourceRouteId,
   writeOutsourceCollabRoutePreference,
 } from '../../utils/outsourceCollabRoutePreference';
+import { outsourceRouteMatchesAllProductMilestones } from '../../shared/outsourceRouteProductMatch';
 
 export interface OutsourceCollabSyncConfirmPayload {
   partnerName: string;
   collaborationTenantId: string;
   recordIds: string[];
-  /** 本次发出涉及的产品 id（去重）；仅当长度为 1 时用该产品记忆默认路线 */
+  /** 本次发出涉及的产品 id（去重） */
   productIds: string[];
+  /** 各产品标准生产路线，用于校验外协路线须与全部产品工序一致 */
+  productMilestoneNodeIdsByProductId?: Record<string, string[]>;
 }
 
 export interface OutsourceCollabSyncModalProps {
@@ -27,7 +30,13 @@ export interface OutsourceCollabSyncModalProps {
 export interface CollabOutsourceRouteRow {
   id: string;
   name?: string;
-  steps?: { stepOrder: number; receiverTenantId: string; nodeName: string; receiverTenantName: string }[];
+  steps?: {
+    stepOrder: number;
+    nodeId?: string;
+    receiverTenantId: string;
+    nodeName: string;
+    receiverTenantName: string;
+  }[];
 }
 
 const OutsourceCollabSyncModal: React.FC<OutsourceCollabSyncModalProps> = ({
@@ -39,7 +48,7 @@ const OutsourceCollabSyncModal: React.FC<OutsourceCollabSyncModalProps> = ({
   const [collabSyncing, setCollabSyncing] = useState(false);
   const [selectedRouteId, setSelectedRouteId] = useState('');
 
-  const matchingRoutes = useMemo(
+  const routesForCollabPartner = useMemo(
     () =>
       collabRoutes.filter(r => {
         const sorted = [...(r.steps || [])].sort((a, b) => a.stepOrder - b.stepOrder);
@@ -48,14 +57,30 @@ const OutsourceCollabSyncModal: React.FC<OutsourceCollabSyncModalProps> = ({
     [collabRoutes, collabSyncConfirm.collaborationTenantId],
   );
 
+  const productMilestoneRoutes = useMemo(
+    () =>
+      collabSyncConfirm.productIds.map(
+        pid => collabSyncConfirm.productMilestoneNodeIdsByProductId?.[pid] ?? [],
+      ),
+    [collabSyncConfirm.productIds, collabSyncConfirm.productMilestoneNodeIdsByProductId],
+  );
+
+  const matchingRoutes = useMemo(
+    () =>
+      routesForCollabPartner.filter(r =>
+        outsourceRouteMatchesAllProductMilestones(r.steps, productMilestoneRoutes),
+      ),
+    [routesForCollabPartner, productMilestoneRoutes],
+  );
+
   useEffect(() => {
+    const allowedIds = matchingRoutes.map(r => r.id);
     if (collabSyncConfirm.productIds.length !== 1) {
       setSelectedRouteId('');
       return;
     }
     const productId = collabSyncConfirm.productIds[0];
     const saved = readOutsourceCollabRoutePreference(tenantId, productId, collabSyncConfirm.collaborationTenantId);
-    const allowedIds = matchingRoutes.map(r => r.id);
     setSelectedRouteId(resolvePreferredOutsourceRouteId(saved, allowedIds));
   }, [tenantId, collabSyncConfirm.collaborationTenantId, collabSyncConfirm.productIds, matchingRoutes]);
 
@@ -69,6 +94,11 @@ const OutsourceCollabSyncModal: React.FC<OutsourceCollabSyncModalProps> = ({
         <p className="text-sm text-slate-600">
           外协工厂「<span className="font-bold text-slate-800">{collabSyncConfirm.partnerName}</span>」已绑定协作企业，是否将本次发出的 {collabSyncConfirm.recordIds.length} 条记录同步？
         </p>
+        {routesForCollabPartner.length > 0 && matchingRoutes.length === 0 && (
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+            无与本次涉及{collabSyncConfirm.productIds.length > 1 ? '全部' : ''}产品标准生产路线一致的外协路线，请使用单步外协，或在协作设置中配置匹配路线。
+          </p>
+        )}
         {matchingRoutes.length > 0 && (
           <div className="space-y-1">
             <label className="text-[10px] font-black text-slate-400 uppercase block ml-1">外协路线（可选）</label>

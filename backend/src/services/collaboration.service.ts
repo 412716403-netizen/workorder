@@ -17,6 +17,8 @@ import {
   type CollabAcceptCreateProductPayload,
   type CollabAcceptTransferBody,
 } from '../../../shared/types.js';
+import { outsourceRouteMatchesProductMilestones } from '../../../shared/outsourceRouteProductMatch.js';
+import { parseMilestoneNodeIds } from '../../../shared/theoreticalProductCost.js';
 
 // ── helpers ──
 
@@ -732,6 +734,17 @@ export async function syncDispatch(tenantId: string, body: { recordIds: string[]
   const productIds = [...new Set(records.map(r => r.productId))];
   const products = await basePrisma.product.findMany({ where: { id: { in: productIds }, tenantId }, include: { variants: true, category: true } });
   const productMap = Object.fromEntries(products.map(p => [p.id, p]));
+  if (routeSnapshot) {
+    const routeSteps = Array.isArray(routeSnapshot) ? routeSnapshot : [];
+    for (const productId of productIds) {
+      const product = productMap[productId];
+      if (!product) throw new AppError(400, '产品不存在');
+      const milestoneNodeIds = parseMilestoneNodeIds(product.milestoneNodeIds);
+      if (!outsourceRouteMatchesProductMilestones(routeSteps, milestoneNodeIds)) {
+        throw new AppError(400, '外协路线与产品标准生产路线不一致');
+      }
+    }
+  }
   const dictItems = await basePrisma.dictionaryItem.findMany({ where: { tenantId } });
   const dictById = Object.fromEntries(dictItems.map(d => [d.id, d.name]));
   const grouped = new Map<string, typeof records>();
