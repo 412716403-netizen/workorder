@@ -157,15 +157,17 @@ export interface PlanDetailPanelProps {
   onImagePreview: (url: string) => void;
   onFilePreview: (url: string, type: 'image' | 'pdf') => void;
   onPrintRun: (run: { template: PrintTemplate; plan: PlanOrder } | null) => void;
-  labelPrintPickerTemplates: PrintTemplate[];
-  labelPrintPickerHasWhitelist: boolean;
-  /** 打开计划单表单配置 → 打印模版（标签打印） */
+  itemCodeLabelPrintPickerTemplates: PrintTemplate[];
+  itemCodeLabelPrintPickerHasWhitelist: boolean;
+  batchLabelPrintPickerTemplates: PrintTemplate[];
+  batchLabelPrintPickerHasWhitelist: boolean;
+  /** 打开计划单表单配置 → 打印模版 */
   onOpenLabelPrintConfig: () => void;
   printTemplates: PrintTemplate[];
   onUpdatePrintTemplates: (list: PrintTemplate[]) => void | Promise<void>;
   onRefreshPrintTemplates?: () => void | Promise<void>;
-  /** 将模版 id 合并进计划单「标签可选模版」白名单（仅当已处于限制模式时生效） */
-  onMergeLabelPrintWhitelist: (templateId: string) => void;
+  /** 将模版 id 合并进计划单单品码/批次码可选模版白名单（仅当已处于限制模式时生效） */
+  onMergeLabelPrintWhitelist: (kind: 'itemCode' | 'batch', templateId: string) => void;
   onUpdatePlanFormSettings: (settings: PlanFormSettings) => void | Promise<void>;
 }
 
@@ -200,8 +202,10 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   onImagePreview,
   onFilePreview,
   onPrintRun,
-  labelPrintPickerTemplates,
-  labelPrintPickerHasWhitelist,
+  itemCodeLabelPrintPickerTemplates,
+  itemCodeLabelPrintPickerHasWhitelist,
+  batchLabelPrintPickerTemplates,
+  batchLabelPrintPickerHasWhitelist,
   onOpenLabelPrintConfig,
   printTemplates,
   onUpdatePrintTemplates,
@@ -824,7 +828,8 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
     }
     setIsSaving(true);
     try {
-      const showDelivery = planFormSettings.listDisplay?.showDeliveryDate === true;
+      const showDelivery =
+        productionLinkMode !== 'product' && planFormSettings.listDisplay?.showDeliveryDate === true;
       const nextDueStr = tempPlanInfo.dueDate.trim() ? tempPlanInfo.dueDate.trim() : undefined;
       const prevDueNorm = viewPlan.dueDate
         ? toLocalDateYmd(viewPlan.dueDate) || String(viewPlan.dueDate).trim().slice(0, 10)
@@ -1368,7 +1373,8 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                       </div>
                     </div>
                   ) : null}
-                  {planFormSettings.listDisplay?.showDeliveryDate === true && (
+                  {productionLinkMode !== 'product' &&
+                    planFormSettings.listDisplay?.showDeliveryDate === true && (
                     <div className="space-y-2">
                       <label className={formStandardLabelClass}>交货日期</label>
                       <input
@@ -2209,8 +2215,10 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
         products={products}
         dictionaries={dictionaries}
         orders={orders ?? []}
-        labelPrintPickerTemplates={labelPrintPickerTemplates}
-        labelPrintPickerHasWhitelist={labelPrintPickerHasWhitelist}
+        itemCodeLabelPrintPickerTemplates={itemCodeLabelPrintPickerTemplates}
+        itemCodeLabelPrintPickerHasWhitelist={itemCodeLabelPrintPickerHasWhitelist}
+        batchLabelPrintPickerTemplates={batchLabelPrintPickerTemplates}
+        batchLabelPrintPickerHasWhitelist={batchLabelPrintPickerHasWhitelist}
         onOpenLabelPrintConfig={handleOpenLabelPrintConfig}
         onPrintRun={onPrintRun}
         virtualBatches={virtualBatches}
@@ -2232,11 +2240,11 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
         <PlanPrintTemplateManageDialog
           open
           onClose={() => setLabelPrintTemplateManageOpen(false)}
-          scope="planLabel"
+          scope="planItemLabel"
           printTemplates={printTemplates}
           onUpdatePrintTemplates={onUpdatePrintTemplates}
           planFormSettings={planFormSettings}
-          onMergePrintWhitelist={onMergeLabelPrintWhitelist}
+          onMergePrintWhitelist={id => onMergeLabelPrintWhitelist('itemCode', id)}
           onRefreshPrintTemplates={onRefreshPrintTemplates}
           plans={plans}
           orders={orders ?? []}

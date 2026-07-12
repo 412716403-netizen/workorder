@@ -55,6 +55,11 @@ import { mergeTenantPrintContext } from '../utils/mergeTenantPrintContext';
 import { buildPlanPrintListRows } from '../utils/buildPlanPrintListRows';
 import { buildPlanListPrintDocumentTitle } from '../utils/printDocumentTitle';
 import { filterPrintTemplatesByAllowedIds } from '../utils/printTemplateWhitelist';
+import {
+  buildPlanLabelPrintPicker,
+  mergePlanLabelPrintWhitelistInSettings,
+} from '../utils/planLabelPrintSettings';
+import type { PlanPrintTemplateManageScope } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import {
   formConfigToolbarButtonClass,
@@ -364,7 +369,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
   }, [onRefreshPrintTemplates]);
   const [planPrintPickerOpen, setPlanPrintPickerOpen] = useState(false);
   const [planPrintPickerPlan, setPlanPrintPickerPlan] = useState<PlanOrder | null>(null);
-  const [planPrintTemplateManageScope, setPlanPrintTemplateManageScope] = useState<'planList' | 'planLabel' | null>(null);
+  const [planPrintTemplateManageScope, setPlanPrintTemplateManageScope] = useState<PlanPrintTemplateManageScope | null>(null);
   const [planListPrintRun, setPlanListPrintRun] = useState<{ template: PrintTemplate; plan: PlanOrder } | null>(null);
   /** 点击图片查看大图：url 为要放大的图片地址 */
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
@@ -566,7 +571,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
   }, []);
 
   const mergePlanPrintWhitelist = useCallback(
-    (scope: 'planList' | 'planLabel', templateId: string) => {
+    (scope: PlanPrintTemplateManageScope, templateId: string) => {
       if (scope === 'planList') {
         const prev = planFormSettings.listPrint?.allowedTemplateIds;
         const allowedTemplateIds = prev?.length
@@ -582,30 +587,25 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
         });
         return;
       }
-      const prev = planFormSettings.labelPrint?.allowedTemplateIds;
-      const allowedTemplateIds = prev?.length ? Array.from(new Set([...prev, templateId])) : [templateId];
-      onUpdatePlanFormSettings({
-        ...planFormSettings,
-        labelPrint: {
-          ...planFormSettings.labelPrint,
-          allowedTemplateIds,
-        },
-      });
+      if (scope === 'planItemLabel') {
+        onUpdatePlanFormSettings(mergePlanLabelPrintWhitelistInSettings(planFormSettings, 'itemCode', templateId));
+        return;
+      }
+      if (scope === 'planBatchLabel') {
+        onUpdatePlanFormSettings(mergePlanLabelPrintWhitelistInSettings(planFormSettings, 'batch', templateId));
+      }
     },
     [planFormSettings, onUpdatePlanFormSettings],
   );
 
-  const { labelPrintPickerTemplates, labelPrintPickerHasWhitelist } = useMemo(() => {
-    const raw = planFormSettings.labelPrint?.allowedTemplateIds;
-    const filtered = filterPrintTemplatesByAllowedIds(printTemplates, raw);
-    const hasWhitelist =
-      Array.isArray(raw) &&
-      raw.some(x => x != null && x !== '' && String(x).trim() !== '');
-    return {
-      labelPrintPickerTemplates: filtered,
-      labelPrintPickerHasWhitelist: hasWhitelist,
-    };
-  }, [printTemplates, planFormSettings.labelPrint?.allowedTemplateIds]);
+  const itemCodeLabelPrintPicker = useMemo(
+    () => buildPlanLabelPrintPicker(printTemplates, planFormSettings.labelPrint, 'itemCode'),
+    [printTemplates, planFormSettings.labelPrint],
+  );
+  const batchLabelPrintPicker = useMemo(
+    () => buildPlanLabelPrintPicker(printTemplates, planFormSettings.labelPrint, 'batch'),
+    [printTemplates, planFormSettings.labelPrint],
+  );
 
   /** 递归获取某计划下所有子孙计划（深度优先，用于列表展示），返回 { plan, depth } */
   const getAllDescendantsWithDepth = (planId: string, depth: number): { plan: PlanOrder; depth: number }[] => {
@@ -805,7 +805,9 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                               {createdListLabel}
                             </span>
                           )}
-                          {planFormSettings.listDisplay?.showDeliveryDate === true && plan.dueDate && (
+                          {productionLinkMode !== 'product' &&
+                            planFormSettings.listDisplay?.showDeliveryDate === true &&
+                            plan.dueDate && (
                             <span className="flex items-center gap-1 shrink-0" title="交货日期">
                               <Clock className="w-3 h-3 shrink-0" />
                               交货 {toLocalDateYmd(plan.dueDate) || String(plan.dueDate).slice(0, 10)}
@@ -907,7 +909,9 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                                       {createdListLabel}
                                     </span>
                                   )}
-                                  {planFormSettings.listDisplay?.showDeliveryDate === true && plan.dueDate && (
+                                  {productionLinkMode !== 'product' &&
+                                    planFormSettings.listDisplay?.showDeliveryDate === true &&
+                                    plan.dueDate && (
                                     <span className="flex items-center gap-1 shrink-0" title="交货日期">
                                       <Clock className="w-3 h-3 shrink-0" />
                                       交货 {toLocalDateYmd(plan.dueDate) || String(plan.dueDate).slice(0, 10)}
@@ -1015,7 +1019,9 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                                     {createdListLabel}
                                   </span>
                                 )}
-                                {planFormSettings.listDisplay?.showDeliveryDate === true && plan.dueDate && (
+                                {productionLinkMode !== 'product' &&
+                                  planFormSettings.listDisplay?.showDeliveryDate === true &&
+                                  plan.dueDate && (
                                   <span className="flex items-center gap-1 shrink-0" title="交货日期">
                                     <Clock className="w-3 h-3 shrink-0" />
                                     交货 {toLocalDateYmd(plan.dueDate) || String(plan.dueDate).slice(0, 10)}
@@ -1127,13 +1133,17 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
           onImagePreview={(url) => setImagePreviewUrl(url)}
           onFilePreview={(url, type) => { setFilePreviewUrl(url); setFilePreviewType(type); }}
           onPrintRun={setPlanListPrintRun}
-          labelPrintPickerTemplates={labelPrintPickerTemplates}
-          labelPrintPickerHasWhitelist={labelPrintPickerHasWhitelist}
+          itemCodeLabelPrintPickerTemplates={itemCodeLabelPrintPicker.templates}
+          itemCodeLabelPrintPickerHasWhitelist={itemCodeLabelPrintPicker.hasWhitelist}
+          batchLabelPrintPickerTemplates={batchLabelPrintPicker.templates}
+          batchLabelPrintPickerHasWhitelist={batchLabelPrintPicker.hasWhitelist}
           onOpenLabelPrintConfig={openPlanFormPrintTab}
           printTemplates={printTemplates}
           onUpdatePrintTemplates={onUpdatePrintTemplates}
           onRefreshPrintTemplates={onRefreshPrintTemplates}
-          onMergeLabelPrintWhitelist={id => mergePlanPrintWhitelist('planLabel', id)}
+          onMergeLabelPrintWhitelist={(kind, id) =>
+            mergePlanPrintWhitelist(kind === 'itemCode' ? 'planItemLabel' : 'planBatchLabel', id)
+          }
           onUpdatePlanFormSettings={onUpdatePlanFormSettings}
         />
       )}

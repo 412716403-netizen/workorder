@@ -251,7 +251,7 @@ interface PlanOrder {
 
 | 字段 | 说明 |
 |------|------|
-| `showDeliveryDate` | 计划列表/表单/打印交期；工单模式外协与工单中心交期列 |
+| `showDeliveryDate` | 仅工单模式：计划列表/表单/打印交期，以及外协与工单中心交期列；产品模式表单配置不展示此项，界面亦不显示交货日期 |
 | `onlyShowNotCompleted` | 列表默认隐藏已完成：计划单排除派生 `COMPLETED`；工单中心排除 `dispatchStatus=COMPLETED`（仅关联工单模式 UI） |
 | `showPurchaseProgress` | （已固定开启，无表单开关）计划单列表每行显示该计划关联采购订单的汇总到货进度；数据由 `POST /api/psi/plans-purchase-progress` 批量取回，无关联采购订单的行不展示 |
 | `materialLossEnabled` | 计划详情「用料清单」显示「损耗」列，按物料行填写损耗百分比；理论总需量按 `(1 + 损耗%/100)` 放大，联动缺料数/计划用量/采购数量。损耗率按计划单持久化于 `PlanOrder.customData.materialLossRates`（`Record<rowKey, number>`，rowKey = `materialId-nodeId-parentId`，百分比值）（仅计划单 UI） |

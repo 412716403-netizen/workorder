@@ -8,7 +8,8 @@ export type { PlanPrintTemplateManageScope };
 
 const SCOPE_DOCUMENT_TYPES: Record<PlanPrintTemplateManageScope, readonly PrintTemplateDocumentType[]> = {
   planList: ['plan'],
-  planLabel: ['plan'],
+  planItemLabel: ['plan'],
+  planBatchLabel: ['plan'],
   orderDetail: ['order'],
   reportBatchDetail: ['order'],
   stockInFlowDetail: ['order'],
@@ -33,7 +34,7 @@ const SCOPE_DOCUMENT_TYPES: Record<PlanPrintTemplateManageScope, readonly PrintT
  * 未带该字段的历史模版仍可在组内各入口共用出现（可在目标入口「复制」生成带归属的副本）。
  */
 const MANAGE_SCOPE_EXCLUSIVE_GROUPS: readonly (readonly PlanPrintTemplateManageScope[])[] = [
-  ['planList', 'planLabel'],
+  ['planList', 'planItemLabel', 'planBatchLabel'],
   ['orderDetail', 'reportBatchDetail', 'stockInFlowDetail'],
   ['outsourceDispatchFlowDetail', 'outsourceReceiveFlowDetail'],
   ['defectTreatmentFlowDetail', 'reworkReportFlowDetail'],

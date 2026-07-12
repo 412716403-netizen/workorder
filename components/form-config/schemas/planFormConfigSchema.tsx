@@ -89,14 +89,12 @@ export const planFormConfigSchema: FormConfigSchema<PlanFormSettings> = {
           kind: 'customSlot',
           id: 'planOrderDeliveryDateToggle',
           render: (ctx, extras) => {
+            // 产品模式不提供交货日期配置（与工单模式交期列语义绑定）
+            if (extras?.productionLinkMode === 'product') return null;
             const ld = (ctx.get('listDisplay') as PlanFormSettings['listDisplay']) ?? {};
             const checked = ld.showDeliveryDate === true;
-            const isOrderMode = extras?.productionLinkMode !== 'product';
             return (
-              <div className={isOrderMode ? 'mt-4' : ''}>
-                {!isOrderMode && (
-                  <h4 className="mb-3 text-sm font-black uppercase tracking-widest text-slate-600">列表显示</h4>
-                )}
+              <div className="mt-4">
                 <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white px-4 py-4">
                   <label className="flex cursor-pointer items-start gap-3 text-sm font-bold text-slate-800">
                     <input
@@ -159,11 +157,16 @@ export const planFormConfigSchema: FormConfigSchema<PlanFormSettings> = {
         {
           kind: 'customSlot',
           id: 'planOrderSplitPlanToggle',
-          render: ctx => {
+          render: (ctx, extras) => {
             const ld = (ctx.get('listDisplay') as PlanFormSettings['listDisplay']) ?? {};
             const checked = ld.splitPlanEnabled === true;
+            // 产品模式无「显示客户 / 交货日期」时，由拆单开关承担「列表显示」分区标题
+            const showSectionTitle = extras?.productionLinkMode === 'product';
             return (
-              <div className="mt-4">
+              <div className={showSectionTitle ? '' : 'mt-4'}>
+                {showSectionTitle && (
+                  <h4 className="mb-3 text-sm font-black uppercase tracking-widest text-slate-600">列表显示</h4>
+                )}
                 <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white px-4 py-4">
                   <label className="flex cursor-pointer items-start gap-3 text-sm font-bold text-slate-800">
                     <input
@@ -243,16 +246,25 @@ export const planFormConfigSchema: FormConfigSchema<PlanFormSettings> = {
           },
         },
         {
+          kind: 'toggle',
+          id: 'traceSectionToggle',
+          label: '在计划详情中显示「追溯码」区块',
+          path: 'labelPrint.showPlanDetailTraceSection',
+          defaultChecked: true,
+        },
+        {
           kind: 'printWhitelist',
-          id: 'labelPrint',
-          title: '标签打印',
-          scope: 'planLabel',
-          path: 'labelPrint',
-          toggle: {
-            label: '在计划详情中显示「追溯码」区块',
-            key: 'showPlanDetailTraceSection',
-            defaultChecked: true,
-          },
+          id: 'itemCodeLabelPrint',
+          title: '单品码打印',
+          scope: 'planItemLabel',
+          path: 'labelPrint.itemCodePrint',
+        },
+        {
+          kind: 'printWhitelist',
+          id: 'batchLabelPrint',
+          title: '批次码打印',
+          scope: 'planBatchLabel',
+          path: 'labelPrint.batchPrint',
         },
       ],
     },

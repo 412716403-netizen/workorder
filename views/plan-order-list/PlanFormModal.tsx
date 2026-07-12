@@ -584,7 +584,8 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
                         />
                       </div>
                     ) : null}
-                    {planFormSettings.listDisplay?.showDeliveryDate === true ? (
+                    {productionLinkMode !== 'product' &&
+                    planFormSettings.listDisplay?.showDeliveryDate === true ? (
                       <div className="space-y-1">
                         <label className="flex items-center gap-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">
                           <CalendarClock className="h-3 w-3" /> 交货日期

@@ -149,7 +149,7 @@ describe('normalizePlanFormSettings listDisplay', () => {
 });
 
 describe('repairPlanLabelPrintWhitelistMissingPlanLabelTemplates', () => {
-  const baseTpl = (id: string, scope: 'planList' | 'planLabel'): PrintTemplate => ({
+  const baseTpl = (id: string, scope: 'planList' | 'planItemLabel' | 'planBatchLabel'): PrintTemplate => ({
     id,
     name: id,
     paperSize: { widthMm: 30, heightMm: 50 },
@@ -160,34 +160,46 @@ describe('repairPlanLabelPrintWhitelistMissingPlanLabelTemplates', () => {
     printTemplateManageScope: scope,
   });
 
-  it('merges planLabel template ids when label whitelist only has planList template', () => {
+  it('merges planItemLabel template ids when item whitelist only has planList template', () => {
     const planForm = normalizePlanFormSettings({
       labelPrint: {
-        allowedTemplateIds: ['list-only'],
+        itemCodePrint: { allowedTemplateIds: ['list-only'] },
         showPlanDetailTraceSection: true,
       },
     });
-    const templates = [baseTpl('list-only', 'planList'), baseTpl('lbl-1', 'planLabel'), baseTpl('lbl-2', 'planLabel')];
+    const templates = [
+      baseTpl('list-only', 'planList'),
+      baseTpl('lbl-1', 'planItemLabel'),
+      baseTpl('lbl-2', 'planItemLabel'),
+    ];
     const r = repairPlanLabelPrintWhitelistMissingPlanLabelTemplates(planForm, templates);
-    expect(r.labelPrint?.allowedTemplateIds?.sort()).toEqual(['lbl-1', 'lbl-2', 'list-only'].sort());
+    expect(r.labelPrint?.itemCodePrint?.allowedTemplateIds?.sort()).toEqual(
+      ['lbl-1', 'lbl-2', 'list-only'].sort(),
+    );
   });
 
-  it('does nothing when label whitelist already includes a planLabel template', () => {
+  it('does nothing when item whitelist already includes a planItemLabel template', () => {
     const planForm = normalizePlanFormSettings({
-      labelPrint: { allowedTemplateIds: ['list-only', 'lbl-1'], showPlanDetailTraceSection: true },
+      labelPrint: {
+        itemCodePrint: { allowedTemplateIds: ['list-only', 'lbl-1'] },
+        showPlanDetailTraceSection: true,
+      },
     });
-    const templates = [baseTpl('list-only', 'planList'), baseTpl('lbl-1', 'planLabel')];
+    const templates = [baseTpl('list-only', 'planList'), baseTpl('lbl-1', 'planItemLabel')];
     const r = repairPlanLabelPrintWhitelistMissingPlanLabelTemplates(planForm, templates);
-    expect(r.labelPrint?.allowedTemplateIds).toEqual(['list-only', 'lbl-1']);
+    expect(r.labelPrint?.itemCodePrint?.allowedTemplateIds).toEqual(['list-only', 'lbl-1']);
   });
 
   it('does nothing when whitelist references unknown template id', () => {
     const planForm = normalizePlanFormSettings({
-      labelPrint: { allowedTemplateIds: ['ghost'], showPlanDetailTraceSection: true },
+      labelPrint: {
+        itemCodePrint: { allowedTemplateIds: ['ghost'] },
+        showPlanDetailTraceSection: true,
+      },
     });
-    const templates = [baseTpl('lbl-1', 'planLabel')];
+    const templates = [baseTpl('lbl-1', 'planItemLabel')];
     const r = repairPlanLabelPrintWhitelistMissingPlanLabelTemplates(planForm, templates);
-    expect(r.labelPrint?.allowedTemplateIds).toEqual(['ghost']);
+    expect(r.labelPrint?.itemCodePrint?.allowedTemplateIds).toEqual(['ghost']);
   });
 });
 

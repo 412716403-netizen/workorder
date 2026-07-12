@@ -56,7 +56,8 @@ function allowedTemplateIdsForScope(
     return os.outsourceCenterPrint?.receiveFlowDetail?.allowedTemplateIds;
   }
   if (scope === 'planList') return (form as PlanFormSettings).listPrint?.allowedTemplateIds;
-  if (scope === 'planLabel') return (form as PlanFormSettings).labelPrint?.allowedTemplateIds;
+  if (scope === 'planItemLabel') return (form as PlanFormSettings).labelPrint?.itemCodePrint?.allowedTemplateIds;
+  if (scope === 'planBatchLabel') return (form as PlanFormSettings).labelPrint?.batchPrint?.allowedTemplateIds;
   if (
     scope === 'materialIssueFlowDetail' ||
     scope === 'materialReturnFlowDetail' ||
@@ -107,8 +108,10 @@ function scopeTitle(scope: PlanPrintTemplateManageScope): string {
   switch (scope) {
     case 'planList':
       return '计划单列表打印模版';
-    case 'planLabel':
-      return '计划单标签打印模版';
+    case 'planItemLabel':
+      return '计划单单品码标签打印模版';
+    case 'planBatchLabel':
+      return '计划单批次码标签打印模版';
     case 'orderDetail':
       return '工单详情打印模版';
     case 'reportBatchDetail':
@@ -152,8 +155,11 @@ function scopeHint(scope: PlanPrintTemplateManageScope): string {
   if (scope === 'planList') {
     return '用于计划单列表「打印」输出；新建模版在新窗口中编辑，保存后会自动同步到本页列表。选中左侧模版后点「加入列表打印可选」可加入表单中的列表可选模版（首次加入会从「全部可用」变为仅已加入项）。';
   }
-  if (scope === 'planLabel') {
-    return '用于计划详情单品码与批次标签；选中模版后点「加入标签打印可选」加入表单中的标签可选模版（首次加入会从「全部可用」变为仅已加入项）。';
+  if (scope === 'planItemLabel') {
+    return '用于计划详情「打印单品码标签」；模版请使用「单品码行」占位符。选中模版后点「加入单品码打印可选」加入表单中的单品码可选模版（首次加入会从「全部可用」变为仅已加入项）。';
+  }
+  if (scope === 'planBatchLabel') {
+    return '用于计划详情「打印批次码」；模版请使用「批次码」占位符。选中模版后点「加入批次码打印可选」加入表单中的批次码可选模版（首次加入会从「全部可用」变为仅已加入项）。';
   }
   if (scope === 'orderDetail') {
     return '用于工单中心工单详情弹窗「打印」；模版建议使用「工单」单据类型。选中左侧模版后点下方按钮加入可选列表。';
@@ -211,7 +217,8 @@ function scopeHint(scope: PlanPrintTemplateManageScope): string {
 
 function joinButtonLabel(scope: PlanPrintTemplateManageScope): string {
   if (scope === 'planList') return '加入列表打印可选';
-  if (scope === 'planLabel') return '加入标签打印可选';
+  if (scope === 'planItemLabel') return '加入单品码打印可选';
+  if (scope === 'planBatchLabel') return '加入批次码打印可选';
   if (scope === 'purchaseOrderList') return '加入列表打印可选';
   if (scope === 'salesOrderList') return '加入列表打印可选';
   if (scope === 'purchaseBillList') return '加入列表打印可选';

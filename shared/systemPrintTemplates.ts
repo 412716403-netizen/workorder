@@ -14,8 +14,8 @@
  * - `builtin-rework-defect-treatment-v1`：统一下发「处理不良单」返工管理详情打印（占位符 `处理不良.*`，版式参考外协发出）。
  * - `builtin-rework-report-flow-v1`：统一下发「返工报工单」详情打印（占位符 `返工报工.*`，含工序列与颜色尺码矩阵）。
  * - `builtin-plan-list-v1`：统一下发「计划单」列表打印（A4；含颜色尺码矩阵与颜色×工序物料矩阵列）。
- * - `builtin-plan-label-v1`：统一下发「计划单品码」小标签打印（30×50mm，`planLabel`；10pt、货号色码左对齐、小二维码、边距 2mm；序列号下居中短横线）。
- * - `builtin-plan-batch-label-v1`：统一下发「计划批次码」小标签打印（30×50mm，`planLabel`；占位符 `批次.*`；与单品码标签版式类似，用于虚拟批次扫码标签）。
+ * - `builtin-plan-label-v1`：统一下发「计划单品码」小标签打印（30×50mm，`planItemLabel`；10pt、货号色码左对齐、小二维码、边距 2mm；序列号下居中短横线）。
+ * - `builtin-plan-batch-label-v1`：统一下发「计划批次码」小标签打印（30×50mm，`planBatchLabel`；占位符 `批次.*`；与单品码标签版式类似，用于虚拟批次扫码标签）。
  * 以上合并进各租户 `printTemplates`；持久化写入时剔除，避免与代码副本重复落库。
  */
 
@@ -1637,13 +1637,13 @@ const BUILTIN_PLAN_LIST_V1: Record<string, unknown> = {
   updatedAt: '2026-05-09T09:25:22.098Z',
 };
 
-/** 计划单品码小标签：30×50mm、`planLabel`；版式含序列号下居中短横线；与租户「单品码标签（副本）」一致时可同步其 line 段 */
+/** 计划单品码小标签：30×50mm、`planItemLabel`；版式含序列号下居中短横线；与租户「单品码标签（副本）」一致时可同步其 line 段 */
 const BUILTIN_PLAN_LABEL_V1: Record<string, unknown> = {
   id: BUILTIN_PLAN_LABEL_PRINT_TEMPLATE_ID,
   name: '单品码标签',
   isSystemTemplate: true,
   documentType: 'plan',
-  printTemplateManageScope: 'planLabel',
+  printTemplateManageScope: 'planItemLabel',
   paperSize: { widthMm: 30, heightMm: 50 },
   paperSizeCustom: true,
   paperMarginsMm: { top: 2, left: 2, right: 2, bottom: 2 },
@@ -1729,13 +1729,13 @@ const BUILTIN_PLAN_LABEL_V1: Record<string, unknown> = {
   updatedAt: '2026-05-13T16:30:00.000Z',
 };
 
-/** 计划批次码小标签：30×50mm、`planLabel`；占位符与 `VirtualBatchPrintRow` / 打印解析一致 */
+/** 计划批次码小标签：30×50mm、`planBatchLabel`；占位符与 `VirtualBatchPrintRow` / 打印解析一致 */
 const BUILTIN_PLAN_BATCH_LABEL_V1: Record<string, unknown> = {
   id: BUILTIN_PLAN_BATCH_LABEL_PRINT_TEMPLATE_ID,
   name: '批次码标签',
   isSystemTemplate: true,
   documentType: 'plan',
-  printTemplateManageScope: 'planLabel',
+  printTemplateManageScope: 'planBatchLabel',
   paperSize: { widthMm: 30, heightMm: 50 },
   paperSizeCustom: true,
   paperMarginsMm: { top: 2, left: 2, right: 2, bottom: 2 },
@@ -1850,7 +1850,20 @@ function filterStoredPrintTemplates(stored: unknown): unknown[] {
     if (MERGED_CODE_PRINT_TEMPLATE_IDS.has(id)) return false;
     if (isSystemLockedPrintTemplateId(id)) return false;
     return true;
-  });
+  }).map(x => normalizeStoredPrintTemplateManageScope(x as Record<string, unknown>));
+}
+
+/** 历史 `planLabel` 归属：批次内置 → planBatchLabel，其余（含用户自建）→ planItemLabel */
+export function normalizeStoredPrintTemplateManageScope(
+  tpl: Record<string, unknown>,
+): Record<string, unknown> {
+  const scope = tpl.printTemplateManageScope;
+  if (scope !== 'planLabel') return tpl;
+  const id = String(tpl.id ?? '').trim();
+  if (id === BUILTIN_PLAN_BATCH_LABEL_PRINT_TEMPLATE_ID) {
+    return { ...tpl, printTemplateManageScope: 'planBatchLabel' };
+  }
+  return { ...tpl, printTemplateManageScope: 'planItemLabel' };
 }
 
 /**

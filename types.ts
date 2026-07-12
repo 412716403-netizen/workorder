@@ -778,9 +778,21 @@ export interface PlanListPrintSettings {
 }
 
 /** 标签打印模版白名单（独立于列表打印） */
-export interface PlanLabelPrintSettings {
-  /** 仅这些模板出现在标签打印选择器中；未设置或空数组表示不限制。表单配置中仅维护已加入项，删空即恢复全部可用。 */
+export interface PlanLabelPrintWhitelistSettings {
+  /** 仅这些模板出现在对应标签打印选择器中；未设置或空数组表示不限制。表单配置中仅维护已加入项，删空即恢复全部可用。 */
   allowedTemplateIds?: string[];
+}
+
+/** 标签打印模版白名单（独立于列表打印） */
+export interface PlanLabelPrintSettings {
+  /**
+   * @deprecated 已拆分为 itemCodePrint / batchPrint；归一化时整份迁移至 itemCodePrint.allowedTemplateIds
+   */
+  allowedTemplateIds?: string[];
+  /** 单品码标签打印可选模版 */
+  itemCodePrint?: PlanLabelPrintWhitelistSettings;
+  /** 批次码标签打印可选模版 */
+  batchPrint?: PlanLabelPrintWhitelistSettings;
   /** 为 false 时计划详情不显示「追溯码」区块（单品码/批次码等）；默认 true */
   showPlanDetailTraceSection?: boolean;
   /** 计划详情「一键生成全部规格」每批件数；合法范围 1–100000，非法值在归一化时剔除 */
@@ -791,7 +803,7 @@ export interface PlanLabelPrintSettings {
 
 /** 计划单列表显示相关开关（与「字段配置」标准字段分离） */
 export interface PlanListDisplaySettings {
-  /** 为 true 时：计划新建/详情/列表显示交货日期；打印可选「计划.dueDate」；工单中心与外协流水列表在工单模式下显示交期列 */
+  /** 为 true 时：计划新建/详情/列表显示交货日期；打印可选「计划.dueDate」；工单中心与外协流水列表在工单模式下显示交期列。产品模式下不提供此配置项，界面亦不展示交货日期。 */
   showDeliveryDate?: boolean;
   /**
    * 为 true 时计划单列表仅显示「未下单」「未完成」（隐藏派生状态为「已完成」的行）。
@@ -1493,7 +1505,8 @@ export type PrintTemplateDocumentType =
 /** 与「增加/管理模版」弹窗入口一一对应；用于同数据源下多入口互斥展示（如外协发出 vs 外协收回） */
 export const PLAN_PRINT_TEMPLATE_MANAGE_SCOPES = [
   'planList',
-  'planLabel',
+  'planItemLabel',
+  'planBatchLabel',
   'orderDetail',
   'reportBatchDetail',
   'stockInFlowDetail',

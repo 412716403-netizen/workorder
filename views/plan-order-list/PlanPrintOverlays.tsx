@@ -15,8 +15,10 @@ interface PlanPrintOverlaysProps {
   products: Product[];
   dictionaries: AppDictionaries;
   orders: ProductionOrder[];
-  labelPrintPickerTemplates: PrintTemplate[];
-  labelPrintPickerHasWhitelist: boolean;
+  itemCodeLabelPrintPickerTemplates: PrintTemplate[];
+  itemCodeLabelPrintPickerHasWhitelist: boolean;
+  batchLabelPrintPickerTemplates: PrintTemplate[];
+  batchLabelPrintPickerHasWhitelist: boolean;
   onOpenLabelPrintConfig: () => void;
   onPrintRun: (run: { template: PrintTemplate; plan: PlanOrder } | null) => void;
   virtualBatches: PlanVirtualBatch[];
@@ -36,14 +38,17 @@ interface PlanPrintOverlaysProps {
 
 const LabelPrintTemplateEmptyState: React.FC<{
   hasWhitelist: boolean;
+  kind: 'itemCode' | 'batch';
   onAddTemplate: () => void;
-}> = ({ hasWhitelist, onAddTemplate }) => (
+}> = ({ hasWhitelist, kind, onAddTemplate }) => (
   <div className="px-2 py-2">
     <div className="flex flex-col items-center gap-4 px-4 py-8 text-center">
       <p className="text-xs leading-relaxed text-slate-500">
         {hasWhitelist
           ? '已加入的可选模版在当前列表中均不可用，或模版已被删除。请在「表单配置 → 打印模版」中调整。'
-          : '请先在「表单配置 → 打印模版」中为「标签打印」增加模版并加入可选列表后，再在此处打印。'}
+          : kind === 'batch'
+            ? '请先在「表单配置 → 打印模版 → 批次码打印」中增加模版并加入可选列表后，再在此处打印。'
+            : '请先在「表单配置 → 打印模版 → 单品码打印」中增加模版并加入可选列表后，再在此处打印。'}
       </p>
       <button
         type="button"
@@ -63,8 +68,10 @@ const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
   products,
   dictionaries,
   orders,
-  labelPrintPickerTemplates,
-  labelPrintPickerHasWhitelist,
+  itemCodeLabelPrintPickerTemplates,
+  itemCodeLabelPrintPickerHasWhitelist,
+  batchLabelPrintPickerTemplates,
+  batchLabelPrintPickerHasWhitelist,
   onOpenLabelPrintConfig,
   onPrintRun,
   virtualBatches,
@@ -214,14 +221,15 @@ const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
               </div>
 
               <div className="max-h-[min(40vh,280px)] overflow-y-auto">
-                {labelPrintPickerTemplates.length === 0 ? (
+                {itemCodeLabelPrintPickerTemplates.length === 0 ? (
                   <LabelPrintTemplateEmptyState
-                    hasWhitelist={labelPrintPickerHasWhitelist}
+                    hasWhitelist={itemCodeLabelPrintPickerHasWhitelist}
+                    kind="itemCode"
                     onAddTemplate={onOpenLabelPrintConfig}
                   />
                 ) : (
                   <ul className="divide-y divide-slate-100 p-2">
-                  {labelPrintPickerTemplates.map(t => (
+                  {itemCodeLabelPrintPickerTemplates.map(t => (
                     <li key={t.id}>
                       <div className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 hover:bg-slate-50/80">
                         <div className="min-w-0 flex-1">
@@ -337,14 +345,15 @@ const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
               </div>
 
               <div className="max-h-[min(40vh,280px)] overflow-y-auto">
-                {labelPrintPickerTemplates.length === 0 ? (
+                {batchLabelPrintPickerTemplates.length === 0 ? (
                   <LabelPrintTemplateEmptyState
-                    hasWhitelist={labelPrintPickerHasWhitelist}
+                    hasWhitelist={batchLabelPrintPickerHasWhitelist}
+                    kind="batch"
                     onAddTemplate={onOpenLabelPrintConfig}
                   />
                 ) : (
                   <ul className="divide-y divide-slate-100 p-2">
-                  {labelPrintPickerTemplates.map(t => (
+                  {batchLabelPrintPickerTemplates.map(t => (
                     <li key={t.id}>
                       <div className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 hover:bg-slate-50/80">
                         <div className="min-w-0 flex-1">
@@ -425,14 +434,15 @@ const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
                 </button>
               </div>
               <div className="max-h-[min(40vh,280px)] overflow-y-auto">
-                {labelPrintPickerTemplates.length === 0 ? (
+                {itemCodeLabelPrintPickerTemplates.length === 0 ? (
                   <LabelPrintTemplateEmptyState
-                    hasWhitelist={labelPrintPickerHasWhitelist}
+                    hasWhitelist={itemCodeLabelPrintPickerHasWhitelist}
+                    kind="itemCode"
                     onAddTemplate={onOpenLabelPrintConfig}
                   />
                 ) : (
                   <ul className="divide-y divide-slate-100 p-2">
-                  {labelPrintPickerTemplates.map(t => (
+                  {itemCodeLabelPrintPickerTemplates.map(t => (
                     <li key={t.id}>
                       <div className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 hover:bg-slate-50/80">
                         <div className="min-w-0 flex-1">
@@ -520,14 +530,15 @@ const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
                 </button>
               </div>
               <div className="max-h-[min(40vh,280px)] overflow-y-auto">
-                {labelPrintPickerTemplates.length === 0 ? (
+                {batchLabelPrintPickerTemplates.length === 0 ? (
                   <LabelPrintTemplateEmptyState
-                    hasWhitelist={labelPrintPickerHasWhitelist}
+                    hasWhitelist={batchLabelPrintPickerHasWhitelist}
+                    kind="batch"
                     onAddTemplate={onOpenLabelPrintConfig}
                   />
                 ) : (
                   <ul className="divide-y divide-slate-100 p-2">
-                  {labelPrintPickerTemplates.map(t => (
+                  {batchLabelPrintPickerTemplates.map(t => (
                     <li key={t.id}>
                       <div className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 hover:bg-slate-50/80">
                         <div className="min-w-0 flex-1">

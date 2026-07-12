@@ -12,7 +12,7 @@ import {
 } from '../../contexts/AppDataContext';
 import { normalizeDecimals } from '../../contexts/formSettingsDefaults';
 import { production as productionApi } from '../../services/api';
-import { filterPrintTemplatesByAllowedIds } from '../../utils/printTemplateWhitelist';
+import { buildPlanLabelPrintPicker, mergePlanLabelPrintWhitelistInSettings } from '../../utils/planLabelPrintSettings';
 import PlanDetailPanel from '../plan-order-list/PlanDetailPanel';
 import OrderDetailModal from '../OrderDetailModal';
 import { getOrderFamilyIds, hasOpsPerm } from '../production-ops/types';
@@ -94,31 +94,20 @@ const SalesOrderReferencedProductionDetailHost: React.FC<
     [canViewOrderDetail, onOrderIdChange],
   );
 
-  const { labelPrintPickerTemplates, labelPrintPickerHasWhitelist } = useMemo(() => {
-    const raw = c.planFormSettings.labelPrint?.allowedTemplateIds;
-    const filtered = filterPrintTemplatesByAllowedIds(c.printTemplates, raw);
-    const hasWhitelist =
-      Array.isArray(raw) &&
-      raw.some(x => x != null && x !== '' && String(x).trim() !== '');
-    return {
-      labelPrintPickerTemplates: filtered,
-      labelPrintPickerHasWhitelist: hasWhitelist,
-    };
-  }, [c.printTemplates, c.planFormSettings.labelPrint?.allowedTemplateIds]);
+  const itemCodeLabelPrintPicker = useMemo(
+    () => buildPlanLabelPrintPicker(c.printTemplates, c.planFormSettings.labelPrint, 'itemCode'),
+    [c.printTemplates, c.planFormSettings.labelPrint],
+  );
+  const batchLabelPrintPicker = useMemo(
+    () => buildPlanLabelPrintPicker(c.printTemplates, c.planFormSettings.labelPrint, 'batch'),
+    [c.printTemplates, c.planFormSettings.labelPrint],
+  );
 
   const mergePlanPrintWhitelist = useCallback(
-    (templateId: string) => {
-      const prev = c.planFormSettings.labelPrint?.allowedTemplateIds;
-      const allowedTemplateIds = prev?.length
-        ? Array.from(new Set([...prev, templateId]))
-        : [templateId];
-      void a.onUpdatePlanFormSettings({
-        ...c.planFormSettings,
-        labelPrint: {
-          ...c.planFormSettings.labelPrint,
-          allowedTemplateIds,
-        },
-      });
+    (kind: 'itemCode' | 'batch', templateId: string) => {
+      void a.onUpdatePlanFormSettings(
+        mergePlanLabelPrintWhitelistInSettings(c.planFormSettings, kind, templateId),
+      );
     },
     [a, c.planFormSettings],
   );
@@ -167,8 +156,10 @@ const SalesOrderReferencedProductionDetailHost: React.FC<
             setFilePreviewType(type);
           }}
           onPrintRun={setPlanListPrintRun}
-          labelPrintPickerTemplates={labelPrintPickerTemplates}
-          labelPrintPickerHasWhitelist={labelPrintPickerHasWhitelist}
+          itemCodeLabelPrintPickerTemplates={itemCodeLabelPrintPicker.templates}
+          itemCodeLabelPrintPickerHasWhitelist={itemCodeLabelPrintPicker.hasWhitelist}
+          batchLabelPrintPickerTemplates={batchLabelPrintPicker.templates}
+          batchLabelPrintPickerHasWhitelist={batchLabelPrintPicker.hasWhitelist}
           onOpenLabelPrintConfig={openPlanFormPrintTab}
           printTemplates={c.printTemplates}
           onUpdatePrintTemplates={a.onUpdatePrintTemplates}

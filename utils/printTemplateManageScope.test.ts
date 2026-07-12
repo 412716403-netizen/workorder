@@ -35,14 +35,16 @@ describe('filterPrintTemplatesForManageScope', () => {
     expect(r.map(x => x.id).sort()).toEqual(['p', 'u'].sort());
   });
 
-  it('计划列表与计划标签按 printTemplateManageScope 互斥', () => {
+  it('计划列表、单品码与批次码按 printTemplateManageScope 互斥', () => {
     const list = [
       tpl('list', { documentType: 'plan', printTemplateManageScope: 'planList' }),
-      tpl('lbl', { documentType: 'plan', printTemplateManageScope: 'planLabel' }),
+      tpl('item', { documentType: 'plan', printTemplateManageScope: 'planItemLabel' }),
+      tpl('batch', { documentType: 'plan', printTemplateManageScope: 'planBatchLabel' }),
       tpl('legacy', { documentType: 'plan' }),
     ];
     expect(filterPrintTemplatesForManageScope(list, 'planList').map(x => x.id).sort()).toEqual(['legacy', 'list'].sort());
-    expect(filterPrintTemplatesForManageScope(list, 'planLabel').map(x => x.id).sort()).toEqual(['lbl', 'legacy'].sort());
+    expect(filterPrintTemplatesForManageScope(list, 'planItemLabel').map(x => x.id).sort()).toEqual(['item', 'legacy'].sort());
+    expect(filterPrintTemplatesForManageScope(list, 'planBatchLabel').map(x => x.id).sort()).toEqual(['batch', 'legacy'].sort());
   });
 
   it('工单详情与报工详情按 printTemplateManageScope 互斥（同为 order 数据源）', () => {

@@ -46,7 +46,13 @@ const PlanFormConfigModal: React.FC<PlanFormConfigModalProps> = ({
       ...planFormConfigSchema,
       tabs: planFormConfigSchema.tabs.map(tab => ({
         ...tab,
-        sections: tab.sections.filter(s => s.id !== 'labelPrint'),
+        sections: tab.sections.filter(
+          s =>
+            s.id !== 'itemCodeLabelPrint' &&
+            s.id !== 'batchLabelPrint' &&
+            s.id !== 'traceSectionToggle' &&
+            s.id !== 'labelPrint',
+        ),
       })),
     };
   }, [traceEnabled]);

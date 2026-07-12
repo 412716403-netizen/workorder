@@ -25,6 +25,8 @@ import {
   DEFAULT_REWORK_FORM_SETTINGS,
 } from '../types';
 import { applyTraceabilityLabelPrintDefaults } from '../shared/traceabilityLabelPrintDefaults';
+import { BUILTIN_PLAN_BATCH_LABEL_PRINT_TEMPLATE_ID } from '../shared/systemPrintTemplates';
+import { migratePlanLabelPrintSettings } from '../utils/planLabelPrintSettings';
 import { ReportApprovalStatus } from '../shared/types';
 import { normalizePlanFormFieldConfigArray } from '../utils/planFormCustomField';
 // ── Decimal normalizer ──
@@ -132,7 +134,11 @@ function alignPlanCustomerVisibility(
 export function normalizePlanFormSettings(raw: PlanFormSettings | null | undefined): PlanFormSettings {
   const s = raw ?? DEFAULT_PLAN_FORM_SETTINGS;
   const allowedList = s.listPrint?.allowedTemplateIds?.filter(Boolean) ?? [];
-  const allowedLabel = s.labelPrint?.allowedTemplateIds?.filter(Boolean) ?? [];
+  const migratedLabelPrint = migratePlanLabelPrintSettings(s.labelPrint);
+  const allowedItemLabel =
+    migratedLabelPrint?.itemCodePrint?.allowedTemplateIds?.filter(Boolean) ?? [];
+  const allowedBatchLabel =
+    migratedLabelPrint?.batchPrint?.allowedTemplateIds?.filter(Boolean) ?? [];
   return {
     ...s,
     standardFields: alignPlanCustomerVisibility(
@@ -150,9 +156,9 @@ export function normalizePlanFormSettings(raw: PlanFormSettings | null | undefin
       showPrintButton: s.listPrint?.showPrintButton === true,
       allowedTemplateIds: allowedList.length > 0 ? allowedList : undefined,
     },
-    labelPrint: s.labelPrint
+    labelPrint: migratedLabelPrint
       ? (() => {
-          const lp = s.labelPrint;
+          const lp = migratedLabelPrint;
           const { bulkQuickSplitBatchSize: rawSizeIn, bulkQuickSplitWithItemCodes: _drop, ...lpRest } = lp;
           let bulkQuickSplitBatchSize: number | undefined;
           if (rawSizeIn != null && Number.isFinite(Number(rawSizeIn))) {
@@ -161,10 +167,16 @@ export function normalizePlanFormSettings(raw: PlanFormSettings | null | undefin
           }
           return {
             ...lpRest,
-            allowedTemplateIds: allowedLabel.length > 0 ? allowedLabel : undefined,
-            // 默认显示（与 PlanDetailPanel 中 `!== false` 判断及配置默认勾选一致）；
-            // 仅在用户显式关闭时存为 false，避免「保存拆批设置」等其它写入路径
-            // 把 undefined 误规范为 false 后让追溯码区块整体消失。
+            ...(allowedItemLabel.length > 0
+              ? { itemCodePrint: { allowedTemplateIds: allowedItemLabel } }
+              : lp.itemCodePrint
+                ? { itemCodePrint: lp.itemCodePrint }
+                : {}),
+            ...(allowedBatchLabel.length > 0
+              ? { batchPrint: { allowedTemplateIds: allowedBatchLabel } }
+              : lp.batchPrint
+                ? { batchPrint: lp.batchPrint }
+                : {}),
             showPlanDetailTraceSection: lp.showPlanDetailTraceSection !== false,
             ...(bulkQuickSplitBatchSize !== undefined ? { bulkQuickSplitBatchSize } : {}),
             bulkQuickSplitWithItemCodes: lp.bulkQuickSplitWithItemCodes !== false,
@@ -175,40 +187,53 @@ export function normalizePlanFormSettings(raw: PlanFormSettings | null | undefin
 }
 
 /**
- * 修复：标签打印白名单里误只加了「计划单列表」归属模版（planList），导致计划详情里
- * `planLabel` 单品码等标签模版不在可选列表中。此时在内存中合并所有 `printTemplateManageScope === 'planLabel'`
- * 的模版 id（不自动写库，下次保存计划表单配置时持久化）。
+ * 修复：单品码/批次码白名单里误只加了「计划单列表」归属模版，导致对应标签模版不在可选列表中。
+ * 内存合并，不写库。
  */
 export function repairPlanLabelPrintWhitelistMissingPlanLabelTemplates(
   planForm: PlanFormSettings,
   printTemplates: PrintTemplate[],
 ): PlanFormSettings {
-  const prev = planForm.labelPrint?.allowedTemplateIds?.filter(Boolean).map(String) ?? [];
-  if (prev.length === 0) return planForm;
+  const migrated = migratePlanLabelPrintSettings(planForm.labelPrint);
+  const repairSlot = (
+    slot: { allowedTemplateIds?: string[] } | undefined,
+    scope: 'planItemLabel' | 'planBatchLabel',
+  ): { allowedTemplateIds?: string[] } | undefined => {
+    const prev = slot?.allowedTemplateIds?.filter(Boolean).map(String) ?? [];
+    if (prev.length === 0) return slot;
 
-  const byId = new Map(printTemplates.map(t => [String(t.id).trim(), t] as const));
-  for (const tid of prev) {
-    if (!byId.has(tid)) return planForm;
-  }
+    const byId = new Map(printTemplates.map(t => [String(t.id).trim(), t] as const));
+    for (const tid of prev) {
+      if (!byId.has(tid)) return slot;
+    }
 
-  const planLabelIds = printTemplates
-    .filter(t => t.printTemplateManageScope === 'planLabel')
-    .map(t => String(t.id).trim())
-    .filter(Boolean);
-  if (!planLabelIds.length) return planForm;
+    const scopeIds = printTemplates
+      .filter(t => {
+        const ms = t.printTemplateManageScope;
+        return ms === scope || (scope === 'planItemLabel' && ms === 'planLabel' && String(t.id).trim() !== BUILTIN_PLAN_BATCH_LABEL_PRINT_TEMPLATE_ID);
+      })
+      .map(t => String(t.id).trim())
+      .filter(Boolean);
+    if (!scopeIds.length) return slot;
+    if (scopeIds.some(pid => prev.includes(pid))) return slot;
 
-  if (planLabelIds.some(pid => prev.includes(pid))) return planForm;
+    const hasPlanListInWhitelist = prev.some(tid => byId.get(tid)?.printTemplateManageScope === 'planList');
+    if (!hasPlanListInWhitelist) return slot;
 
-  const hasPlanListInWhitelist = prev.some(tid => byId.get(tid)?.printTemplateManageScope === 'planList');
-  if (!hasPlanListInWhitelist) return planForm;
+    return { allowedTemplateIds: [...new Set([...prev, ...scopeIds])] };
+  };
 
-  const next = [...new Set([...prev, ...planLabelIds])];
+  const nextItem = repairSlot(migrated?.itemCodePrint, 'planItemLabel');
+  const nextBatch = repairSlot(migrated?.batchPrint, 'planBatchLabel');
+  if (nextItem === migrated?.itemCodePrint && nextBatch === migrated?.batchPrint) return planForm;
+
   return {
     ...planForm,
     labelPrint: {
-      ...planForm.labelPrint,
-      showPlanDetailTraceSection: planForm.labelPrint?.showPlanDetailTraceSection !== false,
-      allowedTemplateIds: next,
+      ...migrated,
+      showPlanDetailTraceSection: migrated?.showPlanDetailTraceSection !== false,
+      ...(nextItem ? { itemCodePrint: nextItem } : {}),
+      ...(nextBatch ? { batchPrint: nextBatch } : {}),
     },
   };
 }
