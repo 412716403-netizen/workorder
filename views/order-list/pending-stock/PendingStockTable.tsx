@@ -13,6 +13,7 @@ import { ScanBatchTrigger } from '../../../components/scan/ScanBatchTrigger';
 import { useTraceabilityPlugin } from '../../../hooks/useTraceabilityPlugin';
 import type { Product, ProductCategory } from '../../../types';
 import { buildStockInFormDefaultsForPending, type PendingStockItem } from '../pendingStockStockInHelpers';
+import { defaultEntryDatetimeLocal } from '../../../utils/docEntryTime';
 import type { usePendingStockState } from '../../../hooks/usePendingStockState';
 import FlowListProductCell from '../../../components/flow/FlowListProductCell';
 
@@ -73,6 +74,7 @@ const PendingStockTable: React.FC<Props> = ({ helper, productionLinkMode, produc
       variantQuantities: d.variantQuantities,
       singleQuantity: d.singleQuantity,
       customData: {},
+      entryTimestamp: defaultEntryDatetimeLocal(),
     });
   };
 

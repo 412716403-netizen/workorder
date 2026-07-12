@@ -1,17 +1,49 @@
-@import '../production-plans/production-plans.wxss';
+@import '../production-orders/production-orders.wxss';
 
-.material-list-view-tabs {
+.material-filter-panel {
+  padding-top: 16rpx;
+  padding-bottom: 16rpx;
+}
+
+.material-filter-toolbar {
   display: flex;
-  gap: 6rpx;
-  padding: 4rpx;
-  background: #f1f5f9;
-  border-radius: 10rpx;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.material-filter-chips {
+  flex: 1;
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.material-filter-flow {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8rpx;
+  padding: 12rpx 20rpx;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary-light);
+  border: 1rpx solid rgba(47, 107, 255, 0.18);
+}
+
+.material-filter-flow--press {
+  opacity: 0.88;
+}
+
+.material-filter-flow__icon {
+  width: 28rpx;
+  height: 28rpx;
   flex-shrink: 0;
 }
 
-.material-list-view-tabs .material-partner-view-tab {
-  padding: 8rpx 14rpx;
-  font-size: 20rpx;
+.material-filter-flow__label {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: var(--color-primary);
+  line-height: 1.2;
 }
 
 .material-stock-page {
@@ -116,31 +148,6 @@
 
 .material-stock-card--nested:last-child {
   border-bottom: none;
-}
-
-.material-flow-btn {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-width: 64rpx;
-  padding: 0 4rpx;
-}
-
-.material-flow-btn__icon {
-  width: 40rpx;
-  height: 40rpx;
-  filter: brightness(0) invert(1);
-  opacity: 0.92;
-}
-
-.material-flow-btn__label {
-  margin-top: 2rpx;
-  font-size: 20rpx;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.92);
-  line-height: 1.2;
 }
 
 .material-stock-card {

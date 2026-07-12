@@ -73,6 +73,7 @@ import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { formatPlanOrderCreatedAtForList, toLocalDateYmd } from '../utils/localDateTime';
 import { getProductCategoryCustomFieldEntries } from '../utils/reportCustomDocField';
 import { resolvePrimaryOrderIdForPlan } from '../utils/resolvePrimaryOrderIdForPlan';
+import { getPlanSourceSalesOrderDocNumber } from '../utils/planFromSalesOrder';
 import { hasOpsPerm, getOrderFamilyIds } from './production-ops/types';
 import OrderDetailModal from './OrderDetailModal';
 import { production as productionApi } from '../services/api';
@@ -196,6 +197,17 @@ function renderPlanListPurchaseProgress(progress: PlanPurchaseProgress | undefin
   );
 }
 
+function renderPlanSourceSalesOrderMeta(plan: PlanOrder): React.ReactNode {
+  const doc = getPlanSourceSalesOrderDocNumber(plan);
+  if (!doc) return null;
+  return (
+    <span className="flex items-center gap-1 text-indigo-600 shrink-0" title="来源销售订单">
+      <ClipboardList className="w-3 h-3 shrink-0" />
+      来源 {doc}
+    </span>
+  );
+}
+
 function renderPlanListCustomFieldValue(
   cf: PlanFormFieldConfig,
   plan: PlanOrder,
@@ -295,6 +307,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
   const canViewOrderDetail = hasOpsPerm(tenantRole, userPermissions, 'production:orders_detail:view');
   const canEditOrderDetail = hasOpsPerm(tenantRole, userPermissions, 'production:orders_detail:edit');
   const canDeleteOrderDetail = hasOpsPerm(tenantRole, userPermissions, 'production:orders_detail:delete');
+  const canReferenceSalesOrder = hasOpsPerm(tenantRole, userPermissions, 'psi:sales_order:view');
   const orderDetailFamilyIds = useMemo(() => {
     if (!orderDetailId) return [] as string[];
     return getOrderFamilyIds(orders, orderDetailId);
@@ -779,6 +792,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                         <div className="mb-1 flex flex-wrap items-center gap-1">{renderProductCustomTags(product)}</div>
                         <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                           {showInList('customer') && productionLinkMode !== 'product' && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {plan.customer}</span>}
+                          {renderPlanSourceSalesOrderMeta(plan)}
                           {showInList('totalQty') && (
                             <span className="flex items-center gap-1">
                               <Layers className="w-3 h-3 shrink-0" />
@@ -880,6 +894,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                                 <div className="mb-1 flex flex-wrap items-center gap-1">{renderProductCustomTags(product)}</div>
                                 <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                                   {showInList('customer') && productionLinkMode !== 'product' && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {plan.customer}</span>}
+                          {renderPlanSourceSalesOrderMeta(plan)}
                                   {showInList('totalQty') && (
                             <span className="flex items-center gap-1">
                               <Layers className="w-3 h-3 shrink-0" />
@@ -987,6 +1002,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                               <div className="mb-1 flex flex-wrap items-center gap-1">{renderProductCustomTags(product)}</div>
                               <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                                 {showInList('customer') && productionLinkMode !== 'product' && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {plan.customer}</span>}
+                          {renderPlanSourceSalesOrderMeta(plan)}
                                 {showInList('totalQty') && (
                             <span className="flex items-center gap-1">
                               <Layers className="w-3 h-3 shrink-0" />
@@ -1071,6 +1087,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
         planFormSettings={planFormSettings}
         plans={plans}
         productionLinkMode={productionLinkMode}
+        canReferenceSalesOrder={canReferenceSalesOrder}
         onSave={async (plan) => {
           await Promise.resolve(onCreatePlan(plan));
         }}
@@ -1298,6 +1315,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
         printTemplates={printTemplates}
         productionLinkMode={productionLinkMode}
         productMilestoneProgresses={productMilestoneProgresses}
+        globalNodes={globalNodes}
         outsourceFormSettings={outsourceFormSettings}
         planFormSettings={planFormSettings}
         partners={partners}

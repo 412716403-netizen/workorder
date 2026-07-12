@@ -36,6 +36,8 @@ import { PlanFormCustomFieldReadonly } from '../../components/PlanFormCustomFiel
 import DocPhaseModal, { DocPhaseEditToolbarPortalContext } from '../../components/DocPhaseModal';
 import { DocSummaryCard, DocInlineMetaRow } from '../../components/doc-modal';
 import { fmtDT } from '../../utils/formatTime';
+import { defaultEntryDatetimeLocal, entryDatetimeLocalToTimestamp, hydrateEntryDatetimeLocal } from '../../utils/docEntryTime';
+import DocEntryTimeField from '../../components/DocEntryTimeField';
 import { buildOneBlockMatrixPrintRows } from '../../utils/variantMatrixPrintRows';
 import {
   psiOrderBillFormSectionStackClass,
@@ -159,6 +161,7 @@ export const StockInFlowModal: React.FC<StockInFlowModalProps> = ({
   const [stockInFlowEditing, setStockInFlowEditing] = useState<{
     warehouseId: string;
     customData: Record<string, unknown>;
+    entryTimestamp: string;
     /**
      * id 为空表示该规格尚未有入库明细行，保存时走新增。
      * productId/orderId 用于多产品共号场景：每行明确归属哪个产品/工单，
@@ -509,6 +512,7 @@ export const StockInFlowModal: React.FC<StockInFlowModalProps> = ({
           const baseEdit = {
             warehouseId: detailBatch.first.warehouseId ?? '',
             customData: { ...(detailBatch.stockInCustomSnapshot ?? {}) },
+            entryTimestamp: hydrateEntryDatetimeLocal(detailBatch.first.timestamp),
           };
           const editRows: { id: string; productId: string; orderId: string; variantId?: string; quantity: number }[] = [];
           for (const g of detailProductGroups) {
@@ -580,7 +584,7 @@ export const StockInFlowModal: React.FC<StockInFlowModalProps> = ({
                 variantId: row.variantId,
                 quantity: row.quantity,
                 operator: detailBatch.first.operator,
-                timestamp: new Date().toLocaleString(),
+                timestamp: entryDatetimeLocalToTimestamp(stockInFlowEditing.entryTimestamp),
                 status: '已完成',
                 warehouseId: stockInFlowEditing.warehouseId || undefined,
                 docNo: detailBatch.docNo,
@@ -1029,6 +1033,17 @@ export const StockInFlowModal: React.FC<StockInFlowModalProps> = ({
                   <div className="space-y-4 min-h-0">
                   {isEditing && ef ? (
                     <div className={psiOrderBillFormSectionStackClass}>
+                      {ef.rows.some(r => !r.id) ? (
+                        <DocEntryTimeField
+                          mode="datetime"
+                          className="mb-4"
+                          label="新建明细创建时间"
+                          value={ef.entryTimestamp}
+                          onChange={entryTimestamp =>
+                            setStockInFlowEditing(prev => (prev ? { ...prev, entryTimestamp } : prev))
+                          }
+                        />
+                      ) : null}
                       <DocSummaryCard
                         className="mb-5"
                         main={

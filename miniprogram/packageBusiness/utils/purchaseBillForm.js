@@ -11,6 +11,12 @@ const _require2 =
 const _require3 = require('./productionPlans.js'),productHasColorSizeMatrix = _require3.productHasColorSizeMatrix;
 const _require4 = require('./variantQtyMatrix.js'),buildVariantMatrixUiModel = _require4.buildVariantMatrixUiModel;
 const _require5 = require('./dateYmd.js'),localTodayYmd = _require5.localTodayYmd;
+const {
+  defaultEntryDate,
+  defaultEntryTimeHm,
+  hydratePsiEntryFields,
+  psiEntryTimestampsFromDatetime,
+} = require('./docEntryTime.js');
 const _require6 = require('./materialIssueBatch.js'),categoryUsesBatchManagement = _require6.categoryUsesBatchManagement;
 const _require7 = require('./materialStockConfirm.js'),BATCH_NO_UNTAGGED = _require7.BATCH_NO_UNTAGGED;
 
@@ -84,7 +90,9 @@ function buildInitialForm() {
     warehouseName: '',
     docNumber: '',
     operator: '',
-    note: ''
+    note: '',
+    createdAt: defaultEntryDate(),
+    createdAtTime: defaultEntryTimeHm(),
   };
 }
 
@@ -273,8 +281,10 @@ function buildPurchaseBillSaveRecords(opts) {
 
 
     opts.form,lines = opts.lines,docNumber = opts.docNumber,editingDocNumber = opts.editingDocNumber,existingRecords = opts.existingRecords,operator = opts.operator;
-  const timestamp = psiDocTimestampIsoForSave(existingRecords, editingDocNumber);
-  const pbCreatedAtIso = pbCreatedAtIsoForSave(existingRecords, editingDocNumber);
+  const { createdAt: pbCreatedAtIso, timestamp } = psiEntryTimestampsFromDatetime(
+    form.createdAt || defaultEntryDate(),
+    form.createdAtTime
+  );
   const newRecords = [];
   let recIdx = 0;
 
@@ -435,8 +445,10 @@ function buildConvertFromOrderRecords(opts) {
 
 
     opts.form,selectedLines = opts.selectedLines,docNumber = opts.docNumber,operator = opts.operator;
-  const timestamp = new Date().toISOString();
-  const pbCreatedAtIso = localCalendarYmdStartToIso(localTodayYmd());
+  const { createdAt: pbCreatedAtIso, timestamp } = psiEntryTimestampsFromDatetime(
+    form.createdAt || defaultEntryDate(),
+    form.createdAtTime
+  );
   const newRecords = [];
   let idx = 0;
 
@@ -515,5 +527,6 @@ module.exports = {
   buildPendingPoDocs,
   filterPendingPoDocs,
   buildConvertFromOrderRecords,
-  applyLastPurchasePrices
+  applyLastPurchasePrices,
+  hydratePsiEntryFields,
 };

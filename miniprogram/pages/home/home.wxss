@@ -8,6 +8,8 @@
 }
 
 .home-header {
+  position: relative;
+  z-index: 20;
   flex-shrink: 0;
   padding: 0 28rpx 28rpx;
   background: linear-gradient(135deg, var(--color-primary-gradient-start), var(--color-primary-gradient-end));
@@ -67,6 +69,8 @@
 }
 
 .home-shortcuts {
+  position: relative;
+  z-index: 21;
   width: 100%;
 }
 
@@ -103,6 +107,8 @@
   align-items: center;
   gap: 10rpx;
   padding: 8rpx 4rpx;
+  position: relative;
+  z-index: 22;
 }
 
 .home-shortcut__icon {
@@ -134,6 +140,11 @@
   white-space: nowrap;
 }
 
+.home-shortcut--press {
+  opacity: 0.82;
+  transform: scale(0.97);
+}
+
 .home-shortcuts--loading,
 .home-shortcuts--empty {
   padding: 20rpx 0 8rpx;
@@ -145,14 +156,17 @@
 .home-scroll {
   flex: 1;
   min-height: 0;
+  position: relative;
+  z-index: 1;
 }
 
 .home-body {
-  margin-top: -24rpx;
-  padding: 48rpx var(--spacing-page) calc(var(--tabbar-height) + env(safe-area-inset-bottom) + 48rpx);
+  margin-top: 0;
+  padding: 24rpx var(--spacing-page) calc(var(--tabbar-height) + env(safe-area-inset-bottom) + 48rpx);
   border-radius: 32rpx 32rpx 0 0;
   background: var(--color-bg-page);
   min-height: 100%;
+  box-sizing: border-box;
 }
 
 .home-dashboard-head {

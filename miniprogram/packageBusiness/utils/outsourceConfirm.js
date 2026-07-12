@@ -35,9 +35,11 @@ function buildDispatchBatchPayload(params) {
     ordersById,
     deliveryDate,
     customValues,
+    timestamp,
   } = params;
 
   const collabExtra = buildDispatchCollabSnapshot(customValues, deliveryDate);
+  const ts = timestamp || undefined;
   const batch = [];
   const { collectDispatchQuantityEntries } = require('./outsourceDispatchMatrix.js');
   const entries = collectDispatchQuantityEntries(rows, quantities);
@@ -54,6 +56,7 @@ function buildDispatchBatchPayload(params) {
         status: '加工中',
         partner: partnerName,
         nodeId: row.nodeId,
+        ...(ts ? { timestamp: ts } : {}),
         ...variantField,
         ...collabExtra,
       });
@@ -69,6 +72,7 @@ function buildDispatchBatchPayload(params) {
         status: '加工中',
         partner: partnerName,
         nodeId: row.nodeId,
+        ...(ts ? { timestamp: ts } : {}),
         ...variantField,
         ...collabExtra,
       });
@@ -86,10 +90,12 @@ function buildReceiveBatchPayload(params) {
     operator,
     ordersById,
     customValues,
+    timestamp,
   } = params;
 
   const { collectReceiveQuantityEntries } = require('./outsourceReceiveMatrix.js');
 
+  const ts = timestamp || undefined;
   const collabExtra = customValues && Object.keys(customValues).length
     ? { collabData: { ...customValues } }
     : {};
@@ -115,6 +121,7 @@ function buildReceiveBatchPayload(params) {
         nodeId: row.nodeId,
         unitPrice: unitPrice > 0 ? unitPrice : undefined,
         amount,
+        ...(ts ? { timestamp: ts } : {}),
         ...variantExtra,
         ...collabExtra,
       });
@@ -129,6 +136,7 @@ function buildReceiveBatchPayload(params) {
         nodeId: row.nodeId,
         unitPrice: unitPrice > 0 ? unitPrice : undefined,
         amount,
+        ...(ts ? { timestamp: ts } : {}),
         ...variantExtra,
         ...collabExtra,
       });

@@ -192,21 +192,6 @@
   color: #d97706;
 }
 
-.report-batch-edit__datetime {
-  display: flex;
-  gap: 12rpx;
-}
-
-.report-batch-edit__picker {
-  flex: 1;
-  padding: 16rpx 20rpx;
-  border-radius: 12rpx;
-  background: var(--color-bg-page);
-  font-size: 26rpx;
-  color: var(--color-text-primary);
-  text-align: center;
-}
-
 .report-batch-edit__input {
   flex: 1;
   padding: 16rpx 20rpx;

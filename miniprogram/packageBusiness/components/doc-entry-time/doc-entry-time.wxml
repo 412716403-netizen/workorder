@@ -1,0 +1,7 @@
+<picker mode="date" value="{{value}}" bindchange="onDateChange">
+  <view class="plan-form-cell {{last ? 'plan-form-cell--last' : ''}}">
+    <text class="plan-form-cell__label">{{label}}</text>
+    <text class="plan-form-cell__value {{value ? '' : 'plan-form-cell__value--ph'}}">{{value || '请选择'}}</text>
+    <text class="plan-form-cell__chevron">›</text>
+  </view>
+</picker>

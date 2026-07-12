@@ -243,7 +243,7 @@ function validateFinanceForm(form, visibility, type = 'RECEIPT') {
   return '';
 }
 
-function buildFinanceSavePayload(form, visibility, operator, existing, type = 'RECEIPT') {
+function buildFinanceSavePayload(form, visibility, operator, existing, type = 'RECEIPT', entryOpts) {
   const amount = Number(form.amount) || 0;
   const customData = buildCustomDataPayload(visibility.customFields || [], form.customData || {});
   const isEdit = !!(existing && existing.id);
@@ -270,6 +270,9 @@ function buildFinanceSavePayload(form, visibility, operator, existing, type = 'R
     body.id = existing.id;
     body.docNo = existing.docNo;
     body.timestamp = existing.timestamp;
+  } else if (entryOpts && entryOpts.entryDate) {
+    const { entryDateAndTimeToTimestamp } = require('./docEntryTime.js');
+    body.timestamp = entryDateAndTimeToTimestamp(entryOpts.entryDate, entryOpts.entryTime);
   }
   return body;
 }

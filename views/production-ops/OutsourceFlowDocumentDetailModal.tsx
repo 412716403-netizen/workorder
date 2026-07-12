@@ -54,6 +54,12 @@ import {
   propagateLineUnitPriceToEntries,
   resolveOutsourceReceiveLineUnitPrice,
 } from '../../utils/outsourceReceiveUnitPrice';
+import DocEntryTimeField from '../../components/DocEntryTimeField';
+import {
+  defaultEntryDatetimeLocal,
+  entryDatetimeLocalToTimestamp,
+  hydrateEntryDatetimeLocal,
+} from '../../utils/docEntryTime';
 
 export interface OutsourceFlowDocumentDetailModalProps {
   productionLinkMode: 'order' | 'product';
@@ -155,6 +161,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
   const [flowDetailLineWeights, setFlowDetailLineWeights] = useState<Record<string, number>>({});
   const [flowDetailEditCustom, setFlowDetailEditCustom] = useState<Record<string, unknown>>({});
   const [flowDetailDeliveryDate, setFlowDetailDeliveryDate] = useState('');
+  const [flowDetailEditTimestamp, setFlowDetailEditTimestamp] = useState(() => defaultEntryDatetimeLocal());
   const [detailImagePreviewUrl, setDetailImagePreviewUrl] = useState<string | null>(null);
 
   const docRecords = useMemo(
@@ -196,6 +203,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
     const firstD = docRecords[0];
     const docPartnerVal = firstD.partner ?? '—';
     setFlowDetailEditPartner(docPartnerVal);
+    setFlowDetailEditTimestamp(hydrateEntryDatetimeLocal(firstD.timestamp));
     setFlowDetailEditCustom({ ...outsourceCustomSnapshot });
     if (firstD.status !== '已收回') {
       const rawDd = (firstD.collabData as Record<string, unknown> | undefined)?.[OUTSOURCE_DISPATCH_DELIVERY_DATE_KEY];
@@ -276,6 +284,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
     setFlowDetailLineWeights({});
     setFlowDetailEditCustom({});
     setFlowDetailDeliveryDate('');
+    setFlowDetailEditTimestamp(defaultEntryDatetimeLocal());
     setFlowDetailEditMode(false);
   }, []);
 
@@ -293,6 +302,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
     setFlowDetailLineWeights({});
     setFlowDetailEditCustom({});
     setFlowDetailDeliveryDate('');
+    setFlowDetailEditTimestamp(defaultEntryDatetimeLocal());
   }, [layout, phase]);
 
   useEffect(() => {
@@ -350,7 +360,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
     } else {
       for (const rec of toDelete) await onDeleteRecord(rec.id);
     }
-    const timestamp = firstSave.timestamp || new Date().toLocaleString();
+    const timestamp = entryDatetimeLocalToTimestamp(flowDetailEditTimestamp);
     const newStatus = isReceiveDocSave ? '已收回' : '加工中';
     const resolveReceiveUnitPrice = (entryKey: string, baseKey: string): number | undefined => {
       if (!isReceiveDocSave) return undefined;
@@ -459,6 +469,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
     setFlowDetailLineWeights({});
     setFlowDetailEditCustom({});
     setFlowDetailDeliveryDate('');
+    setFlowDetailEditTimestamp(defaultEntryDatetimeLocal());
     toast.success('已保存');
     if (onAfterSave) {
       onAfterSave();
@@ -488,6 +499,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
     confirm,
     globalNodes,
     flowDetailDeliveryDate,
+    flowDetailEditTimestamp,
     outsourceFormSettings.showOutsourceDispatchDeliveryDate,
   ]);
 
@@ -683,10 +695,20 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                   ) : null}
                 </div>
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px] font-bold text-slate-400 uppercase">
-                  <span className="flex items-center gap-1">
-                    <Clock className="h-3 w-3 shrink-0" />
-                    <span className="normal-case">{docDateStr}</span>
-                  </span>
+                  {editActive ? (
+                    <DocEntryTimeField
+                      mode="datetime"
+                      className="min-w-0 max-w-xs normal-case"
+                      label="创建时间"
+                      value={flowDetailEditTimestamp}
+                      onChange={setFlowDetailEditTimestamp}
+                    />
+                  ) : (
+                    <span className="flex items-center gap-1">
+                      <Clock className="h-3 w-3 shrink-0" />
+                      <span className="normal-case">{docDateStr}</span>
+                    </span>
+                  )}
                   <span className="flex items-center gap-1">
                     <User className="h-3 w-3 shrink-0" />
                     <span className="normal-case">经办: {first.operator || '—'}</span>

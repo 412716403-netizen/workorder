@@ -30,6 +30,7 @@ const _require10 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _
 const _require11 = require('../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require11.afterMatrixKeyboardOpen;
 const _require12 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require12.LIST_ROUTES,afterSaveReturnToList = _require12.afterSaveReturnToList;
 const { applyPartnerCreatedOnPage } = require('../utils/mergePartnerList.js');
+const { defaultEntryDate, defaultEntryTimeHm, entryDateAndTimeToIso } = require('../utils/docEntryTime.js');
 
 function computeScrollHeight(nav) {
   const win = readWindowMetrics();
@@ -57,7 +58,9 @@ Page({
     navBarHeight: 44,
     headerBlockHeight: 88,
     scrollHeight: 400,
-    matrixScrollTop: 0
+    matrixScrollTop: 0,
+    entryDate: '',
+    entryTime: ''
   },
 
   onLoad() {
@@ -81,7 +84,9 @@ Page({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
       headerBlockHeight: computeSimplePlanHeaderHeight(nav),
-      scrollHeight: computeScrollHeight(nav)
+      scrollHeight: computeScrollHeight(nav),
+      entryDate: defaultEntryDate(),
+      entryTime: defaultEntryTimeHm()
     });
     this.init();
   },
@@ -198,6 +203,14 @@ Page({
 
   onPartnerCreated(e) {
     applyPartnerCreatedOnPage(this, e, { cacheKey: '_partners' });
+  },
+
+  onEntryDateChange(e) {
+    this.setData({ entryDate: (e.detail && e.detail.value) || '' });
+  },
+
+  onEntryTimeChange(e) {
+    this.setData({ entryTime: (e.detail && e.detail.value) || '' });
   },
 
   onDeliveryDateChange(e) {
@@ -368,7 +381,8 @@ Page({
         operator: readOperatorDisplayName(readTenantCtx()),
         productionLinkMode: this._productionLinkMode,
         ordersById: this._ordersById,
-        deliveryDate: this.data.deliveryDate
+        deliveryDate: this.data.deliveryDate,
+        timestamp: entryDateAndTimeToIso(this.data.entryDate, this.data.entryTime)
       });
       if (!batch.length) {
         throw new Error('无有效发出行');

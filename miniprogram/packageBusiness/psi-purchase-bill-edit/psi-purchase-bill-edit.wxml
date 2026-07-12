@@ -34,6 +34,18 @@
       </view>
 
       <view class="plan-form-card">
+        <view class="plan-form-cell">
+          <text class="plan-form-cell__label">创建时间</text>
+          <view class="report-batch-edit__datetime">
+            <picker mode="date" value="{{form.createdAt}}" bindchange="onCreatedAtChange">
+              <view class="report-batch-edit__picker">{{form.createdAt || '选择日期'}}</view>
+            </picker>
+            <picker mode="time" value="{{form.createdAtTime}}" bindchange="onCreatedAtTimeChange">
+              <view class="report-batch-edit__picker">{{form.createdAtTime || '选择时间'}}</view>
+            </picker>
+          </view>
+        </view>
+
         <picker
           wx:if="{{warehouseNames.length}}"
           mode="selector"

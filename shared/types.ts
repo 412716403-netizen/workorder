@@ -218,6 +218,9 @@ export function reportAllowsEditDelete(
 export const PSI_PO_CUSTOM_DATA_SOURCE_PLAN_ID = 'sourcePlanId' as const;
 export const PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER = 'sourcePlanNumber' as const;
 
+/** 计划单 `customData`：由「引用销售订单」新建计划时写入来源销售订单单号 */
+export const PLAN_CUSTOM_DATA_SOURCE_SALES_ORDER_DOC_NUMBER = 'sourceSalesOrderDocNumber' as const;
+
 /**
  * 自定义单据/扩展字段类型（单一事实源）：与生产计划「字段配置 → 自定义单据内容」一致。
  * 用于产品分类、合作单位分类、工序报工模板、财务分类扩展项及计划/进销存单据自定义列。

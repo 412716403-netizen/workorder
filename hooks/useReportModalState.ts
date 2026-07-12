@@ -50,6 +50,7 @@ import {
   resolveTargetOrderForReport,
 } from '../utils/reportRowDerivations';
 import { reportQtyOccupies } from '../utils/reportQtyOccupies';
+import { defaultEntryDatetimeLocal, entryDatetimeLocalToTimestamp } from '../utils/docEntryTime';
 
 export interface ReportModalData {
   order: ProductionOrder;
@@ -108,8 +109,8 @@ interface UseReportModalStateArgs {
   orders: ProductionOrder[];
   /** 计划单列表：报工扫码时校验码与工单是否在同一计划树 */
   plans?: PlanOrder[];
-  onReportSubmit?: (orderId: string, milestoneId: string, quantity: number, customData: unknown, variantId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string, weight?: number) => void;
-  onReportSubmitProduct?: (productId: string, milestoneTemplateId: string, quantity: number, customData: unknown, variantId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string, weight?: number) => void;
+  onReportSubmit?: (orderId: string, milestoneId: string, quantity: number, customData: unknown, variantId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string, weight?: number, timestamp?: string) => void;
+  onReportSubmitProduct?: (productId: string, milestoneTemplateId: string, quantity: number, customData: unknown, variantId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string, weight?: number, timestamp?: string) => void;
   /**
    * 扫码累加前的本格剩余上限（按产品 + 规格）。
    * 返回 null/undefined 表示该入口不做上限拦截，仅做持久化去重。
@@ -206,6 +207,7 @@ export function useReportModalState(args: UseReportModalStateArgs) {
   const [productForms, setProductForms] = useState<Record<string, ReportFormState>>(() => ({
     [anchorProductId]: buildInitialFormForProduct(anchorProductId),
   }));
+  const [entryTimestamp, setEntryTimestamp] = useState(() => defaultEntryDatetimeLocal());
 
   const reportForm = productForms[anchorProductId] ?? buildInitialFormForProduct(anchorProductId);
 
@@ -241,6 +243,7 @@ export function useReportModalState(args: UseReportModalStateArgs) {
     const initial = buildInitialFormForProduct(anchorProductId);
     setSessionProductIds([anchorProductId]);
     setProductForms({ [anchorProductId]: initial });
+    setEntryTimestamp(defaultEntryDatetimeLocal());
   }, [open, reportModal.order.id, reportModal.milestone.id, anchorProductId, buildInitialFormForProduct]);
 
   /** 按节点 + 产品定位本工序适用 BOM;优先精确 variant,次选单 SKU */
@@ -772,6 +775,7 @@ export function useReportModalState(args: UseReportModalStateArgs) {
     const tmpl = effectiveReportTemplate;
     const sharedWorkerId = reportForm.workerId;
     const sharedEquipmentId = reportForm.equipmentId;
+    const reportTimestamp = entryDatetimeLocalToTimestamp(entryTimestamp);
     for (const f of tmpl) {
       if (!f.required) continue;
       const v = reportForm.customData[f.id];
@@ -858,6 +862,7 @@ export function useReportModalState(args: UseReportModalStateArgs) {
               batchId,
               reportNo,
               weightForVariant(vId),
+              reportTimestamp,
             );
           }
         } else {
@@ -873,6 +878,7 @@ export function useReportModalState(args: UseReportModalStateArgs) {
             undefined,
             reportNo,
             weightReportEnabled && form.weight > 0 ? form.weight : undefined,
+            reportTimestamp,
           );
         }
         continue;
@@ -903,6 +909,7 @@ export function useReportModalState(args: UseReportModalStateArgs) {
             batchId,
             reportNo,
             weightForVariant(vId),
+            reportTimestamp,
           );
         }
       } else {
@@ -929,6 +936,7 @@ export function useReportModalState(args: UseReportModalStateArgs) {
           undefined,
           reportNo,
           weightReportEnabled && form.weight > 0 ? form.weight : undefined,
+          reportTimestamp,
         );
       }
     }
@@ -949,9 +957,12 @@ export function useReportModalState(args: UseReportModalStateArgs) {
     productMilestoneProgresses,
     milestoneTemplateId,
     reportModal.order.id,
+    entryTimestamp,
   ]);
 
   return {
+    entryTimestamp,
+    setEntryTimestamp,
     reportForm,
     setReportForm,
     productForms,

@@ -23,6 +23,18 @@
         </view>
       </view>
 
+      <view class="material-issue-entry-time">
+        <view class="material-issue-entry-time__label">创建时间</view>
+        <view class="report-batch-edit__datetime">
+          <picker mode="date" value="{{entryDate}}" bindchange="onEntryDateChange">
+            <view class="report-batch-edit__picker">{{entryDate}}</view>
+          </picker>
+          <picker mode="time" value="{{entryTime}}" bindchange="onEntryTimeChange">
+            <view class="report-batch-edit__picker">{{entryTime}}</view>
+          </picker>
+        </view>
+      </view>
+
       <view wx:if="{{warehouseNames.length}}" class="material-issue-wh">
         <view class="material-issue-wh__label">{{warehouseLabel}}</view>
         <picker

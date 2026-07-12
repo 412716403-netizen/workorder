@@ -16,6 +16,7 @@ import { MaterialIssueBatchSelect } from '../../components/MaterialIssueBatchSel
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 import { useStockSnapshot } from '../../hooks/useStockSnapshot';
 import { formStandardControlClass, formStandardLabelClass } from '../../styles/uiDensity';
+import DocEntryTimeField from '../../components/DocEntryTimeField';
 
 export interface StockConfirmModalProps {
   visible: boolean;
@@ -31,6 +32,8 @@ export interface StockConfirmModalProps {
   onWarehouseChange: (warehouseId: string) => void;
   stockConfirmReason: string;
   onReasonChange: (reason: string) => void;
+  stockConfirmEntryTimestamp?: string;
+  onStockConfirmEntryTimestampChange?: (next: string) => void;
   /** 确认领料/退料时填写的自定义项（showInCreate） */
   materialCustomFieldDefs?: PlanFormFieldConfig[];
   materialCustomValues?: Record<string, unknown>;
@@ -69,6 +72,8 @@ const StockConfirmModal: React.FC<StockConfirmModalProps> = ({
   onWarehouseChange,
   stockConfirmReason,
   onReasonChange,
+  stockConfirmEntryTimestamp = '',
+  onStockConfirmEntryTimestampChange,
   materialCustomFieldDefs = [],
   materialCustomValues = {},
   onMaterialCustomValueChange,
@@ -177,6 +182,15 @@ const StockConfirmModal: React.FC<StockConfirmModalProps> = ({
           </div>
         </div>
         <div className="flex-1 overflow-auto p-5 space-y-4">
+          {onStockConfirmEntryTimestampChange ? (
+            <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+              <DocEntryTimeField
+                mode="datetime"
+                value={stockConfirmEntryTimestamp}
+                onChange={onStockConfirmEntryTimestampChange}
+              />
+            </div>
+          ) : null}
           <div className={`grid gap-3 ${warehouses.length > 0 ? 'md:grid-cols-2' : 'grid-cols-1'}`}>
             {warehouses.length > 0 && (
               <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">

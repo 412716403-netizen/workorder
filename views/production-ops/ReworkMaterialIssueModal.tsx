@@ -24,6 +24,8 @@ import {
   resolvePreferredSingleWarehouse,
   WAREHOUSE_DOC_KIND,
 } from '../../utils/warehouseDocPreference';
+import DocEntryTimeField from '../../components/DocEntryTimeField';
+import { defaultEntryDatetimeLocal, entryDatetimeLocalToTimestamp } from '../../utils/docEntryTime';
 
 export interface ReworkMaterialIssueModalProps {
   reworkMaterialOrderId: string;
@@ -60,6 +62,7 @@ const ReworkMaterialIssueModal: React.FC<ReworkMaterialIssueModalProps> = ({
   const [reworkMaterialQty, setReworkMaterialQty] = useState<Record<string, number>>({});
   const [reworkMaterialLineBatch, setReworkMaterialLineBatch] = useState<Record<string, string>>({});
   const [reworkMaterialWarehouseId, setReworkMaterialWarehouseId] = useState<string>(() => warehouses[0]?.id ?? '');
+  const [entryTimestamp, setEntryTimestamp] = useState(() => defaultEntryDatetimeLocal());
   const reworkIssueOpenKeyRef = useRef<string | null>(null);
   const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
   const categoryById = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
@@ -171,7 +174,7 @@ const ReworkMaterialIssueModal: React.FC<ReworkMaterialIssueModalProps> = ({
         productId: m.productId,
         quantity: reworkMaterialQty[m.productId],
         operator: docOperator,
-        timestamp: new Date().toLocaleString(),
+        timestamp: entryDatetimeLocalToTimestamp(entryTimestamp),
         status: '已完成',
         warehouseId: warehouseId || undefined,
         // docNo 留空，由后端统一分配
@@ -212,6 +215,7 @@ const ReworkMaterialIssueModal: React.FC<ReworkMaterialIssueModalProps> = ({
           <button type="button" onClick={handleClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
         </div>
         <div className="flex-1 overflow-auto p-4">
+          <DocEntryTimeField mode="datetime" className="mb-4" value={entryTimestamp} onChange={setEntryTimestamp} />
           {warehouses.length > 0 && (
             <div className="mb-4">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">出库仓库</label>

@@ -31,6 +31,8 @@ import { hasOpsPerm } from './types';
 import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 import { DEFECT_TREATMENT_CUSTOM_DATA_KEY } from '../../utils/productionOpCollab/rework';
+import DocEntryTimeField from '../../components/DocEntryTimeField';
+import { defaultEntryDatetimeLocal, entryDatetimeLocalToTimestamp } from '../../utils/docEntryTime';
 
 function defectTreatmentCollabFromValues(values: Record<string, unknown>): { collabData?: Record<string, unknown> } {
   const clean = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== '' && v != null && v !== undefined));
@@ -100,6 +102,7 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
   const [reworkActionVariantQuantities, setReworkActionVariantQuantities] = useState<Record<string, number>>({});
   const [outsourcePartnerName, setOutsourcePartnerName] = useState('');
   const [defectCustomData, setDefectCustomData] = useState<Record<string, unknown>>({});
+  const [entryTimestamp, setEntryTimestamp] = useState(() => defaultEntryDatetimeLocal());
 
   const reworkActionProduct = useMemo(() => products.find(p => p.id === reworkActionRow.productId) ?? null, [reworkActionRow, products]);
   const reworkActionCategory = useMemo(() => (reworkActionProduct ? categories.find(c => c.id === reworkActionProduct.categoryId) : null), [reworkActionProduct, categories]);
@@ -212,7 +215,7 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
 
   const handleScrapSubmit = () => {
     const operator = docOperator;
-    const timestamp = new Date().toLocaleString();
+    const timestamp = entryDatetimeLocalToTimestamp(entryTimestamp);
     const nodeIdSc = reworkActionRow.nodeId;
     const scrapDocNo = getNextReworkDocNo();
     const parentsSc = orders.filter(o => !o.parentOrderId && o.productId === reworkActionRow.productId);
@@ -270,7 +273,7 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
 
   const handleReworkSubmit = () => {
     const operator = docOperator;
-    const timestamp = new Date().toLocaleString();
+    const timestamp = entryDatetimeLocalToTimestamp(entryTimestamp);
     const sourceNodeId = reworkActionRow.nodeId;
     const reworkDocNo = getNextReworkDocNo();
     const seqPath = reworkActionProduct?.milestoneNodeIds ?? [];
@@ -345,7 +348,7 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
     const partnerName = (outsourcePartnerName || '').trim();
     if (!partnerName) return;
     const operator = docOperator;
-    const timestamp = new Date().toLocaleString();
+    const timestamp = entryDatetimeLocalToTimestamp(entryTimestamp);
     const sourceNodeId = reworkActionRow.nodeId;
     const reworkDocNo = getNextReworkDocNo();
     const outsourceDocNo = await getNextOutsourceReworkDocNo(partnerName);
@@ -592,6 +595,7 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
                   <div className={psiOrderBillFormSectionIconIndigoClass}><FileText className="w-4 h-4" /></div>
                   <h3 className={sectionTitleClass}>1. 基础信息</h3>
                 </div>
+                <DocEntryTimeField mode="datetime" value={entryTimestamp} onChange={setEntryTimestamp} />
                 <div className="rounded-xl border border-slate-200 bg-slate-50/40 px-3 py-3 sm:px-4">
                   <p className="text-base sm:text-lg font-bold text-slate-900 leading-tight">{reworkActionRow.productName}</p>
                 </div>

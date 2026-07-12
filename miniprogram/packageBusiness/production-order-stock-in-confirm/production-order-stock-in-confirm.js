@@ -42,6 +42,7 @@ const _require0 =
 const _require1 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require1.readNavBarMetrics,readWindowMetrics = _require1.readWindowMetrics,computePlanCreateHeaderHeight = _require1.computePlanCreateHeaderHeight;
 const _require10 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require10.LIST_ROUTES,afterSaveReturnToList = _require10.afterSaveReturnToList;
 const _require11 = require('../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require11.afterMatrixKeyboardOpen;
+const { defaultEntryDate, defaultEntryTimeHm, entryDateAndTimeToIso } = require('../utils/docEntryTime.js');
 
 function computeHeaderBlockHeight(nav) {
   return computePlanCreateHeaderHeight(nav);
@@ -87,7 +88,9 @@ Page({
     statusBarHeight: 20,
     navBarHeight: 44,
     headerBlockHeight: 88,
-    scrollHeight: 500
+    scrollHeight: 500,
+    entryDate: '',
+    entryTime: ''
   },
 
   _quantities: {},
@@ -114,7 +117,9 @@ Page({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
       headerBlockHeight: computeHeaderBlockHeight(nav),
-      scrollHeight: computeScrollHeight(nav)
+      scrollHeight: computeScrollHeight(nav),
+      entryDate: defaultEntryDate(),
+      entryTime: defaultEntryTimeHm()
     });
 
     if (!this._rowKeys.length) {
@@ -127,6 +132,14 @@ Page({
 
   onHeaderBack() {
     wx.navigateBack();
+  },
+
+  onEntryDateChange(e) {
+    this.setData({ entryDate: (e.detail && e.detail.value) || '' });
+  },
+
+  onEntryTimeChange(e) {
+    this.setData({ entryTime: (e.detail && e.detail.value) || '' });
   },
 
   async bootstrap() {
@@ -418,7 +431,7 @@ Page({
     }
 
     const operator = readOperatorDisplayName();
-    const timestamp = new Date().toISOString();
+    const timestamp = entryDateAndTimeToIso(this.data.entryDate, this.data.entryTime);
     const prefKind = this.data.mode === 'batch' ? 'batch' : 'single';
     writeWarehousePreference(prefKind, whId);
 

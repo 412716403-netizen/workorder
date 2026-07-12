@@ -41,7 +41,7 @@
       </view>
     </view>
 
-    <view wx:if="{{showFilterPanel}}" class="plan-filter-panel po-orders-filter-panel">
+    <view wx:if="{{showFilterPanel}}" class="plan-filter-panel po-orders-filter-panel plan-filter-panel--header-dropdown">
       <view class="plan-filter-panel__row">
         <text class="plan-filter-panel__label">仅显示未交清</text>
         <view

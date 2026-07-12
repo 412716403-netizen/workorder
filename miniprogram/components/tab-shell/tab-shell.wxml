@@ -15,7 +15,7 @@
     </block>
   </view>
 
-  <scroll-view class="tab-scroll" scroll-y show-scrollbar="{{false}}" enhanced>
+  <scroll-view class="tab-scroll" scroll-y show-scrollbar="{{false}}">
     <view class="tab-body">
       <slot></slot>
     </view>

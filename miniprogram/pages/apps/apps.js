@@ -2,6 +2,7 @@ const { readTenantCtx } = require('../../utils/session.js');
 const { buildAppCategories } = require('../../config/menus.js');
 const { loadFeaturePlugins } = require('../../utils/featurePlugins.js');
 const { syncTenantCtx } = require('../../utils/tenantCtxSync.js');
+const { syncCurrentCustomTabBar } = require('../../utils/tabAccess.js');
 
 Page({
   data: {
@@ -15,6 +16,7 @@ Page({
     }
     syncTenantCtx().then((ctx) => {
       const activeCtx = ctx || readTenantCtx();
+      syncCurrentCustomTabBar(activeCtx);
       if (!activeCtx || !activeCtx.tenantId) {
         wx.reLaunch({ url: '/pages/tenant-select/tenant-select' });
         return;

@@ -14,6 +14,7 @@ const {
 } = require('../utils/orderReportForm.js');
 const { buildReportScanPayloadFields } = require('../utils/reportScanMeta.js');
 const { buildWorkerReportDisplayLines, entriesFromQuantities } = require('../utils/workerReportConfirmView.js');
+const { defaultEntryDate, defaultEntryTimeHm, entryDateAndTimeToIso } = require('../utils/docEntryTime.js');
 
 function computeScrollHeight(nav) {
   const win = readWindowMetrics();
@@ -39,6 +40,8 @@ Page({
     navBarHeight: 44,
     headerBlockHeight: 88,
     scrollHeight: 500,
+    entryDate: '',
+    entryTime: '',
   },
 
   _prefill: null,
@@ -68,6 +71,8 @@ Page({
       workerName: readOperatorDisplayName() || '本人',
       selfReport,
       workerId: selfReport && meId ? meId : '',
+      entryDate: defaultEntryDate(),
+      entryTime: defaultEntryTimeHm(),
     });
     this.bootstrap();
   },
@@ -101,6 +106,14 @@ Page({
       customData,
       canSubmit: this.computeCanSubmit(customData),
     });
+  },
+
+  onEntryDateChange(e) {
+    this.setData({ entryDate: (e.detail && e.detail.value) || '' });
+  },
+
+  onEntryTimeChange(e) {
+    this.setData({ entryTime: (e.detail && e.detail.value) || '' });
   },
 
   computeCanSubmit(customData) {
@@ -195,6 +208,7 @@ Page({
     const customData = buildCustomDataPayload(this._reportCustomFields, this.data.customData);
     const batchId = `batch-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const operator = readOperatorDisplayName() || '';
+    const timestamp = entryDateAndTimeToIso(this.data.entryDate, this.data.entryTime);
 
     this.setData({ submitting: true });
     try {
@@ -218,6 +232,7 @@ Page({
             customData: scanFields.customData,
             reportBatchId: batchId,
             operator,
+            timestamp,
             itemCodeId: scanFields.itemCodeId,
             virtualBatchId: scanFields.virtualBatchId,
             requireApproval: true,

@@ -58,11 +58,20 @@ function resolveDefaultTabPath(ctx) {
 
 function syncCurrentCustomTabBar(ctx) {
   if (typeof getCurrentPages !== 'function') return;
-  const pages = getCurrentPages();
-  const current = pages && pages[pages.length - 1];
-  const tabBar = current && typeof current.getTabBar === 'function' ? current.getTabBar() : null;
-  if (tabBar && typeof tabBar.syncAccess === 'function') {
-    tabBar.syncAccess(ctx);
+
+  const run = () => {
+    const pages = getCurrentPages();
+    const current = pages && pages[pages.length - 1];
+    const tabBar = current && typeof current.getTabBar === 'function' ? current.getTabBar() : null;
+    if (tabBar && typeof tabBar.syncAccess === 'function') {
+      tabBar.syncAccess(ctx);
+      return true;
+    }
+    return false;
+  };
+
+  if (!run() && typeof wx.nextTick === 'function') {
+    wx.nextTick(run);
   }
 }
 

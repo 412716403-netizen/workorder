@@ -27,6 +27,8 @@ import { writeWarehousePreference, WAREHOUSE_DOC_KIND } from '../../utils/wareho
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 import { useStockSnapshot } from '../../hooks/useStockSnapshot';
 import { psiOrderBillCompactLineInputClass } from '../../styles/uiDensity';
+import DocEntryTimeField from '../../components/DocEntryTimeField';
+import { defaultEntryDatetimeLocal, entryDatetimeLocalToTimestamp } from '../../utils/docEntryTime';
 import type { StockDocDetail } from './types';
 
 /**
@@ -133,6 +135,7 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
   const docOperator = currentOperatorDisplayName(currentUser);
   const [matDispatchCustomValues, setMatDispatchCustomValues] = useState<Record<string, unknown>>({});
   const [lineBatchByProduct, setLineBatchByProduct] = useState<Record<string, string>>({});
+  const [entryTimestamp, setEntryTimestamp] = useState(() => defaultEntryDatetimeLocal());
   const categoryById = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
   const { listAvailableBatches } = useStockSnapshot({ enabled: !!(matDispatchOrderId || matDispatchProductId) });
   const productById = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
@@ -441,7 +444,7 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
       }
     }
     const docNo = getNextWfDocNo();
-    const timestamp = new Date().toLocaleString();
+    const timestamp = entryDatetimeLocalToTimestamp(entryTimestamp);
     const collabExtra = buildMaterialStockCustomCollabPayload(matDispatchCustomValues, 'STOCK_OUT', matDispatchPartner);
     const batch: ProductionOpRecord[] = toIssue.map(m => {
       const p = products.find(x => x.id === m.productId);
@@ -533,6 +536,7 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
           </button>
         </div>
         <div className="flex-1 overflow-auto p-5 space-y-4">
+          <DocEntryTimeField mode="datetime" value={entryTimestamp} onChange={setEntryTimestamp} />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">外协工厂</label>

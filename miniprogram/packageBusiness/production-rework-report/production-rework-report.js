@@ -43,6 +43,7 @@ const _require14 =
 
   require('../../utils/windowMetrics.js'),readNavBarMetrics = _require14.readNavBarMetrics,readWindowMetrics = _require14.readWindowMetrics,computePlanCreateHeaderHeight = _require14.computePlanCreateHeaderHeight;
 const _require15 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require15.LIST_ROUTES,afterSaveReturnToList = _require15.afterSaveReturnToList;
+const { defaultEntryDate, defaultEntryTimeHm, entryDateAndTimeToIso } = require('../utils/docEntryTime.js');
 const _require16 = require('../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require16.afterMatrixKeyboardOpen;
 const _require17 =
 
@@ -238,7 +239,9 @@ Page({
     navBarHeight: 44,
     headerBlockHeight: 88,
     scrollHeight: 500,
-    scanEnabled: false
+    scanEnabled: false,
+    entryDate: '',
+    entryTime: '',
   },
 
   _quantities: {},
@@ -254,7 +257,9 @@ Page({
       orderId: options.orderId ? decodeURIComponent(options.orderId) : '',
       productId: options.productId ? decodeURIComponent(options.productId) : '',
       nodeId: options.nodeId ? decodeURIComponent(options.nodeId) : '',
-      outsourcePartner: options.outsourcePartner ? decodeURIComponent(options.outsourcePartner) : ''
+      outsourcePartner: options.outsourcePartner ? decodeURIComponent(options.outsourcePartner) : '',
+      entryDate: defaultEntryDate(),
+      entryTime: defaultEntryTimeHm(),
     });
     this.setData({
       isOutsourceRework: !!this.data.outsourcePartner
@@ -785,6 +790,14 @@ Page({
     this.setData({ lines });
   },
 
+  onEntryDateChange(e) {
+    this.setData({ entryDate: (e.detail && e.detail.value) || '' });
+  },
+
+  onEntryTimeChange(e) {
+    this.setData({ entryTime: (e.detail && e.detail.value) || '' });
+  },
+
   async onSubmit() {
     if (this.data.submitting || !this.data.canSubmit) return;
 
@@ -804,6 +817,7 @@ Page({
       scopeOrderId: this._productionLinkMode === 'order' ? this.data.orderId || undefined : undefined,
       scopeProductId: this.data.productId || undefined,
       operator: this._tenantDisplayName || '',
+      timestamp: entryDateAndTimeToIso(this.data.entryDate, this.data.entryTime),
       workerId: this.data.workerId || '',
       equipmentId: this.data.equipmentId || '',
       unitPrice: Number(this.data.unitPrice) || 0

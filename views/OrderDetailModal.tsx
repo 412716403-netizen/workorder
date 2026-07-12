@@ -45,11 +45,22 @@ import OutsourcePartnerStatCard from './production-ops/OutsourcePartnerStatCard'
 import OutsourceFlowListModal, { type OutsourceFlowOpenSeed } from './production-ops/OutsourceFlowListModal';
 import OutsourcePartnerFlowDetailModal, { type PartnerFlowDetailSeed } from './production-ops/OutsourcePartnerFlowDetailModal';
 import OutsourceFlowDocumentDetailModal from './production-ops/OutsourceFlowDocumentDetailModal';
+import { buildOutOfSequenceTemplateIds } from '../shared/processSequence';
+import { buildOrderMilestoneStripItems } from '../utils/orderMilestoneProgressStrip';
+import OrderMilestoneProgressStrip from '../components/order/OrderMilestoneProgressStrip';
+import { useConfigData } from '../contexts/AppDataContext';
 import { hasOpsPerm, getOrderFamilyIds } from './production-ops/types';
 import OrderMaterialInfoSection, { type StockFlowInitialSeed } from './order-list/OrderMaterialInfoSection';
 import type { ReportHistoryInitialSeed } from './order-list/ReportHistoryModal';
 import { resolveRootOrderIdForMaterial } from '../utils/computeOrderMaterialStats';
+import { resolveMilestoneTemplateName } from '../utils/productProductionDetailStats';
 import AddTodoButton from '../components/AddTodoButton';
+import DocEntryTimeField from '../components/DocEntryTimeField';
+import {
+  defaultEntryDatetimeLocal,
+  entryDatetimeLocalToTimestamp,
+  hydrateEntryDatetimeLocal,
+} from '../utils/docEntryTime';
 
 function reportFieldToPlanForm(cf: ReportFieldDefinition): PlanFormFieldConfig {
   return {
@@ -133,6 +144,7 @@ interface OrderDetailModalProps {
 const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   orderId, onClose, orders, products, boms, prodRecords, dictionaries, categories, orderFormSettings, printTemplates = [], productionLinkMode, productMilestoneProgresses = [], globalNodes = [], detailFromFlowLayout = false, onOpenOrderFormPrintTab, onOpenReportHistory, canViewReportHistory = false, canViewMaterialFlow = false, onOpenMaterialFlow, outsourceFormSettings = DEFAULT_OUTSOURCE_FORM_SETTINGS, planFormSettings, partners = [], partnerCategories = [], userPermissions, tenantRole, onAddRecord, onAddRecordBatch, onUpdateRecord, onDeleteRecord, onUpdateOrder, onDeleteOrder
 }) => {
+  const { processSequenceMode, allowExceedMaxReportQty } = useConfigData();
   const showInDetail = (id: string) => orderFormSettings?.standardFields.find(f => f.id === id)?.showInDetail ?? true;
   const order = orders.find(o => o.id === orderId);
   const reportHistoryFamilyOrderIds = useMemo(() => {
@@ -150,8 +162,9 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     customer: string;
     dueDate: string;
     startDate: string;
+    entryCreatedAt: string;
     items: OrderItem[];
-  }>({ customer: '', dueDate: '', startDate: '', items: [] });
+  }>({ customer: '', dueDate: '', startDate: '', entryCreatedAt: defaultEntryDatetimeLocal(), items: [] });
   const [showOutsourceFlow, setShowOutsourceFlow] = useState(false);
   const [flowOpenSeed, setFlowOpenSeed] = useState<OutsourceFlowOpenSeed>(null);
   const [flowOpenNonce, setFlowOpenNonce] = useState(0);
@@ -216,6 +229,32 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   );
 
   const orderTotalQty = useMemo(() => order?.items.reduce((s, i) => s + i.quantity, 0) || 0, [order]);
+  const outOfSequenceTemplateIds = useMemo(
+    () => buildOutOfSequenceTemplateIds(globalNodes ?? []),
+    [globalNodes],
+  );
+  const milestoneStripItems = useMemo(() => {
+    if (!order) return [];
+    return buildOrderMilestoneStripItems({
+      order,
+      orders,
+      prodRecords,
+      productionLinkMode,
+      processSequenceMode,
+      outOfSequenceTemplateIds,
+      allowExceedMaxReportQty,
+      productMilestoneProgresses,
+    });
+  }, [
+    order,
+    orders,
+    prodRecords,
+    productionLinkMode,
+    processSequenceMode,
+    outOfSequenceTemplateIds,
+    allowExceedMaxReportQty,
+    productMilestoneProgresses,
+  ]);
   const stockInAggregates = useMemo(
     () => (order ? getOrderStockInAggregates(order, prodRecords) : { alreadyIn: 0, alreadyInByVariant: {} as Record<string, number> }),
     [order, prodRecords],
@@ -291,6 +330,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
         customer: order.customer || '',
         dueDate: toLocalDateYmd(order.dueDate) || (order.dueDate || '').trim(),
         startDate: toLocalDateYmd(order.startDate) || (order.startDate || '').trim(),
+        entryCreatedAt: hydrateEntryDatetimeLocal(order.createdAt),
         items
       });
       setIsEditing(false);
@@ -317,15 +357,6 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
         if ((m.completedQuantity ?? 0) > 0 || (m.reports?.length ?? 0) > 0) tplIds.add(m.templateId);
       });
     });
-    const tplNameById = new Map<string, string>();
-    productMilestoneProgresses
-      .filter(p => p.productId === order.productId)
-      .forEach(p => tplNameById.set(p.milestoneTemplateId, globalNodes.find(n => n.id === p.milestoneTemplateId)?.name ?? p.milestoneTemplateId));
-    productOrdersForMilestones.forEach(o => {
-      o.milestones.forEach(m => {
-        if (!tplNameById.has(m.templateId)) tplNameById.set(m.templateId, m.name);
-      });
-    });
     const list: Array<[string, { name: string; completed: number }]> = [];
     tplIds.forEach(tid => {
       const completed = combinedCompletedAtTemplate(
@@ -335,7 +366,13 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
         tid,
       );
       if (completed <= 0) return;
-      list.push([tid, { name: tplNameById.get(tid) ?? tid, completed }]);
+      list.push([
+        tid,
+        {
+          name: resolveMilestoneTemplateName(tid, globalNodes, productOrdersForMilestones),
+          completed,
+        },
+      ]);
     });
     return list.sort(([a], [b]) => {
       const nodeIds = product?.milestoneNodeIds ?? [];
@@ -380,6 +417,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       customer: editForm.customer,
       dueDate: normalizeOrderDateField(editForm.dueDate),
       startDate: normalizeOrderDateField(editForm.startDate),
+      createdAt: entryDatetimeLocalToTimestamp(editForm.entryCreatedAt),
       items: sanitizedItems
     });
     setIsEditing(false);
@@ -788,14 +826,22 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                     {order.orderNumber}
                   </span>
                 </div>
-                {categoryCustomFields.length > 0 || createdTimeDisplay ? (
+                {categoryCustomFields.length > 0 || createdTimeDisplay || isEditing ? (
                   <DocInlineMetaRow>
                     <DocCustomFieldInlineReadList
                       fields={categoryCustomFields}
                       values={categoryCustomValues}
                       hasFilled={() => true}
                     />
-                    {createdTimeDisplay ? (
+                    {isEditing ? (
+                      <DocEntryTimeField
+                        mode="datetime"
+                        className="space-y-1 min-w-[220px]"
+                        label="创建时间"
+                        value={editForm.entryCreatedAt}
+                        onChange={entryCreatedAt => setEditForm(f => ({ ...f, entryCreatedAt }))}
+                      />
+                    ) : createdTimeDisplay ? (
                       <span className="inline-flex items-center gap-1 normal-case">
                         <Clock className="h-3 w-3 shrink-0" />
                         <span>添加 {createdTimeDisplay}</span>
@@ -955,6 +1001,10 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
               })()
             ) : null}
           </div>
+          )}
+
+          {milestoneStripItems.length > 0 && (
+            <OrderMilestoneProgressStrip items={milestoneStripItems} />
           )}
 
           {/* 各工序报工汇总（仅关联工单模式下显示） */}

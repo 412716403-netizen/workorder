@@ -62,6 +62,8 @@ import { REWORK_REPORT_CUSTOM_DATA_KEY } from '../../utils/productionOpCollab/re
 import { useEquipmentFeaturesEffective } from '../../hooks/useEquipmentFeaturesEffective';
 import { useTraceabilityPlugin } from '../../hooks/useTraceabilityPlugin';
 import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
+import DocEntryTimeField from '../../components/DocEntryTimeField';
+import { defaultEntryDatetimeLocal, entryDatetimeLocalToTimestamp } from '../../utils/docEntryTime';
 
 function reworkReportCollabFromValues(values: Record<string, unknown>): { collabData?: Record<string, unknown> } {
   const clean = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== '' && v != null && v !== undefined));
@@ -131,6 +133,7 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
   const [reworkReportEquipmentId, setReworkReportEquipmentId] = useState('');
   const [reworkReportUnitPrice, setReworkReportUnitPrice] = useState<number>(0);
   const [reworkReportCustomData, setReworkReportCustomData] = useState<Record<string, unknown>>({});
+  const [entryTimestamp, setEntryTimestamp] = useState(() => defaultEntryDatetimeLocal());
 
   const reworkReportCreateFields = useMemo(
     () => reworkReportCustomFields.filter(f => f.showInCreate),
@@ -531,6 +534,7 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
         return;
       }
     }
+    const ts = entryDatetimeLocalToTimestamp(entryTimestamp);
     const pathsSnapshot = reworkReportPaths;
     const hasAnyQty = hasAnyReworkEnteredQty(
       pathsSnapshot,
@@ -611,7 +615,6 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
                 n => (r.reworkCompletedQuantityByNode?.[n] ?? 0) + (n === currentNodeId ? add : 0) >= r.quantity
               );
               const opName = resolveOpName(r.operator);
-              const ts = new Date().toLocaleString();
               onUpdateRecord({
                 ...r,
                 reworkCompletedQuantityByNode: { ...(r.reworkCompletedQuantityByNode ?? {}), [currentNodeId]: nextDone },
@@ -659,7 +662,6 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
             const nodes = (r.reworkNodeIds && r.reworkNodeIds.length > 0) ? r.reworkNodeIds : (r.nodeId ? [r.nodeId] : []);
             const allDone = nodes.every(n => (r.reworkCompletedQuantityByNode?.[n] ?? 0) + (n === currentNodeId ? need : 0) >= r.quantity);
             const opName = resolveOpName(r.operator);
-            const ts = new Date().toLocaleString();
             onUpdateRecord({
               ...r,
               reworkCompletedQuantityByNode: { ...(r.reworkCompletedQuantityByNode ?? {}), [currentNodeId]: nextDone },
@@ -693,7 +695,6 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
             const nodes = (r.reworkNodeIds && r.reworkNodeIds.length > 0) ? r.reworkNodeIds : (r.nodeId ? [r.nodeId] : []);
             const allDone = nodes.every(n => (r.reworkCompletedQuantityByNode?.[n] ?? 0) + (n === currentNodeId ? add : 0) >= r.quantity);
             const opName = resolveOpName(r.operator);
-            const ts = new Date().toLocaleString();
             onUpdateRecord({
               ...r,
               reworkCompletedQuantityByNode: { ...(r.reworkCompletedQuantityByNode ?? {}), [currentNodeId]: nextDone },
@@ -720,7 +721,6 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
     for (let i = 0; i < pendingReworkReports.length; i++) {
       const { qty, variantId, src } = pendingReworkReports[i]!;
       const srcProductId = src.productId ?? order.productId;
-      const ts = new Date().toLocaleString();
       const opName = isOutsourceRework ? '' : resolveOpName();
       const sid = src.id != null ? String(src.id) : 'x';
       onAddRecord({
@@ -750,7 +750,6 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
       return;
     }
     if (isOutsourceRework && appliedReportQty > 0) {
-      const ts = new Date().toLocaleString();
       for (const [productId, productQty] of appliedReportQtyByProduct.entries()) {
         if (productQty <= 0) continue;
         let receiveDocNo: string;
@@ -839,6 +838,12 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
                   </div>
                 </div>
                 <div className={`grid grid-cols-1 md:grid-cols-2 ${psiOrderBillFormGridGapClass} pt-2`}>
+                  <DocEntryTimeField
+                    mode="datetime"
+                    className="min-w-0 space-y-1.5 md:col-span-2"
+                    value={entryTimestamp}
+                    onChange={setEntryTimestamp}
+                  />
                   {!isOutsourceRework && (
                     <div className="min-w-0 space-y-1.5 md:col-span-2">
                       <label className="mb-1.5 ml-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">
@@ -914,6 +919,12 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
                   </div>
                 </div>
                 <div className={`grid grid-cols-1 md:grid-cols-2 ${psiOrderBillFormGridGapClass}`}>
+                  <DocEntryTimeField
+                    mode="datetime"
+                    className="min-w-0 space-y-1.5 md:col-span-2"
+                    value={entryTimestamp}
+                    onChange={setEntryTimestamp}
+                  />
                   {isOutsourceRework ? (
                     <div className="space-y-1.5 min-w-0 md:col-span-2">
                       <label className="mb-1.5 ml-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">外协工厂</label>

@@ -15,6 +15,8 @@ import {
   Sliders,
   ScrollText,
   X,
+  ClipboardList,
+  CalendarRange,
 } from 'lucide-react';
 import {
   Product,
@@ -58,6 +60,7 @@ import { PSI_ORDER_BILL_FLOW_LABELS } from './psi-ops/psiOrderBillFlowHelpers';
 import PendingShipmentListModal, { PendingShipmentGroup } from './psi-ops/PendingShipmentListModal';
 import PendingShipDetailModal from './psi-ops/PendingShipDetailModal';
 import AllocationModal from './psi-ops/AllocationModal';
+import SalesOrderReferencedProductionDetailHost from './psi-ops/SalesOrderReferencedProductionDetailHost';
 import PsiFormConfigModal from './psi-ops/PsiFormConfigModal';
 import {
   PsiListPrintController,
@@ -67,7 +70,7 @@ import { buildPurchaseOrderPrintContextFromPsiDoc } from '../utils/buildPurchase
 import { buildPurchaseBillPrintContextFromPsiDoc } from '../utils/buildPurchaseBillPrintContext';
 import { buildSalesOrderPrintContextFromPsiDoc } from '../utils/buildSalesOrderPrintContext';
 import { buildSalesBillPrintContextFromPsiDoc } from '../utils/buildSalesBillPrintContext';
-import { useConfigData, useAppActions } from '../contexts/AppDataContext';
+import { useConfigData, useAppActions, useOrdersData } from '../contexts/AppDataContext';
 import * as apiNs from '../services/api';
 import {
   flowRecordsEarliestMs,
@@ -122,6 +125,14 @@ import {
   WAREHOUSE_DOC_KIND,
 } from '../utils/warehouseDocPreference';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import { toast } from 'sonner';
+import {
+  buildReferencedPlanBySalesOrderProductKey,
+  isReferencedPlanConvertedToOrder,
+  resolveReferencedPlanForSalesOrderLine,
+} from '../utils/planFromSalesOrder';
+import { resolvePrimaryOrderIdForPlan } from '../utils/resolvePrimaryOrderIdForPlan';
+import { hasOpsPerm } from './production-ops/types';
 
 /** 避免 `records ?? []` 每次渲染新引用导致 react-query / useMemo 无意义抖动 */
 const EMPTY_PSI_CTX: unknown[] = [];
@@ -188,10 +199,22 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
     const key = PSI_DOC_TYPE_AMOUNT_KEY[docType];
     return key ? canViewAmount(tenantRole, userPermissions, key) : true;
   };
-  const ordersList = orders ?? [];
-  const recordsList = usePsiOpsRecordsList(type, records == null ? EMPTY_PSI_CTX : records) as any[];
   const { printTemplates } = useConfigData();
-  const { refreshPrintTemplates, onUpdatePrintTemplates } = useAppActions();
+  const { refreshPrintTemplates, onUpdatePrintTemplates, ensureDeferredLoaded } = useAppActions();
+  const { plans } = useOrdersData();
+  const ordersList = orders ?? [];
+  const productionOrders = ordersList as ProductionOrder[];
+  const canViewPlanDetail = hasModulePerm(tenantRole, userPermissions, 'production', 'production:plans:view');
+  const canViewOrderDetail = hasOpsPerm(tenantRole, userPermissions, 'production:orders_detail:view');
+  const referencedPlanByProductKey = useMemo(
+    () => buildReferencedPlanBySalesOrderProductKey(plans),
+    [plans],
+  );
+
+  useEffect(() => {
+    if (type === 'SALES_ORDER') void ensureDeferredLoaded();
+  }, [type, ensureDeferredLoaded]);
+  const recordsList = usePsiOpsRecordsList(type, records == null ? EMPTY_PSI_CTX : records) as any[];
   // Phase 3.D follow-up：financeRecords 旧用作销售单打印应收 ledger 兜底；现已改异步调
   // `api.finance.partnerReceivable`，故不再从 context 读取全量财务记录。
   const safePurchaseOrderFormSettings = useMemo(
@@ -273,6 +296,8 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
   const [editingSBDocNumber, setEditingSBDocNumber] = useState<string | null>(null);
   // 销售订单列表 - 配货弹窗：当前行 { docNumber, lineGroupId, product, grp }
   const [allocationModal, setAllocationModal] = useState<{ docNumber: string; lineGroupId: string; product: Product; grp: any[] } | null>(null);
+  const [soRefPlanDetailId, setSoRefPlanDetailId] = useState<string | null>(null);
+  const [soRefOrderDetailId, setSoRefOrderDetailId] = useState<string | null>(null);
   // 配货弹窗内输入的配货数量：无规格时为 number，有规格时为 { variantId: number }
   const [allocationQuantities, setAllocationQuantities] = useState<number | Record<string, number> | null>(null);
   // 配货弹窗选择的出库仓库
@@ -1671,6 +1696,21 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                                 soBarAllocPct = (allocRemain / orderQty) * 100;
                               }
                             }
+                            const referencedPlan = type === 'SALES_ORDER'
+                              ? resolveReferencedPlanForSalesOrderLine(
+                                  docNum,
+                                  first.productId,
+                                  referencedPlanByProductKey,
+                                )
+                              : undefined;
+                            const referencedPlanConverted = referencedPlan
+                              ? isReferencedPlanConvertedToOrder(referencedPlan)
+                              : false;
+                            const showReferencedPlanLink = !!referencedPlan && (
+                              referencedPlanConverted ? canViewOrderDetail : canViewPlanDetail
+                            );
+                            const showAllocateBtn = type === 'SALES_ORDER'
+                              && hasPsiPerm('psi:sales_order_allocation:allow');
                           return (
                               <tr key={gid} className="hover:bg-slate-50/30 transition-colors">
                                 <td className="py-2.5 pr-3">
@@ -1822,71 +1862,111 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                                     </div>
                                   </td>
                                 )}
-                                {type === 'SALES_ORDER' && hasPsiPerm('psi:sales_order_allocation:allow') && (
+                                {type === 'SALES_ORDER' && (
                                   <td className="py-2.5 px-3 text-center">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setAllocationModal({
-                                          docNumber: docNum,
-                                          lineGroupId: gid,
-                                          product: product ?? {
-                                            id: first.productId,
-                                            sku: rowProductSku || '',
-                                            name: rowProductName || '未知产品',
-                                            colorIds: [],
-                                            sizeIds: [],
-                                            variants: [],
-                                            milestoneNodeIds: [],
-                                          } as Product,
-                                          grp,
-                                        });
-                                        (() => {
-                                          const lineWh = grp[0]?.allocationWarehouseId as string | undefined;
-                                          const whIds = new Set(warehouses.map(w => w.id));
-                                          const lineOk = lineWh && whIds.has(lineWh) ? lineWh : '';
-                                          const prefWh = resolvePreferredSingleWarehouse(
-                                            warehouses,
-                                            readWarehousePreference(
-                                              tenantCtx?.tenantId,
-                                              userId,
-                                              WAREHOUSE_DOC_KIND.SALES_ORDER_ALLOCATION,
-                                            ),
-                                            '',
-                                          );
-                                          setAllocationWarehouseId(
-                                            lineOk || prefWh || warehouses[0]?.id || '',
-                                          );
-                                        })();
-                                        const hasVariants = grp.some((i: any) => i.variantId);
-                                        if (hasVariants) {
-                                          const agg: Record<string, { order: number; allocated: number; shipped: number }> = {};
-                                          grp.forEach((i: any) => {
-                                            if (!i.variantId) return;
-                                            if (!agg[i.variantId]) agg[i.variantId] = { order: 0, allocated: 0, shipped: 0 };
-                                            agg[i.variantId].order += Number(i.quantity) || 0;
-                                            agg[i.variantId].allocated += Number(i.allocatedQuantity) || 0;
-                                            agg[i.variantId].shipped += Number(i.shippedQuantity) || 0;
-                                          });
-                                          const next: Record<string, number> = {};
-                                          Object.keys(agg).forEach(vid => {
-                                            const e = agg[vid];
-                                            const eff = effectiveAllocatedQuantity(e.allocated, e.shipped);
-                                            next[vid] = Math.max(0, e.order - eff);
-                                          });
-                                          setAllocationQuantities(next);
-                                        } else {
-                                          const order = grp.reduce((s: number, i: any) => s + (Number(i.quantity) || 0), 0);
-                                          const allocated = grp.reduce((s: number, i: any) => s + (Number(i.allocatedQuantity) || 0), 0);
-                                          const shipped = grp.reduce((s: number, i: any) => s + (Number(i.shippedQuantity) || 0), 0);
-                                          const eff = effectiveAllocatedQuantity(allocated, shipped);
-                                          setAllocationQuantities(Math.max(0, order - eff));
-                                        }
-                                      }}
-                                      className="px-2.5 py-1 text-[10px] font-black rounded-lg border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all flex items-center gap-1 inline-flex whitespace-nowrap"
-                                    >
-                                      <PackageCheck className="w-3.5 h-3.5 shrink-0" /> 配货
-                                    </button>
+                                    {showReferencedPlanLink || showAllocateBtn ? (
+                                    <div className="flex flex-col items-center gap-1.5">
+                                      {showReferencedPlanLink && referencedPlan && (
+                                        <button
+                                          type="button"
+                                          onClick={e => {
+                                            e.stopPropagation();
+                                            if (referencedPlanConverted) {
+                                              const orderId = resolvePrimaryOrderIdForPlan(
+                                                referencedPlan.id,
+                                                productionOrders,
+                                              );
+                                              if (!orderId) {
+                                                toast.warning('未找到关联工单，请刷新列表后重试');
+                                                return;
+                                              }
+                                              setSoRefOrderDetailId(orderId);
+                                              return;
+                                            }
+                                            setSoRefPlanDetailId(referencedPlan.id);
+                                          }}
+                                          className="px-2.5 py-1 text-[10px] font-black rounded-lg border border-slate-200 text-slate-600 bg-white hover:bg-slate-50 transition-all flex items-center gap-1 inline-flex whitespace-nowrap"
+                                        >
+                                          {referencedPlanConverted ? (
+                                            <>
+                                              <ClipboardList className="w-3.5 h-3.5 shrink-0" /> 工单详情
+                                            </>
+                                          ) : (
+                                            <>
+                                              <CalendarRange className="w-3.5 h-3.5 shrink-0" /> 计划详情
+                                            </>
+                                          )}
+                                        </button>
+                                      )}
+                                      {showAllocateBtn && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setAllocationModal({
+                                              docNumber: docNum,
+                                              lineGroupId: gid,
+                                              product: product ?? {
+                                                id: first.productId,
+                                                sku: rowProductSku || '',
+                                                name: rowProductName || '未知产品',
+                                                colorIds: [],
+                                                sizeIds: [],
+                                                variants: [],
+                                                milestoneNodeIds: [],
+                                              } as Product,
+                                              grp,
+                                            });
+                                            (() => {
+                                              const lineWh = grp[0]?.allocationWarehouseId as string | undefined;
+                                              const whIds = new Set(warehouses.map(w => w.id));
+                                              const lineOk = lineWh && whIds.has(lineWh) ? lineWh : '';
+                                              const prefWh = resolvePreferredSingleWarehouse(
+                                                warehouses,
+                                                readWarehousePreference(
+                                                  tenantCtx?.tenantId,
+                                                  userId,
+                                                  WAREHOUSE_DOC_KIND.SALES_ORDER_ALLOCATION,
+                                                ),
+                                                '',
+                                              );
+                                              setAllocationWarehouseId(
+                                                lineOk || prefWh || warehouses[0]?.id || '',
+                                              );
+                                            })();
+                                            const hasVariants = grp.some((i: any) => i.variantId);
+                                            if (hasVariants) {
+                                              const agg: Record<string, { order: number; allocated: number; shipped: number }> = {};
+                                              grp.forEach((i: any) => {
+                                                if (!i.variantId) return;
+                                                if (!agg[i.variantId]) agg[i.variantId] = { order: 0, allocated: 0, shipped: 0 };
+                                                agg[i.variantId].order += Number(i.quantity) || 0;
+                                                agg[i.variantId].allocated += Number(i.allocatedQuantity) || 0;
+                                                agg[i.variantId].shipped += Number(i.shippedQuantity) || 0;
+                                              });
+                                              const next: Record<string, number> = {};
+                                              Object.keys(agg).forEach(vid => {
+                                                const e = agg[vid];
+                                                const eff = effectiveAllocatedQuantity(e.allocated, e.shipped);
+                                                next[vid] = Math.max(0, e.order - eff);
+                                              });
+                                              setAllocationQuantities(next);
+                                            } else {
+                                              const order = grp.reduce((s: number, i: any) => s + (Number(i.quantity) || 0), 0);
+                                              const allocated = grp.reduce((s: number, i: any) => s + (Number(i.allocatedQuantity) || 0), 0);
+                                              const shipped = grp.reduce((s: number, i: any) => s + (Number(i.shippedQuantity) || 0), 0);
+                                              const eff = effectiveAllocatedQuantity(allocated, shipped);
+                                              setAllocationQuantities(Math.max(0, order - eff));
+                                            }
+                                          }}
+                                          className="px-2.5 py-1 text-[10px] font-black rounded-lg border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all flex items-center gap-1 inline-flex whitespace-nowrap"
+                                        >
+                                          <PackageCheck className="w-3.5 h-3.5 shrink-0" /> 配货
+                                        </button>
+                                      )}
+                                    </div>
+                                    ) : (
+                                      <span className="text-[10px] text-slate-300">—</span>
+                                    )}
                                   </td>
                                 )}
                                 {type === 'PURCHASE_ORDER' && (
@@ -2180,6 +2260,15 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
           products={products}
           warehouses={warehouses}
           receivedByOrderLine={type === 'PURCHASE_ORDER' ? receivedByOrderLine : undefined}
+        />
+      )}
+
+      {(soRefPlanDetailId || soRefOrderDetailId) && (
+        <SalesOrderReferencedProductionDetailHost
+          planId={soRefPlanDetailId}
+          orderId={soRefOrderDetailId}
+          onPlanIdChange={setSoRefPlanDetailId}
+          onOrderIdChange={setSoRefOrderDetailId}
         />
       )}
 

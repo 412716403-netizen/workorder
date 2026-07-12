@@ -24,6 +24,7 @@ import {
   Wrench,
   Plus,
   Split,
+  ClipboardList,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useConfirm } from '../../contexts/ConfirmContext';
@@ -58,7 +59,9 @@ import { fetchAllPages } from '../../utils/fetchAllPages';
 import { useQuery } from '@tanstack/react-query';
 import { CustomerSelect } from '../../components/CustomerSelect';
 import { SearchableMultiSelectWithProcessTabs } from '../../components/SearchableMultiSelect';
-import { formatPlanOrderCreatedAtForList, localTodayYmd, planIdToLocalYmd, toLocalDateYmd } from '../../utils/localDateTime';
+import { localTodayYmd, planIdToLocalYmd, toLocalDateYmd } from '../../utils/localDateTime';
+import { hydratePlanEntryDatetime, planEntryDatetimeToCreatedAt } from '../../utils/docEntryTime';
+import DocEntryTimeField from '../../components/DocEntryTimeField';
 // Phase 3.D follow-up：`nextPsiDocNumber` / `getLastPurchaseUnitPrice` 不再依赖前端全量扫表，
 // 改为调后端 `psi.nextDocNumber` / `psi.lastPurchasePrices`。
 import { PlanPrintTemplateManageDialog } from '../../components/plan-print/PlanPrintTemplateManageDialog';
@@ -79,10 +82,10 @@ import {
   primaryToolbarButtonClass,
 } from '../../styles/uiDensity';
 import {
-  formatPlanCreatedDateList,
   effectiveSupplierIdFromProduct,
   purchaseOrderRecordMatchesPlanPanel,
 } from '../../utils/planDetailHelpers';
+import { getPlanSourceSalesOrderDocNumber } from '../../utils/planFromSalesOrder';
 import { getMaterialLossRates, applyLoss, MATERIAL_LOSS_RATES_KEY } from '../../utils/materialLoss';
 import {
   getEffectivePlanMilestoneNodeIds,
@@ -768,7 +771,9 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
       setTempMilestoneNodeIds(
         getEffectivePlanMilestoneNodeIds(viewPlan, viewProduct),
       );
-      const createdDate = formatPlanCreatedDateList(viewPlan.createdAt || planIdToLocalYmd(viewPlan.id) || localTodayYmd());
+      const createdDate = hydratePlanEntryDatetime(
+        viewPlan.createdAt || planIdToLocalYmd(viewPlan.id) || localTodayYmd(),
+      );
       setTempPlanInfo({
         customer: viewPlan.customer,
         createdAt: createdDate,
@@ -835,7 +840,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
       const planPayload: Partial<PlanOrder> = {
         assignments: sanitizedAssignments,
         customer: tempPlanInfo.customer,
-        createdAt: tempPlanInfo.createdAt,
+        createdAt: planEntryDatetimeToCreatedAt(tempPlanInfo.createdAt),
         ...(showDelivery ? { dueDate: nextDueStr } : {}),
         ...(!planWorkOrdersDispatched ? { items: tempPlanInfo.items } : {}),
         customData: tempPlanInfo.customData,
@@ -1259,6 +1264,8 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
     traceEnabled &&
     (planFormSettings.labelPrint?.showPlanDetailTraceSection !== false || planHasActiveItemCodes);
 
+  const sourceSalesOrderDocNumber = getPlanSourceSalesOrderDocNumber(viewPlan);
+
   // --- Render ---
   return (
     <>
@@ -1279,6 +1286,12 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                      <h2 className="text-2xl font-black text-slate-900 tracking-tight">查看生产计划</h2>
                   <p className="text-sm font-bold text-slate-400 mt-0.5 tracking-tighter uppercase flex flex-wrap items-center gap-2">
                     {viewPlan.planNumber} — 关联：{viewProduct.name}
+                    {sourceSalesOrderDocNumber ? (
+                      <span className="inline-flex items-center gap-1 normal-case text-indigo-600 font-bold">
+                        <ClipboardList className="w-3.5 h-3.5 shrink-0" />
+                        来源销售订单 {sourceSalesOrderDocNumber}
+                      </span>
+                    ) : null}
                   </p>
                 </div>
              </div>
@@ -1336,15 +1349,25 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                     </div>
                   )}
                   {planFormSettings.standardFields.find(f => f.id === 'createdAt')?.showInDetail !== false && (
+                    <DocEntryTimeField
+                      mode="datetime"
+                      className="space-y-2"
+                      label={
+                        planFormSettings.standardFields.find(f => f.id === 'createdAt')?.label ?? '入单时间'
+                      }
+                      value={tempPlanInfo.createdAt}
+                      onChange={createdAt => setTempPlanInfo({ ...tempPlanInfo, createdAt })}
+                    />
+                  )}
+                  {sourceSalesOrderDocNumber ? (
                     <div className="space-y-2">
-                      <label className={formStandardLabelClass}>
-                        {planFormSettings.standardFields.find(f => f.id === 'createdAt')?.label ?? '创建时间'}
-                      </label>
-                      <div className={`${formStandardControlClass} flex items-center text-slate-800`}>
-                        {formatPlanOrderCreatedAtForList(viewPlan.createdAt, viewPlan.id) || '—'}
+                      <label className={formStandardLabelClass}>来源销售订单</label>
+                      <div className={`${formStandardControlClass} flex items-center gap-2 text-indigo-700 font-bold`}>
+                        <ClipboardList className="w-4 h-4 shrink-0 text-indigo-500" />
+                        {sourceSalesOrderDocNumber}
                       </div>
                     </div>
-                  )}
+                  ) : null}
                   {planFormSettings.listDisplay?.showDeliveryDate === true && (
                     <div className="space-y-2">
                       <label className={formStandardLabelClass}>交货日期</label>

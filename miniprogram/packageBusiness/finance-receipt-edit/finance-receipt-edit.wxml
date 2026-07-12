@@ -18,6 +18,19 @@
     <view wx:if="{{loading}}" class="plan-create-muted">加载中…</view>
 
     <view wx:else class="plan-create-page">
+      <view wx:if="{{!editing}}" class="plan-form-card">
+        <view class="plan-form-cell plan-form-cell--last">
+          <text class="plan-form-cell__label">创建时间</text>
+          <view class="report-batch-edit__datetime">
+            <picker mode="date" value="{{entryDate}}" bindchange="onEntryDateChange">
+              <view class="report-batch-edit__picker">{{entryDate}}</view>
+            </picker>
+            <picker mode="time" value="{{entryTime}}" bindchange="onEntryTimeChange">
+              <view class="report-batch-edit__picker">{{entryTime}}</view>
+            </picker>
+          </view>
+        </view>
+      </view>
       <view class="plan-form-card">
         <picker
           wx:if="{{hasCategories}}"

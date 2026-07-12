@@ -40,6 +40,7 @@ import {
   psiOrderBillCompactSummaryUnitClass,
 } from '../../styles/uiDensity';
 import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
+import DocEntryTimeField from '../../components/DocEntryTimeField';
 
 export interface DispatchRow {
   orderId?: string;
@@ -80,6 +81,8 @@ export interface OutsourceDispatchQuantityModalProps {
   showDispatchDeliveryDate?: boolean;
   dispatchDeliveryDate?: string;
   setDispatchDeliveryDate?: React.Dispatch<React.SetStateAction<string>>;
+  dispatchEntryTimestamp?: string;
+  setDispatchEntryTimestamp?: React.Dispatch<React.SetStateAction<string>>;
   onSubmit: () => void;
   onClose: () => void;
   /** 嵌入 `DocPhaseModal` 时由外层提供遮罩与标题，本组件不渲染全屏壳与顶栏 */
@@ -341,6 +344,8 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
   showDispatchDeliveryDate = false,
   dispatchDeliveryDate = '',
   setDispatchDeliveryDate,
+  dispatchEntryTimestamp = '',
+  setDispatchEntryTimestamp,
   onSubmit,
   onClose,
   embedded = false,
@@ -453,6 +458,14 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
                   </div>
                 </div>
                 <div className={`grid grid-cols-1 md:grid-cols-2 ${psiOrderBillFormGridGapClass}`}>
+                  {setDispatchEntryTimestamp ? (
+                    <DocEntryTimeField
+                      mode="datetime"
+                      className="space-y-1 md:col-span-2"
+                      value={dispatchEntryTimestamp}
+                      onChange={setDispatchEntryTimestamp}
+                    />
+                  ) : null}
                   <div className="space-y-1.5 min-w-0 md:col-span-2">
                     <label className="mb-1.5 ml-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">外协工厂</label>
                     <SupplierSelect

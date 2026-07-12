@@ -17,11 +17,8 @@
         <image class="plan-tool-btn__icon" src="/assets/icons/list-filter.png" mode="aspectFit" />
       </view>
     </view>
-  </view>
-  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
-
-  <view class="outsource-pick-body">
-    <view wx:if="{{showFilterPanel}}" class="plan-filter-panel">
+  
+    <view wx:if="{{showFilterPanel}}" class="plan-filter-panel plan-filter-panel--header-dropdown">
       <view class="plan-filter-panel__row">
         <text class="plan-filter-panel__label">工序</text>
         <picker
@@ -38,7 +35,12 @@
         <view class="plan-filter-reset" bindtap="onFilterReset">重置</view>
         <view class="plan-filter-apply" bindtap="onFilterApply">确定</view>
       </view>
-    </view>
+    </view></view>
+    
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <view class="outsource-pick-body">
+    
     <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
     <view wx:elif="{{rows.length}}" class="plan-list-wrap outsource-pick-wrap">
       <view

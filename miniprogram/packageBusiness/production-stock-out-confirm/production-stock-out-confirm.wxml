@@ -21,6 +21,18 @@
         </view>
       </view>
 
+      <view class="material-confirm-entry-time">
+        <view class="material-confirm-entry-time__label">创建时间</view>
+        <view class="report-batch-edit__datetime">
+          <picker mode="date" value="{{entryDate}}" bindchange="onEntryDateChange">
+            <view class="report-batch-edit__picker">{{entryDate}}</view>
+          </picker>
+          <picker mode="time" value="{{entryTime}}" bindchange="onEntryTimeChange">
+            <view class="report-batch-edit__picker">{{entryTime}}</view>
+          </picker>
+        </view>
+      </view>
+
       <view class="material-confirm-wh">
         <view class="material-confirm-wh__label">出库仓库</view>
         <picker

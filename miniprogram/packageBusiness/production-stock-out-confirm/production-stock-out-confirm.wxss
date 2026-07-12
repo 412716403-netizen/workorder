@@ -24,6 +24,13 @@
   color: var(--color-text-primary);
 }
 
+.material-confirm-entry-time {
+  padding: 24rpx;
+  margin-bottom: 16rpx;
+  background: var(--color-bg-card);
+  border-radius: 16rpx;
+}
+
 .material-confirm-wh {
   padding: 24rpx;
   margin-bottom: 16rpx;

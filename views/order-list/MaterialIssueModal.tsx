@@ -33,6 +33,8 @@ import {
 import { formatMaterialQtyDisplay } from '../../utils/formatMaterialQtyDisplay';
 import { useStockSnapshot } from '../../hooks/useStockSnapshot';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
+import DocEntryTimeField from '../../components/DocEntryTimeField';
+import { defaultEntryDatetimeLocal, entryDatetimeLocalToTimestamp } from '../../utils/docEntryTime';
 
 interface MaterialIssueModalProps {
   orderId: string | null;
@@ -110,6 +112,7 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
   const [materialIssueQty, setMaterialIssueQty] = useState<Record<string, number>>({});
   const [materialIssueLineBatch, setMaterialIssueLineBatch] = useState<Record<string, string>>({});
   const [materialIssueWarehouseId, setMaterialIssueWarehouseId] = useState<string>(warehouses[0]?.id ?? '');
+  const [materialIssueEntryTimestamp, setMaterialIssueEntryTimestamp] = useState(() => defaultEntryDatetimeLocal());
   const materialIssueOpenKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -321,7 +324,7 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
           productId: m.productId,
           quantity: materialIssueQty[m.productId],
           operator: docOperator,
-          timestamp: new Date().toLocaleString(),
+          timestamp: entryDatetimeLocalToTimestamp(materialIssueEntryTimestamp),
           status: '已完成',
           warehouseId: materialIssueWarehouseId || undefined,
           // docNo 留空，由后端分配
@@ -360,6 +363,9 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
             </button>
           </div>
           <div className="flex-1 overflow-auto p-5 space-y-4">
+            <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+              <DocEntryTimeField mode="datetime" value={materialIssueEntryTimestamp} onChange={setMaterialIssueEntryTimestamp} />
+            </div>
             {warehouses.length > 0 && (
               <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">出库仓库</label>
@@ -646,7 +652,7 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
           productId: m.productId,
           quantity: materialIssueQty[m.productId],
           operator: docOperator,
-          timestamp: new Date().toLocaleString(),
+          timestamp: entryDatetimeLocalToTimestamp(materialIssueEntryTimestamp),
           status: '已完成',
           warehouseId: materialIssueWarehouseId || undefined,
           // docNo 留空，由后端分配
@@ -697,6 +703,9 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
             </button>
           </div>
           <div className="flex-1 overflow-auto p-5 space-y-4">
+            <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+              <DocEntryTimeField mode="datetime" value={materialIssueEntryTimestamp} onChange={setMaterialIssueEntryTimestamp} />
+            </div>
             {warehouses.length > 0 && (
               <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">出库仓库</label>

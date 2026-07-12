@@ -20,6 +20,7 @@ const _require6 =
   require('../utils/orderReportHistory.js'),localTodayYmd = _require6.localTodayYmd,dateInputToIsoStart = _require6.dateInputToIsoStart,dateInputToIsoEndExclusive = _require6.dateInputToIsoEndExclusive;
 const _require7 = require('../utils/productionPlans.js'),normalizeMasterList = _require7.normalizeMasterList;
 const _require8 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require8.readNavBarMetrics,readWindowMetrics = _require8.readWindowMetrics;
+const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../../utils/planFilterPanel.js');
 const _require9 = require('../utils/reworkReportOperator.js'),buildReworkByIdMap = _require9.buildReworkByIdMap;
 
 function computeHeaderBlockHeight(nav) {
@@ -130,6 +131,7 @@ Page({
       this.patchFilterActive({ showFilterPanel: false });
       return;
     }
+    markFilterPanelOpen(this);
     this.patchFilterActive({
       showFilterPanel: true,
       draftDateFrom: this.data.dateFrom,
@@ -140,6 +142,7 @@ Page({
   },
 
   onPageScroll() {
+    if (!shouldCloseFilterPanelOnScroll(this)) return;
     if (this.data.showFilterPanel) {
       this.patchFilterActive({ showFilterPanel: false });
     }

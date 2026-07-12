@@ -32,8 +32,8 @@ function validatePaymentForm(form, visibility) {
   return records.validateFinanceForm(form, visibility, TYPE);
 }
 
-function buildPaymentSavePayload(form, visibility, operator, existing) {
-  return records.buildFinanceSavePayload(form, visibility, operator, existing, TYPE);
+function buildPaymentSavePayload(form, visibility, operator, existing, entryOpts) {
+  return records.buildFinanceSavePayload(form, visibility, operator, existing, TYPE, entryOpts);
 }
 
 function buildCategoryPickerOptions(categories) {

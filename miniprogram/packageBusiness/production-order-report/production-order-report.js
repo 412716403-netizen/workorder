@@ -42,6 +42,7 @@ const _require7 =
   require('../utils/planApi.js'),fetchEquipmentAll = _require7.fetchEquipmentAll,fetchDictionaries = _require7.fetchDictionaries;
 const _require8 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require8.readNavBarMetrics,readWindowMetrics = _require8.readWindowMetrics,computePlanCreateHeaderHeight = _require8.computePlanCreateHeaderHeight;
 const _require9 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require9.LIST_ROUTES,afterSaveReturnToList = _require9.afterSaveReturnToList;
+const { defaultEntryDate, defaultEntryTimeHm, entryDateAndTimeToIso } = require('../utils/docEntryTime.js');
 const _require0 = require('../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require0.afterMatrixKeyboardOpen;
 const _require1 = require('../utils/scanBatchController.js'),createScanBatchController = _require1.createScanBatchController;
 const _require10 = require('../utils/scanBatchApplyReport.js'),createReportScanBatchHandlers = _require10.createReportScanBatchHandlers;
@@ -207,6 +208,8 @@ Page({
     scanEnabled: false,
     /** 小程序 Tab 自报工：锁定本人 + requireApproval */
     selfReport: false,
+    entryDate: '',
+    entryTime: '',
   },
 
   _quantities: {},
@@ -229,6 +232,8 @@ Page({
       selfReport,
       workerId: selfReport && meId ? meId : '',
       workerName: selfReport ? (readOperatorDisplayName() || '本人') : '',
+      entryDate: defaultEntryDate(),
+      entryTime: defaultEntryTimeHm(),
     });
 
     if (!this.data.orderId || !this.data.milestoneId) {
@@ -829,6 +834,14 @@ Page({
     if (this._scanBatch) this._scanBatch.setScanIntent(e.detail.intent);
   },
 
+  onEntryDateChange(e) {
+    this.setData({ entryDate: (e.detail && e.detail.value) || '' });
+  },
+
+  onEntryTimeChange(e) {
+    this.setData({ entryTime: (e.detail && e.detail.value) || '' });
+  },
+
   async onSubmit() {
     if (this.data.submitting || !this.data.canSubmit) return;
 
@@ -886,6 +899,7 @@ Page({
     const customData = buildCustomDataPayload(this._reportCustomFields, this.data.customData);
     const batchId = `batch-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const operator = this._tenantDisplayName || '';
+    const timestamp = entryDateAndTimeToIso(this.data.entryDate, this.data.entryTime);
 
     this.setData({ submitting: true });
     try {
@@ -905,6 +919,7 @@ Page({
           customData: scanFields.customData,
           reportBatchId: batchId,
           operator,
+          timestamp,
           itemCodeId: scanFields.itemCodeId,
           virtualBatchId: scanFields.virtualBatchId,
           requireApproval: this.data.selfReport ? true : undefined,

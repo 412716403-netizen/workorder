@@ -16,6 +16,7 @@ const _require6 =
 const _require7 = require('../utils/productionOrders.js'),normalizeMasterList = _require7.normalizeMasterList;
 const _require8 = require('../utils/listProductThumb.js'),listProductThumbFromProduct = _require8.listProductThumbFromProduct;
 const _require9 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require9.readNavBarMetrics,readWindowMetrics = _require9.readWindowMetrics;
+const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../../utils/planFilterPanel.js');
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
@@ -129,6 +130,7 @@ Page({
   },
 
   onPageScroll() {
+    if (!shouldCloseFilterPanelOnScroll(this)) return;
     if (this.data.showFilterPanel) {
       this.patchFilterActive({ showFilterPanel: false });
     }
@@ -150,6 +152,7 @@ Page({
       this.patchFilterActive({ showFilterPanel: false });
       return;
     }
+    markFilterPanelOpen(this);
     this.patchFilterActive({
       showFilterPanel: true,
       draftMilestoneFilterIndex: this.data.milestoneFilterIndex,

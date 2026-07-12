@@ -32,8 +32,8 @@ function validateReceiptForm(form, visibility) {
   return records.validateFinanceForm(form, visibility, TYPE);
 }
 
-function buildReceiptSavePayload(form, visibility, operator, existing) {
-  return records.buildFinanceSavePayload(form, visibility, operator, existing, TYPE);
+function buildReceiptSavePayload(form, visibility, operator, existing, entryOpts) {
+  return records.buildFinanceSavePayload(form, visibility, operator, existing, TYPE, entryOpts);
 }
 
 function buildCategoryPickerOptions(categories) {

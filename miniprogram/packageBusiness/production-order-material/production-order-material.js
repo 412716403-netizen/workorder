@@ -49,6 +49,7 @@ const _require9 = require('../utils/outsourceMaterialLite.js'),buildPartnerIssue
 const _require0 = require('../utils/materialStatsLite.js'),INTERNAL_PARTNER_KEY = _require0.INTERNAL_PARTNER_KEY;
 const _require1 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require1.readNavBarMetrics,readWindowMetrics = _require1.readWindowMetrics;
 const _require10 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require10.LIST_ROUTES,afterSaveReturnToList = _require10.afterSaveReturnToList;
+const { defaultEntryDate, defaultEntryTimeHm, entryDateAndTimeToIso } = require('../utils/docEntryTime.js');
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
@@ -152,7 +153,9 @@ Page({
     showPartner: false,
     statusBarHeight: 20,
     navBarHeight: 44,
-    headerBlockHeight: 88
+    headerBlockHeight: 88,
+    entryDate: '',
+    entryTime: '',
   },
 
   onLoad(options) {
@@ -160,7 +163,9 @@ Page({
     this.setData({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
-      headerBlockHeight: computeHeaderBlockHeight(nav)
+      headerBlockHeight: computeHeaderBlockHeight(nav),
+      entryDate: defaultEntryDate(),
+      entryTime: defaultEntryTimeHm(),
     });
 
     const ctx = readTenantCtx();
@@ -238,6 +243,14 @@ Page({
 
   onHeaderBack() {
     wx.navigateBack();
+  },
+
+  onEntryDateChange(e) {
+    this.setData({ entryDate: (e.detail && e.detail.value) || '' });
+  },
+
+  onEntryTimeChange(e) {
+    this.setData({ entryTime: (e.detail && e.detail.value) || '' });
   },
 
   onProductHeroTap() {
@@ -716,6 +729,7 @@ Page({
       sourceProductId: this._scopeMode === 'product' ? this._sourceProductId || undefined : undefined,
       warehouse,
       operator: readOperatorDisplayName(),
+      timestamp: entryDateAndTimeToIso(this.data.entryDate, this.data.entryTime),
       reason: this._isRework ? '来自于返工' : undefined,
       partner: (() => {
         if (this._isOutsource && this._partnerKey) return this._partnerKey;

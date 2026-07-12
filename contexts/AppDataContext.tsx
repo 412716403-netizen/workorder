@@ -176,8 +176,8 @@ export interface AppDataContextValue {
     items: Array<{ variantId?: string; quantity: number }>,
   ) => Promise<{ sourcePlan: PlanOrder; newPlan: PlanOrder } | null>;
   // Orders / reports
-  onReportSubmit: (oId: string, mId: string, qty: number, data: Record<string, any> | null, vId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string, weight?: number) => Promise<void>;
-  onReportSubmitProduct: (productId: string, milestoneTemplateId: string, qty: number, data: Record<string, any> | null, vId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string, weight?: number) => Promise<void>;
+  onReportSubmit: (oId: string, mId: string, qty: number, data: Record<string, any> | null, vId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string, weight?: number, timestamp?: string) => Promise<void>;
+  onReportSubmitProduct: (productId: string, milestoneTemplateId: string, qty: number, data: Record<string, any> | null, vId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string, weight?: number, timestamp?: string) => Promise<void>;
   onUpdateReport: (data: { orderId: string; milestoneId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string; newMilestoneId?: string; customData?: Record<string, unknown>; weight?: number | null }) => Promise<void>;
   onDeleteReport: (data: { orderId: string; milestoneId: string; reportId: string }) => Promise<void>;
   onUpdateReportProduct: (data: { progressId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string; newMilestoneTemplateId?: string; customData?: Record<string, unknown>; weight?: number | null }) => Promise<void>;
@@ -817,7 +817,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   // Phase 3.D follow-up：报工成功后不再 `refreshProdRecords()` 全表刷新；
   //   `OrderListView` / `ProductionMgmtOpsView` 在挂载时按当前 tab 的 type 集合 react-query 窄拉，
   //   `react-query` 的 mutate / refetchOnFocus 由各组件自行接管。
-  const onReportSubmit = useCallback(async (oId: string, mId: string, qty: number, data: Record<string, any> | null, vId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string, weight?: number) => {
+  const onReportSubmit = useCallback(async (oId: string, mId: string, qty: number, data: Record<string, any> | null, vId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string, weight?: number, timestamp?: string) => {
     try {
       const operatorName = workerId ? (workers.find((w: any) => w.id === workerId)?.name ?? '未知') : currentOperatorDisplayName(currentUser);
       const order = orders.find(o => o.id === oId);
@@ -829,6 +829,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         variantId: vId, workerId, equipmentId, reportBatchId, reportNo,
         customData, rate: rate != null ? rate : undefined,
         weight,
+        timestamp,
         virtualBatchId: typeof virtualBatchId === 'string' ? virtualBatchId : undefined,
         itemCodeId: typeof itemCodeId === 'string' ? itemCodeId : undefined,
       });
@@ -838,7 +839,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     } catch (err: any) { toast.error(err.message || '报工失败'); }
   }, [workers, currentUser, orders, products, invalidateAllProdRecords]);
 
-  const onReportSubmitProduct = useCallback(async (productId: string, milestoneTemplateId: string, qty: number, data: Record<string, any> | null, vId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string, weight?: number) => {
+  const onReportSubmitProduct = useCallback(async (productId: string, milestoneTemplateId: string, qty: number, data: Record<string, any> | null, vId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string, weight?: number, timestamp?: string) => {
     try {
       const operatorName = workerId ? (workers.find((w: any) => w.id === workerId)?.name ?? '未知') : currentOperatorDisplayName(currentUser);
       const rate = products.find(p => p.id === productId)?.nodeRates?.[milestoneTemplateId];
@@ -849,6 +850,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         defectiveQuantity: defectiveQty || 0, variantId: vId, workerId, equipmentId,
         reportBatchId, reportNo, customData, rate: rate != null ? rate : undefined,
         weight,
+        timestamp,
         virtualBatchId: typeof virtualBatchId === 'string' ? virtualBatchId : undefined,
         itemCodeId: typeof itemCodeId === 'string' ? itemCodeId : undefined,
       });

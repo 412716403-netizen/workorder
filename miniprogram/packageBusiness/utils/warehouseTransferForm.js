@@ -7,7 +7,12 @@ const { categoryUsesBatchManagement } = require('./materialIssueBatch.js');
 const { productHasColorSizeMatrix } = require('./productionPlans.js');
 const { buildVariantMatrixUiModel } = require('./variantQtyMatrix.js');
 const { formatPsiQtyDisplay } = require('./psiOpsAggregators.js');
-const { localTodayYmd, localCalendarYmdStartToIso } = require('./dateYmd.js');
+const { localTodayYmd } = require('./dateYmd.js');
+const {
+  defaultEntryDate,
+  hydrateEntryDate,
+  psiEntryTimestampsFromDate,
+} = require('./docEntryTime.js');
 const { getProductUnitName } = require('./planFormCustomField.js');
 const { BATCH_NO_UNTAGGED } = require('./materialStockConfirm.js');
 
@@ -49,17 +54,6 @@ function generateTRDocNumber(existingRecords) {
   });
   const nextSeq = seqNums.length > 0 ? Math.max(...seqNums) + 1 : 1;
   return `${prefix}-${String(nextSeq).padStart(3, '0')}`;
-}
-
-function toTimestampIso(timestamp) {
-  const ts = timestamp && String(timestamp).includes('T')
-    ? timestamp
-    : (timestamp ? new Date(timestamp) : new Date());
-  if (ts instanceof Date) {
-    return Number.isNaN(ts.getTime()) ? new Date().toISOString() : ts.toISOString();
-  }
-  const d = new Date(ts);
-  return Number.isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
 }
 
 function readTransferPreference() {
@@ -113,7 +107,7 @@ function buildInitialForm() {
     toWarehouseId: '',
     toWarehouseName: '',
     docNumber: '',
-    transferDate: localTodayYmd(),
+    transferDate: defaultEntryDate(),
     note: '',
     operator: '',
   };
@@ -255,12 +249,12 @@ async function validateTransferBatchStock(lines, fromWarehouseId, productMap, ca
   return '';
 }
 
-function buildTransferSaveRecords(form, lines, productMap, categoryMap, docNumber, timestamp, operator) {
+function buildTransferSaveRecords(form, lines, productMap, categoryMap, docNumber, _timestamp, operator) {
   const fromId = form.fromWarehouseId;
   const toId = form.toWarehouseId;
-  const ymd = String(form.transferDate || '').trim().slice(0, 10) || localTodayYmd();
-  const createdAt = localCalendarYmdStartToIso(ymd);
-  const timestampIso = toTimestampIso(timestamp);
+  const { createdAt, timestamp: timestampIso } = psiEntryTimestampsFromDate(
+    form.transferDate || defaultEntryDate()
+  );
   const op = String(operator || '').trim().slice(0, 100) || undefined;
   const note = String(form.note || '').trim() || undefined;
   const records = [];
@@ -337,4 +331,5 @@ module.exports = {
   validateTransferSave,
   validateTransferBatchStock,
   buildTransferSaveRecords,
+  hydrateEntryDate,
 };

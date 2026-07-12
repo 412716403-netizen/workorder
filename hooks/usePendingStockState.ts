@@ -57,12 +57,14 @@ import {
   tryAddScanQtyToStockInForm,
 } from '../utils/pendingStockScanMatch';
 import { checkExceedMax } from '../utils/scanApplyGuards';
+import { defaultEntryDatetimeLocal, entryDatetimeLocalToTimestamp } from '../utils/docEntryTime';
 
 export type StockInForm = {
   warehouseId: string;
   variantQuantities: Record<string, number>;
   singleQuantity: number;
   customData: Record<string, unknown>;
+  entryTimestamp: string;
 };
 
 /** 待入库扫码解析结果（按 token 缓存，确认时复用以避免重复网络请求） */
@@ -180,6 +182,7 @@ export function usePendingStockState(args: UsePendingStockStateArgs) {
     variantQuantities: {},
     singleQuantity: 0,
     customData: {},
+    entryTimestamp: defaultEntryDatetimeLocal(),
   });
   const [stockInScanLink, setStockInScanLink] = useState<{
     virtualBatchId?: string;
@@ -219,6 +222,7 @@ export function usePendingStockState(args: UsePendingStockStateArgs) {
         variantQuantities: {},
         singleQuantity: 0,
         customData: {},
+        entryTimestamp: defaultEntryDatetimeLocal(),
       });
       setStockInScanLink({});
     }
@@ -525,6 +529,7 @@ export function usePendingStockState(args: UsePendingStockStateArgs) {
         variantQuantities: formSlice.variantQuantities,
         singleQuantity: formSlice.singleQuantity,
         customData: {},
+        entryTimestamp: defaultEntryDatetimeLocal(),
       });
       for (const key of seen) {
         const [kind, token] = key.split(':');
@@ -741,7 +746,7 @@ export function usePendingStockState(args: UsePendingStockStateArgs) {
       const category = product ? categoryMap.get(product.categoryId) : undefined;
       const hasColorSize = productHasColorSizeMatrix(product ?? undefined, category ?? undefined);
 
-      const ts = new Date().toLocaleString();
+      const ts = entryDatetimeLocalToTimestamp(stockInForm.entryTimestamp);
       const operator = docOperator;
 
       const records = buildSingleStockInRecords({
@@ -777,7 +782,7 @@ export function usePendingStockState(args: UsePendingStockStateArgs) {
         });
       }
       setStockInOrder(null);
-      setStockInForm({ warehouseId: singlePendingStockInDefaultWh(), variantQuantities: {}, singleQuantity: 0, customData: {} });
+      setStockInForm({ warehouseId: singlePendingStockInDefaultWh(), variantQuantities: {}, singleQuantity: 0, customData: {}, entryTimestamp: defaultEntryDatetimeLocal() });
     },
     [
       stockInOrder,

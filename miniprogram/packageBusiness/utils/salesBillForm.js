@@ -7,6 +7,12 @@ const _require2 = require('./psiOpsAggregators.js'),groupDocItemsByLineGroup = _
 const _require3 = require('./productionPlans.js'),productHasColorSizeMatrix = _require3.productHasColorSizeMatrix;
 const _require4 = require('./variantQtyMatrix.js'),buildVariantMatrixUiModel = _require4.buildVariantMatrixUiModel;
 const _require5 = require('./dateYmd.js'),localTodayYmd = _require5.localTodayYmd;
+const {
+  defaultEntryDate,
+  defaultEntryTimeHm,
+  hydratePsiEntryFields,
+  psiEntryTimestampsFromDatetime,
+} = require('./docEntryTime.js');
 const _require6 = require('./materialIssueBatch.js'),categoryUsesBatchManagement = _require6.categoryUsesBatchManagement;
 const _require7 = require('./materialStockConfirm.js'),BATCH_NO_UNTAGGED = _require7.BATCH_NO_UNTAGGED;
 const _require8 = require('./purchaseBillBatch.js'),listLocalAvailableBatches = _require8.listLocalAvailableBatches;
@@ -78,7 +84,9 @@ function buildInitialForm() {
     warehouseName: '',
     docNumber: '',
     operator: '',
-    note: ''
+    note: '',
+    createdAt: defaultEntryDate(),
+    createdAtTime: defaultEntryTimeHm(),
   };
 }
 
@@ -252,8 +260,10 @@ function buildSalesBillSaveRecords(opts) {
 
 
     opts.form,lines = opts.lines,docNumber = opts.docNumber,editingDocNumber = opts.editingDocNumber,existingRecords = opts.existingRecords,operator = opts.operator;
-  const timestamp = psiDocTimestampIsoForSave(existingRecords, editingDocNumber);
-  const sbCreatedAtIso = sbCreatedAtIsoForSave(existingRecords, editingDocNumber);
+  const { createdAt: sbCreatedAtIso, timestamp } = psiEntryTimestampsFromDatetime(
+    form.createdAt || defaultEntryDate(),
+    form.createdAtTime
+  );
   const head = editingDocNumber ?
   (existingRecords || []).find(
     (r) => r.type === PSI_TYPE && r.docNumber === editingDocNumber
@@ -336,5 +346,6 @@ module.exports = {
   computeFormTotals,
   resolveBatchForSave,
   validateSalesBillSave,
-  buildSalesBillSaveRecords
+  buildSalesBillSaveRecords,
+  hydratePsiEntryFields,
 };

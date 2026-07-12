@@ -46,10 +46,17 @@ function computePlanCreateHeaderHeight(nav) {
   return nav.statusBarHeight + nav.navBarHeight + rpxToPx(12);
 }
 
+/** 订单编辑页双行底栏（合计 + 删除/保存） */
+const PO_EDIT_FOOTER_RPX = 200;
+
 /** 固定底栏占位（如外协确认「确认发出」） */
 function computeFixedFooterInsetPx(footerRpx = 128) {
   const win = readWindowMetrics();
   return rpxToPx(footerRpx) + (win.safeAreaBottom || 0);
+}
+
+function computePoEditFooterInsetPx() {
+  return computeFixedFooterInsetPx(PO_EDIT_FOOTER_RPX);
 }
 
 module.exports = {
@@ -59,4 +66,6 @@ module.exports = {
   computeSimplePlanHeaderHeight,
   computePlanCreateHeaderHeight,
   computeFixedFooterInsetPx,
+  computePoEditFooterInsetPx,
+  PO_EDIT_FOOTER_RPX,
 };

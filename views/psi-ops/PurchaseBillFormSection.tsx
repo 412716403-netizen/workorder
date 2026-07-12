@@ -32,7 +32,7 @@ import {
 } from '../../types';
 import { PsiListPrintPicker } from '../../components/psi/PsiListPrintPicker';
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
-import { localTodayYmd, localCalendarYmdStartToIso } from '../../utils/localDateTime';
+import { psiEntryTimestampsFromDatetime, defaultEntryDatetimeLocal } from '../../utils/docEntryTime';
 import { parsePsiNonVariantQuantityInput, parsePsiSignedQuantityInputOptional } from '../../utils/psiQtyInput';
 import {
   sectionTitleClass,
@@ -59,6 +59,7 @@ import { useConfirm } from '../../contexts/ConfirmContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
+import DocEntryTimeField from '../../components/DocEntryTimeField';
 import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
 import { formatPsiDocNumForList } from './psiOpsListFormatting';
 
@@ -266,7 +267,9 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
       toast.warning('入库数量须大于 0，请填写后再执行入库');
       return;
     }
-    const timestampIso = new Date().toISOString();
+    const { createdAt: pbCreatedAtIso, timestamp } = psiEntryTimestampsFromDatetime(
+      form.createdAt || defaultEntryDatetimeLocal(),
+    );
     const firstItem = itemsToBill[0];
     let pbDocNumber = generatePBDocNumber(firstItem?.partnerId || '', firstItem?.partner || '');
     const exists = (n: string) => recordsList.some((r: any) => r.type === 'PURCHASE_BILL' && r.docNumber === n);
@@ -317,12 +320,12 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
         sourceOrderNumber: item.docNumber,
         sourceLineId: item.id,
         warehouseId: form.warehouseId,
-        timestamp: timestampIso,
+        timestamp,
         _savedAtMs: Date.now(),
         note: `由订单[${item.docNumber}]商品明细转化`,
         operator: `${docOperator}(订单转化)`,
         lineGroupId: item.lineGroupId ?? item.id,
-        createdAt: localCalendarYmdStartToIso(localTodayYmd()),
+        createdAt: pbCreatedAtIso,
         ...(lineCd ? { customData: lineCd } : {}),
         ...(batchVal && { batch: batchVal })
       });
@@ -427,6 +430,13 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                 <h3 className={sectionTitleClass}>1. 采购入库基础信息</h3>
               </div>
               <div className={`grid grid-cols-1 md:grid-cols-2 ${psiOrderBillFormGridGapClass}`}>
+                <DocEntryTimeField
+                  className="space-y-1.5"
+                  label="创建时间"
+                  mode="datetime"
+                  value={form.createdAt || ''}
+                  onChange={createdAt => setForm({ ...form, createdAt })}
+                />
                 <div className="space-y-1.5">
                   <label className={formStandardLabelClass}>供应商</label>
                   <SupplierSelect
@@ -642,6 +652,30 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
           </>
         ) : (
           <div className="space-y-5">
+            <div className={`grid grid-cols-1 md:grid-cols-2 ${psiOrderBillFormGridGapClass}`}>
+              <DocEntryTimeField
+                className="space-y-1.5"
+                label="创建时间"
+                mode="datetime"
+                value={form.createdAt || ''}
+                onChange={createdAt => setForm({ ...form, createdAt })}
+              />
+              <div className="space-y-1">
+                <label className={formStandardLabelClass}>入库仓库</label>
+                <select
+                  value={form.warehouseId}
+                  onChange={e => setForm({ ...form, warehouseId: e.target.value })}
+                  className={psiOrderBillCompactWarehouseSelectClass}
+                >
+                  <option value="">选择仓库...</option>
+                  {warehouses.map(w => (
+                    <option key={w.id} value={w.id}>
+                      {w.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
             <div className="space-y-3">
               <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><ClipboardList className="w-4 h-4" /> 1. 选择来源订单</h4>
               {pendingPOs.length === 0 ? (

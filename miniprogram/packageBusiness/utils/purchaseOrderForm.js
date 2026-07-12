@@ -7,6 +7,12 @@ const _require2 = require('./psiOpsAggregators.js'),groupDocItemsByLineGroup = _
 const _require3 = require('./productionPlans.js'),productHasColorSizeMatrix = _require3.productHasColorSizeMatrix;
 const _require4 = require('./variantQtyMatrix.js'),buildVariantMatrixUiModel = _require4.buildVariantMatrixUiModel;
 const _require5 = require('./dateYmd.js'),localTodayYmd = _require5.localTodayYmd;
+const {
+  defaultEntryDate,
+  defaultEntryTimeHm,
+  hydratePsiEntryFields,
+  psiEntryTimestampsFromDatetime,
+} = require('./docEntryTime.js');
 
 function newLineId() {
   return `po-line-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -41,7 +47,9 @@ function buildInitialForm() {
     partner: '',
     partnerId: '',
     docNumber: '',
-    operator: ''
+    operator: '',
+    createdAt: defaultEntryDate(),
+    createdAtTime: defaultEntryTimeHm(),
   };
 }
 
@@ -190,8 +198,10 @@ function buildPurchaseOrderSaveRecords(opts) {
 
 
     opts.form,lines = opts.lines,docNumber = opts.docNumber,editingDocNumber = opts.editingDocNumber,existingRecords = opts.existingRecords,operator = opts.operator;
-  const timestamp = psiDocTimestampIsoForSave(existingRecords, editingDocNumber);
-  const poCreatedAtIso = poCreatedAtIsoForSave(existingRecords, editingDocNumber);
+  const { createdAt: poCreatedAtIso, timestamp } = psiEntryTimestampsFromDatetime(
+    form.createdAt || defaultEntryDate(),
+    form.createdAtTime
+  );
   const headerCustomData = buildHeaderCustomData(existingRecords, editingDocNumber);
   const newRecords = [];
   let recIdx = 0;
@@ -272,5 +282,6 @@ module.exports = {
   computeFormTotals,
   validatePurchaseOrderSave,
   buildPurchaseOrderSaveRecords,
-  applyLastPurchasePrices
+  applyLastPurchasePrices,
+  hydratePsiEntryFields,
 };

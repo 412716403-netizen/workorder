@@ -12,7 +12,7 @@ const _require3 =
 
 
 
-  require('../utils/warehouseTransferForm.js'),buildInitialForm = _require3.buildInitialForm,createEmptyLine = _require3.createEmptyLine,recordsToLineItems = _require3.recordsToLineItems,enrichLineForUi = _require3.enrichLineForUi,lineTotalQty = _require3.lineTotalQty,validateTransferSave = _require3.validateTransferSave,validateTransferBatchStock = _require3.validateTransferBatchStock,buildTransferSaveRecords = _require3.buildTransferSaveRecords,generateTRDocNumber = _require3.generateTRDocNumber,resolvePreferredTransferWarehouses = _require3.resolvePreferredTransferWarehouses,writeTransferPreference = _require3.writeTransferPreference;
+  require('../utils/warehouseTransferForm.js'),buildInitialForm = _require3.buildInitialForm,createEmptyLine = _require3.createEmptyLine,recordsToLineItems = _require3.recordsToLineItems,enrichLineForUi = _require3.enrichLineForUi,lineTotalQty = _require3.lineTotalQty,validateTransferSave = _require3.validateTransferSave,validateTransferBatchStock = _require3.validateTransferBatchStock,buildTransferSaveRecords = _require3.buildTransferSaveRecords,generateTRDocNumber = _require3.generateTRDocNumber,resolvePreferredTransferWarehouses = _require3.resolvePreferredTransferWarehouses,writeTransferPreference = _require3.writeTransferPreference,hydrateEntryDate = _require3.hydrateEntryDate;
 const _require4 = require('../utils/purchaseBillBatch.js'),attachMergeBatchesToLine = _require4.attachMergeBatchesToLine;
 const _require5 = require('../utils/purchaseOrders.js'),buildProductMap = _require5.buildProductMap,buildCategoryMap = _require5.buildCategoryMap;
 const _require6 = require('../utils/psiOpsAggregators.js'),groupRecordsByDocNumber = _require6.groupRecordsByDocNumber;
@@ -130,7 +130,7 @@ Page({
           docNumber: this._editingDocNumber,
           note: first.note || '',
           operator: first.operator || '',
-          transferDate: first.createdAt || form.transferDate
+          transferDate: hydrateEntryDate(first.createdAt),
         };
         lines = recordsToLineItems(items, this._productMap, this._categoryMap, this._dictionaries);
         this._deleteIds = items.map((r) => r.id);
@@ -186,6 +186,12 @@ Page({
       totalQtyText: String(totalQty),
       canSubmit
     });
+  },
+
+  onTransferDateChange(e) {
+    const transferDate = (e.detail && e.detail.value) || '';
+    this._form = { ...this._form, transferDate };
+    this.setData({ form: this._form });
   },
 
   onFromWarehouseChange(e) {

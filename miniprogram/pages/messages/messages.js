@@ -5,6 +5,7 @@ const { updateMessagesTabBadge } = require('../../utils/messagesTabBadge.js');
 const { setCache } = require('../../utils/messagesCache.js');
 const { normalizeListBody } = require('../../utils/listResponse.js');
 const { readTabShellInsets } = require('../../utils/tabShell.js');
+const { syncCurrentCustomTabBar } = require('../../utils/tabAccess.js');
 
 function filterConversations(conversations, keyword) {
   const kw = (keyword || '').trim().toLowerCase();
@@ -48,6 +49,7 @@ Page({
       wx.reLaunch({ url: '/pages/tenant-select/tenant-select' });
       return;
     }
+    syncCurrentCustomTabBar(ctx);
     this._tenantCtx = ctx;
     this.loadMessages();
   },

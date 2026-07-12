@@ -1,6 +1,8 @@
 const { readTenantCtx } = require('../../utils/session.js');
 const { readTabShellInsets } = require('../../utils/tabShell.js');
 const { hasPermission, hasPrefixPermission } = require('../../utils/permissions.js');
+const { syncCurrentCustomTabBar } = require('../../utils/tabAccess.js');
+const { syncTenantCtx } = require('../../utils/tenantCtxSync.js');
 const {
   listMyReportableTasks,
   listMyReportHistory,
@@ -304,6 +306,9 @@ Page({
     }
     const hasProcessReport = canAccessProcessReport(ctx.permissions || []);
     this.setData({ hasProcessReport });
+    syncTenantCtx().then((freshCtx) => {
+      syncCurrentCustomTabBar(freshCtx || ctx);
+    });
     if (!hasProcessReport) return;
     loadTraceabilityScanEnabled().then((scanEnabled) => {
       this.setData({ scanEnabled });

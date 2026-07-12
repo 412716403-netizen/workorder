@@ -22,6 +22,18 @@
     <view wx:else class="plan-create-page {{matrixKeyboardVisible ? 'matrix-keyboard-page--open' : ''}}">
       <view class="plan-form-card">
         <picker
+          mode="date"
+          value="{{form.stocktakeDate}}"
+          bindchange="onStocktakeDateChange"
+        >
+          <view class="plan-form-cell">
+            <text class="plan-form-cell__label">创建时间</text>
+            <text class="plan-form-cell__value {{form.stocktakeDate ? '' : 'plan-form-cell__value--ph'}}">{{form.stocktakeDate || '请选择'}}</text>
+            <text class="plan-form-cell__chevron">›</text>
+          </view>
+        </picker>
+
+        <picker
           wx:if="{{warehouseNames.length}}"
           mode="selector"
           range="{{warehouseNames}}"

@@ -19,6 +19,8 @@ import { toLocalCompactYmd } from '../../utils/localDateTime';
 import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
+import DocEntryTimeField from '../../components/DocEntryTimeField';
+import { defaultEntryDatetimeLocal, entryDatetimeLocalToTimestamp } from '../../utils/docEntryTime';
 import { buildMaterialStockCustomCollabPayload } from '../../utils/productionOpCollab/material';
 import { writeWarehousePreference, WAREHOUSE_DOC_KIND } from '../../utils/warehouseDocPreference';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
@@ -80,6 +82,7 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
   const docOperator = currentOperatorDisplayName(currentUser);
   const [matReturnCustomValues, setMatReturnCustomValues] = useState<Record<string, unknown>>({});
   const [lineBatchByProduct, setLineBatchByProduct] = useState<Record<string, string>>({});
+  const [entryTimestamp, setEntryTimestamp] = useState(() => defaultEntryDatetimeLocal());
   const categoryById = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
   const { listAvailableBatches } = useStockSnapshot({ enabled: !!(matReturnOrderId || matReturnProductId) });
   const productById = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
@@ -328,7 +331,7 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
     const overItems = toReturn.filter(m => (matReturnQty[m.productId] ?? 0) > Math.max(0, Math.round((m.dispatched - m.consumed - m.returned) * 100) / 100));
     if (overItems.length > 0) { toast.warning(`「${overItems[0].name}」退回数量超过可退回数量`); return; }
     const docNo = getNextWtDocNo();
-    const timestamp = new Date().toLocaleString();
+    const timestamp = entryDatetimeLocalToTimestamp(entryTimestamp);
     const collabExtra = buildMaterialStockCustomCollabPayload(matReturnCustomValues, 'STOCK_RETURN', matReturnPartner);
     const batch: ProductionOpRecord[] = toReturn.map(m => {
       const p = products.find(x => x.id === m.productId);
@@ -418,6 +421,9 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
           </button>
         </div>
         <div className="flex-1 overflow-auto p-5 space-y-4">
+          <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+            <DocEntryTimeField mode="datetime" value={entryTimestamp} onChange={setEntryTimestamp} />
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">外协工厂</label>

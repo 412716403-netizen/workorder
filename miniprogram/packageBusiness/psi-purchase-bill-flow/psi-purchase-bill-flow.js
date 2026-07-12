@@ -11,6 +11,7 @@ const _require6 = require('../utils/psiApi.js'),fetchAllPsiRecords = _require6.f
 const _require7 = require('../utils/planApi.js'),fetchProductsAll = _require7.fetchProductsAll;
 const _require8 = require('../utils/orderApi.js'),fetchWarehousesAll = _require8.fetchWarehousesAll;
 const _require9 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require9.readNavBarMetrics,readWindowMetrics = _require9.readWindowMetrics;
+const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../../utils/planFilterPanel.js');
 const _require0 = require('../utils/dateYmd.js'),localTodayYmd = _require0.localTodayYmd;
 
 function computeHeaderBlockHeight(nav) {
@@ -82,6 +83,7 @@ Page({
   },
 
   onPageScroll() {
+    if (!shouldCloseFilterPanelOnScroll(this)) return;
     this.closeFilterPanel();
   },
 
@@ -111,6 +113,7 @@ Page({
       this.closeFilterPanel();
       return;
     }
+    markFilterPanelOpen(this);
     this.setData({ showFilterPanel: true });
   },
 

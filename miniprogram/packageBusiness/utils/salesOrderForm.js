@@ -5,8 +5,13 @@
 const _require = require('./psiOpsAggregators.js'),groupDocItemsByLineGroup = _require.groupDocItemsByLineGroup,formatPsiQtyDisplay = _require.formatPsiQtyDisplay;
 const _require2 = require('./productionPlans.js'),productHasColorSizeMatrix = _require2.productHasColorSizeMatrix;
 const _require3 = require('./variantQtyMatrix.js'),buildVariantMatrixUiModel = _require3.buildVariantMatrixUiModel;
-const _require4 = require('./dateYmd.js'),localTodayYmd = _require4.localTodayYmd;
 const _require5 = require('./psiPartnerProductLastPrice.js'),resolveDefaultSalesPrice = _require5.resolveDefaultSalesPrice;
+const {
+  defaultEntryDate,
+  defaultEntryTimeHm,
+  hydratePsiEntryFields,
+  psiEntryTimestampsFromDatetime,
+} = require('./docEntryTime.js');
 
 function newLineId() {
   return `so-line-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -41,7 +46,9 @@ function buildInitialForm() {
     partner: '',
     partnerId: '',
     docNumber: '',
-    operator: ''
+    operator: '',
+    createdAt: defaultEntryDate(),
+    createdAtTime: defaultEntryTimeHm(),
   };
 }
 
@@ -195,8 +202,10 @@ function buildSalesOrderSaveRecords(opts) {
 
 
     opts.form,lines = opts.lines,docNumber = opts.docNumber,editingDocNumber = opts.editingDocNumber,existingRecords = opts.existingRecords,operator = opts.operator;
-  const timestamp = psiDocTimestampIsoForSave(existingRecords, editingDocNumber);
-  const soCreatedAtIso = soCreatedAtIsoForSave(existingRecords, editingDocNumber);
+  const { createdAt: soCreatedAtIso, timestamp } = psiEntryTimestampsFromDatetime(
+    form.createdAt || defaultEntryDate(),
+    form.createdAtTime
+  );
   const newRecords = [];
   let recIdx = 0;
 
@@ -280,5 +289,6 @@ module.exports = {
   validateSalesOrderSave,
   buildSalesOrderSaveRecords,
   applyDefaultSalesPrices,
-  preservedSalesOrderLinePsi
+  preservedSalesOrderLinePsi,
+  hydratePsiEntryFields,
 };

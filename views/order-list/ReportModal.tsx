@@ -50,6 +50,7 @@ import { formStandardLabelClass } from '../../styles/uiDensity';
 import { getVariantNodeUnitWeightKg } from '../../utils/variantNodeUnitWeight';
 import { computeReportRowDerivations } from '../../utils/reportRowDerivations';
 import { ScanBatchTrigger } from '../../components/scan/ScanBatchTrigger';
+import DocEntryTimeField from '../../components/DocEntryTimeField';
 
 export type { ReportModalData };
 
@@ -61,13 +62,13 @@ interface ReportModalProps {
     orderId: string, milestoneId: string, quantity: number, customData: unknown,
     variantId?: string, workerId?: string, defectiveQty?: number,
     equipmentId?: string, reportBatchId?: string, reportNo?: string,
-    weight?: number,
+    weight?: number, timestamp?: string,
   ) => void;
   onReportSubmitProduct?: (
     productId: string, milestoneTemplateId: string, quantity: number, customData: unknown,
     variantId?: string, workerId?: string, defectiveQty?: number,
     equipmentId?: string, reportBatchId?: string, reportNo?: string,
-    weight?: number,
+    weight?: number, timestamp?: string,
   ) => void;
   products: Product[];
   categories: ProductCategory[];
@@ -184,6 +185,8 @@ const ReportModal: React.FC<ReportModalProps> = ({
   );
 
   const {
+    entryTimestamp,
+    setEntryTimestamp,
     reportForm,
     setReportForm,
     productForms,
@@ -351,6 +354,13 @@ const ReportModal: React.FC<ReportModalProps> = ({
               product={productForModal}
               globalNodes={globalNodes}
               onOpenFilePreview={openDisplayFilePreview}
+            />
+
+            <DocEntryTimeField
+              mode="datetime"
+              className="mb-1"
+              value={entryTimestamp}
+              onChange={setEntryTimestamp}
             />
 
             <div className="space-y-1">

@@ -100,7 +100,7 @@ const TransferOrderModal: React.FC<TransferOrderModalProps> = ({
                 </select>
               </div>
               <div>
-                <label className="text-[10px] font-bold text-slate-500 block mb-1.5">调拨日期</label>
+                <label className="text-[10px] font-bold text-slate-500 block mb-1.5">创建时间</label>
                 <input type="date" value={transferForm.transferDate} onChange={e => setTransferForm(f => ({ ...f, transferDate: e.target.value }))} className="w-full text-sm py-2.5 px-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white" />
               </div>
               <div className="sm:col-span-2 lg:col-span-1">

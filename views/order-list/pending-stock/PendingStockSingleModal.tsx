@@ -17,6 +17,8 @@ import type {
 import { productHasColorSizeMatrix } from '../../../utils/productColorSize';
 import VariantQtyMatrixInputs from '../../../components/variant-matrix/VariantQtyMatrixInputs';
 import DocPhaseModal from '../../../components/DocPhaseModal';
+import DocEntryTimeField from '../../../components/DocEntryTimeField';
+import { defaultEntryDatetimeLocal } from '../../../utils/docEntryTime';
 import { StockInCustomCreateFields, expandPendingByVariantForMatrix } from '../pendingStockStockInHelpers';
 import type { usePendingStockState } from '../../../hooks/usePendingStockState';
 import {
@@ -126,6 +128,7 @@ const PendingStockSingleModal: React.FC<Props> = ({
       variantQuantities: {},
       singleQuantity: 0,
       customData: {},
+      entryTimestamp: defaultEntryDatetimeLocal(),
     });
   };
 
@@ -172,6 +175,14 @@ const PendingStockSingleModal: React.FC<Props> = ({
                   <h4 className={sectionTitleClass}>1. 入库信息</h4>
                 </div>
                 <div className={`grid grid-cols-1 md:grid-cols-2 ${psiOrderBillFormGridGapClass}`}>
+                  {'entryTimestamp' in stockInForm && (
+                    <DocEntryTimeField
+                      mode="datetime"
+                      className="space-y-1 md:col-span-2"
+                      value={stockInForm.entryTimestamp}
+                      onChange={entryTimestamp => setStockInForm(f => ({ ...f, entryTimestamp }))}
+                    />
+                  )}
                   <div className="space-y-1 md:col-span-2">
                     <label className={formStandardLabelClass}>入库仓库</label>
                     {warehouses.length > 0 ? (

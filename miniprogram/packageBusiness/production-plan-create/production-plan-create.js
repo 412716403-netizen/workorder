@@ -38,6 +38,11 @@ const _require9 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _r
 const _require0 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require0.LIST_ROUTES,afterSaveReturnToList = _require0.afterSaveReturnToList;
 const _require1 = require('../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require1.afterMatrixKeyboardOpen;
 const { applyPartnerCreatedOnPage } = require('../utils/mergePartnerList.js');
+const {
+  defaultPlanEntryDatetime,
+  defaultEntryTimeHm,
+  entryDateAndTimeToIso,
+} = require('../utils/docEntryTime.js');
 
 function computeHeaderBlockHeight(nav) {
   return computePlanCreateHeaderHeight(nav);
@@ -64,6 +69,8 @@ Page({
     productId: '',
     productName: '',
     customer: '',
+    entryDate: '',
+    entryTime: '',
     dueDate: '',
     showCustomer: false,
     showDeliveryDate: true,
@@ -154,6 +161,8 @@ Page({
         categories,
         partners,
         partnerCategories,
+        entryDate: defaultPlanEntryDatetime().slice(0, 10),
+        entryTime: defaultEntryTimeHm(),
         showCustomer: customerShowInCreate(planFormSettings, productionLinkMode),
         showDeliveryDate: listDisplay.showDeliveryDate !== false,
         createCustomFields,
@@ -223,6 +232,14 @@ Page({
 
   onPartnerCreated(e) {
     applyPartnerCreatedOnPage(this, e);
+  },
+
+  onEntryDateChange(e) {
+    this.setData({ entryDate: e.detail.value || '' });
+  },
+
+  onEntryTimeChange(e) {
+    this.setData({ entryTime: e.detail.value || '' });
   },
 
   onDueDateChange(e) {
@@ -439,6 +456,7 @@ Page({
     }
 
     const today = localTodayYmd();
+    const entryCreatedAt = entryDateAndTimeToIso(this.data.entryDate || today, this.data.entryTime);
     const customData = buildCustomDataPayload(
       this.data.createCustomFields,
       this.data.customData
@@ -452,7 +470,7 @@ Page({
       customer: this.data.showCustomer ? this.data.customer || '' : '',
       priority: 'Medium',
       assignments: {},
-      createdAt: today
+      createdAt: entryCreatedAt
     };
     if (customData) body.customData = customData;
     if (this.data.showDeliveryDate && this.data.dueDate) {

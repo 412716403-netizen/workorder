@@ -22,6 +22,7 @@ const _require8 =
 
   require('../utils/materialStockFlow.js'),buildMaterialFlowListRows = _require8.buildMaterialFlowListRows,filterMaterialFlowRows = _require8.filterMaterialFlowRows,computeMaterialFlowStats = _require8.computeMaterialFlowStats,TYPE_FILTER_LABELS = _require8.TYPE_FILTER_LABELS,TYPE_FILTER_VALUES = _require8.TYPE_FILTER_VALUES;
 const _require9 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require9.readNavBarMetrics,readWindowMetrics = _require9.readWindowMetrics;
+const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../../utils/planFilterPanel.js');
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
@@ -101,6 +102,7 @@ Page({
       this.closeFilterPanel();
       return;
     }
+    markFilterPanelOpen(this);
     this.setData({
       draftDateFrom: this.data.dateFrom,
       draftDateTo: this.data.dateTo,
@@ -115,6 +117,7 @@ Page({
   },
 
   onPageScroll() {
+    if (!shouldCloseFilterPanelOnScroll(this)) return;
     this.closeFilterPanel();
   },
 

@@ -10,7 +10,7 @@ const _require4 =
 
 
 
-  require('../utils/salesOrderForm.js'),buildInitialForm = _require4.buildInitialForm,createEmptyLine = _require4.createEmptyLine,recordsToLineItems = _require4.recordsToLineItems,enrichLineForUi = _require4.enrichLineForUi,computeFormTotals = _require4.computeFormTotals,validateSalesOrderSave = _require4.validateSalesOrderSave,buildSalesOrderSaveRecords = _require4.buildSalesOrderSaveRecords,applyDefaultSalesPrices = _require4.applyDefaultSalesPrices;
+  require('../utils/salesOrderForm.js'),buildInitialForm = _require4.buildInitialForm,createEmptyLine = _require4.createEmptyLine,recordsToLineItems = _require4.recordsToLineItems,enrichLineForUi = _require4.enrichLineForUi,computeFormTotals = _require4.computeFormTotals,validateSalesOrderSave = _require4.validateSalesOrderSave,buildSalesOrderSaveRecords = _require4.buildSalesOrderSaveRecords,applyDefaultSalesPrices = _require4.applyDefaultSalesPrices,hydratePsiEntryFields = _require4.hydratePsiEntryFields;
 const _require5 = require('../utils/salesOrders.js'),buildProductMap = _require5.buildProductMap,buildCategoryMap = _require5.buildCategoryMap;
 const _require6 = require('../utils/psiOpsAggregators.js'),groupRecordsByDocNumber = _require6.groupRecordsByDocNumber;
 const _require7 =
@@ -36,7 +36,7 @@ const _require0 =
 
 
   require('../utils/matrixQtyKeyboard.js'),activateMatrixKeyboardCell = _require0.activateMatrixKeyboardCell,applyMatrixKeyboardKey = _require0.applyMatrixKeyboardKey,buildMatrixKeyboardPreview = _require0.buildMatrixKeyboardPreview,createMatrixKeyboardInputSession = _require0.createMatrixKeyboardInputSession,getNextMatrixVariantIdInColumn = _require0.getNextMatrixVariantIdInColumn,getNextMatrixVariantIdInRow = _require0.getNextMatrixVariantIdInRow;
-const _require1 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require1.readNavBarMetrics,readWindowMetrics = _require1.readWindowMetrics,computePlanCreateHeaderHeight = _require1.computePlanCreateHeaderHeight;
+const _require1 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require1.readNavBarMetrics,readWindowMetrics = _require1.readWindowMetrics,computePlanCreateHeaderHeight = _require1.computePlanCreateHeaderHeight,computePoEditFooterInsetPx = _require1.computePoEditFooterInsetPx;
 const _require10 = require('../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require10.afterMatrixKeyboardOpen;
 const _require11 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require11.LIST_ROUTES,afterSaveReturnToList = _require11.afterSaveReturnToList;
 const _require12 = require('../utils/psiPartnerProductLastPrice.js'),resolveDefaultSalesPrice = _require12.resolveDefaultSalesPrice;
@@ -48,8 +48,7 @@ function computeHeaderBlockHeight(nav) {
 
 function computeScrollHeight(nav) {
   const win = readWindowMetrics();
-  const rpx = win.windowWidth / 750;
-  const footerPx = Math.ceil(128 * rpx) + (win.safeAreaBottom || 0);
+  const footerPx = computePoEditFooterInsetPx();
   const headerPx = computeHeaderBlockHeight(nav);
   return Math.max(200, (win.windowHeight || 667) - headerPx - footerPx);
 }
@@ -152,7 +151,8 @@ Page({
           partner: first.partner || '',
           partnerId: first.partnerId || '',
           docNumber: this._editingDocNumber,
-          operator: first.operator || ''
+          operator: first.operator || '',
+          ...hydratePsiEntryFields(first.createdAt || first.timestamp),
         };
         this._deleteIds = items.map((r) => r.id);
         lines = recordsToLineItems(items);
@@ -191,6 +191,16 @@ Page({
       showAmount: totals.showAmount,
       canSubmit: totals.canSubmit && Boolean(String(this.data.form.partner || '').trim())
     });
+  },
+
+  onCreatedAtChange(e) {
+    const createdAt = (e.detail && e.detail.value) || '';
+    this.setData({ form: { ...this.data.form, createdAt } });
+  },
+
+  onCreatedAtTimeChange(e) {
+    const createdAtTime = (e.detail && e.detail.value) || '';
+    this.setData({ form: { ...this.data.form, createdAtTime } });
   },
 
   onPartnerChange(e) {

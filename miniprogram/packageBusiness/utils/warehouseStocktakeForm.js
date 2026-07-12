@@ -7,7 +7,12 @@ const _require2 = require('./materialIssueBatch.js'),categoryUsesBatchManagement
 const _require3 = require('./productionPlans.js'),productHasColorSizeMatrix = _require3.productHasColorSizeMatrix;
 const _require4 = require('./variantQtyMatrix.js'),buildVariantMatrixUiModel = _require4.buildVariantMatrixUiModel;
 const _require5 = require('./psiOpsAggregators.js'),formatPsiQtyDisplay = _require5.formatPsiQtyDisplay;
-const _require6 = require('./dateYmd.js'),localTodayYmd = _require6.localTodayYmd,localCalendarYmdStartToIso = _require6.localCalendarYmdStartToIso;
+const _require6 = require('./dateYmd.js'),localTodayYmd = _require6.localTodayYmd;
+const {
+  defaultEntryDate,
+  hydrateEntryDate,
+  psiEntryTimestampsFromDate,
+} = require('./docEntryTime.js');
 const _require7 = require('./planFormCustomField.js'),getProductUnitName = _require7.getProductUnitName;
 const _require8 = require('./materialStockConfirm.js'),BATCH_NO_UNTAGGED = _require8.BATCH_NO_UNTAGGED;
 const _require9 = require('./warehouseStock.js'),buildStockSnapshotIndex = _require9.buildStockSnapshotIndex;
@@ -105,7 +110,7 @@ function buildInitialForm() {
     warehouseId: '',
     warehouseName: '',
     docNumber: '',
-    stocktakeDate: localTodayYmd(),
+    stocktakeDate: defaultEntryDate(),
     note: '',
     operator: ''
   };
@@ -255,16 +260,11 @@ function validateStocktakeSave(form, lines, productMap, categoryMap) {
   return '';
 }
 
-function buildStocktakeSaveRecords(form, lines, productMap, categoryMap, stockIndex, docNumber, timestamp, operator, editingDocNumber) {
+function buildStocktakeSaveRecords(form, lines, productMap, categoryMap, stockIndex, docNumber, _timestamp, operator, editingDocNumber) {
   const warehouseId = form.warehouseId;
-  const ymd = String(form.stocktakeDate || '').trim().slice(0, 10) || localTodayYmd();
-  const createdAt = localCalendarYmdStartToIso(ymd);
-  const ts = timestamp && String(timestamp).includes('T') ?
-  timestamp :
-  timestamp ? new Date(timestamp) : new Date();
-  const timestampIso = ts instanceof Date ?
-  Number.isNaN(ts.getTime()) ? new Date().toISOString() : ts.toISOString() :
-  Number.isNaN(new Date(ts).getTime()) ? new Date().toISOString() : new Date(ts).toISOString();
+  const { createdAt, timestamp: timestampIso } = psiEntryTimestampsFromDate(
+    form.stocktakeDate || defaultEntryDate()
+  );
   const stock = stockIndex && typeof stockIndex.getStock === 'function' ?
   stockIndex :
   emptyStockIndex();
@@ -392,5 +392,6 @@ module.exports = {
   recordsToLineItems,
   enrichLineForUi,
   validateStocktakeSave,
-  buildStocktakeSaveRecords
+  buildStocktakeSaveRecords,
+  hydrateEntryDate,
 };

@@ -1,5 +1,6 @@
 @import '../../styles/tokens.wxss';
 @import '../../styles/plan-form-cell.wxss';
+@import '../../styles/doc-entry-datetime.wxss';
 @import '../../styles/matrix-keyboard-page.wxss';
 
 page {
@@ -65,7 +66,7 @@ page {
 }
 
 .plan-create-page {
-  padding: 16rpx var(--spacing-page) calc(160rpx + env(safe-area-inset-bottom));
+  padding: 16rpx var(--spacing-page) calc(240rpx + env(safe-area-inset-bottom));
 }
 
 .plan-form-card {

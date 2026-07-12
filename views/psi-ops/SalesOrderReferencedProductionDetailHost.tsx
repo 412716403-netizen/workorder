@@ -1,0 +1,262 @@
+import React, { useCallback, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import type { PlanOrder, PrintTemplate, ProductionOpRecord } from '../../types';
+import { DEFAULT_OUTSOURCE_FORM_SETTINGS } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
+import {
+  useAppActions,
+  useConfigData,
+  useMasterData,
+  useOrdersData,
+} from '../../contexts/AppDataContext';
+import { normalizeDecimals } from '../../contexts/formSettingsDefaults';
+import { production as productionApi } from '../../services/api';
+import { filterPrintTemplatesByAllowedIds } from '../../utils/printTemplateWhitelist';
+import PlanDetailPanel from '../plan-order-list/PlanDetailPanel';
+import OrderDetailModal from '../OrderDetailModal';
+import { getOrderFamilyIds, hasOpsPerm } from '../production-ops/types';
+
+export interface SalesOrderReferencedProductionDetailHostProps {
+  planId: string | null;
+  orderId: string | null;
+  onPlanIdChange: (id: string | null) => void;
+  onOrderIdChange: (id: string | null) => void;
+}
+
+const SalesOrderReferencedProductionDetailHost: React.FC<
+  SalesOrderReferencedProductionDetailHostProps
+> = ({ planId, orderId, onPlanIdChange, onOrderIdChange }) => {
+  const { tenantCtx } = useAuth();
+  const tenantRole = tenantCtx?.tenantRole;
+  const userPermissions = tenantCtx?.permissions;
+
+  const m = useMasterData();
+  const c = useConfigData();
+  const o = useOrdersData();
+  const a = useAppActions();
+
+  const canViewOrderDetail = hasOpsPerm(tenantRole, userPermissions, 'production:orders_detail:view');
+  const canEditOrderDetail = hasOpsPerm(tenantRole, userPermissions, 'production:orders_detail:edit');
+  const canDeleteOrderDetail = hasOpsPerm(tenantRole, userPermissions, 'production:orders_detail:delete');
+
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
+  const [filePreviewType, setFilePreviewType] = useState<'image' | 'pdf'>('image');
+  const [planListPrintRun, setPlanListPrintRun] = useState<{
+    template: PrintTemplate;
+    plan: PlanOrder;
+  } | null>(null);
+
+  const orderDetailFamilyIds = useMemo(() => {
+    if (!orderId) return [] as string[];
+    return getOrderFamilyIds(o.orders, orderId);
+  }, [orderId, o.orders]);
+
+  const orderDetailProdQuery = useQuery({
+    queryKey: ['psiSalesOrderRefOrderDetailProd', orderId, orderDetailFamilyIds.join(',')],
+    enabled: !!orderId && orderDetailFamilyIds.length > 0,
+    queryFn: async (): Promise<ProductionOpRecord[]> => {
+      const acc: ProductionOpRecord[] = [];
+      let page = 1;
+      const pageSize = 200;
+      const types = 'REWORK,OUTSOURCE,REWORK_REPORT,STOCK_IN';
+      for (;;) {
+        const res = await productionApi.listPage({
+          page,
+          pageSize,
+          types,
+          orderIds: orderDetailFamilyIds.join(','),
+        });
+        const chunk = Array.isArray(res)
+          ? (res as ProductionOpRecord[])
+          : ((res?.data ?? []) as ProductionOpRecord[]);
+        acc.push(...chunk);
+        const total = Array.isArray(res) ? chunk.length : (res?.total ?? 0);
+        if (chunk.length < pageSize || acc.length >= total) break;
+        page += 1;
+        if (page > 40) break;
+      }
+      return normalizeDecimals(acc);
+    },
+    staleTime: 15_000,
+  });
+  const orderDetailProdRecords = orderDetailProdQuery.data ?? [];
+
+  const openOrderDetail = useCallback(
+    (id: string) => {
+      if (!canViewOrderDetail) {
+        toast.warning('无工单详情查看权限');
+        return;
+      }
+      onOrderIdChange(id);
+    },
+    [canViewOrderDetail, onOrderIdChange],
+  );
+
+  const { labelPrintPickerTemplates, labelPrintPickerHasWhitelist } = useMemo(() => {
+    const raw = c.planFormSettings.labelPrint?.allowedTemplateIds;
+    const filtered = filterPrintTemplatesByAllowedIds(c.printTemplates, raw);
+    const hasWhitelist =
+      Array.isArray(raw) &&
+      raw.some(x => x != null && x !== '' && String(x).trim() !== '');
+    return {
+      labelPrintPickerTemplates: filtered,
+      labelPrintPickerHasWhitelist: hasWhitelist,
+    };
+  }, [c.printTemplates, c.planFormSettings.labelPrint?.allowedTemplateIds]);
+
+  const mergePlanPrintWhitelist = useCallback(
+    (templateId: string) => {
+      const prev = c.planFormSettings.labelPrint?.allowedTemplateIds;
+      const allowedTemplateIds = prev?.length
+        ? Array.from(new Set([...prev, templateId]))
+        : [templateId];
+      void a.onUpdatePlanFormSettings({
+        ...c.planFormSettings,
+        labelPrint: {
+          ...c.planFormSettings.labelPrint,
+          allowedTemplateIds,
+        },
+      });
+    },
+    [a, c.planFormSettings],
+  );
+
+  const openPlanFormPrintTab = useCallback(() => {
+    void a.refreshPrintTemplates?.();
+    toast.info('请在「生产管理 → 计划单」中配置标签打印模版');
+  }, [a]);
+
+  if (!planId && !orderId && !imagePreviewUrl && !filePreviewUrl) return null;
+
+  return (
+    <>
+      {planId && (
+        <PlanDetailPanel
+          planId={planId}
+          onClose={() => onPlanIdChange(null)}
+          plans={o.plans}
+          products={m.products}
+          categories={m.categories}
+          dictionaries={m.dictionaries}
+          workers={m.workers}
+          equipment={m.equipment}
+          globalNodes={m.globalNodes}
+          boms={m.boms}
+          partners={m.partners}
+          partnerCategories={m.partnerCategories}
+          planFormSettings={c.planFormSettings}
+          orders={o.orders}
+          productionLinkMode={c.productionLinkMode}
+          onUpdatePlan={a.onUpdatePlan}
+          onUpdateOrder={a.onUpdateOrder}
+          onDeletePlan={a.onDeletePlan}
+          onConvertToOrder={a.onConvertToOrder}
+          onUpdateProduct={a.onUpdateProduct}
+          onAddPSIRecord={a.onAddPSIRecord}
+          onAddPSIRecordBatch={a.onAddPSIRecordBatch}
+          onCreateSubPlan={a.onCreateSubPlan}
+          onCreateSubPlans={a.onCreateSubPlans}
+          onSplitPlan={a.onSplitPlan}
+          onOpenOrderDetail={openOrderDetail}
+          canViewOrderDetail={canViewOrderDetail}
+          onImagePreview={url => setImagePreviewUrl(url)}
+          onFilePreview={(url, type) => {
+            setFilePreviewUrl(url);
+            setFilePreviewType(type);
+          }}
+          onPrintRun={setPlanListPrintRun}
+          labelPrintPickerTemplates={labelPrintPickerTemplates}
+          labelPrintPickerHasWhitelist={labelPrintPickerHasWhitelist}
+          onOpenLabelPrintConfig={openPlanFormPrintTab}
+          printTemplates={c.printTemplates}
+          onUpdatePrintTemplates={a.onUpdatePrintTemplates}
+          onRefreshPrintTemplates={a.refreshPrintTemplates}
+          onMergeLabelPrintWhitelist={mergePlanPrintWhitelist}
+          onUpdatePlanFormSettings={a.onUpdatePlanFormSettings}
+        />
+      )}
+
+      <OrderDetailModal
+        orderId={orderId}
+        onClose={() => onOrderIdChange(null)}
+        orders={o.orders}
+        products={m.products}
+        boms={m.boms}
+        prodRecords={orderDetailProdRecords}
+        dictionaries={m.dictionaries}
+        categories={m.categories}
+        orderFormSettings={c.orderFormSettings}
+        printTemplates={c.printTemplates}
+        productionLinkMode={c.productionLinkMode}
+        productMilestoneProgresses={o.productMilestoneProgresses}
+        globalNodes={m.globalNodes}
+        outsourceFormSettings={c.outsourceFormSettings ?? DEFAULT_OUTSOURCE_FORM_SETTINGS}
+        planFormSettings={c.planFormSettings}
+        partners={m.partners}
+        partnerCategories={m.partnerCategories}
+        userPermissions={userPermissions}
+        tenantRole={tenantRole}
+        onAddRecord={a.onAddProdRecord}
+        onAddRecordBatch={
+          a.onAddProdRecordBatch
+            ? async records => {
+                await a.onAddProdRecordBatch(records);
+              }
+            : undefined
+        }
+        onUpdateRecord={a.onUpdateProdRecord}
+        onDeleteRecord={a.onDeleteProdRecord}
+        onUpdateOrder={canEditOrderDetail ? a.onUpdateOrder : undefined}
+        onDeleteOrder={
+          canDeleteOrderDetail
+            ? id => {
+                a.onDeleteOrder(id);
+                onOrderIdChange(null);
+              }
+            : undefined
+        }
+      />
+
+      {imagePreviewUrl && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/70 p-4"
+          onClick={() => setImagePreviewUrl(null)}
+          role="presentation"
+        >
+          <img
+            src={imagePreviewUrl}
+            alt="预览"
+            className="max-h-[90vh] max-w-full rounded-xl object-contain"
+            onClick={e => e.stopPropagation()}
+          />
+        </div>
+      )}
+
+      {filePreviewUrl && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/70 p-4"
+          onClick={() => setFilePreviewUrl(null)}
+          role="presentation"
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-xl bg-white"
+            onClick={e => e.stopPropagation()}
+          >
+            {filePreviewType === 'image' ? (
+              <img src={filePreviewUrl} alt="预览" className="max-h-[85vh] w-full object-contain" />
+            ) : (
+              <iframe src={filePreviewUrl} title="PDF 预览" className="h-[85vh] w-full border-0" />
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 计划详情内触发列表打印时占位；完整打印链路请在计划单模块使用 */}
+      {planListPrintRun && null}
+    </>
+  );
+};
+
+export default React.memo(SalesOrderReferencedProductionDetailHost);

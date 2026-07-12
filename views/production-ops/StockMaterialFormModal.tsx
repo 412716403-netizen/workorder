@@ -22,6 +22,8 @@ import {
   WAREHOUSE_DOC_KIND,
 } from '../../utils/warehouseDocPreference';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
+import DocEntryTimeField from '../../components/DocEntryTimeField';
+import { defaultEntryDatetimeLocal, entryDatetimeLocalToTimestamp } from '../../utils/docEntryTime';
 
 export interface StockMaterialFormModalProps {
   visible: boolean;
@@ -63,6 +65,7 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
     batchNo: '',
   });
   const [customValues, setCustomValues] = useState<Record<string, unknown>>({});
+  const [entryTimestamp, setEntryTimestamp] = useState(() => defaultEntryDatetimeLocal());
 
   const emptyMaterialForm = () => ({
     orderId: '',
@@ -78,6 +81,7 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
     if (!visible) {
       setForm(emptyMaterialForm());
       setCustomValues({});
+      setEntryTimestamp(defaultEntryDatetimeLocal());
     }
   }, [visible]);
 
@@ -167,7 +171,7 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
       reason: form.reason,
       partner: form.partner,
       operator: docOperator,
-      timestamp: new Date().toLocaleString(),
+      timestamp: entryDatetimeLocalToTimestamp(entryTimestamp),
       status: '已完成',
       warehouseId: form.warehouseId || undefined,
       ...(batchEnabled && clampBatchNoInput(form.batchNo)
@@ -213,6 +217,7 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
         <h3 className="text-lg font-black text-slate-900">
           {stockModalMode === 'stock_return' ? '生产退料' : '生产领料'}
         </h3>
+        <DocEntryTimeField mode="datetime" value={entryTimestamp} onChange={setEntryTimestamp} />
         {form.orderId && (
           <div className="text-sm">
             <span className="text-slate-500">工单：</span>

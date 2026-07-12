@@ -120,6 +120,9 @@ export async function updateOrder(
 
   const { items, milestones, childOrders, opRecords, ...rest } = body;
   const data = sanitizeUpdate(rest);
+  if (rest.createdAt !== undefined && rest.createdAt !== null && rest.createdAt !== '') {
+    data.createdAt = rest.createdAt;
+  }
   normalizeDates(data);
 
   await basePrisma.$transaction(async (tx) => {

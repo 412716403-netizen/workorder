@@ -39,6 +39,7 @@ const _require11 =
 const _require12 = require('../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require12.afterMatrixKeyboardOpen;
 const _require13 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require13.LIST_ROUTES,afterSaveReturnToList = _require13.afterSaveReturnToList;
 const { applyPartnerCreatedOnPage } = require('../utils/mergePartnerList.js');
+const { defaultEntryDate, defaultEntryTimeHm, entryDateAndTimeToIso } = require('../utils/docEntryTime.js');
 const _require14 =
 
 
@@ -162,7 +163,9 @@ Page({
     navBarHeight: 44,
     headerBlockHeight: 88,
     scrollHeight: 400,
-    matrixScrollTop: 0
+    matrixScrollTop: 0,
+    entryDate: '',
+    entryTime: ''
   },
 
   onLoad(options) {
@@ -191,6 +194,8 @@ Page({
       navBarHeight: nav.navBarHeight,
       headerBlockHeight: computeSimplePlanHeaderHeight(nav),
       scrollHeight: computeScrollHeight(nav),
+      entryDate: defaultEntryDate(),
+      entryTime: defaultEntryTimeHm(),
       canOutsourceRework: this._canOutsourceRework,
       modeOptions: this._canOutsourceRework ?
       MODE_OPTIONS :
@@ -205,6 +210,14 @@ Page({
 
   onHeaderBack() {
     wx.navigateBack();
+  },
+
+  onEntryDateChange(e) {
+    this.setData({ entryDate: (e.detail && e.detail.value) || '' });
+  },
+
+  onEntryTimeChange(e) {
+    this.setData({ entryTime: (e.detail && e.detail.value) || '' });
   },
 
   onModeTap(e) {
@@ -562,7 +575,8 @@ Page({
       reworkNodeIds,
       outsourcePartner: this.data.partnerName,
       operator: readOperatorDisplayName(readTenantCtx()),
-      outsourceDocNo
+      outsourceDocNo,
+      timestamp: entryDateAndTimeToIso(this.data.entryDate, this.data.entryTime)
     });
 
     if (result.error) {

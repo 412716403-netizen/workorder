@@ -33,6 +33,7 @@ const _require7 = require('../utils/productionPlans.js'),normalizeList = _requir
 const _require8 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require8.readNavBarMetrics,readWindowMetrics = _require8.readWindowMetrics,computePlanCreateHeaderHeight = _require8.computePlanCreateHeaderHeight;
 const _require9 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require9.LIST_ROUTES,afterSaveReturnToList = _require9.afterSaveReturnToList;
 const { applyPartnerCreatedOnPage } = require('../utils/mergePartnerList.js');
+const { defaultEntryDate, defaultEntryTimeHm } = require('../utils/docEntryTime.js');
 
 function findIndexById(ids, id) {
   if (!id) return 0;
@@ -68,7 +69,9 @@ Page({
     statusBarHeight: 20,
     navBarHeight: 44,
     headerBlockHeight: 88,
-    scrollHeight: 500
+    scrollHeight: 500,
+    entryDate: '',
+    entryTime: ''
   },
 
   onLoad(options) {
@@ -97,7 +100,9 @@ Page({
         computePlanCreateHeaderHeight(nav) -
         Math.ceil(128 * rpx) - (
         win.safeAreaBottom || 0)
-      )
+      ),
+      entryDate: defaultEntryDate(),
+      entryTime: defaultEntryTimeHm()
     });
     this.bootstrap();
   },
@@ -261,6 +266,14 @@ Page({
     this.patchForm({ note: e.detail.value || '' });
   },
 
+  onEntryDateChange(e) {
+    this.setData({ entryDate: (e.detail && e.detail.value) || '' });
+  },
+
+  onEntryTimeChange(e) {
+    this.setData({ entryTime: (e.detail && e.detail.value) || '' });
+  },
+
   onSubmit() {
     if (this.data.submitting) return;
     const form = this.data.form;
@@ -272,7 +285,10 @@ Page({
     }
 
     const operator = readOperatorDisplayName();
-    const body = buildReceiptSavePayload(form, visibility, operator, this._existing);
+    const body = buildReceiptSavePayload(form, visibility, operator, this._existing, {
+      entryDate: this.data.entryDate,
+      entryTime: this.data.entryTime
+    });
     this.setData({ submitting: true });
 
     const req = this._existing ?

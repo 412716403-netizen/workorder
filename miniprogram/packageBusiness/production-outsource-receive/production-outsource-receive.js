@@ -1,5 +1,6 @@
 const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
 const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../../utils/planFilterPanel.js');
 const _require3 = require('../utils/outsourceReceiveAggregates.js'),buildOutsourceReceiveAggregates = _require3.buildOutsourceReceiveAggregates;
 const _require4 = require('../utils/outsourceReceiveKeys.js'),outsourceReceiveBaseKey = _require4.outsourceReceiveBaseKey;
 const _require5 = require('../utils/outsourceDispatchLite.js'),buildDispatchMilestoneOptions = _require5.buildDispatchMilestoneOptions;
@@ -130,6 +131,7 @@ Page({
   },
 
   onPageScroll() {
+    if (!shouldCloseFilterPanelOnScroll(this)) return;
     if (this.data.showFilterPanel) {
       this.patchFilterActive({ showFilterPanel: false });
     }
@@ -151,6 +153,7 @@ Page({
       this.patchFilterActive({ showFilterPanel: false });
       return;
     }
+    markFilterPanelOpen(this);
     this.patchFilterActive({
       showFilterPanel: true,
       draftMilestoneFilterIndex: this.data.milestoneFilterIndex,

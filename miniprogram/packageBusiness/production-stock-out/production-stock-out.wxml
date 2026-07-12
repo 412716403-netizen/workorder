@@ -18,25 +18,41 @@
         />
         <view wx:if="{{searchKeyword}}" class="plan-search__clear" bindtap="onSearchClear">×</view>
       </view>
-      <view wx:if="{{canViewList}}" class="material-list-view-tabs">
-        <view
-          class="material-partner-view-tab {{listViewMode === 'order' ? 'material-partner-view-tab--active' : ''}}"
-          data-mode="order"
-          bindtap="onListViewModeTap"
-        >按工单</view>
-        <view
-          class="material-partner-view-tab {{listViewMode === 'material' ? 'material-partner-view-tab--active' : ''}}"
-          data-mode="material"
-          bindtap="onListViewModeTap"
-        >按物料</view>
-      </view>
       <view
-        wx:if="{{canViewFlow}}"
-        class="material-flow-btn"
-        bindtap="onFlowTap"
+        wx:if="{{canViewList || canViewFlow}}"
+        class="plan-tool-btn {{filterActive ? 'plan-tool-btn--active' : ''}}"
+        bindtap="onFilterTap"
       >
-        <image class="material-flow-btn__icon" src="/assets/icons/scroll-text.png" mode="aspectFit" />
-        <text class="material-flow-btn__label">流水</text>
+        <image class="plan-tool-btn__icon" src="/assets/icons/list-filter.png" mode="aspectFit" />
+      </view>
+    </view>
+
+    <view
+      wx:if="{{showFilterPanel}}"
+      class="plan-filter-panel plan-filter-panel--header-dropdown material-filter-panel"
+    >
+      <view wx:if="{{canViewList || canViewFlow}}" class="material-filter-toolbar">
+        <view wx:if="{{canViewList}}" class="plan-filter-chips material-filter-chips">
+          <view
+            class="plan-filter-chip {{listViewMode === 'order' ? 'plan-filter-chip--active' : ''}}"
+            data-mode="order"
+            bindtap="onListViewModeTap"
+          >按工单</view>
+          <view
+            class="plan-filter-chip {{listViewMode === 'material' ? 'plan-filter-chip--active' : ''}}"
+            data-mode="material"
+            bindtap="onListViewModeTap"
+          >按物料</view>
+        </view>
+        <view
+          wx:if="{{canViewFlow}}"
+          class="material-filter-flow"
+          bindtap="onFlowTap"
+          hover-class="material-filter-flow--press"
+        >
+          <image class="material-filter-flow__icon" src="/assets/icons/scroll-text.png" mode="aspectFit" />
+          <text class="material-filter-flow__label">流水</text>
+        </view>
       </view>
     </view>
   </view>

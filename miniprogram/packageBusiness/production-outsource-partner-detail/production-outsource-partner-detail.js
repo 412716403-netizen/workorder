@@ -15,6 +15,7 @@ const _require6 =
 const _require7 = require('../utils/planApi.js'),fetchDictionaries = _require7.fetchDictionaries;
 const _require8 = require('../utils/productionPlans.js'),normalizeMasterList = _require8.normalizeMasterList,normalizeAppDictionaries = _require8.normalizeAppDictionaries;
 const _require9 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require9.readNavBarMetrics,readWindowMetrics = _require9.readWindowMetrics;
+const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../../utils/planFilterPanel.js');
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
@@ -87,6 +88,7 @@ Page({
   },
 
   onPageScroll() {
+    if (!shouldCloseFilterPanelOnScroll(this)) return;
     if (this.data.showFilterPanel) {
       this.setData({ showFilterPanel: false, filterActive: computeFilterActive({ ...this.data, showFilterPanel: false }) });
     }
@@ -111,6 +113,7 @@ Page({
       });
       return;
     }
+    markFilterPanelOpen(this);
     this.setData({
       showFilterPanel: true,
       draftDateFrom: this.data.dateFrom,

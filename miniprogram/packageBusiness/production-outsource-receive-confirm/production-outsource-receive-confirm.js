@@ -39,6 +39,7 @@ const _require14 =
 
 
   require('../utils/matrixQtyKeyboard.js'),activateMatrixKeyboardCell = _require14.activateMatrixKeyboardCell,applyMatrixKeyboardKey = _require14.applyMatrixKeyboardKey,buildMatrixKeyboardPreview = _require14.buildMatrixKeyboardPreview,createMatrixKeyboardInputSession = _require14.createMatrixKeyboardInputSession,getNextMatrixVariantIdInColumn = _require14.getNextMatrixVariantIdInColumn,getNextMatrixVariantIdInRow = _require14.getNextMatrixVariantIdInRow;
+const { defaultEntryDate, defaultEntryTimeHm, entryDateAndTimeToIso } = require('../utils/docEntryTime.js');
 
 function computeScrollHeight(nav) {
   const win = readWindowMetrics();
@@ -88,7 +89,9 @@ Page({
     navBarHeight: 44,
     headerBlockHeight: 88,
     scrollHeight: 400,
-    matrixScrollTop: 0
+    matrixScrollTop: 0,
+    entryDate: '',
+    entryTime: ''
   },
 
   onLoad() {
@@ -114,13 +117,23 @@ Page({
       navBarHeight: nav.navBarHeight,
       headerBlockHeight: computePlanCreateHeaderHeight(nav),
       scrollHeight: computeScrollHeight(nav),
-      canViewAmount: hasPermission(ctx && ctx.permissions || [], 'production:outsource_amount:allow')
+      canViewAmount: hasPermission(ctx && ctx.permissions || [], 'production:outsource_amount:allow'),
+      entryDate: defaultEntryDate(),
+      entryTime: defaultEntryTimeHm()
     });
     this.init();
   },
 
   onHeaderBack() {
     wx.navigateBack();
+  },
+
+  onEntryDateChange(e) {
+    this.setData({ entryDate: (e.detail && e.detail.value) || '' });
+  },
+
+  onEntryTimeChange(e) {
+    this.setData({ entryTime: (e.detail && e.detail.value) || '' });
   },
 
   buildMatrixCtx() {
@@ -452,7 +465,8 @@ Page({
         quantities,
         unitPrices,
         operator: readOperatorDisplayName(readTenantCtx()),
-        ordersById: this._ordersById
+        ordersById: this._ordersById,
+        timestamp: entryDateAndTimeToIso(this.data.entryDate, this.data.entryTime)
       });
       if (!batch.length) {
         throw new Error('无有效收回行');

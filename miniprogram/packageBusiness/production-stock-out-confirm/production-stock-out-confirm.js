@@ -27,6 +27,7 @@ const _require8 =
 const _require9 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require9.readNavBarMetrics,readWindowMetrics = _require9.readWindowMetrics;
 const _require0 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require0.LIST_ROUTES,afterSaveReturnToList = _require0.afterSaveReturnToList;
 const _require1 = require('../utils/materialStatsLite.js'),INTERNAL_PARTNER_KEY = _require1.INTERNAL_PARTNER_KEY;
+const { defaultEntryDate, defaultEntryTimeHm, entryDateAndTimeToIso } = require('../utils/docEntryTime.js');
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
@@ -50,7 +51,9 @@ Page({
     warehouseIndex: 0,
     statusBarHeight: 20,
     navBarHeight: 44,
-    headerBlockHeight: 88
+    headerBlockHeight: 88,
+    entryDate: '',
+    entryTime: '',
   },
 
   onLoad(options) {
@@ -108,6 +111,8 @@ Page({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
       headerBlockHeight: computeHeaderBlockHeight(nav),
+      entryDate: defaultEntryDate(),
+      entryTime: defaultEntryTimeHm(),
       mode,
       modeLabel,
       pageTitle: isOutsourceMaterial ? modeLabel : `确认${modeLabel}`,
@@ -145,6 +150,14 @@ Page({
 
   onHeaderBack() {
     wx.navigateBack();
+  },
+
+  onEntryDateChange(e) {
+    this.setData({ entryDate: (e.detail && e.detail.value) || '' });
+  },
+
+  onEntryTimeChange(e) {
+    this.setData({ entryTime: (e.detail && e.detail.value) || '' });
   },
 
   async loadWarehouses() {
@@ -239,6 +252,7 @@ Page({
       sourceProductId: this._detail.sourceProductId || undefined,
       warehouse: wh,
       operator: readOperatorDisplayName(),
+      timestamp: entryDateAndTimeToIso(this.data.entryDate, this.data.entryTime),
       partner: this._partnerKey !== INTERNAL_PARTNER_KEY ? this._partnerKey : undefined
     });
 

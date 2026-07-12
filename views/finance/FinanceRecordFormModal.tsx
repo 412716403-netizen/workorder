@@ -15,6 +15,7 @@ import { PartnerSelect } from '../../components/PartnerSelect';
 import { SearchableProductSelect } from '../../components/SearchableProductSelect';
 import WorkerSelectWithTabs from './WorkerSelectWithTabs';
 import ReportCustomFieldsEditor from '../../components/ReportCustomFieldsEditor';
+import DocEntryTimeField from '../../components/DocEntryTimeField';
 import { formStandardControlClass, formStandardControlIconClass, formStandardTextareaClass } from '../../styles/uiDensity';
 
 export interface FinanceRecordFormValues {
@@ -27,6 +28,7 @@ export interface FinanceRecordFormValues {
   productId: string;
   paymentAccount: string;
   customData: Record<string, any>;
+  entryTimestamp: string;
 }
 
 interface FinanceRecordFormModalProps {
@@ -147,6 +149,13 @@ function FinanceRecordFormModal({
         </div>
         <div className="p-10 overflow-y-auto flex-1">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <DocEntryTimeField
+              mode="datetime"
+              className="space-y-1 lg:col-span-2"
+              label="创建时间"
+              value={form.entryTimestamp}
+              onChange={entryTimestamp => setForm({ ...form, entryTimestamp })}
+            />
             {isReceiptOrPayment ? (
               <>
                 {categoriesForType.length > 0 && (

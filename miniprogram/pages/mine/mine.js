@@ -1,6 +1,7 @@
 const { API_BASE } = require('../../config.js');
 const { request } = require('../../utils/request.js');
 const { clearSession, readTenantCtx } = require('../../utils/session.js');
+const { syncCurrentCustomTabBar } = require('../../utils/tabAccess.js');
 
 function roleLabel(role) {
   if (role === 'owner') return '创建者';
@@ -30,6 +31,7 @@ Page({
       wx.reLaunch({ url: '/pages/tenant-select/tenant-select' });
       return;
     }
+    syncCurrentCustomTabBar(ctx);
     const tenantRoleLabel = roleLabel(ctx.tenantRole || '');
     this.setData({
       tenantName: ctx.tenantName || '',

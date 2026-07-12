@@ -216,6 +216,9 @@ export async function updatePlan(
 
   const { items, childPlans, parentPlan, productionOrders, ...rest } = body;
   const data = sanitizeUpdate(rest);
+  if (rest.createdAt !== undefined && rest.createdAt !== null && rest.createdAt !== '') {
+    data.createdAt = rest.createdAt;
+  }
   normalizeDates(data);
 
   if ('milestoneNodeIds' in data) {

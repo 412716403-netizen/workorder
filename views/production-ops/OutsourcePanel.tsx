@@ -104,6 +104,8 @@ import {
   WAREHOUSE_DOC_KIND,
 } from '../../utils/warehouseDocPreference';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
+import DocEntryTimeField from '../../components/DocEntryTimeField';
+import { defaultEntryDatetimeLocal, entryDatetimeLocalToTimestamp } from '../../utils/docEntryTime';
 import { buildOutsourceDispatchCollabSnapshot, outsourceCustomCollabPart } from '../../utils/productionOpCollab/outsource';
 import OutsourceFormConfigModal from './OutsourceFormConfigModal';
 import type { PartnerFlowDetailSeed } from '../../utils/outsourcePartnerFlowDetail';
@@ -246,6 +248,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
   const [dispatchSelectedKeys, setDispatchSelectedKeys] = useState<Set<string>>(new Set());
   const [dispatchFormModalOpen, setDispatchFormModalOpen] = useState(false);
   const [dispatchFormQuantities, setDispatchFormQuantities] = useState<Record<string, number>>({});
+  const [dispatchEntryTimestamp, setDispatchEntryTimestamp] = useState(() => defaultEntryDatetimeLocal());
   const [collabSyncConfirm, setCollabSyncConfirm] = useState<OutsourceCollabSyncConfirmPayload | null>(null);
   const [collabRoutes, setCollabRoutes] = useState<CollabOutsourceRouteRow[]>([]);
 
@@ -267,6 +270,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
   >({});
   const [receiveModal, setReceiveModal] = useState<{ orderId?: string; nodeId: string; productId: string; orderNumber?: string; productName: string; milestoneName: string; partner: string; pendingQty: number } | null>(null);
   const [receiveQty, setReceiveQty] = useState(0);
+  const [receiveEntryTimestamp, setReceiveEntryTimestamp] = useState(() => defaultEntryDatetimeLocal());
   const [flowDetailKey, setFlowDetailKey] = useState<string | null>(null);
   /**
    * 流水弹窗按日期窗口窄拉 records，详情打开时把这条 docNo 的原始 records 一并存下来，
@@ -849,6 +853,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
     setDispatchCustomValues({});
     setDispatchDeliveryDate('');
     setDispatchPartnerName('');
+    setDispatchEntryTimestamp(defaultEntryDatetimeLocal());
   };
 
   const closeDispatchFormModal = () => {
@@ -863,6 +868,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
     setReceiveFormWeights({});
     setReceiveScanLinkByKey({});
     setReceiveCustomValues({});
+    setReceiveEntryTimestamp(defaultEntryDatetimeLocal());
   };
 
   const closeReceiveFormModal = () => {
@@ -888,7 +894,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
       toast.error(`生成外协发出单号失败：${e instanceof Error ? e.message : String(e)}`);
       return;
     }
-    const timestamp = new Date().toLocaleString();
+    const timestamp = entryDatetimeLocalToTimestamp(dispatchEntryTimestamp);
     const isProductMode = productionLinkMode === 'product';
     const dispatchCollab = buildOutsourceDispatchCollabSnapshot(
       dispatchCustomValues,
@@ -1007,7 +1013,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
       productId: receiveModal.productId,
       quantity: receiveQty,
       operator: docOperator,
-      timestamp: new Date().toLocaleString(),
+      timestamp: entryDatetimeLocalToTimestamp(receiveEntryTimestamp),
       status: '已收回',
       partner: receiveModal.partner,
       nodeId: receiveModal.nodeId,
@@ -1115,7 +1121,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
       }
     }
     }
-    const timestamp = new Date().toLocaleString();
+    const timestamp = entryDatetimeLocalToTimestamp(receiveEntryTimestamp);
     const firstKey = receiveSelectedKeys.values().next().value;
     const firstRow = firstKey ? outsourceReceiveAllAggregates.find(r => outsourceReceiveBaseKey(r) === firstKey) : null;
     const partnerName = firstRow?.partner ?? '';
@@ -1706,6 +1712,8 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
               showDispatchDeliveryDate={outsourceFormSettings.showOutsourceDispatchDeliveryDate === true}
               dispatchDeliveryDate={dispatchDeliveryDate}
               setDispatchDeliveryDate={setDispatchDeliveryDate}
+              dispatchEntryTimestamp={dispatchEntryTimestamp}
+              setDispatchEntryTimestamp={setDispatchEntryTimestamp}
               onSubmit={handleDispatchFormSubmit}
               onClose={closeDispatchFormModal}
             />
@@ -1777,6 +1785,8 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
               globalNodes={globalNodes}
               boms={boms}
               allowExceedMaxOutsourceReceiveQty={allowExceedMaxOutsourceReceiveQty}
+              receiveEntryTimestamp={receiveEntryTimestamp}
+              onReceiveEntryTimestampChange={setReceiveEntryTimestamp}
               onSubmit={handleReceiveFormSubmit}
               onClose={closeReceiveFormModal}
             />
@@ -1936,6 +1946,13 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
               <p><span className="text-slate-500">产品：</span><span className="font-bold text-slate-800">{receiveModal.productName}</span></p>
               <p><span className="text-slate-500">工序：</span><span className="font-bold text-indigo-600">{receiveModal.milestoneName}</span></p>
               <p><span className="text-slate-500">待收回数量：</span><span className="font-bold text-amber-600">{receiveModal.pendingQty}</span></p>
+            </div>
+            <div>
+              <DocEntryTimeField
+                mode="datetime"
+                value={receiveEntryTimestamp}
+                onChange={setReceiveEntryTimestamp}
+              />
             </div>
             <div>
               <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">本次收回数量</label>

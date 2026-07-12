@@ -21,6 +21,17 @@ page {
   background: linear-gradient(135deg, var(--color-primary-gradient-start), var(--color-primary-gradient-end));
 }
 
+.plan-filter-panel--header-dropdown {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  z-index: 210;
+  margin: 0;
+  border-radius: 0 0 16rpx 16rpx;
+  box-shadow: 0 8rpx 24rpx rgba(15, 23, 42, 0.08);
+}
+
 .plan-header__bar {
   display: flex;
   align-items: center;

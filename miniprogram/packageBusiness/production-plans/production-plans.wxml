@@ -33,11 +33,8 @@
         <image class="plan-tool-btn__icon" src="/assets/icons/file-plus.png" mode="aspectFit" />
       </view>
     </view>
-  </view>
 
-  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
-
-  <view wx:if="{{showFilterPanel}}" class="plan-filter-panel">
+    <view wx:if="{{showFilterPanel}}" class="plan-filter-panel plan-filter-panel--header-dropdown">
     <view wx:if="{{showStatusTabs}}" class="plan-filter-panel__section">
       <text class="plan-filter-panel__label">下达状态</text>
       <view class="plan-filter-chips">
@@ -60,7 +57,10 @@
       <view class="plan-filter-reset" bindtap="onFilterReset">重置</view>
       <view class="plan-filter-apply" bindtap="onFilterApply">确定</view>
     </view>
+    </view>
   </view>
+
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
 
   <view class="plan-list-body">
     <empty-state wx:if="{{loading && !rows.length}}" loading="{{true}}" />

@@ -13,6 +13,7 @@ import type { PlanListPrintSettings, PrintRenderContext, PrintTemplate } from '.
 import { Product, ProductCategory, Partner, PartnerCategory, AppDictionaries } from '../../types';
 import { PsiListPrintPicker } from '../../components/psi/PsiListPrintPicker';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
+import DocEntryTimeField from '../../components/DocEntryTimeField';
 import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 import { parsePsiIntegerQuantityInputOptional } from '../../utils/psiQtyInput';
@@ -149,6 +150,13 @@ const SalesOrderFormSection: React.FC<SalesOrderFormSectionProps> = ({
             <h3 className={sectionTitleClass}>1. 销售订单基础信息</h3>
           </div>
           <div className={`grid grid-cols-1 md:grid-cols-2 ${psiOrderBillFormGridGapClass}`}>
+            <DocEntryTimeField
+              className="space-y-1.5 min-w-0"
+              label="创建时间"
+              mode="datetime"
+              value={form.createdAt || ''}
+              onChange={createdAt => setForm({ ...form, createdAt })}
+            />
             <div className={`md:col-span-2 grid grid-cols-1 md:grid-cols-2 ${psiOrderBillFormGridGapClass}`}>
               <div className="space-y-1.5 min-w-0">
                 <label className={formStandardLabelClass}>{partnerLabel}</label>

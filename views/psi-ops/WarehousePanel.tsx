@@ -25,6 +25,7 @@ import { sortedColorEntries } from '../../utils/sortVariantsByProduct';
 import { useProgressiveList } from '../../hooks/useProgressiveList';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { localTodayYmd, toLocalDateYmd } from '../../utils/localDateTime';
+import { psiEntryTimestampsFromDate } from '../../utils/docEntryTime';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   readWarehousePreference,
@@ -381,10 +382,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
       }
     }
     const docNumber = editingTransferDocNumber || generateTRDocNumber();
-    const timestamp = editingTransferDocNumber
-      ? (recordsList.find((r: any) => r.type === 'TRANSFER' && r.docNumber === editingTransferDocNumber)?.timestamp ?? new Date().toLocaleString())
-      : new Date().toLocaleString();
-    const createdAt = transferForm.transferDate || localTodayYmd();
+    const { createdAt, timestamp } = psiEntryTimestampsFromDate(transferForm.transferDate || localTodayYmd());
     const newRecords: any[] = [];
     let trIdx = 0;
     transferItems.forEach((item) => {
@@ -517,10 +515,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
       }
     }
     const docNumber = editingStocktakeDocNumber || generateSTDocNumber();
-    const timestamp = editingStocktakeDocNumber
-      ? (recordsList.find((r: any) => r.type === 'STOCKTAKE' && r.docNumber === editingStocktakeDocNumber)?.timestamp ?? new Date().toLocaleString())
-      : new Date().toLocaleString();
-    const createdAt = stocktakeForm.stocktakeDate || localTodayYmd();
+    const { createdAt, timestamp } = psiEntryTimestampsFromDate(stocktakeForm.stocktakeDate || localTodayYmd());
     const newRecords: any[] = [];
     let stIdx = 0;
     stocktakeItems.forEach((item) => {

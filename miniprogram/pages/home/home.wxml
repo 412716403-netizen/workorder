@@ -15,7 +15,6 @@
       wx:elif="{{shortcuts.length > 5}}"
       class="home-shortcuts"
       scroll-x
-      enhanced
       show-scrollbar="{{false}}"
     >
       <view class="home-shortcuts__inner home-shortcuts__inner--scroll">
@@ -26,6 +25,8 @@
           data-key="{{item.key}}"
           data-path="{{item.path}}"
           bindtap="onShortcutTap"
+          hover-class="home-shortcut--press"
+          hover-stay-time="80"
         >
           <image wx:if="{{item.icon}}" class="home-shortcut__icon" src="{{item.icon}}" mode="aspectFit" />
           <text wx:else class="home-shortcut__fallback">{{item.fallbackChar}}</text>
@@ -42,6 +43,8 @@
           data-key="{{item.key}}"
           data-path="{{item.path}}"
           bindtap="onShortcutTap"
+          hover-class="home-shortcut--press"
+          hover-stay-time="80"
         >
           <image wx:if="{{item.icon}}" class="home-shortcut__icon" src="{{item.icon}}" mode="aspectFit" />
           <text wx:else class="home-shortcut__fallback">{{item.fallbackChar}}</text>

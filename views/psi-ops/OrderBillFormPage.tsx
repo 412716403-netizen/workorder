@@ -20,8 +20,7 @@ import PurchaseOrderFormSection from './PurchaseOrderFormSection';
 import SalesOrderFormSection from './SalesOrderFormSection';
 import SalesBillFormSection from './SalesBillFormSection';
 import PurchaseBillFormSection from './PurchaseBillFormSection';
-import { localTodayYmd, localCalendarYmdStartToIso, toLocalDateYmd } from '../../utils/localDateTime';
-import { flowRecordsEarliestMs } from '../../utils/flowDocSort';
+import { psiEntryTimestampsFromDatetime, defaultEntryDatetimeLocal, hydrateEntryDatetimeLocal } from '../../utils/docEntryTime';
 import { nextPsiDocNumber } from '../../utils/partnerDocNumber';
 import {
   buildSalesOrderPrintRenderContext,
@@ -50,16 +49,6 @@ import { categoryUsesBatchManagement } from '../../types';
 import { validatePsiOrderSave } from '../../utils/psiOrderLineSave';
 
 type FormType = 'PURCHASE_ORDER' | 'PURCHASE_BILL' | 'SALES_ORDER' | 'SALES_BILL';
-
-/** 新建用当前 UTC ISO；编辑保留原单据组内最早可解析时间，便于列表排序与展示一致（避免 toLocaleString 不可解析） */
-function psiDocTimestampIsoForSave(recordsList: PsiRecord[], formType: FormType, editingDocNumber: string | null): string {
-  if (editingDocNumber) {
-    const lines = recordsList.filter((r) => r.type === formType && r.docNumber === editingDocNumber);
-    const ms = flowRecordsEarliestMs(lines);
-    if (ms > 0) return new Date(ms).toISOString();
-  }
-  return new Date().toISOString();
-}
 
 /**
  * 重新保存销售订单时从原行带回已发、已配（待发）、配货仓；若订单数量改小则收敛到不超过新数量且已配 ≥ 已发。
@@ -215,7 +204,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       note: '',
       docNumber: '',
       dueDate: '',
-      createdAt: localTodayYmd(),
+      createdAt: defaultEntryDatetimeLocal(),
       customData: {} as Record<string, any>,
     };
         if (editingDocNumber) {
@@ -226,16 +215,13 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         base.partnerId = first.partnerId ?? '';
         base.docNumber = editingDocNumber;
         base.warehouseId = first.warehouseId ?? '';
-        if (formType !== 'PURCHASE_ORDER' && formType !== 'SALES_ORDER') {
-          if (formType === 'SALES_BILL') {
-            base.createdAt = toLocalDateYmd(first.createdAt) || localTodayYmd();
-            base.note = '';
-            base.dueDate = '';
-          } else {
-            base.dueDate = first.dueDate ?? '';
-            base.note = first.note ?? '';
-            base.createdAt = toLocalDateYmd(first.createdAt) || localTodayYmd();
-          }
+        base.createdAt = hydrateEntryDatetimeLocal(first.createdAt || first.timestamp);
+        if (formType === 'SALES_BILL') {
+          base.note = '';
+          base.dueDate = '';
+        } else {
+          base.dueDate = first.dueDate ?? '';
+          base.note = first.note ?? '';
         }
         base.customData = first.customData && typeof first.customData === 'object' ? { ...first.customData } : {};
         if (formType === 'PURCHASE_BILL') {
@@ -741,7 +727,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
 
   // ── Reset form ──
   const resetForm = () => {
-    const t = localTodayYmd();
+    const t = defaultEntryDatetimeLocal();
     setForm({ productId: '', warehouseId: '', fromWarehouseId: '', toWarehouseId: '', quantity: 0, actualQuantity: 0, purchasePrice: 0, partner: '', partnerId: '', note: '', docNumber: '', dueDate: '', createdAt: t, customData: {} });
     setPurchaseOrderItems([]);
     setPurchaseBillItems([]);
@@ -779,7 +765,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
           attempts++;
         }
       }
-      const timestamp = psiDocTimestampIsoForSave(recordsList, 'PURCHASE_ORDER', editingDocNumber);
+      const { createdAt: poCreatedAtIso, timestamp } = psiEntryTimestampsFromDatetime(form.createdAt || defaultEntryDatetimeLocal());
 
       const poHeaderCustomData: Record<string, unknown> | null = (() => {
         const raw = form.customData && typeof form.customData === 'object' ? { ...form.customData } : {};
@@ -801,18 +787,6 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
           else delete raw[PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER];
         }
         return Object.keys(raw).length > 0 ? raw : null;
-      })();
-
-      const poCreatedAtIso = (() => {
-        if (!editingDocNumber) return localCalendarYmdStartToIso(localTodayYmd());
-        const row = recordsList.find(
-          (r) => r.type === 'PURCHASE_ORDER' && String(r.docNumber || '') === String(editingDocNumber),
-        );
-        if (!row) return localCalendarYmdStartToIso(localTodayYmd());
-        const ca = row.createdAt;
-        if (ca == null || ca === '') return localCalendarYmdStartToIso(localTodayYmd());
-        if (typeof ca === 'string' && ca.includes('T')) return ca;
-        return localCalendarYmdStartToIso(toLocalDateYmd(ca) || localTodayYmd());
       })();
 
       const newRecords: Partial<PsiRecord>[] = [];
@@ -923,7 +897,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
           attempts++;
         }
       }
-      const timestamp = psiDocTimestampIsoForSave(recordsList, 'PURCHASE_BILL', editingDocNumber);
+      const { createdAt: pbCreatedAtIso, timestamp } = psiEntryTimestampsFromDatetime(form.createdAt || defaultEntryDatetimeLocal());
       const buildPurchaseBillLineCustomData = (lineRelatedProduct: string | undefined): Record<string, unknown> | null => {
         const raw: Record<string, unknown> = form.customData && typeof form.customData === 'object' ? { ...form.customData } : {};
         delete raw.relatedProductId;
@@ -933,17 +907,6 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         }
         return Object.keys(raw).length > 0 ? raw : null;
       };
-      const pbCreatedAtIso = (() => {
-        if (!editingDocNumber) return localCalendarYmdStartToIso(localTodayYmd());
-        const row = recordsList.find(
-          (r) => r.type === 'PURCHASE_BILL' && String(r.docNumber || '') === String(editingDocNumber),
-        );
-        if (!row) return localCalendarYmdStartToIso(localTodayYmd());
-        const ca = row.createdAt;
-        if (ca == null || ca === '') return localCalendarYmdStartToIso(localTodayYmd());
-        if (typeof ca === 'string' && ca.includes('T')) return ca;
-        return localCalendarYmdStartToIso(toLocalDateYmd(ca) || localTodayYmd());
-      })();
       const pbNoteForLine = (item: (typeof purchaseBillItems)[number]): string => {
         const kept = item.lineNote != null && String(item.lineNote).trim() !== '' ? String(item.lineNote).trim() : '';
         if (kept) return kept;
@@ -1074,18 +1037,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
           attempts++;
         }
       }
-      const soCreatedAtIso = (() => {
-        if (!editingDocNumber) return localCalendarYmdStartToIso(localTodayYmd());
-        const row = recordsList.find(
-          (r) => r.type === 'SALES_ORDER' && String(r.docNumber || '') === String(editingDocNumber),
-        );
-        if (!row) return localCalendarYmdStartToIso(localTodayYmd());
-        const ca = row.createdAt;
-        if (ca == null || ca === '') return localCalendarYmdStartToIso(localTodayYmd());
-        if (typeof ca === 'string' && ca.includes('T')) return ca;
-        return localCalendarYmdStartToIso(toLocalDateYmd(ca) || localTodayYmd());
-      })();
-      const timestamp = psiDocTimestampIsoForSave(recordsList, 'SALES_ORDER', editingDocNumber);
+      const { createdAt: soCreatedAtIso, timestamp } = psiEntryTimestampsFromDatetime(form.createdAt || defaultEntryDatetimeLocal());
       const newRecords: Partial<PsiRecord>[] = [];
       let recIdx = 0;
       salesOrderItems.forEach((item) => {
@@ -1225,15 +1177,10 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
           attempts++;
         }
       }
-      const timestamp = psiDocTimestampIsoForSave(recordsList, 'SALES_BILL', editingDocNumber);
+      const { createdAt: sbCreatedAtIso, timestamp } = psiEntryTimestampsFromDatetime(form.createdAt || defaultEntryDatetimeLocal());
       const sbHead = editingDocNumber
         ? recordsList.find((r) => r.type === 'SALES_BILL' && r.docNumber === editingDocNumber)
         : undefined;
-      const sbCreatedAtIso = sbHead?.createdAt
-        ? (String(sbHead.createdAt).trim().includes('T')
-          ? String(sbHead.createdAt).trim()
-          : localCalendarYmdStartToIso(toLocalDateYmd(sbHead.createdAt) || localTodayYmd()))
-        : localCalendarYmdStartToIso(localTodayYmd());
       const sbNotePreserve = sbHead && editingDocNumber ? (sbHead.note != null ? String(sbHead.note) : '') : '';
       const newRecords: Partial<PsiRecord>[] = [];
       let recIdx = 0;

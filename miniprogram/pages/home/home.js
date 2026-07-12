@@ -3,6 +3,7 @@ const { readTenantCtx, readCurrentUserId, readCurrentUser } = require('../../uti
 const { syncTenantCtx } = require('../../utils/tenantCtxSync.js');
 const { readTabShellInsets } = require('../../utils/tabShell.js');
 const { navigateMenuPath } = require('../../utils/navigateMenuPath.js');
+const { consumeExplicitHomeTabNav } = require('../../utils/customTabBarNav.js');
 
 function buildUserProfile(ctx) {
   const user = readCurrentUser();
@@ -113,6 +114,9 @@ Page({
     }
     if (this.data.bootError) return;
 
+    const { syncCurrentCustomTabBar } = require('../../utils/tabAccess.js');
+    syncCurrentCustomTabBar(ctx);
+
     if (!this._deps) {
       try {
         this._deps = loadHomeDeps();
@@ -134,6 +138,9 @@ Page({
       const { canShowHomeTab, resolveDefaultTabPath, syncCurrentCustomTabBar } = require('../../utils/tabAccess.js');
       syncCurrentCustomTabBar(activeCtx);
       if (!canShowHomeTab(activeCtx)) {
+        if (consumeExplicitHomeTabNav()) {
+          wx.showToast({ title: '暂无工作台权限', icon: 'none' });
+        }
         wx.switchTab({ url: resolveDefaultTabPath(activeCtx) });
         return;
       }
@@ -378,6 +385,10 @@ Page({
 
   onShortcutTap(e) {
     const { path } = e.currentTarget.dataset;
+    if (!path) {
+      wx.showToast({ title: '功能开发中', icon: 'none' });
+      return;
+    }
     navigateMenuPath(path);
   },
 

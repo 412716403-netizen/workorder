@@ -11,7 +11,7 @@ const _require4 =
 
 
 
-  require('../utils/salesBillForm.js'),buildInitialForm = _require4.buildInitialForm,createEmptyLine = _require4.createEmptyLine,recordsToLineItems = _require4.recordsToLineItems,enrichLineForUi = _require4.enrichLineForUi,computeFormTotals = _require4.computeFormTotals,validateSalesBillSave = _require4.validateSalesBillSave,buildSalesBillSaveRecords = _require4.buildSalesBillSaveRecords,resolvePreferredWarehouse = _require4.resolvePreferredWarehouse,writeWarehousePreference = _require4.writeWarehousePreference;
+  require('../utils/salesBillForm.js'),buildInitialForm = _require4.buildInitialForm,createEmptyLine = _require4.createEmptyLine,recordsToLineItems = _require4.recordsToLineItems,enrichLineForUi = _require4.enrichLineForUi,computeFormTotals = _require4.computeFormTotals,validateSalesBillSave = _require4.validateSalesBillSave,buildSalesBillSaveRecords = _require4.buildSalesBillSaveRecords,resolvePreferredWarehouse = _require4.resolvePreferredWarehouse,writeWarehousePreference = _require4.writeWarehousePreference,hydratePsiEntryFields = _require4.hydratePsiEntryFields;
 const _require5 = require('../utils/purchaseBillBatch.js'),attachMergeBatchesToLine = _require5.attachMergeBatchesToLine;
 const _require6 = require('../utils/purchaseOrders.js'),buildProductMap = _require6.buildProductMap,buildCategoryMap = _require6.buildCategoryMap;
 const _require7 = require('../utils/psiOpsAggregators.js'),groupRecordsByDocNumber = _require7.groupRecordsByDocNumber;
@@ -174,7 +174,8 @@ Page({
           warehouseName: whList[whIdx] && whList[whIdx].name || '',
           docNumber: this._editingDocNumber,
           operator: first.operator || '',
-          note: first.note || ''
+          note: first.note || '',
+          ...hydratePsiEntryFields(first.createdAt || first.timestamp),
         };
         lines = recordsToLineItems(items);
         this._deleteIds = items.map((r) => r.id);
@@ -229,6 +230,18 @@ Page({
       totalAmountText: totals.totalAmountText,
       canSubmit: totals.canSubmit && Boolean(String(this._form.partner || '').trim())
     });
+  },
+
+  onCreatedAtChange(e) {
+    const createdAt = (e.detail && e.detail.value) || '';
+    this._form = { ...this._form, createdAt };
+    this.setData({ form: this._form });
+  },
+
+  onCreatedAtTimeChange(e) {
+    const createdAtTime = (e.detail && e.detail.value) || '';
+    this._form = { ...this._form, createdAtTime };
+    this.setData({ form: this._form });
   },
 
   onWarehouseChange(e) {

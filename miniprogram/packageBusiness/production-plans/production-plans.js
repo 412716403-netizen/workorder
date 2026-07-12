@@ -22,6 +22,7 @@ const _require6 =
 const _require7 = require('../utils/planOrderSort.js'),sortPlansNewestFirst = _require7.sortPlansNewestFirst;
 const _require8 = require('../utils/reportCustomDocField.js'),mapProductCustomTags = _require8.mapProductCustomTags;
 const _require9 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require9.readNavBarMetrics,readWindowMetrics = _require9.readWindowMetrics;
+const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../../utils/planFilterPanel.js');
 const _require10 = require('../utils/pendingStockBadge.js'),fetchAllOrdersPaginated = _require10.fetchAllOrdersPaginated;
 
 function computeHeaderBlockHeight(nav) {
@@ -205,6 +206,7 @@ Page({
       this.closeFilterPanel();
       return;
     }
+    markFilterPanelOpen(this);
     this._filterSnapshot = {
       statusFilter: this.data.statusFilter,
       excludeCompleted: this.data.excludeCompleted
@@ -225,6 +227,7 @@ Page({
   },
 
   onPageScroll() {
+    if (!shouldCloseFilterPanelOnScroll(this)) return;
     this.closeFilterPanel();
   },
 

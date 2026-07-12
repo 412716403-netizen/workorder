@@ -21,6 +21,7 @@ const _require6 =
   require('../utils/orderApi.js'),listOrdersPaginated = _require6.listOrdersPaginated,fetchTenantConfig = _require6.fetchTenantConfig,fetchProductsAll = _require6.fetchProductsAll,fetchCategoriesAll = _require6.fetchCategoriesAll,fetchNodesAll = _require6.fetchNodesAll,listReportHistory = _require6.listReportHistory,fetchProductionRecords = _require6.fetchProductionRecords;
 const _require7 = require('../utils/reportCustomDocField.js'),mapProductCustomTags = _require7.mapProductCustomTags;
 const _require8 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require8.readNavBarMetrics,readWindowMetrics = _require8.readWindowMetrics;
+const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../../utils/planFilterPanel.js');
 const _require9 = require('../utils/pendingStockBadge.js'),computePendingStockCount = _require9.computePendingStockCount,loadPendingStockRows = _require9.loadPendingStockRows,fetchAllOrdersPaginated = _require9.fetchAllOrdersPaginated;
 const _require11 = require('../utils/pendingApprovalBadge.js'),computePendingApprovalCount = _require11.computePendingApprovalCount;
 const _require0 =
@@ -286,6 +287,7 @@ Page({
       this.closeFilterPanel();
       return;
     }
+    markFilterPanelOpen(this);
     this.refreshFilterShortcutBadges();
     this.setData({ showFilterPanel: true });
   },
@@ -296,6 +298,7 @@ Page({
   },
 
   onPageScroll() {
+    if (!shouldCloseFilterPanelOnScroll(this)) return;
     this.closeFilterPanel();
   },
 

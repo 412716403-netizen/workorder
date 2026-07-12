@@ -234,7 +234,7 @@ interface PlanOrder {
   customer: string;
   priority: 'High' | 'Medium' | 'Low';
   assignments?: Record<string, NodeAssignment>;
-  customData?: Record<string, any>;
+  customData?: Record<string, any>;  // 引用销售订单建计划时含 sourceSalesOrderDocNumber（见 shared/types PLAN_CUSTOM_DATA_SOURCE_SALES_ORDER_DOC_NUMBER）
   createdAt?: string;
   nodePricingModes?: Record<string, ProcessPricingMode>;  // 已弃用，仅保留计件（元/件）
   /**

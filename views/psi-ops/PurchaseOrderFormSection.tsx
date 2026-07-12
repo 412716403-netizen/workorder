@@ -38,6 +38,7 @@ import {
   formStandardLabelClass,
 } from '../../styles/uiDensity';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
+import DocEntryTimeField from '../../components/DocEntryTimeField';
 import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
 import { useConfirm } from '../../contexts/ConfirmContext';
 
@@ -146,6 +147,13 @@ const PurchaseOrderFormSection: React.FC<PurchaseOrderFormSectionProps> = ({
             <h3 className={sectionTitleClass}>1. 采购订单基础信息</h3>
           </div>
           <div className={`grid grid-cols-1 md:grid-cols-2 ${psiOrderBillFormGridGapClass}`}>
+            <DocEntryTimeField
+              className="space-y-1.5 min-w-0"
+              label="创建时间"
+              mode="datetime"
+              value={form.createdAt || ''}
+              onChange={createdAt => setForm({ ...form, createdAt })}
+            />
             <div className={`md:col-span-2 grid grid-cols-1 md:grid-cols-2 ${psiOrderBillFormGridGapClass}`}>
               <div className="space-y-1.5 min-w-0">
                 <label className={formStandardLabelClass}>{partnerLabel}</label>

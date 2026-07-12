@@ -39,6 +39,20 @@
       </view>
 
       <view class="plan-form-card">
+        <view class="plan-form-cell plan-form-cell--last">
+          <text class="plan-form-cell__label">创建时间</text>
+          <view class="report-batch-edit__datetime">
+            <picker mode="date" value="{{entryDate}}" bindchange="onEntryDateChange">
+              <view class="report-batch-edit__picker">{{entryDate}}</view>
+            </picker>
+            <picker mode="time" value="{{entryTime}}" bindchange="onEntryTimeChange">
+              <view class="report-batch-edit__picker">{{entryTime}}</view>
+            </picker>
+          </view>
+        </view>
+      </view>
+
+      <view class="plan-form-card">
         <view wx:if="{{selfReport}}" class="plan-form-cell">
           <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>生产人员</text>
           <text class="plan-form-cell__value">{{workerName || '本人'}}</text>

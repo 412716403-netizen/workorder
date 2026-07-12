@@ -27,6 +27,7 @@ const _require7 =
 
   require('../utils/materialStatsLite.js'),getActiveOrderIdsCsv = _require7.getActiveOrderIdsCsv,getActiveSourceProductIdsCsv = _require7.getActiveSourceProductIdsCsv;
 const _require8 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require8.readNavBarMetrics,readWindowMetrics = _require8.readWindowMetrics;
+const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../../utils/planFilterPanel.js');
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
@@ -50,6 +51,8 @@ Page({
     totalCards: 0,
     listViewMode: 'order',
     flatMaterialRows: [],
+    showFilterPanel: false,
+    filterActive: false,
     statusBarHeight: 20,
     navBarHeight: 44,
     headerBlockHeight: 88
@@ -113,8 +116,39 @@ Page({
     wx.navigateBack();
   },
 
+  computeFilterActive(showPanel) {
+    if (showPanel) return true;
+    return this.data.listViewMode === 'material';
+  },
+
+  onFilterTap() {
+    if (this.data.showFilterPanel) {
+      this.closeFilterPanel();
+      return;
+    }
+    markFilterPanelOpen(this);
+    this.setData({
+      showFilterPanel: true,
+      filterActive: true,
+    });
+  },
+
+  closeFilterPanel() {
+    if (!this.data.showFilterPanel) return;
+    this.setData({
+      showFilterPanel: false,
+      filterActive: this.computeFilterActive(false),
+    });
+  },
+
+  onPageScroll() {
+    if (!shouldCloseFilterPanelOnScroll(this)) return;
+    this.closeFilterPanel();
+  },
+
   onFlowTap() {
     if (!this.data.canViewFlow) return;
+    this.closeFilterPanel();
     wx.navigateTo({ url: '/packageBusiness/production-stock-out-flow/production-stock-out-flow' });
   },
 
@@ -136,10 +170,14 @@ Page({
   onListViewModeTap(e) {
     const mode = e.currentTarget.dataset.mode;
     if (mode !== 'order' && mode !== 'material') return;
+    if (mode === this._listViewMode) return;
     this._listViewMode = mode;
     this._page = 1;
     this._selectState = { partnerKey: '', scopeKey: '', mode: '', selectedIds: new Set() };
     this.applyPagination();
+    this.setData({
+      filterActive: this.computeFilterActive(this.data.showFilterPanel),
+    });
   },
 
   onStartSelectTap(e) {

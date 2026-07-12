@@ -21,6 +21,7 @@ const _require8 =
   require('../utils/orderApi.js'),fetchTenantConfig = _require8.fetchTenantConfig,fetchProductsAll = _require8.fetchProductsAll,fetchNodesAll = _require8.fetchNodesAll,listProductProgressAll = _require8.listProductProgressAll;
 const _require9 = require('../utils/productionOrders.js'),normalizeMasterList = _require9.normalizeMasterList;
 const _require0 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require0.readNavBarMetrics,readWindowMetrics = _require0.readWindowMetrics;
+const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../../utils/planFilterPanel.js');
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
@@ -195,17 +196,28 @@ Page({
 
   onFilterTap() {
     if (this.data.showFilterPanel) {
-      this.setData({
-        showFilterPanel: false,
-        filterActive: this.computeFilterActive(false)
-      });
+      this.closeFilterPanel();
       return;
     }
+    markFilterPanelOpen(this);
     this.setData({
       showFilterPanel: true,
       draftOnlyShowIncomplete: this.data.onlyShowIncomplete,
       filterActive: true
     });
+  },
+
+  closeFilterPanel() {
+    if (!this.data.showFilterPanel) return;
+    this.setData({
+      showFilterPanel: false,
+      filterActive: this.computeFilterActive(false)
+    });
+  },
+
+  onPageScroll() {
+    if (!shouldCloseFilterPanelOnScroll(this)) return;
+    this.closeFilterPanel();
   },
 
   onExcludeToggle() {

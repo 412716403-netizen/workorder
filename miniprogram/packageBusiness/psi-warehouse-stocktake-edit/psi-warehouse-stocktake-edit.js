@@ -11,7 +11,7 @@ const _require3 =
 
 
 
-  require('../utils/warehouseStocktakeForm.js'),buildInitialForm = _require3.buildInitialForm,createEmptyLine = _require3.createEmptyLine,recordsToLineItems = _require3.recordsToLineItems,enrichLineForUi = _require3.enrichLineForUi,lineWillBeSaved = _require3.lineWillBeSaved,validateStocktakeSave = _require3.validateStocktakeSave,buildStocktakeSaveRecords = _require3.buildStocktakeSaveRecords,generateSTDocNumber = _require3.generateSTDocNumber,resolvePreferredStocktakeWarehouse = _require3.resolvePreferredStocktakeWarehouse,writeStocktakePreference = _require3.writeStocktakePreference;
+  require('../utils/warehouseStocktakeForm.js'),buildInitialForm = _require3.buildInitialForm,createEmptyLine = _require3.createEmptyLine,recordsToLineItems = _require3.recordsToLineItems,enrichLineForUi = _require3.enrichLineForUi,lineWillBeSaved = _require3.lineWillBeSaved,validateStocktakeSave = _require3.validateStocktakeSave,buildStocktakeSaveRecords = _require3.buildStocktakeSaveRecords,generateSTDocNumber = _require3.generateSTDocNumber,resolvePreferredStocktakeWarehouse = _require3.resolvePreferredStocktakeWarehouse,writeStocktakePreference = _require3.writeStocktakePreference,hydrateEntryDate = _require3.hydrateEntryDate;
 const _require4 = require('../utils/purchaseBillBatch.js'),attachMergeBatchesToLine = _require4.attachMergeBatchesToLine;
 const _require5 = require('../utils/warehouseStock.js'),buildStockSnapshotIndex = _require5.buildStockSnapshotIndex;
 const _require6 = require('../utils/purchaseOrders.js'),buildProductMap = _require6.buildProductMap,buildCategoryMap = _require6.buildCategoryMap;
@@ -124,7 +124,7 @@ Page({
           docNumber: this._editingDocNumber,
           note: first.note || '',
           operator: first.operator || '',
-          stocktakeDate: first.createdAt || form.stocktakeDate
+          stocktakeDate: hydrateEntryDate(first.createdAt),
         };
         lines = recordsToLineItems(items, this._productMap, this._categoryMap, this._dictionaries);
         this._deleteIds = items.map((r) => r.id);
@@ -175,6 +175,12 @@ Page({
       enteredLineCount,
       canSubmit: enteredLineCount > 0
     });
+  },
+
+  onStocktakeDateChange(e) {
+    const stocktakeDate = (e.detail && e.detail.value) || '';
+    this._form = { ...this._form, stocktakeDate };
+    this.setData({ form: this._form });
   },
 
   async onWarehouseChange(e) {

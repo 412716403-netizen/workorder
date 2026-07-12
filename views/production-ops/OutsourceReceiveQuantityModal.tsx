@@ -13,6 +13,7 @@ import type {
   BOM,
 } from '../../types';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
+import DocEntryTimeField from '../../components/DocEntryTimeField';
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import { RECEIVE_VARIANT_SEP, outsourceReceiveBaseKey } from './outsourceReceiveKeys';
@@ -78,6 +79,8 @@ export interface OutsourceReceiveQuantityModalProps {
   receiveCustomFieldDefs?: PlanFormFieldConfig[];
   receiveCustomValues?: Record<string, unknown>;
   setReceiveCustomValues?: React.Dispatch<React.SetStateAction<Record<string, unknown>>>;
+  receiveEntryTimestamp?: string;
+  onReceiveEntryTimestampChange?: (next: string) => void;
   /** 当前租户全局工序模板，用于判断 nodeId 是否开启 `enableWeightOnReport` */
   globalNodes?: GlobalNodeTemplate[];
   /** 当前租户全部 BOM，用于根据 nodeId + productId 派生子物料占比并生成预览 */
@@ -134,6 +137,8 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
   receiveCustomFieldDefs = [],
   receiveCustomValues = {},
   setReceiveCustomValues,
+  receiveEntryTimestamp = '',
+  onReceiveEntryTimestampChange,
   globalNodes,
   boms,
   allowExceedMaxOutsourceReceiveQty = false,
@@ -235,6 +240,14 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                   </div>
                 </div>
                 <div className={`grid grid-cols-1 md:grid-cols-2 ${psiOrderBillFormGridGapClass}`}>
+                  {onReceiveEntryTimestampChange ? (
+                    <DocEntryTimeField
+                      mode="datetime"
+                      className="space-y-1 md:col-span-2"
+                      value={receiveEntryTimestamp}
+                      onChange={onReceiveEntryTimestampChange}
+                    />
+                  ) : null}
                   <div className="space-y-1.5 min-w-0 md:col-span-2">
                     <label className="mb-1.5 ml-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">外协工厂</label>
                     <div className="flex h-9 min-h-9 w-full min-w-0 items-center rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-800">

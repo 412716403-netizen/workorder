@@ -4,6 +4,7 @@ import {
   aggregateProductReportSummaryByNode,
   aggregateProductVariantQuantities,
   reportDateRangeFromProductOrders,
+  resolveMilestoneTemplateName,
 } from './productProductionDetailStats';
 import type { GlobalNodeTemplate, ProductionOpRecord, ProductionOrder, ProductMilestoneProgress } from '../types';
 
@@ -42,6 +43,14 @@ const pmps = [
 ] as unknown as ProductMilestoneProgress[];
 
 const globalNodes = [{ id: nodeId, name: '横机' }] as GlobalNodeTemplate[];
+
+describe('resolveMilestoneTemplateName', () => {
+  it('prefers global node name, then milestone name, then id', () => {
+    expect(resolveMilestoneTemplateName(nodeId, globalNodes, productOrders)).toBe('横机');
+    expect(resolveMilestoneTemplateName('missing', [], productOrders)).toBe('横机');
+    expect(resolveMilestoneTemplateName('missing', [], [])).toBe('missing');
+  });
+});
 
 describe('aggregateProductOutsourcePartners', () => {
   it('aggregates dispatched/received/pending by partner and node', () => {

@@ -44,6 +44,11 @@ import PaymentFormConfigModal from './finance/PaymentFormConfigModal';
 import FinanceDetailModal from './finance/FinanceDetailModal';
 import PartnerProductReconTable from './finance/PartnerProductReconTable';
 import FinanceRecordFormModal, { type FinanceRecordFormValues } from './finance/FinanceRecordFormModal';
+import {
+  defaultEntryDatetimeLocal,
+  entryDatetimeLocalToTimestamp,
+  hydrateEntryDatetimeLocal,
+} from '../utils/docEntryTime';
 import FinanceDocFlowListModal from './finance/FinanceDocFlowListModal';
 import { FINANCE_FLOW_LABELS } from './finance/financeFlowHelpers';
 import WorkerSelectWithTabs from './finance/WorkerSelectWithTabs';
@@ -105,6 +110,7 @@ const emptyForm: FinanceRecordFormValues = {
   productId: '',
   paymentAccount: '',
   customData: {} as Record<string, any>,
+  entryTimestamp: defaultEntryDatetimeLocal(),
 };
 
 const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
@@ -444,6 +450,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
       productId: rec.productId || '',
       paymentAccount: rec.paymentAccount || '',
       customData: rec.customData ? { ...rec.customData } : {},
+      entryTimestamp: hydrateEntryDatetimeLocal(rec.timestamp),
     });
     setEditingRecordSnapshot(rec);
   }, []);
@@ -463,6 +470,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
           productId: form.productId || undefined,
           paymentAccount: form.paymentAccount || undefined,
           customData: Object.keys(form.customData).length ? { ...form.customData } : undefined,
+          timestamp: entryDatetimeLocalToTimestamp(form.entryTimestamp),
         };
         onUpdateRecord(updated);
         invalidateFinanceList();
@@ -477,7 +485,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
       id: `fin-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       type: type,
       docNo: getNextDocNo(),
-      timestamp: new Date().toLocaleString(),
+      timestamp: entryDatetimeLocalToTimestamp(form.entryTimestamp),
       amount: form.amount,
       relatedId: form.relatedId || undefined,
       partner: form.partner,

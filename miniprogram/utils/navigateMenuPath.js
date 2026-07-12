@@ -32,7 +32,12 @@ function navigateMenuPath(path, options = {}) {
   if (isTabBarPath(url)) {
     wx.switchTab({
       url,
-      fail: () => wx.navigateTo({ url, fail }),
+      fail: () => {
+        wx.reLaunch({
+          url,
+          fail,
+        });
+      },
     });
   } else {
     wx.navigateTo({

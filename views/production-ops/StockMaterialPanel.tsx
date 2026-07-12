@@ -84,6 +84,7 @@ import StockMaterialFormModal from './StockMaterialFormModal';
 import MaterialFormConfigModal from './MaterialFormConfigModal';
 import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
+import { defaultEntryDatetimeLocal, entryDatetimeLocalToTimestamp } from '../../utils/docEntryTime';
 import {
   readWarehousePreference,
   writeWarehousePreference,
@@ -187,6 +188,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
   const [stockConfirmCustomValues, setStockConfirmCustomValues] = useState<Record<string, unknown>>({});
   /** 确认领退料弹窗内按物料行的批次 */
   const [stockConfirmBatches, setStockConfirmBatches] = useState<Record<string, string>>({});
+  const [stockConfirmEntryTimestamp, setStockConfirmEntryTimestamp] = useState(() => defaultEntryDatetimeLocal());
   const [stockDocDetail, setStockDocDetail] = useState<StockDocDetail | null>(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [materialFormConfigEntryTab, setMaterialFormConfigEntryTab] = useState<'fields' | 'print' | 'list'>('fields');
@@ -606,7 +608,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
         }
       }
     }
-    const timestamp = new Date().toLocaleString();
+    const timestamp = entryDatetimeLocalToTimestamp(stockConfirmEntryTimestamp);
     const partnerForRecord = stockSelectPartner && stockSelectPartner !== '__internal__' ? stockSelectPartner : undefined;
     const srcPid = stockSelectSourceProductId;
     const collabExtra = buildMaterialStockCustomCollabPayload(
@@ -704,6 +706,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
     setStockConfirmBatches({});
     setStockConfirmReason('');
     setStockConfirmCustomValues({});
+    setStockConfirmEntryTimestamp(defaultEntryDatetimeLocal());
   };
 
   const stockConfirmMaterialCustomFieldDefs = useMemo(() => {
@@ -937,7 +940,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                                     {selecting ? (
                                       <>
                                         <span className="text-xs font-bold text-slate-500">已选 {stockSelectedIds.size} 项</span>
-                                        <button type="button" onClick={() => { if (stockSelectedIds.size === 0) return; setStockConfirmQuantities({}); setStockConfirmBatches({}); setStockConfirmCustomValues({}); setStockConfirmWarehouseId(stockSelectMode ? resolveConfirmDefaultWarehouse(stockSelectMode) : ''); setShowStockConfirmModal(true); }} disabled={stockSelectedIds.size === 0} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-all shadow-sm disabled:opacity-50 ${stockSelectMode === 'stock_out' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-rose-600 hover:bg-rose-700'}`}><Check className="w-3 h-3" /> {stockSelectMode === 'stock_out' ? '确认领料' : '确认退料'}</button>
+                                        <button type="button" onClick={() => { if (stockSelectedIds.size === 0) return; setStockConfirmQuantities({}); setStockConfirmBatches({}); setStockConfirmCustomValues({}); setStockConfirmEntryTimestamp(defaultEntryDatetimeLocal()); setStockConfirmWarehouseId(stockSelectMode ? resolveConfirmDefaultWarehouse(stockSelectMode) : ''); setShowStockConfirmModal(true); }} disabled={stockSelectedIds.size === 0} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-all shadow-sm disabled:opacity-50 ${stockSelectMode === 'stock_out' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-rose-600 hover:bg-rose-700'}`}><Check className="w-3 h-3" /> {stockSelectMode === 'stock_out' ? '确认领料' : '确认退料'}</button>
                                         <button type="button" onClick={() => { setStockSelectSourceProductId(null); setStockSelectPartner(null); setStockSelectMode(null); setStockSelectedIds(new Set()); }} className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all">取消</button>
                                       </>
                                     ) : (
@@ -980,7 +983,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                                     {selecting ? (
                                       <>
                                         <span className="text-xs font-bold text-slate-500">已选 {stockSelectedIds.size} 项</span>
-                                        <button type="button" onClick={() => { if (stockSelectedIds.size === 0) return; setStockConfirmQuantities({}); setStockConfirmBatches({}); setStockConfirmCustomValues({}); setStockConfirmWarehouseId(stockSelectMode ? resolveConfirmDefaultWarehouse(stockSelectMode) : ''); setShowStockConfirmModal(true); }} disabled={stockSelectedIds.size === 0} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-all shadow-sm disabled:opacity-50 ${stockSelectMode === 'stock_out' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-rose-600 hover:bg-rose-700'}`}><Check className="w-3 h-3" /> {stockSelectMode === 'stock_out' ? '确认领料' : '确认退料'}</button>
+                                        <button type="button" onClick={() => { if (stockSelectedIds.size === 0) return; setStockConfirmQuantities({}); setStockConfirmBatches({}); setStockConfirmCustomValues({}); setStockConfirmEntryTimestamp(defaultEntryDatetimeLocal()); setStockConfirmWarehouseId(stockSelectMode ? resolveConfirmDefaultWarehouse(stockSelectMode) : ''); setShowStockConfirmModal(true); }} disabled={stockSelectedIds.size === 0} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-all shadow-sm disabled:opacity-50 ${stockSelectMode === 'stock_out' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-rose-600 hover:bg-rose-700'}`}><Check className="w-3 h-3" /> {stockSelectMode === 'stock_out' ? '确认领料' : '确认退料'}</button>
                                         <button type="button" onClick={() => { setStockSelectOrderId(null); setStockSelectPartner(null); setStockSelectMode(null); setStockSelectedIds(new Set()); }} className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all">取消</button>
                                       </>
                                     ) : (
@@ -1098,6 +1101,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                                 setStockConfirmQuantities({});
                                 setStockConfirmBatches({});
                                 setStockConfirmCustomValues({});
+                                setStockConfirmEntryTimestamp(defaultEntryDatetimeLocal());
                                 setStockConfirmWarehouseId(stockSelectMode ? resolveConfirmDefaultWarehouse(stockSelectMode) : '');
                                 setShowStockConfirmModal(true);
                               }}
@@ -1209,6 +1213,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                               setStockConfirmQuantities({});
                               setStockConfirmBatches({});
                               setStockConfirmCustomValues({});
+                              setStockConfirmEntryTimestamp(defaultEntryDatetimeLocal());
                               setStockConfirmWarehouseId(stockSelectMode ? resolveConfirmDefaultWarehouse(stockSelectMode) : '');
                               setShowStockConfirmModal(true);
                             }}
@@ -1272,6 +1277,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
           setShowStockConfirmModal(false);
           setStockConfirmReason('');
           setStockConfirmCustomValues({});
+    setStockConfirmEntryTimestamp(defaultEntryDatetimeLocal());
           setStockConfirmBatches({});
         }}
         onSubmit={handleStockConfirmSubmit}
@@ -1288,6 +1294,8 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
         }}
         stockConfirmReason={stockConfirmReason}
         onReasonChange={setStockConfirmReason}
+        stockConfirmEntryTimestamp={stockConfirmEntryTimestamp}
+        onStockConfirmEntryTimestampChange={setStockConfirmEntryTimestamp}
         materialCustomFieldDefs={stockConfirmMaterialCustomFieldDefs}
         materialCustomValues={stockConfirmCustomValues}
         onMaterialCustomValueChange={(fieldId, value) =>

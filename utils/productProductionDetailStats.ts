@@ -60,6 +60,21 @@ export function aggregateProductOutsourcePartners(
     });
 }
 
+/** 工序模板 id → 展示名：全局工序库 → 工单里程碑名 → 回退 id */
+export function resolveMilestoneTemplateName(
+  templateId: string,
+  globalNodes: GlobalNodeTemplate[],
+  productOrders: ProductionOrder[],
+): string {
+  const fromGlobal = globalNodes.find(n => n.id === templateId)?.name;
+  if (fromGlobal) return fromGlobal;
+  const fromMilestone = productOrders
+    .flatMap(o => o.milestones)
+    .find(m => m.templateId === templateId)?.name;
+  if (fromMilestone) return fromMilestone;
+  return templateId;
+}
+
 /** 收集产品下需参与汇总的工序模板 id */
 function collectTemplateIds(
   productId: string,
@@ -137,10 +152,7 @@ export function aggregateProductReportSummaryByNode(
     const defQty = defectiveFromPmp(pmps, productId, nodeId) + defectiveFromOrders(productOrders, nodeId);
     const scrapQty = scrapQtyForNode(productId, productOrders, prodRecords, nodeId);
     if (goodQty === 0 && defQty === 0 && scrapQty === 0) continue;
-    const name =
-      nodeNameById.get(nodeId) ??
-      productOrders.flatMap(o => o.milestones).find(m => m.templateId === nodeId)?.name ??
-      nodeId;
+    const name = resolveMilestoneTemplateName(nodeId, globalNodes, productOrders);
     rows.push({ nodeId, name, goodQty, defQty, scrapQty });
   }
   return rows;
