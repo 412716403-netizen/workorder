@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Sliders, X } from 'lucide-react';
+import { toast } from 'sonner';
 import type { MaterialPanelSettings } from '../../types';
 
 interface MaterialPanelConfigModalProps {
   onClose: () => void;
   settings: MaterialPanelSettings;
-  onUpdate: (settings: MaterialPanelSettings) => void;
+  onUpdate: (settings: MaterialPanelSettings) => void | Promise<void>;
 }
 
 const MaterialPanelConfigModal: React.FC<MaterialPanelConfigModalProps> = ({
@@ -14,6 +15,22 @@ const MaterialPanelConfigModal: React.FC<MaterialPanelConfigModalProps> = ({
   onUpdate,
 }) => {
   const [draft, setDraft] = useState<MaterialPanelSettings>(() => ({ ...settings }));
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
+
+  const toggleGroupByOutsourcePartner = useCallback(async () => {
+    const next = { ...draft, groupByOutsourcePartner: !draft.groupByOutsourcePartner };
+    setDraft(next);
+    setSaveStatus('saving');
+    try {
+      await onUpdate(next);
+      setSaveStatus('saved');
+    } catch (error) {
+      setDraft(draft);
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(`自动保存失败：${message}`);
+      setSaveStatus('error');
+    }
+  }, [draft, onUpdate]);
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
@@ -39,21 +56,18 @@ const MaterialPanelConfigModal: React.FC<MaterialPanelConfigModalProps> = ({
             </div>
             <div
               className={`relative w-11 h-6 rounded-full transition-colors ${draft.groupByOutsourcePartner ? 'bg-indigo-600' : 'bg-slate-200'}`}
-              onClick={() => setDraft(d => ({ ...d, groupByOutsourcePartner: !d.groupByOutsourcePartner }))}
+              onClick={() => { void toggleGroupByOutsourcePartner(); }}
             >
               <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${draft.groupByOutsourcePartner ? 'translate-x-5' : ''}`} />
             </div>
           </label>
         </div>
 
-        <div className="px-8 py-6 border-t border-slate-100 flex justify-end gap-3">
-          <button onClick={onClose} className="px-6 py-2.5 text-sm font-bold text-slate-500 hover:text-slate-800">取消</button>
-          <button
-            onClick={() => { onUpdate(draft); onClose(); }}
-            className="px-8 py-2.5 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700"
-          >
-            保存配置
-          </button>
+        <div className="px-8 py-5 border-t border-slate-100 flex items-center justify-between gap-3">
+          <span className={`text-xs font-semibold ${saveStatus === 'error' ? 'text-rose-600' : saveStatus === 'saved' ? 'text-emerald-600' : 'text-slate-500'}`}>
+            {saveStatus === 'saving' ? '正在保存…' : saveStatus === 'saved' ? '✓ 已保存' : '保存失败，请再次切换重试'}
+          </span>
+          <button onClick={onClose} className="px-6 py-2.5 text-sm font-bold text-slate-500 hover:text-slate-800">关闭</button>
         </div>
       </div>
     </div>

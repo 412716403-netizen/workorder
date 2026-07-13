@@ -80,6 +80,7 @@ interface Props {
   refreshCollabs: (force?: boolean) => Promise<void>;
   onRefreshProdRecords: () => Promise<void>;
   onRefreshOrders?: () => Promise<void> | void;
+  onRefreshPlans?: () => Promise<void> | void;
   onRefreshPMP?: () => Promise<void> | void;
   onRefreshProducts?: () => Promise<void> | void;
   onRefreshPartners?: () => Promise<void> | void;
@@ -169,6 +170,7 @@ const InboxUtilityModals: React.FC<Props> = props => {
     refreshCollabs,
     onRefreshProdRecords,
     onRefreshOrders,
+    onRefreshPlans,
     onRefreshPMP,
     onRefreshProducts,
     onRefreshPartners,
@@ -176,7 +178,7 @@ const InboxUtilityModals: React.FC<Props> = props => {
 
   const onDoneSet = async () => {
     await Promise.all(
-      [refresh(), onRefreshProdRecords?.(), onRefreshOrders?.(), onRefreshPMP?.()].filter(Boolean) as Promise<void>[],
+      [refresh(), onRefreshProdRecords?.(), onRefreshOrders?.(), onRefreshPlans?.(), onRefreshPMP?.()].filter(Boolean) as Promise<void>[],
     );
   };
 
@@ -203,6 +205,7 @@ const InboxUtilityModals: React.FC<Props> = props => {
             onRefreshList={refresh}
             onRefreshProdRecords={onRefreshProdRecords}
             onRefreshOrders={onRefreshOrders}
+            onRefreshPlans={onRefreshPlans}
             onRefreshPMP={onRefreshPMP}
             onRefreshProducts={onRefreshProducts}
           />
@@ -311,6 +314,7 @@ const InboxUtilityModals: React.FC<Props> = props => {
           categories={categories}
           onRefreshList={refresh}
           onRefreshOrders={onRefreshOrders}
+          onRefreshPlans={onRefreshPlans}
           onRefreshProdRecords={onRefreshProdRecords}
           onRefreshPMP={onRefreshPMP}
           onRefreshProducts={onRefreshProducts}

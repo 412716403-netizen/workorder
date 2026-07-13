@@ -379,6 +379,20 @@ export async function convertPlanToOrders(db: TenantPrismaClient, tenantId: stri
           `工单号 ${orderNumber} 已被其他产品工单占用（可能被协作接单占用），无法从计划 ${p.planNumber} 下达`,
         );
       }
+    }
+
+    const milestoneNodeIds = getEffectivePlanMilestoneNodeIds(
+      { milestoneNodeIds: p.milestoneNodeIds as string[] | null | undefined },
+      { milestoneNodeIds: (prod?.milestoneNodeIds as string[]) ?? [] },
+    );
+    if (milestoneNodeIds.length === 0) {
+      throw new AppError(
+        400,
+        `计划 ${p.planNumber} 尚未配置工序路线，请先在计划详情中配置工序后再下达工单`,
+      );
+    }
+
+    if (existing) {
       planToOrderMap.set(p.id, existing.id);
       ordersToReuse.push({
         existingId: existing.id,
@@ -400,10 +414,6 @@ export async function convertPlanToOrders(db: TenantPrismaClient, tenantId: stri
     const orderId = genId('order');
     planToOrderMap.set(p.id, orderId);
 
-    const milestoneNodeIds = getEffectivePlanMilestoneNodeIds(
-      { milestoneNodeIds: p.milestoneNodeIds as string[] | null | undefined },
-      { milestoneNodeIds: (prod?.milestoneNodeIds as string[]) ?? [] },
-    );
     const milestones = milestoneNodeIds.map((nodeId, idx) => {
       const node = nodes.find(n => n.id === nodeId);
       return {
@@ -479,6 +489,17 @@ export async function convertPlanToOrders(db: TenantPrismaClient, tenantId: stri
       where: { id: { in: plansToConvert.map((p2: PlanWithItems) => p2.id) }, tenantId },
       data: { status: 'CONVERTED' },
     });
+
+    // 协作接单计划：下达后把工单 id 回填到对应派发，供回传等依赖工单的链路使用
+    for (const [convertedPlanId, orderId] of planToOrderMap) {
+      await tx.subcontractCollaborationDispatch.updateMany({
+        where: {
+          receiverPlanOrderId: convertedPlanId,
+          OR: [{ receiverProductionOrderId: null }, { receiverProductionOrderId: '' }],
+        },
+        data: { receiverProductionOrderId: orderId },
+      });
+    }
   });
 
   const dispatchedCount = ordersToCreate.length + ordersToReuse.length;

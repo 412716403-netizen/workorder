@@ -79,7 +79,6 @@ import {
   formStandardControlClass,
   formStandardLabelClass,
   outlineToolbarButtonClass,
-  primaryToolbarButtonClass,
 } from '../../styles/uiDensity';
 import {
   effectiveSupplierIdFromProduct,
@@ -135,7 +134,7 @@ export interface PlanDetailPanelProps {
   productionLinkMode?: 'order' | 'product';
 
   // Callbacks
-  onUpdatePlan?: (planId: string, updates: Partial<PlanOrder>) => void;
+  onUpdatePlan?: (planId: string, updates: Partial<PlanOrder>) => void | Promise<void>;
   /** 计划交期变更时同步更新关联工单 `dueDate`（需工单编辑权限） */
   onUpdateOrder?: (orderId: string, updates: Partial<ProductionOrder>) => void | Promise<void>;
   onDeletePlan?: (planId: string) => void;
@@ -230,7 +229,11 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
     customData?: Record<string, any>;
   }>({ customer: '', createdAt: '', dueDate: '', items: [] });
 
-  const [isSaving, setIsSaving] = useState(false);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'pending' | 'saving' | 'error'>('saved');
+  const pendingPlanUpdateRef = useRef<Partial<PlanOrder>>({});
+  const pendingDueDateRef = useRef<string | undefined>(undefined);
+  const planAutoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const planAutoSaveInFlightRef = useRef(false);
   const [tempNodeRates, setTempNodeRates] = useState<Record<string, number>>({});
   const [tempMilestoneNodeIds, setTempMilestoneNodeIds] = useState<string[]>([]);
   const [proposedOrders, setProposedOrders] = useState<ProposedOrder[]>([]);
@@ -454,6 +457,10 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
     viewPlan?.milestoneNodeIds && viewPlan.milestoneNodeIds.length > 0,
   );
   const isRouteCustomized = !milestoneNodeIdsEqual(tempMilestoneNodeIds, productMilestoneNodeIds);
+  /** 产品无工序时两种模式均可在计划内配置；有工序时 product 模式仍隐藏覆盖编辑 */
+  const canEditProcessRoute =
+    productionLinkMode !== 'product' || productMilestoneNodeIds.length === 0;
+  const productProcessEmpty = productMilestoneNodeIds.length === 0;
 
   const findSubPlanForMaterial = (materialId: string, nodeId: string, rootPlanId: string): PlanOrder | null => {
     const queue: string[] = [rootPlanId];
@@ -480,23 +487,6 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
     () => getMaterialLossRates(tempPlanInfo.customData),
     [tempPlanInfo.customData],
   );
-  /** 写入某物料行的损耗百分比（0/空 → 删除该键），随「保存」落库 */
-  const setMaterialLossRate = useCallback((rowKey: string, pct: number | null) => {
-    setTempPlanInfo(prev => {
-      const prevRates = (prev.customData?.[MATERIAL_LOSS_RATES_KEY] ?? {}) as Record<string, number>;
-      const nextRates: Record<string, number> = { ...prevRates };
-      if (pct == null || !(pct > 0)) {
-        delete nextRates[rowKey];
-      } else {
-        nextRates[rowKey] = pct;
-      }
-      return {
-        ...prev,
-        customData: { ...(prev.customData ?? {}), [MATERIAL_LOSS_RATES_KEY]: nextRates },
-      };
-    });
-  }, []);
-
   const materialRequirements = useMemo(() => {
     if (!viewPlan || !viewProduct || !tempPlanInfo.items) return [];
     type ReqEntry = { materialId: string; nodeId: string; quantity: number; level: number; parentProductId?: string };
@@ -820,96 +810,184 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   }, [probePlanActiveItemCodes]);
 
   // --- Callbacks ---
-  const handleUpdateDetail = async () => {
-    if (!planId || !viewPlan || !viewProduct) return;
-    if (tempMilestoneNodeIds.length === 0) {
-      toast.error('工序路线不能为空，请至少选择一道工序');
-      return;
-    }
-    setIsSaving(true);
-    try {
-      const showDelivery =
-        productionLinkMode !== 'product' && planFormSettings.listDisplay?.showDeliveryDate === true;
-      const nextDueStr = tempPlanInfo.dueDate.trim() ? tempPlanInfo.dueDate.trim() : undefined;
-      const prevDueNorm = viewPlan.dueDate
-        ? toLocalDateYmd(viewPlan.dueDate) || String(viewPlan.dueDate).trim().slice(0, 10)
-        : '';
-      const nextDueNorm = nextDueStr ?? '';
-      const dueChanged = showDelivery && nextDueNorm !== prevDueNorm;
+  /**
+   * 计划资料的低风险编辑统一按 600ms 防抖、串行提交。规格、派发和基础资料均走该入口；
+   * 工艺路线仍由其弹窗的「确定」提交，因为它会影响已下达工单与产品档案。
+   */
+  const schedulePlanAutoSave = useCallback((patch: Partial<PlanOrder>, dueDateToSync?: string) => {
+    pendingPlanUpdateRef.current = { ...pendingPlanUpdateRef.current, ...patch };
+    if (dueDateToSync !== undefined) pendingDueDateRef.current = dueDateToSync;
+    setAutoSaveStatus('pending');
 
-      const activeNodeIds = new Set(tempMilestoneNodeIds);
-      const sanitizedAssignments = Object.fromEntries(
-        Object.entries(tempAssignments).filter(([nodeId]) => activeNodeIds.has(nodeId)),
-      );
+    const flush = async () => {
+      if (planAutoSaveInFlightRef.current) return;
+      const nextPatch = pendingPlanUpdateRef.current;
+      const nextDueDate = pendingDueDateRef.current;
+      pendingPlanUpdateRef.current = {};
+      pendingDueDateRef.current = undefined;
+      if (Object.keys(nextPatch).length === 0) return;
 
-      const planPayload: Partial<PlanOrder> = {
-        assignments: sanitizedAssignments,
-        customer: tempPlanInfo.customer,
-        createdAt: planEntryDatetimeToCreatedAt(tempPlanInfo.createdAt),
-        ...(showDelivery ? { dueDate: nextDueStr } : {}),
-        ...(!planWorkOrdersDispatched ? { items: tempPlanInfo.items } : {}),
-        customData: tempPlanInfo.customData,
-        ...(!planWorkOrdersDispatched
-          ? {
-              milestoneNodeIds: normalizePlanMilestoneNodeIdsForSave(
-                tempMilestoneNodeIds,
-                productMilestoneNodeIds,
-              ),
-            }
-          : {}),
-      };
-
-      await onUpdatePlan?.(planId, planPayload);
-
-      if (dueChanged && onUpdateOrder) {
-        const linkedOrders =
-          !viewPlan.parentPlanId
+      planAutoSaveInFlightRef.current = true;
+      setAutoSaveStatus('saving');
+      let failed = false;
+      try {
+        await onUpdatePlan?.(planId, nextPatch);
+        if (nextDueDate !== undefined && onUpdateOrder && viewPlan) {
+          const linkedOrders = !viewPlan.parentPlanId
             ? orders.filter(o => o.sourcePlanId === viewPlan.id)
             : orders.filter(o => o.planOrderId === viewPlan.id);
-        const uniqById = [...new Map(linkedOrders.map(o => [o.id, o])).values()];
-        await Promise.allSettled(
-          uniqById.map(o => Promise.resolve(onUpdateOrder(o.id, { dueDate: nextDueStr }))),
-        );
+          await Promise.all(
+            [...new Map(linkedOrders.map(o => [o.id, o])).values()]
+              .map(o => Promise.resolve(onUpdateOrder(o.id, { dueDate: nextDueDate || undefined }))),
+          );
+        }
+        setAutoSaveStatus('saved');
+      } catch (error) {
+        failed = true;
+        pendingPlanUpdateRef.current = { ...nextPatch, ...pendingPlanUpdateRef.current };
+        if (nextDueDate !== undefined) pendingDueDateRef.current = nextDueDate;
+        const message = error instanceof Error ? error.message : String(error);
+        toast.error(`自动保存失败：${message}`);
+        setAutoSaveStatus('error');
+      } finally {
+        planAutoSaveInFlightRef.current = false;
+        if (!failed && Object.keys(pendingPlanUpdateRef.current).length > 0) {
+          planAutoSaveTimerRef.current = setTimeout(() => { void flush(); }, 0);
+        }
       }
+    };
 
-      if (viewProduct) {
-        const mergedRates: Record<string, number> = { ...(viewProduct.nodeRates || {}) };
-        Object.entries(tempNodeRates).forEach(([nodeId, rate]) => {
-          const numericRate = typeof rate === 'number' ? rate : parseFloat(String(rate));
-          mergedRates[nodeId] = isNaN(numericRate) ? 0 : numericRate;
-        });
-        await onUpdateProduct({ ...viewProduct, nodeRates: mergedRates });
+    if (planAutoSaveTimerRef.current) clearTimeout(planAutoSaveTimerRef.current);
+    planAutoSaveTimerRef.current = setTimeout(() => { void flush(); }, 600);
+  }, [onUpdateOrder, onUpdatePlan, orders, planId, viewPlan]);
+
+  useEffect(() => () => {
+    if (planAutoSaveTimerRef.current) clearTimeout(planAutoSaveTimerRef.current);
+  }, []);
+
+  const retryPlanAutoSave = useCallback(() => {
+    if (Object.keys(pendingPlanUpdateRef.current).length === 0) return;
+    const patch = pendingPlanUpdateRef.current;
+    const dueDate = pendingDueDateRef.current;
+    pendingPlanUpdateRef.current = {};
+    pendingDueDateRef.current = undefined;
+    schedulePlanAutoSave(patch, dueDate);
+  }, [schedulePlanAutoSave]);
+
+  const handlePanelClose = useCallback(async () => {
+    if (planAutoSaveTimerRef.current) clearTimeout(planAutoSaveTimerRef.current);
+    const patch = pendingPlanUpdateRef.current;
+    const dueDateToSync = pendingDueDateRef.current;
+    pendingPlanUpdateRef.current = {};
+    pendingDueDateRef.current = undefined;
+    if (Object.keys(patch).length > 0 && !planAutoSaveInFlightRef.current) {
+      setAutoSaveStatus('saving');
+      try {
+        await onUpdatePlan?.(planId, patch);
+        if (dueDateToSync !== undefined && onUpdateOrder && viewPlan) {
+          const linkedOrders = !viewPlan.parentPlanId
+            ? orders.filter(o => o.sourcePlanId === viewPlan.id)
+            : orders.filter(o => o.planOrderId === viewPlan.id);
+          await Promise.all(
+            [...new Map(linkedOrders.map(o => [o.id, o])).values()]
+              .map(o => Promise.resolve(onUpdateOrder(o.id, { dueDate: dueDateToSync || undefined }))),
+          );
+        }
+      } catch (error) {
+        pendingPlanUpdateRef.current = patch;
+        pendingDueDateRef.current = dueDateToSync;
+        const message = error instanceof Error ? error.message : String(error);
+        toast.error(`自动保存失败：${message}`);
+        setAutoSaveStatus('error');
+        return;
       }
-      onClose();
-    } finally {
-      setIsSaving(false);
     }
+    onClose();
+  }, [onClose, onUpdateOrder, onUpdatePlan, orders, planId, viewPlan]);
+
+  const saveNodeRates = useCallback(async () => {
+    if (!viewProduct) return;
+    const nodeRates = { ...(viewProduct.nodeRates ?? {}), ...tempNodeRates };
+    const saved = await onUpdateProduct({ ...viewProduct, nodeRates });
+    if (!saved) toast.error('工序工价自动保存失败，请修改后重试');
+  }, [onUpdateProduct, tempNodeRates, viewProduct]);
+
+  /** 写入某物料行的损耗百分比（0/空 → 删除该键），自动落库 */
+  const setMaterialLossRate = useCallback((rowKey: string, pct: number | null) => {
+    const prevRates = (tempPlanInfo.customData?.[MATERIAL_LOSS_RATES_KEY] ?? {}) as Record<string, number>;
+    const nextRates: Record<string, number> = { ...prevRates };
+    if (pct == null || !(pct > 0)) {
+      delete nextRates[rowKey];
+    } else {
+      nextRates[rowKey] = pct;
+    }
+    const customData = { ...(tempPlanInfo.customData ?? {}), [MATERIAL_LOSS_RATES_KEY]: nextRates };
+    setTempPlanInfo(prev => ({ ...prev, customData }));
+    schedulePlanAutoSave({ customData });
+  }, [schedulePlanAutoSave, tempPlanInfo.customData]);
+
+  /** 工艺路线弹窗确认：立即落库（产品无工序时同步写回产品） */
+  const handleConfirmProcessRoute = async (next: string[]) => {
+    if (!planId || !viewPlan || !viewProduct) return;
+    if (planWorkOrdersDispatched) {
+      toast.error('已下达工单的计划单不可修改工序路线');
+      return;
+    }
+    if (next.length === 0) {
+      toast.error('请至少选择一道工序');
+      return;
+    }
+    const productHadNoProcess = (viewProduct.milestoneNodeIds?.length ?? 0) === 0;
+    const activeNodeIds = new Set(next);
+    const sanitizedAssignments = Object.fromEntries(
+      Object.entries(tempAssignments).filter(([nodeId]) => activeNodeIds.has(nodeId)),
+    );
+
+    await onUpdatePlan?.(planId, {
+      milestoneNodeIds: normalizePlanMilestoneNodeIdsForSave(
+        next,
+        productHadNoProcess ? next : productMilestoneNodeIds,
+      ),
+      assignments: sanitizedAssignments,
+    });
+
+    if (productHadNoProcess) {
+      await onUpdateProduct({
+        ...viewProduct,
+        milestoneNodeIds: [...next],
+      });
+    }
+
+    setTempMilestoneNodeIds(next);
+    setTempAssignments(sanitizedAssignments);
+    toast.success(
+      productHadNoProcess ? '工序路线已保存，并已写入产品档案' : '工序路线已保存',
+    );
   };
 
   const updateTempAssignment = (nodeId: string, updates: Partial<NodeAssignment>) => {
-    setTempAssignments(prev => ({
-      ...prev,
+    const next = {
+      ...tempAssignments,
       [nodeId]: {
-        workerIds: prev[nodeId]?.workerIds || [],
-        equipmentIds: prev[nodeId]?.equipmentIds || [],
-        ...updates
-      }
-    }));
+        workerIds: tempAssignments[nodeId]?.workerIds || [],
+        equipmentIds: tempAssignments[nodeId]?.equipmentIds || [],
+        ...updates,
+      },
+    };
+    setTempAssignments(next);
+    schedulePlanAutoSave({ assignments: next });
   };
 
   const updateDetailItemQty = (variantId: string | undefined, val: string) => {
     if (planWorkOrdersDispatched) return;
     const qty = parseInt(val) || 0;
-    setTempPlanInfo(prev => {
-      const newItems = prev.items.map(item => {
+    const newItems = tempPlanInfo.items.map(item => {
         if (item.variantId === variantId) return { ...item, quantity: qty };
         return item;
-      });
-      if (variantId === undefined && newItems.length === 1) {
-        newItems[0].quantity = qty;
-      }
-      return { ...prev, items: newItems };
     });
+    if (variantId === undefined && newItems.length === 1) newItems[0] = { ...newItems[0], quantity: qty };
+    setTempPlanInfo(prev => ({ ...prev, items: newItems }));
+    schedulePlanAutoSave({ items: newItems });
   };
 
   const handleCreateSubPlansFromPlannedQty = () => {
@@ -943,7 +1021,11 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
       }
     });
     toUpdate.forEach(({ req, existing }) => {
-      onUpdatePlan?.(existing.id, { items: [{ variantId: products.find(p => p.id === req.materialId)?.variants?.[0]?.id, quantity: Math.max(0, Number(req.plannedQty) || 0) }] });
+      void Promise.resolve(
+        onUpdatePlan?.(existing.id, {
+          items: [{ variantId: products.find(p => p.id === req.materialId)?.variants?.[0]?.id, quantity: Math.max(0, Number(req.plannedQty) || 0) }],
+        }),
+      ).catch(() => undefined);
     });
     if (toCreate.length > 0) {
       if (onCreateSubPlans) {
@@ -1275,7 +1357,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   return (
     <>
       <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300" onClick={onClose}></div>
+        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300" onClick={() => { void handlePanelClose(); }}></div>
         <div className="relative bg-white w-full max-w-6xl rounded-[40px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 max-h-[92vh]">
 
           <div className="px-10 py-6 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-50">
@@ -1310,7 +1392,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                    href: `/production?tab=plans&planId=${viewPlan.id}`,
                  }}
                />
-               <button onClick={onClose} className="p-3 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50 transition-all"><X className="w-7 h-7" /></button>
+               <button onClick={() => { void handlePanelClose(); }} className="p-3 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50 transition-all"><X className="w-7 h-7" /></button>
              </div>
           </div>
 
@@ -1361,7 +1443,10 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                         planFormSettings.standardFields.find(f => f.id === 'createdAt')?.label ?? '入单时间'
                       }
                       value={tempPlanInfo.createdAt}
-                      onChange={createdAt => setTempPlanInfo({ ...tempPlanInfo, createdAt })}
+                      onChange={createdAt => {
+                        setTempPlanInfo({ ...tempPlanInfo, createdAt });
+                        schedulePlanAutoSave({ createdAt: planEntryDatetimeToCreatedAt(createdAt) });
+                      }}
                     />
                   )}
                   {sourceSalesOrderDocNumber ? (
@@ -1380,7 +1465,11 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                       <input
                         type="date"
                         value={tempPlanInfo.dueDate}
-                        onChange={e => setTempPlanInfo({ ...tempPlanInfo, dueDate: e.target.value })}
+                        onChange={e => {
+                          const dueDate = e.target.value;
+                          setTempPlanInfo({ ...tempPlanInfo, dueDate });
+                          schedulePlanAutoSave({ dueDate: dueDate || undefined }, dueDate);
+                        }}
                         className={formStandardControlClass}
                       />
                     </div>
@@ -1392,7 +1481,10 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                         options={partners}
                         categories={partnerCategories}
                         value={tempPlanInfo.customer}
-                        onChange={customerName => setTempPlanInfo({ ...tempPlanInfo, customer: customerName })}
+                        onChange={customerName => {
+                          setTempPlanInfo({ ...tempPlanInfo, customer: customerName });
+                          schedulePlanAutoSave({ customer: customerName });
+                        }}
                         placeholder="搜索并选择合作单位..."
                       />
                     </div>
@@ -1403,12 +1495,14 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                       <PlanFormCustomFieldInput
                         cf={cf}
                         value={tempPlanInfo.customData?.[cf.id]}
-                        onChange={next =>
+                        onChange={next => {
+                          const customData = { ...tempPlanInfo.customData, [cf.id]: next };
                           setTempPlanInfo({
                             ...tempPlanInfo,
-                            customData: { ...tempPlanInfo.customData, [cf.id]: next },
-                          })
-                        }
+                            customData,
+                          });
+                          schedulePlanAutoSave({ customData });
+                        }}
                         controlClassName={formStandardControlClass}
                         onFilePreview={onFilePreview}
                       />
@@ -1460,18 +1554,32 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                     <Users className="w-5 h-5 text-indigo-600 shrink-0" />
                     <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">3. 工序任务</h3>
                   </div>
-                  {productionLinkMode !== 'product' && (
+                  {canEditProcessRoute && (
                     <button
                       type="button"
                       onClick={() => setProcessRouteModalOpen(true)}
                       className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border transition-all shrink-0 border-indigo-200 text-indigo-700 bg-indigo-50/80 hover:bg-indigo-100 hover:border-indigo-300"
                     >
                       <ClipboardCheck className="w-3.5 h-3.5" />
-                      {planWorkOrdersDispatched ? '查看工艺路线' : '修改工艺路线'}
+                      {planWorkOrdersDispatched
+                        ? '查看工艺路线'
+                        : productProcessEmpty
+                          ? '配置工艺路线'
+                          : '修改工艺路线'}
                     </button>
                   )}
                 </div>
                 <div className="space-y-4">
+                   {planProcessNodes.length === 0 && (
+                     <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
+                       <p className="font-bold">尚未配置工序</p>
+                       <p className="mt-1 text-xs font-medium text-amber-800/90">
+                         {productProcessEmpty
+                           ? '请点击「配置工艺路线」选择工序；确认后立即保存并写入产品档案。'
+                           : '请修改工艺路线；确认后立即保存。'}
+                       </p>
+                     </div>
+                   )}
                    {planProcessNodes.map((node, idx) => {
                      const isAssigned = (tempAssignments[node.id] as NodeAssignment)?.workerIds?.length > 0;
                      const enableWorker =
@@ -1502,6 +1610,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                                      const v = parseFloat(e.target.value);
                                      setTempNodeRates(prev => ({ ...prev, [node.id]: isNaN(v) ? 0 : v }));
                                    }}
+                                   onBlur={() => { void saveNodeRates(); }}
                                    className="w-20 bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2 text-xs font-bold text-slate-800 text-right focus:ring-2 focus:ring-indigo-500 outline-none"
                                  />
                                  <span className="text-[9px] text-slate-400 whitespace-nowrap">元/件</span>
@@ -2055,7 +2164,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
           <div className="px-6 sm:px-10 py-4 sm:py-5 bg-white/90 backdrop-blur-md border-t border-slate-100 shadow-[0_-6px_28px_-10px_rgba(15,23,42,0.08)] flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between sticky bottom-0 z-10">
              <div className="min-w-0 flex-1">
                 <p className="text-xs font-bold text-slate-500">
-                  当前操作：<span className="text-indigo-600 font-black">计划资料整体更新</span>
+                  当前操作：<span className="text-indigo-600 font-black">计划资料自动保存</span>
                   {planWorkOrdersDispatched && (
                     <span className="ml-2 inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-slate-500">
                       已下达工单
@@ -2064,8 +2173,8 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                 </p>
                 <p className="text-[10px] text-slate-400 mt-1.5 leading-relaxed font-medium">
                   {planWorkOrdersDispatched
-                    ? '※ 生产数量与 BOM 计划用量已锁定，用料清单仍可查看。保存将更新客户、交期、工序派发等；交期会同步到关联工单（工单中心 / 外协等）。'
-                    : '※ 点击保存将同步更新客户、交期、规格数量及派发方案。'}
+                    ? '※ 生产数量与 BOM 计划用量已锁定，用料清单仍可查看。客户、交期与工序派发的更改会自动保存；交期会同步到关联工单。'
+                    : '※ 客户、交期、规格数量及派发方案的更改会自动保存；工艺路线仍需在弹窗中确认。'}
                 </p>
              </div>
              <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-2.5">
@@ -2098,6 +2207,11 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                      <button
                        type="button"
                        onClick={() => {
+                         if (tempMilestoneNodeIds.length === 0) {
+                           toast.error('请先配置工序路线后再下达工单');
+                           setProcessRouteModalOpen(true);
+                           return;
+                         }
                          onConvertToOrder(viewPlan.id);
                          onClose();
                        }}
@@ -2143,15 +2257,16 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                      <FileText className="w-4 h-4" /> 工单详情
                    </button>
                  )}
-                 <button
-                   type="button"
-                   onClick={() => void handleUpdateDetail()}
-                   disabled={isSaving}
-                   className={`${primaryToolbarButtonClass} rounded-xl px-6 sm:px-8 py-2.5 font-black text-sm shadow-md shadow-indigo-100/90 disabled:opacity-50 disabled:pointer-events-none`}
-                 >
-                   {isSaving ? <Clock className="h-4 w-4 animate-spin shrink-0" aria-hidden /> : <Save className="h-4 w-4 shrink-0" aria-hidden />}
-                   {planWorkOrdersDispatched ? '保存更新' : '保存并更新计划内容'}
-                 </button>
+                 <div className={`px-3 py-2 text-xs font-bold ${autoSaveStatus === 'error' ? 'text-rose-600' : autoSaveStatus === 'saved' ? 'text-emerald-600' : 'text-slate-500'}`}>
+                   {autoSaveStatus === 'saving' && '正在保存…'}
+                   {autoSaveStatus === 'pending' && '更改将自动保存…'}
+                   {autoSaveStatus === 'saved' && '✓ 已保存'}
+                   {autoSaveStatus === 'error' && (
+                     <button type="button" onClick={retryPlanAutoSave} className="font-bold underline underline-offset-2">
+                       保存失败，点击重试
+                     </button>
+                   )}
+                 </div>
              </div>
           </div>
         </div>
@@ -2252,7 +2367,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
         />
       )}
 
-      {productionLinkMode !== 'product' && processRouteModalOpen && viewPlan && (
+      {canEditProcessRoute && processRouteModalOpen && viewPlan && (
         <PlanProcessRouteModal
           open={processRouteModalOpen}
           onClose={() => setProcessRouteModalOpen(false)}
@@ -2262,13 +2377,8 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
           productMilestoneNodeIds={productMilestoneNodeIds}
           hasPlanOverride={hasPlanProcessOverride || isRouteCustomized}
           disabled={planWorkOrdersDispatched}
-          onConfirm={next => {
-            setTempMilestoneNodeIds(next);
-            const activeNodeIds = new Set(next);
-            setTempAssignments(prev =>
-              Object.fromEntries(Object.entries(prev).filter(([nodeId]) => activeNodeIds.has(nodeId))),
-            );
-          }}
+          writeBackToProduct={productProcessEmpty}
+          onConfirm={handleConfirmProcessRoute}
         />
       )}
 

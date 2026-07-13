@@ -372,7 +372,11 @@ export function useCollabInboxState(args: Args) {
           t.receiverTenantName === '本企业' &&
           (t.status === 'OPEN' || t.status === 'PARTIALLY_RECEIVED') &&
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (t.dispatches || []).some((d: any) => d.status === 'ACCEPTED' || d.status === 'FORWARDED') &&
+          (t.dispatches || []).some(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (d: any) =>
+              (d.status === 'ACCEPTED' || d.status === 'FORWARDED') && !!d.receiverProductionOrderId,
+          ) &&
           !(
             t.outsourceRouteSnapshot &&
             Array.isArray(t.outsourceRouteSnapshot) &&

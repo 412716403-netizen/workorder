@@ -9,11 +9,14 @@ export type PlanProcessRouteModalProps = {
   onClose: () => void;
   globalNodes: GlobalNodeTemplate[];
   value: string[];
-  onConfirm: (next: string[]) => void;
+  /** 确认后由调用方立即落库；可返回 Promise */
+  onConfirm: (next: string[]) => void | Promise<void>;
   disabled?: boolean;
   productMilestoneNodeIds: string[];
   hasPlanOverride?: boolean;
   planNumber?: string;
+  /** 产品尚无工序时：确认保存会写回产品档案 */
+  writeBackToProduct?: boolean;
 };
 
 const PlanProcessRouteModal: React.FC<PlanProcessRouteModalProps> = ({
@@ -26,27 +29,59 @@ const PlanProcessRouteModal: React.FC<PlanProcessRouteModalProps> = ({
   productMilestoneNodeIds,
   hasPlanOverride = false,
   planNumber,
+  writeBackToProduct = false,
 }) => {
   const [draft, setDraft] = useState<string[]>(value);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (open) setDraft(value);
+    if (open) {
+      setDraft(value);
+      setSaving(false);
+    }
   }, [open, value]);
 
   if (!open) return null;
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (draft.length === 0) {
       toast.error('请至少选择一道工序');
       return;
     }
-    onConfirm(draft);
-    onClose();
+    setSaving(true);
+    try {
+      await onConfirm(draft);
+      onClose();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '保存工序路线失败';
+      toast.error(message);
+    } finally {
+      setSaving(false);
+    }
   };
+
+  const title = disabled
+    ? '查看工艺路线'
+    : writeBackToProduct
+      ? '配置工艺路线'
+      : '修改工艺路线';
+  const subtitle = writeBackToProduct
+    ? planNumber
+      ? `${planNumber} · 确认后立即保存，并写入产品档案`
+      : '确认后立即保存，并写入产品档案'
+    : planNumber
+      ? `${planNumber} · 确认后立即保存到本计划单`
+      : '确认后立即保存到本计划单';
 
   return (
     <div className="fixed inset-0 z-[130] flex items-center justify-center p-4">
-      <button type="button" className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" aria-label="关闭" onClick={onClose} />
+      <button
+        type="button"
+        className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+        aria-label="关闭"
+        onClick={onClose}
+        disabled={saving}
+      />
       <div
         role="dialog"
         aria-modal="true"
@@ -61,16 +96,17 @@ const PlanProcessRouteModal: React.FC<PlanProcessRouteModalProps> = ({
             </div>
             <div className="min-w-0">
               <h3 id="plan-process-route-modal-title" className="text-base font-black text-slate-900">
-                {disabled ? '查看工艺路线' : '修改工艺路线'}
+                {title}
               </h3>
-              {planNumber ? (
-                <p className="text-xs text-slate-500 mt-0.5 truncate">{planNumber} · 仅影响本计划单</p>
-              ) : (
-                <p className="text-xs text-slate-500 mt-0.5">调整本计划的生产工序，不回写产品档案</p>
-              )}
+              <p className="text-xs text-slate-500 mt-0.5 truncate">{subtitle}</p>
             </div>
           </div>
-          <button type="button" onClick={onClose} className="rounded-full p-2 text-slate-400 hover:bg-slate-50 hover:text-slate-600 shrink-0">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="rounded-full p-2 text-slate-400 hover:bg-slate-50 hover:text-slate-600 shrink-0 disabled:opacity-50"
+          >
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -80,7 +116,7 @@ const PlanProcessRouteModal: React.FC<PlanProcessRouteModalProps> = ({
             globalNodes={globalNodes}
             value={draft}
             onChange={setDraft}
-            disabled={disabled}
+            disabled={disabled || saving}
             productMilestoneNodeIds={productMilestoneNodeIds}
             hasPlanOverride={hasPlanOverride}
             embedded
@@ -91,17 +127,19 @@ const PlanProcessRouteModal: React.FC<PlanProcessRouteModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors"
+            disabled={saving}
+            className="px-5 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-50"
           >
             取消
           </button>
           {!disabled && (
             <button
               type="button"
-              onClick={handleConfirm}
-              className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors shadow-sm"
+              onClick={() => void handleConfirm()}
+              disabled={saving}
+              className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors shadow-sm disabled:opacity-60"
             >
-              确定
+              {saving ? '保存中…' : '确定'}
             </button>
           )}
         </div>

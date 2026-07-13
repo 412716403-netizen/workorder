@@ -217,6 +217,7 @@ export interface AppDataContextValue {
   refreshFinanceAccountTypes: () => Promise<void>;
   refreshProducts: () => Promise<void>;
   refreshOrders: () => Promise<void>;
+  refreshPlans: () => Promise<void>;
   refreshPMP: () => Promise<void>;
   /** 从服务端重新拉取打印模板（多标签页保存后另一页可即时同步） */
   refreshPrintTemplates: () => Promise<void>;
@@ -769,7 +770,11 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     try {
       const updated = await api.plans.update(id, updates);
       setPlans(prev => prev.map(p => p.id === id ? norm1(updated) : p));
-    } catch (err: any) { toast.error(err.message || '更新计划失败'); }
+    } catch (err: any) {
+      toast.error(err.message || '更新计划失败');
+      // 调用方需要据此保留草稿并呈现「重试」，不能把失败伪装成保存成功。
+      throw err;
+    }
   }, []);
 
   const onDeletePlan = useCallback(async (id: string) => {
@@ -1149,7 +1154,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     refreshDictionaries, refreshWorkers, refreshEquipment, refreshPartners,
     refreshPartnerCategories, refreshCategories, refreshGlobalNodes, applyGlobalNodes, refreshWarehouses,
     refreshFinanceCategories, refreshFinanceAccountTypes,
-    refreshProducts, refreshOrders, refreshPMP,
+    refreshProducts, refreshOrders, refreshPlans, refreshPMP,
     refreshPrintTemplates,
     ensureDeferredLoaded,
   }), [
@@ -1171,7 +1176,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     refreshDictionaries, refreshWorkers, refreshEquipment, refreshPartners,
     refreshPartnerCategories, refreshCategories, refreshGlobalNodes, applyGlobalNodes, refreshWarehouses,
     refreshFinanceCategories, refreshFinanceAccountTypes,
-    refreshProducts, refreshOrders, refreshPMP,
+    refreshProducts, refreshOrders, refreshPlans, refreshPMP,
     refreshPrintTemplates,
     ensureDeferredLoaded,
   ]);

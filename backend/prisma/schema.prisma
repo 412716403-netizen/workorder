@@ -988,6 +988,8 @@ model SubcontractCollaborationDispatch {
   payload                     Json
   senderDispatchRecordIds     Json     @map("sender_dispatch_record_ids")
   receiverProductionOrderId   String?  @map("receiver_production_order_id") @db.VarChar(50)
+  /** 乙方接单时自动创建的生产计划；下达工单后回填 receiverProductionOrderId */
+  receiverPlanOrderId         String?  @map("receiver_plan_order_id") @db.VarChar(50)
   amendmentPayload            Json?    @map("amendment_payload")
   amendmentSenderRecordIds    Json?    @map("amendment_sender_record_ids")
   amendmentStatus             String?  @map("amendment_status") @db.VarChar(30)
@@ -999,6 +1001,7 @@ model SubcontractCollaborationDispatch {
 
   @@index([transferId])
   @@index([status])
+  @@index([receiverPlanOrderId])
   @@map("subcontract_collaboration_dispatches")
 }
 

@@ -62,7 +62,7 @@ export const FEATURE_PLUGIN_MARKET_CATALOG: FeaturePluginMarketItem[] = [
       highlights: [
         '协作收件箱集中处理待接单、待回传、待确认事项',
         '支持跨租户派发与回传，减少微信/Excel 对账',
-        '与生产工单、工序报工联动，状态实时同步',
+        '与生产计划、工序报工联动；接单后生成生产计划，下达工单后状态实时同步',
       ],
       scenarios: [
         '服装厂将部分工序外发给加工厂，需在线派单与回传',
@@ -82,7 +82,7 @@ export const FEATURE_PLUGIN_MARKET_CATALOG: FeaturePluginMarketItem[] = [
       },
       {
         title: '回传与确认',
-        body: '协作方在收件箱接单并完成报工/回传；发起方可审核回传数据，确认后写入本方生产进度。',
+        body: '协作方在收件箱接单并生成生产计划，配置工序后下达工单并完成报工/回传；发起方可审核回传数据，确认后写入本方生产进度。',
       },
     ],
   },

@@ -83,6 +83,7 @@ export function settledVal<T>(results: PromiseSettledResult<unknown>[], i: numbe
 }
 
 export function mergeById<T extends { id: string }>(prev: T[], incoming: T[]): T[] {
+  if (incoming.length === 0) return prev;
   const map = new Map(prev.map(x => [x.id, x]));
   for (const item of incoming) map.set(item.id, item);
   return Array.from(map.values());

@@ -41,6 +41,7 @@ interface CollabDocDetailModalProps {
   categories?: ProductCategory[];
   onRefreshList: () => void;
   onRefreshOrders?: () => Promise<void>;
+  onRefreshPlans?: () => Promise<void>;
   onRefreshProdRecords?: () => Promise<void>;
   onRefreshPMP?: () => Promise<void>;
   onRefreshProducts?: () => Promise<void>;
@@ -71,7 +72,7 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
   products,
   dictionaries,
   categories: categoriesProp,
-  onRefreshList, onRefreshOrders, onRefreshProdRecords, onRefreshPMP, onRefreshProducts,
+  onRefreshList, onRefreshOrders, onRefreshPlans, onRefreshProdRecords, onRefreshPMP, onRefreshProducts,
 }) => {
   const categories = categoriesProp ?? [];
   const confirm = useConfirm();
@@ -124,10 +125,11 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
     }
   }, [transfer?.id, doc?.id, docKind, onClose]);
 
-  const afterMutation = useCallback(async (opts?: { closeAfter?: boolean; refreshProducts?: boolean; refreshOrders?: boolean; refreshProd?: boolean; refreshPMP?: boolean }) => {
+  const afterMutation = useCallback(async (opts?: { closeAfter?: boolean; refreshProducts?: boolean; refreshOrders?: boolean; refreshPlans?: boolean; refreshProd?: boolean; refreshPMP?: boolean }) => {
     onRefreshList();
     if (opts?.refreshProducts) onRefreshProducts?.();
     if (opts?.refreshOrders) onRefreshOrders?.();
+    if (opts?.refreshPlans) onRefreshPlans?.();
     if (opts?.refreshProd) onRefreshProdRecords?.();
     if (opts?.refreshPMP) onRefreshPMP?.();
     if (opts?.closeAfter) {
@@ -135,7 +137,7 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
     } else {
       await refreshSelf();
     }
-  }, [onRefreshList, onRefreshProducts, onRefreshOrders, onRefreshProdRecords, onRefreshPMP, refreshSelf, onClose]);
+  }, [onRefreshList, onRefreshProducts, onRefreshOrders, onRefreshPlans, onRefreshProdRecords, onRefreshPMP, refreshSelf, onClose]);
 
   // ── Dispatch 动作 ──
   const handleWithdrawDispatch = async () => {
@@ -184,13 +186,13 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
   };
 
   const handleConfirmDispatchAmendment = async () => {
-    const ok = await confirm({ message: '确认接受甲方的发出修订？修订后将更新对应工单明细。' });
+    const ok = await confirm({ message: '确认接受甲方的发出修订？修订后将同步更新对应生产计划明细（若已下达工单则同步工单明细）。' });
     if (!ok) return;
     setBusy(true);
     try {
       const res = await api.collaboration.confirmDispatchAmendment(doc.id);
       toast.success(res.quantityWarning ? `已确认修订（注意：${res.quantityWarning}）` : '已确认发出修订');
-      await afterMutation({ refreshOrders: true });
+      await afterMutation({ refreshOrders: true, refreshPlans: true });
     } catch (err: any) {
       toast.error(err?.message || '确认失败');
     } finally {
@@ -541,16 +543,18 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
     }
     const msg =
       mode === 'UPDATE_ACK'
-        ? '确认接受该派发？将把甲方本次名称/SKU/描述及规格变更同步到本地已关联产品，并生成或并入工单。'
+        ? '确认接受该派发？将把甲方本次名称/SKU/描述及规格变更同步到本地已关联产品，并生成或并入生产计划。'
         : mode === 'READY'
-          ? '确认接受该派发？将生成或并入工单。'
-          : '确认接受该派发？将创建乙方产品并生成对应工单。';
+          ? '确认接受该派发？将生成或并入生产计划。'
+          : '确认接受该派发？将创建乙方产品并生成对应生产计划。';
     const ok = await confirm({ message: msg });
     if (!ok) return;
     setBusy(true);
     try {
       interface AcceptTransferRes {
         accepted?: number;
+        createdPlans?: unknown[];
+        receiverPlanIds?: unknown[];
         createdOrders?: unknown[];
         pendingProcess?: boolean;
         receiverProductId?: string;
@@ -558,17 +562,27 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
       }
       const res = (await api.collaboration.acceptTransfer(transfer.id, payload)) as AcceptTransferRes;
       const accepted = Number(res?.accepted) || 0;
-      const ordersLen = Array.isArray(res?.createdOrders) ? res.createdOrders.length : 0;
-      toast.success(
-        res?.pendingProcess
-          ? `已接受派发 · ${accepted} 条 · 生成 ${ordersLen} 张工单（部分待配工序）`
-          : `已接受派发 · ${accepted} 条 · 生成 ${ordersLen} 张工单`,
-        {
+      const plansLen = Array.isArray(res?.createdPlans) ? res.createdPlans.length : 0;
+      const planIdsForNav = [
+        ...(Array.isArray(res?.receiverPlanIds) ? res.receiverPlanIds : []),
+        ...(Array.isArray(res?.createdPlans) ? res.createdPlans : []),
+      ].filter((id): id is string => typeof id === 'string' && id.length > 0);
+      const firstPlanId = planIdsForNav[0];
+      const mergedMsg =
+        plansLen > 0
+          ? res?.pendingProcess
+            ? `已接受派发 · ${accepted} 条 · 生成 ${plansLen} 张生产计划（待配置工序）`
+            : `已接受派发 · ${accepted} 条 · 生成 ${plansLen} 张生产计划`
+          : res?.pendingProcess
+            ? `已接受派发 · ${accepted} 条 · 已并入生产计划（待配置工序）`
+            : `已接受派发 · ${accepted} 条 · 已并入生产计划`;
+      toast.success(mergedMsg, {
           duration: 8000,
-          action: res?.pendingProcess && res?.receiverProductId
+          action: firstPlanId
             ? {
-                label: '去配置工序 →',
-                onClick: () => navigate('/basic', { state: { editProductId: res.receiverProductId } }),
+                label: res?.pendingProcess ? '去配置工序 →' : '查看计划 →',
+                onClick: () =>
+                  navigate('/production', { state: { tab: 'plans', detailPlanId: firstPlanId } }),
               }
             : undefined,
         },
@@ -579,7 +593,14 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
         );
         toast.info(`商品信息已根据甲方最新数据同步：\n${lines.join('\n')}`, { duration: 12000 });
       }
-      await afterMutation({ refreshOrders: true, refreshProd: true, refreshProducts: true, refreshPMP: true, closeAfter: true });
+      await afterMutation({
+        refreshOrders: true,
+        refreshPlans: true,
+        refreshProd: true,
+        refreshProducts: true,
+        refreshPMP: true,
+        closeAfter: true,
+      });
     } catch (err: any) {
       toast.error(err?.message || '接受失败');
     } finally {
@@ -757,7 +778,7 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
             {canAcceptDispatch && !acceptUiLoading && acceptMode === 'CREATE' && (
               <div className="rounded-xl border border-indigo-200 bg-indigo-50/90 p-4 space-y-3">
                 <p className="text-sm text-indigo-950 font-bold leading-relaxed">
-                  该派发为「待接受」，且尚未绑定乙方本地产品。请确认新建产品信息后接受，将创建本企业产品并生成对应工单。
+                  该派发为「待接受」，且尚未绑定乙方本地产品。请确认新建产品信息后接受，将创建本企业产品并生成对应生产计划。
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div className="space-y-1">

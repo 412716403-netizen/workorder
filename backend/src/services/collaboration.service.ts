@@ -6,7 +6,7 @@
 import { Prisma } from '@prisma/client';
 import { prisma as basePrisma } from '../lib/prisma.js';
 import { genId } from '../utils/genId.js';
-import { getNextWorkOrderNumber, generateDocNo } from '../utils/docNumber.js';
+import { getNextPlanNumber, generateDocNo } from '../utils/docNumber.js';
 import { nextOutsourceDocNoForPartner } from '../utils/partnerDocNumberServer.js';
 import { applyOutsourceProgress } from './production.service.js';
 import { AppError } from '../middleware/errorHandler.js';
@@ -1105,132 +1105,109 @@ export async function acceptTransfer(tenantId: string, transferId: string, body:
         },
       });
     }
-    const displayName = transfer.senderProductName || '';
-    const displaySku = transfer.senderProductSku || '';
     const product = await tx.product.findUnique({ where: { id: finalProductId } });
-    let milestoneNodeIds = (product?.milestoneNodeIds as string[]) || [];
-    let fallbackMilestones: Array<{ templateId: string; name: string; reportTemplate: any; reportDisplayTemplate?: any; sortOrder: number }> | null = null;
-    if (milestoneNodeIds.length === 0) {
-      const existingOrder = await tx.productionOrder.findFirst({
-        where: { productId: finalProductId, tenantId, milestones: { some: {} } },
-        include: { milestones: { orderBy: { sortOrder: 'asc' } } },
-      });
-      if (existingOrder?.milestones?.length) {
-        fallbackMilestones = existingOrder.milestones.map(m => ({
-          templateId: m.templateId,
-          name: m.name,
-          reportTemplate: m.reportTemplate,
-          reportDisplayTemplate: (m as { reportDisplayTemplate?: unknown }).reportDisplayTemplate ?? [],
-          sortOrder: m.sortOrder,
-        }));
+    const milestoneNodeIds = Array.isArray(product?.milestoneNodeIds)
+      ? (product!.milestoneNodeIds as string[]).filter(Boolean)
+      : [];
+    const pendingProcess = milestoneNodeIds.length === 0;
+    const createdPlans: string[] = [];
+    const receiverPlanIds: string[] = [];
+
+    const appendPlanItemsFromDispatches = async (planId: string, dispatches: typeof toAccept) => {
+      for (const d of dispatches) {
+        await createPlanItemsFromCollabPayload(tx, planId, tenantId, finalProductId, (d.payload as any)?.items ?? []);
       }
-    }
-    const nodes = milestoneNodeIds.length > 0 ? await tx.globalNodeTemplate.findMany({ where: { tenantId } }) : [];
-    const hasProcesses = milestoneNodeIds.length > 0 || fallbackMilestones !== null;
-    const orderStatus = hasProcesses ? 'IN_PROGRESS' : 'PENDING_PROCESS';
-    const buildMilestones = () => {
-      if (milestoneNodeIds.length > 0) {
-        return milestoneNodeIds.map((nodeId, idx) => {
-          const node = nodes.find(n => n.id === nodeId);
-          return {
-            id: genId('ms'),
-            templateId: nodeId,
-            name: node?.name || nodeId,
-            status: 'PENDING',
-            completedQuantity: 0,
-            reportTemplate: (node as any)?.reportTemplate || [],
-            reportDisplayTemplate: (node as any)?.reportDisplayTemplate ?? [],
-            weight: 1,
-            assignedWorkerIds: [],
-            assignedEquipmentIds: [],
-            sortOrder: idx,
-          };
-        });
-      }
-      if (fallbackMilestones) {
-        return fallbackMilestones.map(fm => ({
-          id: genId('ms'),
-          templateId: fm.templateId,
-          name: fm.name,
-          status: 'PENDING',
-          completedQuantity: 0,
-          reportTemplate: fm.reportTemplate || [],
-          reportDisplayTemplate: fm.reportDisplayTemplate ?? [],
-          weight: 1,
-          assignedWorkerIds: [],
-          assignedEquipmentIds: [],
-          sortOrder: fm.sortOrder,
-        }));
-      }
-      return [];
     };
-    const createdOrders: string[] = [];
+
     if (effectiveMode === 'product') {
-      let existingOrderId = transfer.dispatches.find(d => d.receiverProductionOrderId)?.receiverProductionOrderId;
-      if (!existingOrderId) {
-        const orderId = genId('ord');
-        const orderNumber = await getNextWorkOrderNumber(tenantId, tx);
-        const milestones = buildMilestones();
-        await tx.productionOrder.create({
+      let existingPlanId = transfer.dispatches.find(d => d.receiverPlanOrderId)?.receiverPlanOrderId ?? null;
+      let linkedOrderId =
+        transfer.dispatches.find(d => d.receiverProductionOrderId)?.receiverProductionOrderId ?? null;
+      if (!existingPlanId) {
+        const planId = genId('plan');
+        const planNumber = await getNextPlanNumber(tenantId, tx);
+        await tx.planOrder.create({
           data: {
-            id: orderId,
+            id: planId,
             tenantId,
-            orderNumber,
+            planNumber,
             productId: finalProductId,
-            productName: displayName,
-            sku: displaySku,
-            status: orderStatus,
-            ...(milestones.length > 0 ? { milestones: { create: milestones } } : {}),
+            status: 'APPROVED',
+            customData: {
+              sourceCollaborationTransferId: transferId,
+            },
           },
         });
-        for (const d of toAccept) {
-          await createOrderItemsWithSource(tx, orderId, tenantId, finalProductId, (d.payload as any)?.items ?? [], d.id);
-        }
-        existingOrderId = orderId;
-        createdOrders.push(orderId);
+        await appendPlanItemsFromDispatches(planId, toAccept);
+        existingPlanId = planId;
+        createdPlans.push(planId);
       } else {
-        for (const d of toAccept) {
-          await createOrderItemsWithSource(tx, existingOrderId!, tenantId, finalProductId, (d.payload as any)?.items ?? [], d.id);
+        await appendPlanItemsFromDispatches(existingPlanId, toAccept);
+        if (linkedOrderId) {
+          for (const d of toAccept) {
+            await createOrderItemsWithSource(
+              tx,
+              linkedOrderId,
+              tenantId,
+              finalProductId,
+              (d.payload as any)?.items ?? [],
+              d.id,
+            );
+          }
         }
       }
+      receiverPlanIds.push(existingPlanId);
       for (const d of toAccept) {
         await tx.subcontractCollaborationDispatch.update({
           where: { id: d.id },
-          data: { status: 'ACCEPTED', receiverProductionOrderId: existingOrderId, amendmentStatus: null },
+          data: {
+            status: 'ACCEPTED',
+            receiverPlanOrderId: existingPlanId,
+            ...(linkedOrderId ? { receiverProductionOrderId: linkedOrderId } : {}),
+            amendmentStatus: null,
+          },
         });
       }
     } else {
       for (const d of toAccept) {
-        const orderId = genId('ord');
-        const orderNumber = await getNextWorkOrderNumber(tenantId, tx);
+        const planId = genId('plan');
+        const planNumber = await getNextPlanNumber(tenantId, tx);
         const items = (d.payload as any)?.items ?? [];
-        const milestones = buildMilestones();
-        await tx.productionOrder.create({
+        await tx.planOrder.create({
           data: {
-            id: orderId,
+            id: planId,
             tenantId,
-            orderNumber,
+            planNumber,
             productId: finalProductId,
-            productName: displayName,
-            sku: displaySku,
-            status: orderStatus,
-            ...(milestones.length > 0 ? { milestones: { create: milestones } } : {}),
+            status: 'APPROVED',
+            customData: {
+              sourceCollaborationTransferId: transferId,
+              sourceCollaborationDispatchId: d.id,
+            },
           },
         });
-        await createOrderItemsWithSource(tx, orderId, tenantId, finalProductId, items, d.id);
+        await createPlanItemsFromCollabPayload(tx, planId, tenantId, finalProductId, items);
         await tx.subcontractCollaborationDispatch.update({
           where: { id: d.id },
-          data: { status: 'ACCEPTED', receiverProductionOrderId: orderId, amendmentStatus: null },
+          data: {
+            status: 'ACCEPTED',
+            receiverPlanOrderId: planId,
+            amendmentStatus: null,
+          },
         });
-        createdOrders.push(orderId);
+        createdPlans.push(planId);
+        receiverPlanIds.push(planId);
       }
     }
     return {
       accepted: toAccept.length,
       bReceiveMode: effectiveMode,
       receiverProductId: finalProductId,
-      createdOrders,
-      pendingProcess: !hasProcesses,
+      createdPlans,
+      receiverPlanIds,
+      /** @deprecated 接单改为建计划；保留空数组以免旧前端误读 */
+      createdOrders: [] as string[],
+      pendingProcess,
       productInfoChanges,
     };
   });
@@ -1249,6 +1226,11 @@ export async function createReturn(tenantId: string, transferId: string, body: {
   const alreadyReturnedTotal = [...returnedByVar.values()].reduce((a, b) => a + b, 0);
   const thisReturn = cleanItems.reduce((s: number, i: any) => s + (Number(i.quantity) || 0), 0);
   if (totalDispatchedAccepted <= 0) throw new AppError(400, '没有已接受的发出批次，无法回传');
+  const acceptedDispatches = transfer.dispatches.filter(d => d.status === 'ACCEPTED' || d.status === 'FORWARDED');
+  const missingWo = acceptedDispatches.filter(d => !d.receiverProductionOrderId);
+  if (missingWo.length > 0) {
+    throw new AppError(400, '协作计划尚未下达工单，请先在生产计划中下达工单后再回传');
+  }
   for (const it of cleanItems) {
     const q = Number(it.quantity) || 0; const k = collabVariantKey(it); const cap = dispatchedByVar.get(k) ?? 0;
     if (cap <= 0) throw new AppError(400, `规格「${[it.colorName, it.sizeName].filter(Boolean).join('/') || '无规格'}」不在已发出明细中`);
@@ -1781,15 +1763,27 @@ export async function confirmDispatchAmendment(tenantId: string, dispatchId: str
   });
 
   let updatedOrderId: string | null = null;
+  let updatedPlanId: string | null = null;
   let orderItemsChanged = false;
+  let planItemsChanged = false;
   let quantityWarning: string | null = null;
 
-  if (dispatch.receiverProductionOrderId && newPayload?.items) {
-    const orderId = dispatch.receiverProductionOrderId;
+  const receiverProductId = dispatch.transfer.receiverProductId;
+  const planId = dispatch.receiverPlanOrderId;
+  const orderId = dispatch.receiverProductionOrderId;
+
+  if (planId && !orderId && newPayload?.items && receiverProductId) {
+    updatedPlanId = planId;
+    const allDispatches = await basePrisma.subcontractCollaborationDispatch.findMany({
+      where: { receiverPlanOrderId: planId, status: { in: ['ACCEPTED', 'FORWARDED'] } },
+    });
+    await rebuildPlanItemsFromDispatches(basePrisma, planId, tenantId, receiverProductId, allDispatches);
+    planItemsChanged = true;
+  }
+
+  if (orderId && newPayload?.items) {
     updatedOrderId = orderId;
 
-    const transfer = dispatch.transfer;
-    const receiverProductId = transfer.receiverProductId;
     if (receiverProductId) {
       // Delete ALL order items for this order, then rebuild from every dispatch's current payload.
       // This handles legacy items that lack sourceDispatchId (created before the field existed).
@@ -1807,6 +1801,15 @@ export async function confirmDispatchAmendment(tenantId: string, dispatchId: str
       }
       orderItemsChanged = true;
 
+      if (planId) {
+        updatedPlanId = planId;
+        const planDispatches = await basePrisma.subcontractCollaborationDispatch.findMany({
+          where: { receiverPlanOrderId: planId, status: { in: ['ACCEPTED', 'FORWARDED'] } },
+        });
+        await rebuildPlanItemsFromDispatches(basePrisma, planId, tenantId, receiverProductId, planDispatches);
+        planItemsChanged = true;
+      }
+
       const order = await basePrisma.productionOrder.findUnique({ where: { id: orderId }, include: { milestones: true } });
       if (order?.milestones) {
         for (const ms of order.milestones) {
@@ -1822,7 +1825,14 @@ export async function confirmDispatchAmendment(tenantId: string, dispatchId: str
     }
   }
 
-  return { success: true, updatedOrderId, orderItemsChanged, quantityWarning };
+  return {
+    success: true,
+    updatedOrderId,
+    updatedPlanId,
+    orderItemsChanged,
+    planItemsChanged,
+    quantityWarning,
+  };
 }
 
 export async function rejectDispatchAmendment(tenantId: string, dispatchId: string) {
@@ -2029,6 +2039,62 @@ export async function rejectReturnAmendment(tenantId: string, returnId: string) 
 
 type CollabOrderItemTx = Pick<typeof basePrisma, 'dictionaryItem' | 'productVariant' | 'orderItem'>;
 
+type CollabPlanItemTx = Pick<typeof basePrisma, 'dictionaryItem' | 'productVariant' | 'planItem'>;
+
+async function resolveVariantIdFromCollabItem(
+  tx: Pick<typeof basePrisma, 'dictionaryItem' | 'productVariant'>,
+  tenantId: string,
+  productId: string,
+  item: { quantity?: number; colorName?: string; sizeName?: string },
+  dictByName?: Map<string, string>,
+  variants?: Array<{ id: string; colorId: string | null; sizeId: string | null }>,
+): Promise<string | null> {
+  const dict =
+    dictByName ??
+    new Map((await tx.dictionaryItem.findMany({ where: { tenantId } })).map(d => [`${d.type}:${d.name}`, d.id]));
+  const vars = variants ?? (await tx.productVariant.findMany({ where: { productId } }));
+  const itemColor = normalizeSpecLabel(item.colorName);
+  const itemSize = normalizeSpecLabel(item.sizeName);
+  if (!itemColor && !itemSize) return null;
+  const colorId = itemColor ? dict.get(`color:${itemColor}`) ?? null : null;
+  const sizeId = itemSize ? dict.get(`size:${itemSize}`) ?? null : null;
+  return vars.find(v => (colorId ? v.colorId === colorId : !v.colorId) && (sizeId ? v.sizeId === sizeId : !v.sizeId))?.id ?? null;
+}
+
+/** 协作派发明细 → 计划明细（无 sourceDispatchId；修订时按计划全量重建） */
+async function createPlanItemsFromCollabPayload(
+  tx: CollabPlanItemTx,
+  planId: string,
+  tenantId: string,
+  productId: string,
+  items: any[],
+) {
+  const dictItems = await tx.dictionaryItem.findMany({ where: { tenantId } });
+  const dictByName = new Map(dictItems.map(d => [`${d.type}:${d.name}`, d.id]));
+  const variants = await tx.productVariant.findMany({ where: { productId } });
+  for (const item of items) {
+    if (!item.quantity || item.quantity <= 0) continue;
+    const variantId = await resolveVariantIdFromCollabItem(tx, tenantId, productId, item, dictByName, variants);
+    await tx.planItem.create({ data: { planOrderId: planId, variantId, quantity: item.quantity } });
+  }
+}
+
+async function rebuildPlanItemsFromDispatches(
+  tx: CollabPlanItemTx,
+  planId: string,
+  tenantId: string,
+  productId: string,
+  dispatches: Array<{ id: string; payload: unknown }>,
+) {
+  await tx.planItem.deleteMany({ where: { planOrderId: planId } });
+  for (const d of dispatches) {
+    const items = (d.payload as any)?.items ?? [];
+    if (items.length > 0) {
+      await createPlanItemsFromCollabPayload(tx, planId, tenantId, productId, items);
+    }
+  }
+}
+
 async function createOrderItemsWithSource(
   tx: CollabOrderItemTx,
   orderId: string,
@@ -2042,14 +2108,7 @@ async function createOrderItemsWithSource(
   const variants = await tx.productVariant.findMany({ where: { productId } });
   for (const item of items) {
     if (!item.quantity || item.quantity <= 0) continue;
-    let variantId: string | null = null;
-    const itemColor = normalizeSpecLabel(item.colorName);
-    const itemSize = normalizeSpecLabel(item.sizeName);
-    if (itemColor || itemSize) {
-      const colorId = itemColor ? dictByName.get(`color:${itemColor}`) ?? null : null;
-      const sizeId = itemSize ? dictByName.get(`size:${itemSize}`) ?? null : null;
-      variantId = variants.find(v => (colorId ? v.colorId === colorId : !v.colorId) && (sizeId ? v.sizeId === sizeId : !v.sizeId))?.id ?? null;
-    }
+    const variantId = await resolveVariantIdFromCollabItem(tx, tenantId, productId, item, dictByName, variants);
     await tx.orderItem.create({ data: { productionOrderId: orderId, variantId, quantity: item.quantity, sourceDispatchId } });
   }
 }

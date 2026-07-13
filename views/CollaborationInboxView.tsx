@@ -50,6 +50,7 @@ const CollaborationInboxView: React.FC = () => {
   const onRefreshPartners = a.refreshPartners;
   const onRefreshProducts = a.refreshProducts;
   const onRefreshOrders = a.refreshOrders;
+  const onRefreshPlans = a.refreshPlans;
   const onRefreshPMP = a.refreshPMP;
 
   const { tenantCtx, userId } = useAuth();
@@ -137,6 +138,7 @@ const CollaborationInboxView: React.FC = () => {
         refreshCollabs={s.refreshCollabs}
         onRefreshProdRecords={s.onRefreshProdRecords}
         onRefreshOrders={onRefreshOrders}
+        onRefreshPlans={onRefreshPlans}
         onRefreshPMP={onRefreshPMP}
         onRefreshProducts={onRefreshProducts}
         onRefreshPartners={onRefreshPartners}
@@ -173,6 +175,7 @@ const CollaborationInboxView: React.FC = () => {
       dictionaries,
       nodeTemplates,
       onRefreshOrders,
+      onRefreshPlans,
       onRefreshPMP,
       onRefreshProducts,
       onRefreshPartners,

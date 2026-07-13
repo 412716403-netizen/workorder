@@ -62,7 +62,7 @@ function resolveSubtitle(
  * - section 分派：customFieldsTable / standardFieldsList / printWhitelist / toggle / customSlot
  * - 内置 PlanPrintTemplateManageDialog 挂载：scope 由 printWhitelist 卡片触发；section.hideOptionalTemplateList 时可隐藏「可选模版」芯片区
  * - window.focus 刷新：当 schema 含任一 printWhitelist section 时自动启用
- * - 保存：先跑 `transformOnSave`，再 `onSave`；另起 `sideEffectSaves` 钩子支持多 key 写入
+ * - 自动保存：编辑停止 600ms 后先跑 `transformOnSave`，再 `onSave`；另起 `sideEffectSaves` 钩子支持多 key 写入
  */
 export function BusinessFormConfigModal<TSettings extends Record<string, unknown>>({
   open,
@@ -83,8 +83,13 @@ export function BusinessFormConfigModal<TSettings extends Record<string, unknown
   const [draft, setDraftState] = useState<TSettings | null>(null);
   const [tabId, setTabId] = useState<string>(() => defaultTabId ?? schema.tabs[0]?.id ?? '');
   const [activePrintSection, setActivePrintSection] = useState<FormConfigPrintWhitelistSection | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'pending' | 'saving' | 'error'>('saved');
   const wasOpenRef = useRef(false);
+  const draftRef = useRef<TSettings | null>(null);
+  const lastSavedSnapshotRef = useRef<string | null>(null);
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
+
+  const snapshot = useCallback((value: TSettings) => JSON.stringify(value), []);
 
   const hasAnyPrintWhitelist = useMemo(
     () => schema.tabs.some(t => t.sections.some(s => s.kind === 'printWhitelist')),
@@ -95,19 +100,81 @@ export function BusinessFormConfigModal<TSettings extends Record<string, unknown
 
   useEffect(() => {
     if (open && !wasOpenRef.current) {
-      setDraftState(schema.normalize(JSON.parse(JSON.stringify(initialValue))) as TSettings);
+      const normalized = schema.normalize(JSON.parse(JSON.stringify(initialValue))) as TSettings;
+      setDraftState(normalized);
+      draftRef.current = normalized;
+      lastSavedSnapshotRef.current = snapshot(normalized);
       const tabIds = new Set(schema.tabs.map(t => t.id));
       const fallback = schema.tabs[0]?.id ?? '';
       const want = defaultTabId ?? fallback;
       setTabId(tabIds.has(want) ? want : fallback);
-      setSaving(false);
+      setSaveStatus('saved');
     } else if (!open && wasOpenRef.current) {
       setDraftState(null);
+      draftRef.current = null;
+      lastSavedSnapshotRef.current = null;
       setActivePrintSection(null);
-      setSaving(false);
+      setSaveStatus('saved');
     }
     wasOpenRef.current = open;
-  }, [open, initialValue, defaultTabId, schema]);
+  }, [open, initialValue, defaultTabId, schema, snapshot]);
+
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
+
+  /**
+   * 同一弹窗内的保存严格串行，避免慢请求以旧草稿覆盖新草稿。
+   * 失败不会丢草稿；下次编辑或点击重试会再次提交最新值。
+   */
+  const enqueueSave = useCallback(async (value: TSettings): Promise<boolean> => {
+    const valueSnapshot = snapshot(value);
+    if (valueSnapshot === lastSavedSnapshotRef.current) return true;
+
+    const task = async (): Promise<boolean> => {
+      setSaveStatus('saving');
+      const transformed = schema.transformOnSave ? schema.transformOnSave(value) : value;
+      try {
+        await onSave(transformed);
+        if (schema.sideEffectSaves && onSideSave) {
+          for (const side of schema.sideEffectSaves) {
+            await onSideSave(side.key, side.build(value));
+          }
+        }
+        lastSavedSnapshotRef.current = valueSnapshot;
+        setSaveStatus(snapshot(draftRef.current ?? value) === valueSnapshot ? 'saved' : 'pending');
+        return true;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        toast.error(`自动保存失败：${msg}`);
+        setSaveStatus(snapshot(draftRef.current ?? value) === valueSnapshot ? 'error' : 'pending');
+        return false;
+      }
+    };
+
+    const result = saveQueueRef.current.then(task, task);
+    saveQueueRef.current = result.then(() => undefined, () => undefined);
+    return result;
+  }, [onSave, onSideSave, schema, snapshot]);
+
+  useEffect(() => {
+    if (!open || !draft) return;
+    if (snapshot(draft) === lastSavedSnapshotRef.current) return;
+    setSaveStatus('pending');
+    const timer = window.setTimeout(() => {
+      void enqueueSave(draft);
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [draft, enqueueSave, open, snapshot]);
+
+  const handleClose = useCallback(async () => {
+    const current = draftRef.current;
+    if (current && snapshot(current) !== lastSavedSnapshotRef.current) {
+      const saved = await enqueueSave(current);
+      if (!saved) return;
+    }
+    onClose();
+  }, [enqueueSave, onClose, snapshot]);
 
   const buildCtx = useCallback(
     (current: TSettings): FormConfigSlotContext<TSettings> => ({
@@ -115,14 +182,14 @@ export function BusinessFormConfigModal<TSettings extends Record<string, unknown
       setDraft: updater => setDraftState(d => (d ? updater(d) : d)),
       get: path => getByPath(current, path),
       set: (path, value) => setDraftState(d => (d ? (setByPath(d, path, value) as TSettings) : d)),
-      close: onClose,
+      close: () => { void handleClose(); },
       openPrintManage: scope => {
         const found = findPrintWhitelistSectionByScope(schema, scope);
         if (found) setActivePrintSection(found);
       },
       refreshPrintTemplates: () => onRefreshPrintTemplates?.() ?? undefined,
     }),
-    [onClose, schema, onRefreshPrintTemplates],
+    [handleClose, schema, onRefreshPrintTemplates],
   );
 
   if (!open || !draft) return null;
@@ -132,45 +199,9 @@ export function BusinessFormConfigModal<TSettings extends Record<string, unknown
   const tab = tabs.find(t => t.id === tabId) ?? tabs[0];
   const subtitle = resolveSubtitle(schema.subtitle, tab?.id);
 
-  const handleSave = async () => {
-    if (saving) return;
-    setSaving(true);
-    const transformed = schema.transformOnSave ? schema.transformOnSave(draft) : draft;
-    /**
-     * 保存管线（错误处理契约）
-     * - 主 onSave 失败：toast 提示，不跑 sideEffectSaves，不 onClose（保留用户编辑）
-     * - sideEffectSaves 中任一失败：toast 提示「主配置已保存，但 X 同步失败」，不 onClose
-     *   底层 SystemSetting upsert 不在事务里，主 + 副两步是独立请求，部分成功是真实可能性。
-     * - 全部成功才 onClose。saving 锁防止快速双击重复触发。
-     */
-    try {
-      await onSave(transformed);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      toast.error(`保存失败：${msg}`);
-      setSaving(false);
-      return;
-    }
-    if (schema.sideEffectSaves && onSideSave) {
-      for (const side of schema.sideEffectSaves) {
-        try {
-          await onSideSave(side.key, side.build(draft));
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
-          const name = side.label ?? side.key;
-          toast.error(`主配置已保存，但「${name}」同步失败，请稍后重新保存：${msg}`);
-          setSaving(false);
-          return;
-        }
-      }
-    }
-    setSaving(false);
-    onClose();
-  };
-
   return (
     <div className="fixed inset-0 z-[130] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} />
+      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => { void handleClose(); }} />
       <div className="relative flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-[32px] bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 px-8 py-6">
           <div>
@@ -179,7 +210,7 @@ export function BusinessFormConfigModal<TSettings extends Record<string, unknown
             </h3>
             {subtitle && <p className="mt-1 text-xs text-slate-500">{subtitle}</p>}
           </div>
-          <button onClick={onClose} className="rounded-full p-2 text-slate-400 hover:bg-slate-50 hover:text-slate-600">
+          <button onClick={() => { void handleClose(); }} className="rounded-full p-2 text-slate-400 hover:bg-slate-50 hover:text-slate-600">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -232,20 +263,22 @@ export function BusinessFormConfigModal<TSettings extends Record<string, unknown
           ))}
         </div>
 
-        <div className="flex justify-end gap-3 border-t border-slate-100 px-8 py-6">
+        <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-8 py-5">
+          <div className={`text-xs font-semibold ${saveStatus === 'error' ? 'text-rose-600' : saveStatus === 'saved' ? 'text-emerald-600' : 'text-slate-500'}`}>
+            {saveStatus === 'saving' && '正在保存…'}
+            {saveStatus === 'pending' && '更改将自动保存…'}
+            {saveStatus === 'saved' && '✓ 已保存'}
+            {saveStatus === 'error' && (
+              <button type="button" onClick={() => draftRef.current && void enqueueSave(draftRef.current)} className="font-bold underline underline-offset-2">
+                保存失败，点击重试
+              </button>
+            )}
+          </div>
           <button
-            onClick={onClose}
-            disabled={saving}
+            onClick={() => { void handleClose(); }}
             className="px-6 py-2.5 text-sm font-bold text-slate-500 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            取消
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex items-center gap-2 rounded-xl bg-indigo-600 px-8 py-2.5 text-sm font-bold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {saving ? '保存中…' : '保存配置'}
+            关闭
           </button>
         </div>
       </div>

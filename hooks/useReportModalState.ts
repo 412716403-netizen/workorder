@@ -244,7 +244,10 @@ export function useReportModalState(args: UseReportModalStateArgs) {
     setSessionProductIds([anchorProductId]);
     setProductForms({ [anchorProductId]: initial });
     setEntryTimestamp(defaultEntryDatetimeLocal());
-  }, [open, reportModal.order.id, reportModal.milestone.id, anchorProductId, buildInitialFormForProduct]);
+    // 故意不依赖 buildInitialFormForProduct：弹窗打开期间 refreshOrders 会使该回调换身份，
+    // 若重置表单会清空用户已填的生产人员/数量（约十几秒轮询或打开时立刻 sync 都会触发）。
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅在打开或切换工单/工序时重置
+  }, [open, reportModal.order.id, reportModal.milestone.id, anchorProductId]);
 
   /** 按节点 + 产品定位本工序适用 BOM;优先精确 variant,次选单 SKU */
   const resolveBomForProductVariant = useCallback(

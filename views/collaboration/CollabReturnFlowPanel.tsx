@@ -31,6 +31,7 @@ interface CollabReturnFlowPanelProps {
   onRefreshList?: () => Promise<void>;
   onRefreshProdRecords?: () => Promise<void>;
   onRefreshOrders?: () => Promise<void> | void;
+  onRefreshPlans?: () => Promise<void> | void;
   onRefreshPMP?: () => Promise<void> | void;
   onRefreshProducts?: () => Promise<void> | void;
 }
@@ -200,6 +201,7 @@ const CollabReturnFlowPanel: React.FC<CollabReturnFlowPanelProps> = ({
   onRefreshList,
   onRefreshProdRecords,
   onRefreshOrders,
+  onRefreshPlans,
   onRefreshPMP,
   onRefreshProducts,
 }) => {
@@ -223,7 +225,7 @@ const CollabReturnFlowPanel: React.FC<CollabReturnFlowPanelProps> = ({
 
   const handleDetailDone = async () => {
     await Promise.all(
-      [onRefreshList?.(), onRefreshProdRecords?.(), onRefreshOrders?.(), onRefreshPMP?.()].filter(Boolean) as Promise<void>[],
+      [onRefreshList?.(), onRefreshProdRecords?.(), onRefreshOrders?.(), onRefreshPlans?.(), onRefreshPMP?.()].filter(Boolean) as Promise<void>[],
     );
   };
 
@@ -426,6 +428,7 @@ const CollabReturnFlowPanel: React.FC<CollabReturnFlowPanelProps> = ({
             categories={categories}
             onRefreshList={() => { void onRefreshList?.(); }}
             onRefreshOrders={onRefreshOrders}
+            onRefreshPlans={onRefreshPlans}
             onRefreshProdRecords={onRefreshProdRecords}
             onRefreshPMP={onRefreshPMP}
             onRefreshProducts={onRefreshProducts}
@@ -477,6 +480,7 @@ const CollabReturnFlowPanel: React.FC<CollabReturnFlowPanelProps> = ({
           categories={categories}
           onRefreshList={() => { void onRefreshList?.(); }}
           onRefreshOrders={onRefreshOrders}
+          onRefreshPlans={onRefreshPlans}
           onRefreshProdRecords={onRefreshProdRecords}
           onRefreshPMP={onRefreshPMP}
           onRefreshProducts={onRefreshProducts}
