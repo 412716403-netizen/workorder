@@ -1278,6 +1278,8 @@ export interface PurchaseOrderPrintContext {
   operator?: string;
   docTotalQty: number;
   docTotalAmount: number;
+  /** 表头关联成品展示文案；占位符 {{采购订单.relatedProduct}}（存 customData.relatedProductId） */
+  relatedProduct?: string;
   custom?: Record<string, unknown>;
 }
 

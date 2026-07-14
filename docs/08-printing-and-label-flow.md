@@ -21,7 +21,7 @@
 | 环节 | 代表文件 | 作用 |
 |------|------|------|
 | 模板定义 | `types.ts` | 定义 `PrintTemplate`、元素类型、上下文类型 |
-| 模板编辑 | `views/PrintTemplateEditorView.tsx`、`components/print-editor/*` | 设计模板、调整元素 |
+| 模板编辑 | `views/PrintTemplateEditorView.tsx`、`components/print-editor/*` | 设计模板、调整元素；从模版管理点「可视化编辑」为**同 SPA** `navigate(/print-editor/:id)`（不再 `window.open` 新窗口冷启动），返回用历史回退 |
 | 纸张渲染 | `components/print-editor/PrintPaper.tsx` | 把模板渲染成可预览 / 可打印纸张 |
 | 打印触发 | `components/print-editor/PrintPreview.tsx` | 隐藏打印槽、浏览器打印、标签专用打印 |
 | 占位符解析 | `utils/printResolve.ts` | 把 `{{计划.planNumber}}` 等解析成真实文本 |
@@ -32,6 +32,7 @@
 
 ### 2.1 打印模版配置与历史系统模版 id 清理
 
+- **可视化编辑打开方式**：`PrintTemplateManager` 用当前窗口路由进入 `/print-editor/:id`，复用已加载的 Auth / `getConfig` / `printTemplates`。若直接打开或刷新该 URL（冷开），`AppData` 仍走 critical 批出壳，但跳过 products/boms 等 secondary；离开编辑页后再补拉主数据。
 - **`getConfig` / `updateConfig('printTemplates')`**：`shared/systemPrintTemplates.ts` 的 **`mergePrintTemplatesForTenantConfig`** / **`stripSystemPrintTemplatesForPersistence`** 在读写时过滤已废弃 id **`builtin-outsource-dispatch-v1`**（历史上曾代码统一下发的外协发出单模版，已删除），避免库内残留 JSON 仍出现在模版列表或写回数据库。
 - **统一下发外协发出单**：读配置时合并内置模版 **`builtin-outsource-dispatch-v2`**（241×140mm；列表显示名含「（颜色尺码）」）；写入 `printTemplates` 时剔除该 id，由读时再次注入，避免与租户 JSON 重复落库。
 - **统一下发外协收回单**：读配置时合并 **`builtin-outsource-receive-v2`**（241×140mm，动态列含单价/金额，表尾合计；显示名含「（颜色尺码）」）；持久化规则同上。
@@ -97,6 +98,8 @@ PrintRenderContext.virtualBatch
 **小计列（可选）**：「颜色尺码数量」矩阵列支持在尺码列后追加一列「小计」，按每个颜色行的各尺码数量求和显示。开关在动态列表列属性面板「列类型 = 颜色尺码数量」下的 **「尺码列后显示『小计』列」**（列字段 `matrixShowRowSubtotal`，缺省关闭；表头文案 `matrixRowSubtotalHeader`，缺省「小计」）。开启后矩阵块按「颜色 + N 个尺码 + 小计」均分列宽；逐行求和由纯函数 `colorSizeRowSubtotal`（`utils/colorSizeMatrixPrint.ts`）计算。该选项仅限颜色尺码矩阵，「颜色物料数量」矩阵不支持。
 
 **采购入库关联产品**（与表单配置「关联产品」开关联动）：开启后打印字段选项暴露 `{{采购入库.relatedProduct}}`（各行 `customData.relatedProductId` 去重汇总）、明细 `{{行.relatedProductName}}` / `{{行.relatedProductSku}}`。数据由 `utils/buildPurchaseBillPrintContext.ts` 与 `utils/purchaseBillRelatedProductPrint.ts` 组装；兼容占位符 `{{采购单.relatedProduct}}`。
+
+**采购订单关联产品**（与表单配置「关联产品」开关联动）：开启后打印字段选项暴露 `{{采购订单.relatedProduct}}`（表头 `customData.relatedProductId`，展示文案 `名称（货号）`）。数据由 `utils/buildPurchaseOrderPrintContext.ts` 组装。
 
 实现入口：`utils/buildSalesBillPrintContext.ts`（`buildSalesBillPrintListRowsByProductLine`、`buildMatrixJsonAndTotalQtyFromVariantLine`）、`utils/variantMatrixPrintRows.ts` 及各 `utils/build*PrintContext.ts`。
 

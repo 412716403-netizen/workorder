@@ -5,14 +5,6 @@
 const _require = require('./reworkPanelLite.js'),shouldShowOrderInIncompleteList = _require.shouldShowOrderInIncompleteList;
 const _require2 = require('./listProductThumb.js'),listProductNameSkuFields = _require2.listProductNameSkuFields;
 
-function orderCreatedMs(order) {
-  if (!order) return 0;
-  const raw = order.createdAt || order.created_at;
-  if (!raw) return 0;
-  const t = new Date(raw).getTime();
-  return Number.isNaN(t) ? 0 : t;
-}
-
 function milestoneIndexInOrder(order, nodeId) {
   const idx = (order && order.milestones || []).findIndex((m) => m.templateId === nodeId);
   return idx >= 0 ? idx : 999;
@@ -24,12 +16,15 @@ function milestoneIndexInProduct(product, nodeId) {
   return idx >= 0 ? idx : 999;
 }
 
-function productNewestOrderCreatedMs(productId, orders) {
+function latestDefectiveReportMs(reports) {
+  if (!reports || !reports.length) return 0;
   let max = 0;
-  (orders || []).forEach((o) => {
-    if (o.productId !== productId) return;
-    max = Math.max(max, orderCreatedMs(o));
-  });
+  for (let i = 0; i < reports.length; i++) {
+    const r = reports[i];
+    if ((Number(r.defectiveQuantity) || 0) <= 0) continue;
+    const t = Date.parse(r.timestamp || '');
+    if (!Number.isNaN(t) && t > max) max = t;
+  }
   return max;
 }
 
@@ -106,16 +101,17 @@ function buildReworkPendingRows(params) {
           reworkTotal,
           scrapTotal,
           pendingQty,
-          pendingQtyText: `${pendingQty} 件`
+          pendingQtyText: `${pendingQty} 件`,
+          latestDefectiveAtMs: latestDefectiveReportMs(ms.reports)
         });
       });
     });
 
     rows.sort((a, b) => {
+      const d = b.latestDefectiveAtMs - a.latestDefectiveAtMs;
+      if (d !== 0) return d;
       const oa = ordersById.get(a.orderId);
       const ob = ordersById.get(b.orderId);
-      const d = orderCreatedMs(ob) - orderCreatedMs(oa);
-      if (d !== 0) return d;
       const ma = milestoneIndexInOrder(oa, a.nodeId);
       const mb = milestoneIndexInOrder(ob, b.nodeId);
       if (ma !== mb) return ma - mb;
@@ -126,10 +122,16 @@ function buildReworkPendingRows(params) {
 
   const prodKey = (productId, nodeId) => `${productId}|${nodeId}`;
   const defectiveMap = new Map();
+  const latestDefectiveAtMap = new Map();
+  const bumpLatest = (k, reports) => {
+    const t = latestDefectiveReportMs(reports);
+    if (t > (latestDefectiveAtMap.get(k) || 0)) latestDefectiveAtMap.set(k, t);
+  };
   (productMilestoneProgresses || []).forEach((pmp) => {
     const k = prodKey(pmp.productId, pmp.milestoneTemplateId);
     const d = (pmp.reports || []).reduce((s, r) => {var _r$defectiveQuantity2;return s + ((_r$defectiveQuantity2 = r.defectiveQuantity) != null ? _r$defectiveQuantity2 : 0);}, 0);
     defectiveMap.set(k, (defectiveMap.get(k) || 0) + d);
+    bumpLatest(k, pmp.reports);
   });
   (orders || []).forEach((order) => {
     (order.milestones || []).forEach((ms) => {
@@ -137,6 +139,7 @@ function buildReworkPendingRows(params) {
       if (d <= 0) return;
       const k = prodKey(order.productId, ms.templateId);
       defectiveMap.set(k, (defectiveMap.get(k) || 0) + d);
+      bumpLatest(k, ms.reports);
     });
   });
 
@@ -195,6 +198,7 @@ function buildReworkPendingRows(params) {
       scrapTotal,
       pendingQty,
       pendingQtyText: `${pendingQty} 件`,
+      latestDefectiveAtMs: latestDefectiveAtMap.get(key) || 0,
       productOrderCount: cnt,
       productOrdersLine,
       productOrdersTitle: parentNos.length ? productOrdersTitle : undefined
@@ -202,8 +206,7 @@ function buildReworkPendingRows(params) {
   });
 
   rows.sort((a, b) => {
-    const d = productNewestOrderCreatedMs(b.productId, orders) -
-    productNewestOrderCreatedMs(a.productId, orders);
+    const d = b.latestDefectiveAtMs - a.latestDefectiveAtMs;
     if (d !== 0) return d;
     if (a.productId !== b.productId) return a.productId.localeCompare(b.productId);
     const pa = productsById.get(a.productId);

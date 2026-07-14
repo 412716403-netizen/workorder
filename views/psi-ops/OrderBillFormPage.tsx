@@ -47,6 +47,7 @@ import { toast } from 'sonner';
 import * as api from '../../services/api';
 import { categoryUsesBatchManagement } from '../../types';
 import { validatePsiOrderSave } from '../../utils/psiOrderLineSave';
+import { resolvePreservedPsiLineRecordId } from '../../utils/resolvePreservedPsiLineRecordId';
 
 type FormType = 'PURCHASE_ORDER' | 'PURCHASE_BILL' | 'SALES_ORDER' | 'SALES_BILL';
 
@@ -791,6 +792,8 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
 
       const newRecords: Partial<PsiRecord>[] = [];
       let recIdx = 0;
+      /** 编辑保存须复用原行 PsiRecord.id，否则已引用生成的采购入库 sourceLineId 会断链 */
+      const usedPoRecordIds = new Set<string>();
       purchaseOrderItems.forEach((item) => {
         if (!item.productId) return;
         const price = item.purchasePrice || 0;
@@ -798,8 +801,16 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
           Object.entries(item.variantQuantities).forEach(([variantId, qty]: [string, number]) => {
             if (!qty || qty <= 0) return;
             const amount = qty * price;
+            const fallbackId = `psi-po-${Date.now()}-${recIdx++}`;
             newRecords.push({
-              id: `psi-po-${Date.now()}-${recIdx++}`,
+              id: resolvePreservedPsiLineRecordId({
+                type: 'PURCHASE_ORDER',
+                sourceRecordIds: item.sourceRecordIds,
+                variantId,
+                records: recordsList,
+                usedIds: usedPoRecordIds,
+                fallbackId,
+              }),
               type: 'PURCHASE_ORDER',
               docNumber,
               timestamp,
@@ -821,8 +832,16 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
           });
         } else if ((item.quantity ?? 0) > 0) {
           const amount = item.quantity! * price;
+          const fallbackId = `psi-po-${Date.now()}-${recIdx++}`;
           newRecords.push({
-            id: `psi-po-${Date.now()}-${recIdx++}`,
+            id: resolvePreservedPsiLineRecordId({
+              type: 'PURCHASE_ORDER',
+              sourceRecordIds: item.sourceRecordIds,
+              variantId: undefined,
+              records: recordsList,
+              usedIds: usedPoRecordIds,
+              fallbackId,
+            }),
             type: 'PURCHASE_ORDER',
             docNumber,
             timestamp,

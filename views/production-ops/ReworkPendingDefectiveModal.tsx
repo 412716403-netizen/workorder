@@ -101,7 +101,8 @@ const ReworkPendingDefectiveModal: React.FC<ReworkPendingDefectiveModalProps> = 
 
   const displayReworkPendingRows = React.useMemo(() => {
     return [...filteredReworkPendingRows].sort((a, b) => {
-      if (b.pendingQty !== a.pendingQty) return b.pendingQty - a.pendingQty;
+      const d = (b.latestDefectiveAtMs ?? 0) - (a.latestDefectiveAtMs ?? 0);
+      if (d !== 0) return d;
       const aKey = a.scope === 'order' ? a.orderNumber : a.productName;
       const bKey = b.scope === 'order' ? b.orderNumber : b.productName;
       return (aKey || '').localeCompare(bKey || '', 'zh-CN');
@@ -134,8 +135,8 @@ const ReworkPendingDefectiveModal: React.FC<ReworkPendingDefectiveModalProps> = 
             <h3 className="text-lg font-black text-slate-900 flex items-center gap-2"><ClipboardList className="w-5 h-5 text-indigo-600 shrink-0" /> 待处理不良</h3>
             <p className="text-[11px] text-slate-500 mt-1 leading-relaxed hidden sm:block">
               {productionLinkMode === 'product'
-                ? '合并产品工序与各工单报工不良；单号支持工单号或报工单号 BG…。列表按「待返工」从高到低排列。'
-                : '扣除已返工/报损后的待处理数量；单号支持工单号或报工单号。按待返工数量优先显示。'}
+                ? '合并产品工序与各工单报工不良；单号支持工单号或报工单号 BG…。最近提交的不良排在前面。'
+                : '扣除已返工/报损后的待处理数量；单号支持工单号或报工单号。最近提交的不良排在前面。'}
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">

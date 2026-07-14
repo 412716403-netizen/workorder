@@ -395,6 +395,19 @@ function buildPendingPoLineUi(item, docNumber, ctx) {
   };
 }
 
+function relatedProductTextFromPoItems(items, productMap) {
+  for (let i = 0; i < (items || []).length; i++) {
+    const cd = items[i] && items[i].customData;
+    if (!cd || typeof cd !== 'object') continue;
+    const id = String(cd.relatedProductId || '').trim();
+    if (!id) continue;
+    const p = productMap && productMap.get ? productMap.get(id) : null;
+    if (p) return p.sku ? `${p.name || '—'}（${p.sku}）` : p.name || id;
+    return id;
+  }
+  return '';
+}
+
 function buildPendingPoDocs(purchaseOrders, receivedByOrderLine, ctx) {
   const groups = {};
   (purchaseOrders || []).forEach((r) => {
@@ -404,6 +417,7 @@ function buildPendingPoDocs(purchaseOrders, receivedByOrderLine, ctx) {
     groups[key].push(r);
   });
 
+  const productMap = ctx && ctx.productMap;
   const docs = [];
   Object.entries(groups).forEach(([docNumber, items]) => {
     if (!purchaseOrderDocHasUnsettled(docNumber, items, receivedByOrderLine)) return;
@@ -414,10 +428,12 @@ function buildPendingPoDocs(purchaseOrders, receivedByOrderLine, ctx) {
       if (line) lines.push(line);
     });
     if (!lines.length) return;
+    const relatedProductText = relatedProductTextFromPoItems(items, productMap);
     docs.push({
       docNumber,
       partner: String(first.partner || '').trim() || '—',
       lineCount: lines.length,
+      relatedProductText,
       expanded: false,
       lines
     });
@@ -430,11 +446,11 @@ function filterPendingPoDocs(docs, keyword) {
   const kw = String(keyword || '').trim().toLowerCase();
   if (!kw) return docs || [];
   return (docs || []).filter((doc) => {
-    const fields = [doc.docNumber, doc.partner];
+    const fields = [doc.docNumber, doc.partner, doc.relatedProductText];
     (doc.lines || []).forEach((l) => {
-      fields.push(l.productName, l.productSku);
+      fields.push(l.productName, l.productSku, l.variantLabel);
     });
-    return fields.some((f) => f && String(f).toLowerCase().includes(kw));
+    return fields.filter(Boolean).join(' ').toLowerCase().includes(kw);
   });
 }
 

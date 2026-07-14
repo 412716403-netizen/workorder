@@ -94,6 +94,8 @@ export function buildPrintFieldOptions(opts: {
   showPlanDeliveryDate?: boolean;
   /** 与采购入库表单配置「关联产品」联动；为 true 时开放关联产品表头/明细字段 */
   showPurchaseBillRelatedProduct?: boolean;
+  /** 与采购订单表单配置「关联产品」联动；为 true 时开放 {{采购订单.relatedProduct}} */
+  showPurchaseOrderRelatedProduct?: boolean;
   /** 外协收回自定义；{{外协收回.custom.<id>}} */
   outsourceReceiveCustomFields?: PlanFormFieldConfig[];
   /** 返工管理：处理不良自定义；{{处理不良.custom.<id>}} */
@@ -123,6 +125,7 @@ export function buildPrintFieldOptions(opts: {
   const showOutsourceDispatchDeliveryDate = opts.showOutsourceDispatchDeliveryDate === true;
   const showPlanDeliveryDate = opts.showPlanDeliveryDate === true;
   const showPurchaseBillRelatedProduct = opts.showPurchaseBillRelatedProduct === true;
+  const showPurchaseOrderRelatedProduct = opts.showPurchaseOrderRelatedProduct === true;
   const outsourceReceiveCustomFields = opts.outsourceReceiveCustomFields ?? [];
   const defectTreatmentCustomFields = opts.defectTreatmentCustomFields ?? [];
   const reworkReportCustomFields = opts.reworkReportCustomFields ?? [];
@@ -223,6 +226,9 @@ export function buildPrintFieldOptions(opts: {
     { group: '采购订单', value: '采购订单.operator', label: '经办' },
     { group: '采购订单', value: '采购订单.docTotalQty', label: '本单总件数' },
     { group: '采购订单', value: '采购订单.docTotalAmount', label: '本单总金额' },
+    ...(showPurchaseOrderRelatedProduct
+      ? [{ group: '采购订单' as const, value: '采购订单.relatedProduct', label: '关联产品' }]
+      : []),
   ];
   const purchaseOrderCustom: PrintFieldOption[] = purchaseOrderCustomFields.map(f =>
     planFormCustomPrintField('采购订单', '采购订单', f),

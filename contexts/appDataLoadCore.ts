@@ -133,14 +133,30 @@ export interface AppDataLoadCoreSetters {
  * - critical 批（阻塞全屏 spinner）：getConfig + 分类 + 工序节点 + 仓库——都是小请求，1~2s 内出壳；
  * - secondary 批（出壳后后台补齐）：products/boms/partners/字典/成员/设备等大数据，
  *   完成后置 masterDataReady=true，页面可据此区分「加载中」与「暂无数据」。
+ * - skipSecondary：打印编辑冷开路径（`/print-editor/*`）可跳过 secondary，出壳后即可用；
+ *   离开编辑页时由 AppDataContext 补拉。
  */
 export async function executeAppDataLoadCore(
   activeTenantId: string,
   cancelled: () => boolean,
   s: AppDataLoadCoreSetters,
+  opts?: { skipSecondary?: boolean },
 ): Promise<void> {
   await loadCriticalBatch(cancelled, s);
   if (cancelled()) return;
+  if (opts?.skipSecondary) {
+    if (!cancelled()) s.setMasterDataReady(true);
+    return;
+  }
+  await loadSecondaryBatch(activeTenantId, cancelled, s);
+}
+
+/** 供打印编辑冷开跳过 secondary 后、离开编辑页时补齐主数据 */
+export async function executeAppDataSecondaryLoad(
+  activeTenantId: string,
+  cancelled: () => boolean,
+  s: AppDataLoadCoreSetters,
+): Promise<void> {
   await loadSecondaryBatch(activeTenantId, cancelled, s);
 }
 

@@ -48,6 +48,8 @@ export type ReworkPendingRow = {
   reworkTotal: number;
   scrapTotal: number;
   pendingQty: number;
+  /** 该工序最近一次含不良品的报工时间（ms），列表按提交先后倒序 */
+  latestDefectiveAtMs: number;
   productOrderCount?: number;
   productOrdersLine?: string;
   productOrdersTitle?: string;

@@ -150,6 +150,8 @@ function purchaseOrderField(po: PurchaseOrderPrintContext, key: string): unknown
       return String(Math.round(Number(po.docTotalQty) || 0));
     case 'docTotalAmount':
       return fmtMoney(Number(po.docTotalAmount) || 0);
+    case 'relatedProduct':
+      return po.relatedProduct ?? '';
     default:
       if (key.startsWith('custom.')) {
         const id = key.slice('custom.'.length);

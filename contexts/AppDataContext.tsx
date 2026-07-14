@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from './AuthContext';
@@ -91,6 +92,7 @@ import {
 import {
   mergeById,
   executeAppDataLoadCore,
+  executeAppDataSecondaryLoad,
   executeAppDataDeferredLoad,
 } from './appDataLoadCore';
 
@@ -465,6 +467,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [productMilestoneProgresses, setProductMilestoneProgresses] = useState<ProductMilestoneProgress[]>([]);
 
   const activeTenantId = tenantCtx?.tenantId;
+  const location = useLocation();
+  /** 打印编辑冷开时跳过了 secondary；离开编辑页后补拉一次 */
+  const secondaryDeferredRef = useRef(false);
 
   // ── Initial data loading (core data only — heavy data loaded on demand) ──
   // App.tsx 通过 `key={`${userId}_${tenantCtx.tenantId}`}` 重建整个 Provider 子树，
@@ -477,45 +482,49 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     setDataLoading(true);
+    const skipSecondary = location.pathname.startsWith('/print-editor');
+    secondaryDeferredRef.current = skipSecondary;
+
+    const setters = {
+      setDataLoading,
+      setMasterDataReady,
+      setFeaturePlugins,
+      setProductionLinkMode,
+      setAllowExceedMaxReportQty,
+      setAllowExceedMaxOutsourceReceiveQty,
+      setAllowExceedMaxStockInQty,
+      setWeightTolerancePercent,
+      setProductEconomicsSettings,
+      setPlanFormSettings,
+      setOrderFormSettings,
+      setPurchaseOrderFormSettings,
+      setSalesOrderFormSettings,
+      setPurchaseBillFormSettings,
+      setSalesBillFormSettings,
+      setReceiptFormSettings,
+      setPaymentFormSettings,
+      setMaterialPanelSettings,
+      setMaterialFormSettings,
+      setOutsourceFormSettings,
+      setReworkFormSettings,
+      setPrintTemplates,
+      setCategories,
+      setPartnerCategories,
+      setGlobalNodes,
+      setWarehouses,
+      setFinanceCategories,
+      setFinanceAccountTypes,
+      setPartners,
+      setDictionaries,
+      setProducts,
+      setBoms,
+      setWorkers,
+      setEquipment,
+    };
 
     (async () => {
       try {
-        await executeAppDataLoadCore(activeTenantId, () => cancelled, {
-          setDataLoading,
-          setMasterDataReady,
-          setFeaturePlugins,
-          setProductionLinkMode,
-          setAllowExceedMaxReportQty,
-          setAllowExceedMaxOutsourceReceiveQty,
-          setAllowExceedMaxStockInQty,
-          setWeightTolerancePercent,
-          setProductEconomicsSettings,
-          setPlanFormSettings,
-          setOrderFormSettings,
-          setPurchaseOrderFormSettings,
-          setSalesOrderFormSettings,
-          setPurchaseBillFormSettings,
-          setSalesBillFormSettings,
-          setReceiptFormSettings,
-          setPaymentFormSettings,
-          setMaterialPanelSettings,
-          setMaterialFormSettings,
-          setOutsourceFormSettings,
-          setReworkFormSettings,
-          setPrintTemplates,
-          setCategories,
-          setPartnerCategories,
-          setGlobalNodes,
-          setWarehouses,
-          setFinanceCategories,
-          setFinanceAccountTypes,
-          setPartners,
-          setDictionaries,
-          setProducts,
-          setBoms,
-          setWorkers,
-          setEquipment,
-        });
+        await executeAppDataLoadCore(activeTenantId, () => cancelled, setters, { skipSecondary });
       } catch (err) {
         console.error('数据加载失败', err);
       } finally {
@@ -527,7 +536,63 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       }
     })();
     return () => { cancelled = true; };
+    // 仅租户就绪时拉首屏；pathname 变化不重跑整套冷启动（由下方 effect 补 secondary）
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: mount/tenant only
   }, [activeTenantId]);
+
+  // 打印编辑冷开跳过了 products 等 secondary：一旦离开 /print-editor，补拉主数据
+  useEffect(() => {
+    if (!activeTenantId) return;
+    if (location.pathname.startsWith('/print-editor')) return;
+    if (!secondaryDeferredRef.current) return;
+    secondaryDeferredRef.current = false;
+    let cancelled = false;
+    setMasterDataReady(false);
+    void executeAppDataSecondaryLoad(
+      activeTenantId,
+      () => cancelled,
+      {
+        setDataLoading,
+        setMasterDataReady,
+        setFeaturePlugins,
+        setProductionLinkMode,
+        setAllowExceedMaxReportQty,
+        setAllowExceedMaxOutsourceReceiveQty,
+        setAllowExceedMaxStockInQty,
+        setWeightTolerancePercent,
+        setProductEconomicsSettings,
+        setPlanFormSettings,
+        setOrderFormSettings,
+        setPurchaseOrderFormSettings,
+        setSalesOrderFormSettings,
+        setPurchaseBillFormSettings,
+        setSalesBillFormSettings,
+        setReceiptFormSettings,
+        setPaymentFormSettings,
+        setMaterialPanelSettings,
+        setMaterialFormSettings,
+        setOutsourceFormSettings,
+        setReworkFormSettings,
+        setPrintTemplates,
+        setCategories,
+        setPartnerCategories,
+        setGlobalNodes,
+        setWarehouses,
+        setFinanceCategories,
+        setFinanceAccountTypes,
+        setPartners,
+        setDictionaries,
+        setProducts,
+        setBoms,
+        setWorkers,
+        setEquipment,
+      },
+    ).catch(err => {
+      console.error('主数据补载失败', err);
+      if (!cancelled) setMasterDataReady(true);
+    });
+    return () => { cancelled = true; };
+  }, [activeTenantId, location.pathname]);
 
   // ── Incremental sync timestamps ──
   const lastFetchTs = useRef<Record<string, string>>({});

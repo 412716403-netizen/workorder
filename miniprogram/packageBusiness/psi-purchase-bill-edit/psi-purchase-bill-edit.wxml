@@ -196,7 +196,7 @@
             class="pb-from-order-search__input"
             value="{{fromOrderSearch}}"
             bindinput="onFromOrderSearchInput"
-            placeholder="搜索订单号 / 供应商 / 产品"
+            placeholder="搜索订单号 / 供应商 / 关联产品 / 产品"
           />
         </view>
 
@@ -204,9 +204,13 @@
 
         <view wx:for="{{pendingPoDocs}}" wx:key="docNumber" class="pb-po-doc">
           <view class="pb-po-doc__head" data-doc-number="{{item.docNumber}}" bindtap="onPoDocToggle">
-            <view>
+            <view class="pb-po-doc__head-main">
               <text class="pb-po-doc__title">{{item.docNumber}}</text>
-              <view class="pb-po-doc__meta">{{item.partner}} · {{item.lineCount}} 项待入</view>
+              <view class="pb-po-doc__meta">
+                {{item.partner}}
+                <text wx:if="{{item.relatedProductText}}" class="pb-po-doc__related"> · 关联 {{item.relatedProductText}}</text>
+                · {{item.lineCount}} 项待入
+              </view>
             </view>
             <text>{{item.expanded ? '▾' : '▸'}}</text>
           </view>

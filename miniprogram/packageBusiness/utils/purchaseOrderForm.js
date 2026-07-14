@@ -189,6 +189,22 @@ function buildHeaderCustomData(existingRecords, editingDocNumber) {
   return out;
 }
 
+function resolvePreservedPoRecordId(existingRecords, sourceRecordIds, variantId, usedIds, fallbackId) {
+  const ids = (sourceRecordIds || []).filter(Boolean);
+  if (!ids.length) return fallbackId;
+  const idSet = new Set(ids);
+  const candidate = (existingRecords || []).find(
+    (r) =>
+      r.type === 'PURCHASE_ORDER' &&
+      idSet.has(r.id) &&
+      !usedIds.has(r.id) &&
+      (variantId ? r.variantId === variantId : !r.variantId)
+  );
+  if (!candidate) return fallbackId;
+  usedIds.add(candidate.id);
+  return candidate.id;
+}
+
 function buildPurchaseOrderSaveRecords(opts) {
   const
     form =
@@ -205,6 +221,8 @@ function buildPurchaseOrderSaveRecords(opts) {
   const headerCustomData = buildHeaderCustomData(existingRecords, editingDocNumber);
   const newRecords = [];
   let recIdx = 0;
+  /** 编辑保存复用原行 id，保持采购入库 sourceLineId 关联 */
+  const usedPoRecordIds = new Set();
 
   (lines || []).forEach((item) => {
     if (!item.productId) return;
@@ -213,8 +231,15 @@ function buildPurchaseOrderSaveRecords(opts) {
       Object.entries(item.variantQuantities).forEach(([variantId, qty]) => {
         const n = Number(qty) || 0;
         if (n <= 0) return;
+        const fallbackId = `psi-po-${Date.now()}-${recIdx++}`;
         newRecords.push({
-          id: `psi-po-${Date.now()}-${recIdx++}`,
+          id: resolvePreservedPoRecordId(
+            existingRecords,
+            item.sourceRecordIds,
+            variantId,
+            usedPoRecordIds,
+            fallbackId
+          ),
           type: 'PURCHASE_ORDER',
           docNumber,
           timestamp,
@@ -236,8 +261,15 @@ function buildPurchaseOrderSaveRecords(opts) {
     } else {
       const qty = Number(item.quantity) || 0;
       if (qty <= 0) return;
+      const fallbackId = `psi-po-${Date.now()}-${recIdx++}`;
       newRecords.push({
-        id: `psi-po-${Date.now()}-${recIdx++}`,
+        id: resolvePreservedPoRecordId(
+          existingRecords,
+          item.sourceRecordIds,
+          undefined,
+          usedPoRecordIds,
+          fallbackId
+        ),
         type: 'PURCHASE_ORDER',
         docNumber,
         timestamp,

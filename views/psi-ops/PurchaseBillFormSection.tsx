@@ -62,6 +62,7 @@ import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldCo
 import DocEntryTimeField from '../../components/DocEntryTimeField';
 import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
 import { formatPsiDocNumForList } from './psiOpsListFormatting';
+import { formatRelatedProductDisplayText } from '../../utils/purchaseBillRelatedProductPrint';
 
 export interface PurchaseBillLineItem {
   id: string;
@@ -177,6 +178,14 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
 
   const getReceivedQty = (docNum: string, lineId: string) => receivedByOrderLine[`${docNum}::${lineId}`] ?? 0;
 
+  const readPoLineRelatedId = (row: { customData?: unknown }): string => {
+    const cd = row?.customData;
+    if (!cd || typeof cd !== 'object' || Array.isArray(cd)) return '';
+    return String((cd as Record<string, unknown>).relatedProductId ?? '').trim();
+  };
+
+  const formatRelatedProductLine = (id: string) => formatRelatedProductDisplayText(id, productMapPSI) || id;
+
   const pendingPOs = useMemo(() => {
     return Object.entries(allPOByGroups).filter(([, items]) => {
       return items.some((item: any) => {
@@ -191,8 +200,17 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
     if (!q) return pendingPOs;
     return pendingPOs.filter(([docNum, items]) => {
       const parts: string[] = [docNum, formatPsiDocNumForList(docNum)];
-      const first = items[0] as { partner?: string } | undefined;
+      const first = items[0] as { partner?: string; customData?: unknown } | undefined;
       if (first?.partner) parts.push(String(first.partner));
+      const relatedId = readPoLineRelatedId(first ?? {});
+      if (relatedId) {
+        parts.push(relatedId);
+        const relatedText = formatRelatedProductDisplayText(relatedId, productMapPSI);
+        if (relatedText) parts.push(relatedText);
+        const rp = productMapPSI.get(relatedId);
+        if (rp?.name) parts.push(rp.name);
+        if (rp?.sku) parts.push(rp.sku);
+      }
       for (const it of items as { productId?: string }[]) {
         const p = it.productId ? productMapPSI.get(it.productId) : undefined;
         if (p?.name) parts.push(p.name);
@@ -235,18 +253,6 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
   const previewPbFromOrder = !editingDocNumber && firstSelectedPOItem
     ? generatePBDocNumber(String(firstSelectedPOItem.partnerId || ''), String(firstSelectedPOItem.partner || ''))
     : undefined;
-
-  const readPoLineRelatedId = (row: { customData?: unknown }): string => {
-    const cd = row?.customData;
-    if (!cd || typeof cd !== 'object' || Array.isArray(cd)) return '';
-    return String((cd as Record<string, unknown>).relatedProductId ?? '').trim();
-  };
-
-  const formatRelatedProductLine = (id: string) => {
-    const p = productMapPSI.get(id);
-    if (p) return p.sku ? `${p.name || '—'}（${p.sku}）` : (p.name || id);
-    return id;
-  };
 
   const handleConvertPOToBill = () => {
     if (!form.warehouseId) {
@@ -691,7 +697,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                     type="search"
                     value={fromOrderPODocSearch}
                     onChange={e => setFromOrderPODocSearch(e.target.value)}
-                    placeholder="搜索单号、供应商或订单内品名/SKU…"
+                    placeholder="搜索单号、供应商、关联产品或订单内品名/SKU…"
                     className={`w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-800 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-indigo-500`}
                   />
                 </div>
@@ -702,9 +708,14 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                   {filteredPendingPOs.map(([docNum, items]) => {
                     const isSelected = selectedPOOrderNums.includes(docNum);
                     const partnerName = items[0]?.partner;
+                    const relatedId = readPoLineRelatedId(items[0] ?? {});
+                    const relatedProductText = relatedId
+                      ? formatRelatedProductDisplayText(relatedId, productMapPSI)
+                      : '';
                     return (
                       <button
                         key={docNum}
+                        type="button"
                         onClick={() => {
                           if (selectedPOOrderNums.length > 0) {
                             const currentPartner = allPOByGroups[selectedPOOrderNums[0]][0]?.partner;
@@ -715,13 +726,18 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                           }
                           setSelectedPOOrderNums(prev => prev.includes(docNum) ? prev.filter(n => n !== docNum) : [...prev, docNum]);
                         }}
-                        className={`p-3 rounded-2xl border-2 text-left transition-all flex items-center justify-between ${isSelected ? 'border-indigo-600 bg-indigo-50' : 'border-slate-50 bg-slate-50 hover:border-indigo-200'}`}
+                        className={`p-3 rounded-2xl border-2 text-left transition-all flex items-center justify-between gap-2 ${isSelected ? 'border-indigo-600 bg-indigo-50' : 'border-slate-50 bg-slate-50 hover:border-indigo-200'}`}
                       >
-                        <div>
-                          <p className="text-sm font-black text-slate-800">{docNum}</p>
-                          <p className="text-[10px] text-slate-400 font-bold uppercase">{partnerName}</p>
+                        <div className="min-w-0">
+                          <p className="text-sm font-black text-slate-800 truncate">{docNum}</p>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase truncate">
+                            {partnerName}
+                            {relatedProductText ? (
+                              <span className="normal-case text-violet-600"> · 关联 {relatedProductText}</span>
+                            ) : null}
+                          </p>
                         </div>
-                        {isSelected ? <CheckSquare className="w-5 h-5 text-indigo-600" /> : <Square className="w-5 h-5 text-slate-200" />}
+                        {isSelected ? <CheckSquare className="w-5 h-5 text-indigo-600 shrink-0" /> : <Square className="w-5 h-5 text-slate-200 shrink-0" />}
                       </button>
                     );
                   })}

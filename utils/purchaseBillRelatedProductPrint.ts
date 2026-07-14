@@ -26,6 +26,21 @@ export function aggregatePurchaseBillRelatedProductListText(
     .join('、');
 }
 
+/**
+ * 单条关联成品展示文案（采购订单表头等）；无 id 返回空串。
+ * 格式与列表一致：`名称（货号）`；找不到产品时回退为 id。
+ */
+export function formatRelatedProductDisplayText(
+  relatedProductId: string | undefined | null,
+  productMap?: Map<string, Product>,
+): string {
+  const id = String(relatedProductId ?? '').trim();
+  if (!id) return '';
+  const p = productMap?.get(id);
+  if (!p) return id;
+  return p.sku ? `${p.name || '—'}（${p.sku}）` : (p.name || id);
+}
+
 /** 行级关联成品名称；无关联或查不到时返回空串 */
 export function relatedProductNameForPrint(
   relatedProductId: string | undefined,

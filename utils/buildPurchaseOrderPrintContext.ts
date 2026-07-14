@@ -1,5 +1,6 @@
 import type { AppDictionaries, PrintListRow, PrintRenderContext, Product, PurchaseOrderPrintContext, PsiRecord } from '../types';
 import { buildSalesBillPrintListRowsByProductLine, type SalesBillLineInput } from './buildSalesBillPrintContext';
+import { formatRelatedProductDisplayText } from './purchaseBillRelatedProductPrint';
 import { sumPsiLineQty, sumPsiLineAmount, groupPsiDocLines } from './psiPrintShared';
 
 export type PurchaseOrderLineInput = {
@@ -43,12 +44,18 @@ export function buildPurchaseOrderPrintRenderContext(params: {
   const printListRows = buildPurchaseOrderPrintListRows(lines, productMap, dictionaries);
   const firstProductId = lines.find(l => l.productId)?.productId;
   const product = firstProductId ? productMap.get(firstProductId) : undefined;
+  const relatedProductId =
+    customData && typeof customData === 'object'
+      ? String((customData as Record<string, unknown>).relatedProductId ?? '').trim()
+      : '';
+  const relatedProduct = formatRelatedProductDisplayText(relatedProductId, productMap);
   const purchaseOrderPrint: PurchaseOrderPrintContext = {
     docNumber,
     partner,
     operator: operator ?? '',
     docTotalQty: sumPsiLineQty(lines, productMap),
     docTotalAmount: sumPsiLineAmount(lines, productMap, l => Number(l.purchasePrice) || 0),
+    ...(relatedProduct ? { relatedProduct } : {}),
     custom: customData && Object.keys(customData).length > 0 ? { ...customData } : undefined,
   };
   return {

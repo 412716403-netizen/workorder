@@ -252,6 +252,7 @@ export default function PrintTemplateEditorView() {
         purchaseOrderCustomFields: purchaseOrderFormSettings.customFields,
         salesOrderCustomFields: salesOrderFormSettings.customFields,
         purchaseBillCustomFields: purchaseBillFormSettings.customFields,
+        showPurchaseOrderRelatedProduct: purchaseOrderFormSettings.relatedProductEnabled === true,
         showPurchaseBillRelatedProduct: purchaseBillFormSettings.relatedProductEnabled === true,
         salesBillCustomFields: salesBillFormSettings.customFields,
         financeCategories,
@@ -271,6 +272,7 @@ export default function PrintTemplateEditorView() {
       reworkFormSettings.defectTreatmentCustomFields,
       reworkFormSettings.reworkReportCustomFields,
       purchaseOrderFormSettings.customFields,
+      purchaseOrderFormSettings.relatedProductEnabled,
       salesOrderFormSettings.customFields,
       purchaseBillFormSettings.customFields,
       purchaseBillFormSettings.relatedProductEnabled,
@@ -538,6 +540,15 @@ export default function PrintTemplateEditorView() {
     navigate(`/print-editor/${dup.id}${qs ? `?${qs}` : ''}`);
   }, [template, printTemplates, onUpdatePrintTemplates, navigate, searchParams]);
 
+  const leaveEditor = useCallback(() => {
+    // 同 SPA 从模版管理进入时回退一层即可回到原页面；直接打开编辑 URL 时回退到生产页
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate('/production');
+  }, [navigate]);
+
   if (systemLocked && routeId !== 'new') {
     return (
       <>
@@ -546,7 +557,7 @@ export default function PrintTemplateEditorView() {
             <div className="flex min-w-0 items-center gap-3">
               <button
                 type="button"
-                onClick={() => navigate('/production')}
+                onClick={leaveEditor}
                 className="flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"
               >
                 <ArrowLeft className="h-4 w-4" /> 返回
@@ -627,7 +638,7 @@ export default function PrintTemplateEditorView() {
           <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
-              onClick={() => navigate('/production')}
+              onClick={leaveEditor}
               className="flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"
             >
               <ArrowLeft className="h-4 w-4" /> 返回

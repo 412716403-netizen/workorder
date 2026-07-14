@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Copy, Plus, RotateCcw, Search, Trash2, ZoomIn, ZoomOut } from 'lucide-react';
 import { toast } from 'sonner';
@@ -15,12 +16,10 @@ const PREVIEW_SCALE_MIN = 0.16;
 const PREVIEW_SCALE_MAX = 2;
 const PREVIEW_SCALE_STEP = 0.07;
 
-function openEditor(id: string, manageScope?: PlanPrintTemplateManageScope) {
-  const base = import.meta.env.BASE_URL || '/';
-  const root = base.endsWith('/') ? base.slice(0, -1) : base;
+/** 同 SPA 路由打开，复用已加载的 Auth/AppData，避免新窗口整站冷启动 */
+function editorPath(id: string, manageScope?: PlanPrintTemplateManageScope): string {
   const qs = manageScope != null ? `?manageScope=${encodeURIComponent(manageScope)}` : '';
-  const path = `${window.location.origin}${root}/print-editor/${id}${qs}`;
-  window.open(path, '_blank', 'noopener,noreferrer');
+  return `/print-editor/${id}${qs}`;
 }
 
 export interface PrintTemplateManagerProps {
@@ -33,7 +32,7 @@ export interface PrintTemplateManagerProps {
   onAfterPersist?: (nextList: PrintTemplate[], prevList: PrintTemplate[]) => void;
   /** 左侧选中模版变化 */
   onSelectionChange?: (templateId: string | null) => void;
-  /** 从「增加/管理模版」打开时传入：新建/复制写入 printTemplateManageScope，并在新窗口 URL 中带参 */
+  /** 从「增加/管理模版」打开时传入：新建/复制写入 printTemplateManageScope，并在编辑路由 URL 中带参 */
   manageScope?: PlanPrintTemplateManageScope;
 }
 
@@ -47,6 +46,7 @@ export const PrintTemplateManager: React.FC<PrintTemplateManagerProps> = ({
   onSelectionChange,
   manageScope,
 }) => {
+  const navigate = useNavigate();
   const [selectedId, setSelectedId] = useState<string | null>(() => printTemplates[0]?.id ?? null);
   const [draft, setDraft] = useState<PrintTemplate | null>(null);
   const [listSearch, setListSearch] = useState('');
@@ -139,7 +139,7 @@ export const PrintTemplateManager: React.FC<PrintTemplateManagerProps> = ({
         <p className="text-sm font-bold text-slate-500">暂无打印模板</p>
         <button
           type="button"
-          onClick={() => openEditor('new', manageScope)}
+          onClick={() => navigate(editorPath('new', manageScope))}
           className="flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-indigo-700"
         >
           <Plus className="h-4 w-4" /> 创建模板
@@ -154,7 +154,7 @@ export const PrintTemplateManager: React.FC<PrintTemplateManagerProps> = ({
         <div className="mb-2 shrink-0">
           <button
             type="button"
-            onClick={() => openEditor('new', manageScope)}
+            onClick={() => navigate(editorPath('new', manageScope))}
             className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-indigo-300 bg-white py-2.5 text-sm font-bold text-indigo-600 hover:bg-indigo-50"
           >
             <Plus className="h-4 w-4" /> 创建模板
@@ -260,7 +260,7 @@ export const PrintTemplateManager: React.FC<PrintTemplateManagerProps> = ({
                   if (!selectedId) return;
                   const t = printTemplates.find(x => x.id === selectedId);
                   if (t) stashPrintTemplateForEditorBootstrap(t);
-                  openEditor(selectedId, manageScope);
+                  navigate(editorPath(selectedId, manageScope));
                 }}
                 disabled={selected ? isReadonlySystemPrintTemplate(selected) : false}
                 className="rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-[11px] font-bold text-indigo-700 hover:bg-indigo-50 disabled:pointer-events-none disabled:opacity-40"

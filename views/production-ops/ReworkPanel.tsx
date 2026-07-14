@@ -34,12 +34,12 @@ import { toLocalCompactYmd } from '../../utils/localDateTime';
 import {
   milestoneIndexInOrder,
   milestoneIndexInProduct,
-  orderCreatedMs,
   productNewestOrderCreatedMs,
   reworkMainListBlockCreatedMs,
   reworkMainListBlockTieId,
 } from '../../utils/orderCenterSort';
 import { shouldShowOrderInIncompleteListFilter } from '../../utils/orderDispatchListFilter';
+import { latestDefectiveReportMs } from '../../utils/latestDefectiveReportMs';
 import ReworkPendingDefectiveModal from './ReworkPendingDefectiveModal';
 import ReworkOrderDetailModal from './ReworkOrderDetailModal';
 import ReworkMaterialIssueModal from './ReworkMaterialIssueModal';
@@ -244,15 +244,16 @@ const ReworkPanel: React.FC<PanelProps> = ({
             defectiveTotal,
             reworkTotal,
             scrapTotal,
-            pendingQty
+            pendingQty,
+            latestDefectiveAtMs: latestDefectiveReportMs(ms.reports),
           });
         });
       });
       rows.sort((a, b) => {
+        const d = b.latestDefectiveAtMs - a.latestDefectiveAtMs;
+        if (d !== 0) return d;
         const oa = idx.ordersById.get(a.orderId);
         const ob = idx.ordersById.get(b.orderId);
-        const d = orderCreatedMs(ob) - orderCreatedMs(oa);
-        if (d !== 0) return d;
         const ma = milestoneIndexInOrder(oa, a.nodeId);
         const mb = milestoneIndexInOrder(ob, b.nodeId);
         if (ma !== mb) return ma - mb;
@@ -262,10 +263,16 @@ const ReworkPanel: React.FC<PanelProps> = ({
     }
     const prodKey = (productId: string, nodeId: string) => `${productId}|${nodeId}`;
     const defectiveMap = new Map<string, number>();
+    const latestDefectiveAtMap = new Map<string, number>();
+    const bumpLatest = (k: string, reports: { timestamp?: string | null; defectiveQuantity?: number | null }[] | undefined) => {
+      const t = latestDefectiveReportMs(reports);
+      if (t > (latestDefectiveAtMap.get(k) ?? 0)) latestDefectiveAtMap.set(k, t);
+    };
     productMilestoneProgresses.forEach(pmp => {
       const k = prodKey(pmp.productId, pmp.milestoneTemplateId);
       const d = (pmp.reports || []).reduce((s, r) => s + (r.defectiveQuantity ?? 0), 0);
       defectiveMap.set(k, (defectiveMap.get(k) ?? 0) + d);
+      bumpLatest(k, pmp.reports);
     });
     orders.forEach(order => {
       order.milestones.forEach(ms => {
@@ -273,6 +280,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
         if (d <= 0) return;
         const k = prodKey(order.productId, ms.templateId);
         defectiveMap.set(k, (defectiveMap.get(k) ?? 0) + d);
+        bumpLatest(k, ms.reports);
       });
     });
     const reworkProd = new Map<string, number>();
@@ -325,13 +333,14 @@ const ReworkPanel: React.FC<PanelProps> = ({
         reworkTotal,
         scrapTotal,
         pendingQty,
+        latestDefectiveAtMs: latestDefectiveAtMap.get(key) ?? 0,
         productOrderCount: cnt,
         productOrdersLine,
         productOrdersTitle: parentNos.length ? productOrdersTitle : undefined
       });
     });
     rows.sort((a, b) => {
-      const d = productNewestOrderCreatedMs(b.productId, orders) - productNewestOrderCreatedMs(a.productId, orders);
+      const d = b.latestDefectiveAtMs - a.latestDefectiveAtMs;
       if (d !== 0) return d;
       if (a.productId !== b.productId) return a.productId.localeCompare(b.productId);
       const pa = idx.productsById.get(a.productId);

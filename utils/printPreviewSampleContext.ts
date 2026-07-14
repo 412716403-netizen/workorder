@@ -306,6 +306,7 @@ const SAMPLE_PURCHASE_ORDER_PRINT: PurchaseOrderPrintContext = {
   operator: '示例经办',
   docTotalQty: 150,
   docTotalAmount: 12345.67,
+  relatedProduct: '示例成品 A（SKU-FG-001）',
   custom: {},
 };
 
