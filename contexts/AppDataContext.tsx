@@ -61,6 +61,7 @@ import {
   normalizeProductCategoriesFromApi,
 } from '../utils/reportCustomDocField';
 import { currentOperatorDisplayName } from '../utils/currentOperatorDisplayName';
+import type { FeaturePluginsConfig } from '../shared/workbench';
 import { broadcastPrintTemplatesSaved, subscribePrintTemplatesChanged } from '../utils/printTemplatesCrossTab';
 import { mergePrintTemplatesForTenantConfig } from '../shared/systemPrintTemplates';
 
@@ -250,6 +251,11 @@ export interface MasterDataState {
   warehouses: Warehouse[];
   products: Product[];
   boms: BOM[];
+  /**
+   * Phase 3.F：secondary 批（products/boms/partners/字典等）是否加载完成。
+   * false 且列表为空时页面应显示「加载中」而非「暂无数据」。
+   */
+  masterDataReady: boolean;
 }
 
 export interface ConfigState {
@@ -273,6 +279,8 @@ export interface ConfigState {
   outsourceFormSettings: OutsourceFormSettings;
   reworkFormSettings: ReworkFormSettings;
   printTemplates: PrintTemplate[];
+  /** getConfig 已带的 featurePlugins（403 时为 null）；useFeaturePlugins 用作 initialData 避免启动期重复请求 */
+  featurePlugins: FeaturePluginsConfig | null;
 }
 
 export interface OrdersState {
@@ -409,6 +417,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
   // ── State ──
   const [dataLoading, setDataLoading] = useState(true);
+  const [masterDataReady, setMasterDataReady] = useState(false);
+  const [featurePlugins, setFeaturePlugins] = useState<FeaturePluginsConfig | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
   const [plans, setPlans] = useState<PlanOrder[]>([]);
@@ -472,6 +482,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       try {
         await executeAppDataLoadCore(activeTenantId, () => cancelled, {
           setDataLoading,
+          setMasterDataReady,
+          setFeaturePlugins,
           setProductionLinkMode,
           setAllowExceedMaxReportQty,
           setAllowExceedMaxOutsourceReceiveQty,
@@ -507,7 +519,11 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       } catch (err) {
         console.error('数据加载失败', err);
       } finally {
-        if (!cancelled) setDataLoading(false);
+        if (!cancelled) {
+          setDataLoading(false);
+          // 异常兜底：即使 secondary 批抛错也解除「加载中」标记，避免页面永久 loading
+          setMasterDataReady(true);
+        }
       }
     })();
     return () => { cancelled = true; };
@@ -546,7 +562,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const refreshPlans = useCallback(async () => { setPlans(normalizeDecimals(await api.plans.list())); markFetched('plans'); }, []);
   const refreshOrders = useCallback(async () => {
     const ts = lastFetchTs.current['orders'];
-    const data = normalizeDecimals(await api.orders.list(ts ? { updatedAfter: ts } : undefined));
+    // lastFetchTs 取自客户端时钟；回退 2 分钟做重叠窗口，避免客户端与 DB 时钟偏差导致增量漏单
+    const since = ts ? new Date(new Date(ts).getTime() - 2 * 60_000).toISOString() : undefined;
+    const data = normalizeDecimals(await api.orders.list(since ? { updatedAfter: since } : undefined));
     setOrders(prev => ts ? mergeById(prev, data) : data);
     markFetched('orders');
   }, []);
@@ -1115,15 +1133,15 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
   const masterDataValue: MasterDataState = useMemo(() => ({
     categories, partnerCategories, dictionaries, globalNodes,
-    partners, workers, equipment, warehouses, products, boms,
-  }), [categories, partnerCategories, dictionaries, globalNodes, partners, workers, equipment, warehouses, products, boms]);
+    partners, workers, equipment, warehouses, products, boms, masterDataReady,
+  }), [categories, partnerCategories, dictionaries, globalNodes, partners, workers, equipment, warehouses, products, boms, masterDataReady]);
 
   const configValue: ConfigState = useMemo(() => ({
     productionLinkMode, processSequenceMode, allowExceedMaxReportQty, allowExceedMaxOutsourceReceiveQty, allowExceedMaxStockInQty, weightTolerancePercent, productEconomicsSettings,
     planFormSettings, orderFormSettings, purchaseOrderFormSettings, salesOrderFormSettings, purchaseBillFormSettings, salesBillFormSettings,
     receiptFormSettings, paymentFormSettings,
-    materialPanelSettings, materialFormSettings, outsourceFormSettings, reworkFormSettings, printTemplates,
-  }), [productionLinkMode, processSequenceMode, allowExceedMaxReportQty, allowExceedMaxOutsourceReceiveQty, allowExceedMaxStockInQty, weightTolerancePercent, productEconomicsSettings, planFormSettings, orderFormSettings, purchaseOrderFormSettings, salesOrderFormSettings, purchaseBillFormSettings, salesBillFormSettings, receiptFormSettings, paymentFormSettings, materialPanelSettings, materialFormSettings, outsourceFormSettings, reworkFormSettings, printTemplates]);
+    materialPanelSettings, materialFormSettings, outsourceFormSettings, reworkFormSettings, printTemplates, featurePlugins,
+  }), [productionLinkMode, processSequenceMode, allowExceedMaxReportQty, allowExceedMaxOutsourceReceiveQty, allowExceedMaxStockInQty, weightTolerancePercent, productEconomicsSettings, planFormSettings, orderFormSettings, purchaseOrderFormSettings, salesOrderFormSettings, purchaseBillFormSettings, salesBillFormSettings, receiptFormSettings, paymentFormSettings, materialPanelSettings, materialFormSettings, outsourceFormSettings, reworkFormSettings, printTemplates, featurePlugins]);
 
   const ordersValue: OrdersState = useMemo(() => ({
     orders, plans, productMilestoneProgresses,
@@ -1240,6 +1258,11 @@ export function useConfigData(): ConfigState {
   const ctx = useContext(ConfigCtx);
   if (!ctx) throw new Error('useConfigData must be used within AppDataProvider');
   return ctx;
+}
+
+/** 无 Provider 时返回 null；供 useFeaturePlugins 等可能在独立渲染环境使用的 hook 读取 */
+export function useConfigDataOptional(): ConfigState | null {
+  return useContext(ConfigCtx);
 }
 
 export function useOrdersData(): OrdersState {

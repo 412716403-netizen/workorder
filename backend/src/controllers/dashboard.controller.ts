@@ -347,6 +347,7 @@ export const patchParentMaterialPriceDefaultRule = asyncHandler(async (req, res)
   res.json(
     await materialPurchasePriceService.updateParentMaterialPriceDefaultRule(
       db,
+      tenantId,
       parentId,
       req.body.defaultRule,
     ),
@@ -447,6 +448,7 @@ export const patchParentReportPriceDefaultRule = asyncHandler(async (req, res) =
   res.json(
     await processEconomicsPriceService.updateParentReportPriceDefaultRule(
       db,
+      tenantId,
       parentId,
       req.body.defaultRule,
     ),
@@ -460,6 +462,7 @@ export const patchParentOutsourcePriceDefaultRule = asyncHandler(async (req, res
   res.json(
     await processEconomicsPriceService.updateParentOutsourcePriceDefaultRule(
       db,
+      tenantId,
       parentId,
       req.body.defaultRule,
     ),
@@ -474,6 +477,7 @@ export const patchReportPriceNodeOverride = asyncHandler(async (req, res) => {
   res.json(
     await processEconomicsPriceService.updateReportPriceNodeOverride(
       db,
+      tenantId,
       parentId,
       nodeId,
       req.body.rule,
@@ -489,6 +493,7 @@ export const patchOutsourcePriceNodeOverride = asyncHandler(async (req, res) => 
   res.json(
     await processEconomicsPriceService.updateOutsourcePriceNodeOverride(
       db,
+      tenantId,
       parentId,
       nodeId,
       req.body.rule,

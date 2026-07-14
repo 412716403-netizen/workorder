@@ -614,11 +614,13 @@ model ProductionOrder {
   @@unique([tenantId, orderNumber])
   @@index([tenantId])
   @@index([parentOrderId])
+  @@index([planOrderId])
   @@index([productId])
   @@index([status])
   @@index([tenantId, createdAt])
   @@index([tenantId, status, createdAt])
   @@index([tenantId, updatedAt])
+  @@index([tenantId, dispatchStatus])
   @@map("production_orders")
 }
 

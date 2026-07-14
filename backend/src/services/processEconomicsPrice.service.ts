@@ -1,6 +1,7 @@
 import type { TenantPrismaClient } from '../lib/prisma.js';
 import { Prisma } from '@prisma/client';
 import { AppError } from '../middleware/errorHandler.js';
+import { invalidateProductEconomicsCache } from './productEconomicsCache.js';
 import { formatMaterialPriceRuleLabel } from '../../../shared/materialPurchasePrice.js';
 import {
   processNodePriceContextKey,
@@ -466,36 +467,48 @@ export async function listOutsourcePriceNodes(
 
 export async function updateParentReportPriceDefaultRule(
   db: TenantPrismaClient,
+  tenantId: string,
   parentProductId: string,
   defaultRule: MaterialPriceRule | null,
 ) {
-  return updateParentDefaultRule(db, 'report', parentProductId, defaultRule);
+  const result = await updateParentDefaultRule(db, 'report', parentProductId, defaultRule);
+  await invalidateProductEconomicsCache(tenantId);
+  return result;
 }
 
 export async function updateParentOutsourcePriceDefaultRule(
   db: TenantPrismaClient,
+  tenantId: string,
   parentProductId: string,
   defaultRule: MaterialPriceRule | null,
 ) {
-  return updateParentDefaultRule(db, 'outsource', parentProductId, defaultRule);
+  const result = await updateParentDefaultRule(db, 'outsource', parentProductId, defaultRule);
+  await invalidateProductEconomicsCache(tenantId);
+  return result;
 }
 
 export async function updateReportPriceNodeOverride(
   db: TenantPrismaClient,
+  tenantId: string,
   parentProductId: string,
   nodeId: string,
   rule: MaterialPriceRuleOverride,
 ) {
-  return updateNodeOverride(db, 'report', parentProductId, nodeId, rule);
+  const result = await updateNodeOverride(db, 'report', parentProductId, nodeId, rule);
+  await invalidateProductEconomicsCache(tenantId);
+  return result;
 }
 
 export async function updateOutsourcePriceNodeOverride(
   db: TenantPrismaClient,
+  tenantId: string,
   parentProductId: string,
   nodeId: string,
   rule: MaterialPriceRuleOverride,
 ) {
-  return updateNodeOverride(db, 'outsource', parentProductId, nodeId, rule);
+  const result = await updateNodeOverride(db, 'outsource', parentProductId, nodeId, rule);
+  await invalidateProductEconomicsCache(tenantId);
+  return result;
 }
 
 export { PROCESS_NODE_PRICE_RULE_SOURCE_LABEL };

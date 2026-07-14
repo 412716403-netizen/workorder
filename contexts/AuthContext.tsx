@@ -241,7 +241,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!isLoggedIn || !tenantCtx?.tenantId) return;
-    syncTenantPermissions();
+    // Phase 3.F：延后 2.5s，避免与首屏 critical 批数据请求抢占浏览器并发连接；
+    // 期间沿用 localStorage 权限渲染，同步完成后自动纠正。
+    const t = window.setTimeout(() => syncTenantPermissions(), 2500);
+    return () => window.clearTimeout(t);
   }, [isLoggedIn, tenantCtx?.tenantId, syncTenantPermissions]);
 
   /**

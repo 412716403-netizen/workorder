@@ -56,6 +56,11 @@ export async function listOrders(
     /** 列表仅显示进行中（隐藏 dispatchStatus=COMPLETED） */
     excludeCompleted?: boolean;
     all?: boolean;
+    /**
+     * Phase 3.F：增量刷新——只返回该时间之后有更新的工单（含嵌套 milestones/reports 全量结构）。
+     * 前端 refreshOrders 已按此参数做 mergeById 合并；注意增量结果不含「被删除的工单」。
+     */
+    updatedAfter?: string;
   },
 ) {
   const where: Record<string, unknown> = {};
@@ -64,6 +69,29 @@ export async function listOrders(
   if (opts.parentOrderId) where.parentOrderId = opts.parentOrderId;
   if (opts.excludeCompleted) {
     where.dispatchStatus = OrderDispatchStatus.IN_PROGRESS;
+  }
+  if (opts.updatedAfter) {
+    const ts = new Date(opts.updatedAfter);
+    if (!Number.isNaN(ts.getTime())) {
+      /**
+       * 报工/外协收回/审批只 update milestone（recalcMilestoneCompleted 等），不触碰工单自身
+       * 的 updatedAt，因此增量条件必须同时覆盖「里程碑有更新」与「子工单（嵌套返回）有更新」，
+       * 否则报工后增量刷新会漏掉该工单，出现数量不刷新。
+       * 用 AND 包裹，避免与 search 的 where.OR 相互覆盖。
+       */
+      const touched = (t: Date) => ({
+        OR: [
+          { updatedAt: { gte: t } },
+          { milestones: { some: { updatedAt: { gte: t } } } },
+        ],
+      });
+      where.AND = [{
+        OR: [
+          ...touched(ts).OR,
+          { childOrders: { some: touched(ts) } },
+        ],
+      }];
+    }
   }
   if (opts.search) {
     where.OR = [

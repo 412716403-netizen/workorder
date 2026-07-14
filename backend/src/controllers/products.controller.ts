@@ -12,6 +12,7 @@ export const listProducts = asyncHandler(async (req, res) => {
   res.json(await productsService.listProducts(db, req.tenantId!, {
     categoryId: optStr(req.query.categoryId), search: optStr(req.query.search),
     all, page, pageSize,
+    lite: req.query.lite === 'true',
   }));
 });
 

@@ -219,7 +219,20 @@
   - 新后端接口：`psi.listRecords` 加 `startDate/endDate/search/types`；新增 `GET /api/orders/report-history`。
   - `PendingStockPanel` 内嵌的「生产入库流水」与 `OrderListView.orderCenterProdQuery` 脱钩，绕过其 40 页/8000 条客户端硬上限；主面板「待入库清单」跨日累计逻辑仍沿用 props.prodRecords。
   - `AppDataContext.invalidateAll{Prod,Psi}Records` 改 predicate 风格批量匹配 queryKey 前缀，修复旧 `psiOps.warehouseStockProd` 与实际 key 不一致的 invalidate bug。
-- **资金账户余额与转账（已完成）**：
+- **Phase 3.F（已完成）登录首屏提速（安全重做版）**：
+  - **首屏拆两批**（`contexts/appDataLoadCore.ts`）：critical 批（getConfig + 产品分类 + 工序节点 + 仓库）完成即撤全屏 spinner；secondary 批（products / boms / partners / 字典 / 财务分类 / 成员 / 设备）后台补齐，完成后置 `masterDataReady=true`。产品档案页在未就绪且列表为空时显示局部 loading。`App.tsx` 的 `AppLayout` 拆出 `AppLayoutReady`，spinner 期间不挂载协作红点 / feature-plugins / workbench hook。
+  - **products lite（保守版）**：`GET /products?lite=true`（前端 `api.products.list` 默认带）只用 Prisma `omit` 裁 4 个 `economics*` 经营核算规则 JSON；**保留** `routeReportValues / routeReportDisplayValues / nodeRates / nodePricingModes / milestoneNodeIds` 与 variants 全字段（含 `nodeBoms`）——这些被报工弹窗展示项、领退料/外协物料、产品编辑表单直接消费，裁掉会复现「工序标签数量错误」同类问题。
+  - **orders / product-progress 不做 lite**：`milestones[].reports` 明细是前端按规格聚合工序标签数字的数据源，首拉与刷新均保持全量结构。瘦身留待服务端预聚合后再做。
+  - **orders 增量刷新**：`GET /orders?updatedAfter=<ts>` 只返回自该时间起有变化的工单；因报工/审批只 update `milestone` 不触碰工单 `updatedAt`，增量条件覆盖「工单自身 / milestones / childOrders 任一有更新」。前端 `refreshOrders` 带 2 分钟重叠窗口 + `mergeById` 幂等合并。注意增量拿不到「被删除的工单」（本地删除路径已同步 setOrders，跨标签页依赖下次全量）。
+  - **权限缓存**：`buildTenantPayload` TTL 5s→30s + 进程内 singleflight；`invalidateAuthTenantCache / invalidateAuthCacheForTenant` 同步清 in-flight。权限写路径仍主动失效，30s 只是漏调 invalidate 时的兜底窗口。
+  - **启动请求去重**：`useFeaturePlugins` 用 getConfig 已带的 `featurePlugins` 作 React Query `initialData`（getConfig 403 时回退正常请求）；`AuthContext.syncTenantPermissions` 首屏延后 2.5s。
+  - **product 模式工序锁定标记缓存**：`getProductIdsWithActiveOrders` 加 60s Redis 缓存（key `cache:products:active-order-product-ids:<tenantId>`）；仅影响 `processLocked` 展示标记，写保护 `assertProcessRouteEditableIfNeeded` 实时查库。
+  - **索引**：`production_orders(plan_order_id)`、`production_orders(tenant_id, dispatch_status)`（migration `20260714090000_production_order_plan_dispatch_indexes`）。
+  - 部署提醒：生产环境须配 `REDIS_URL`（无 Redis 时权限/锁定标记缓存自动降级为直查 DB）并执行 `prisma migrate deploy`。
+- **Phase 3.G（已完成）产品经营弹窗提速**（`dashboard/product-economics` 列表 + `:productId` 明细）：
+  - **明细接口按 productId 下推过滤**：`loadProductionAggregates`（报工/外协/返工/报废聚合）与 `loadPsiAggregates`（销售/库存）加可选 `productId`；`computeMaterialSurplusLossByProduct` 加 `{ scoped: true }` 模式——先按成品找工单家族（生产该成品的工单 + 沿 `parentOrderId` 向上补祖先 + 向下补子孙，`loadScopedOrderIds`），再只拉家族内工单（嵌套报工）与相关领退料流水（`sourceProductId in ids OR orderId in 家族`）。此前点单个产品明细会全量拉全租户报工重算一遍。列表接口传全部产品时行为不变（不走 scoped）。
+  - **结果 Redis 缓存**（`backend/src/services/productEconomicsCache.ts`，TTL 60s）：key 含 `materialCostMode + period/customRange + 权限位(canProduction/canPsi/canFinance)`，两个物料成本口径独立缓存、不同权限用户不串数据。失效走租户级版本号（`pe:ver:<tenantId>` INCR，旧 key 靠短 TTL 过期），价格写路径（全局物料价规则 / 成品 BOM 物料价 / 报工·外协工序单价的默认规则与覆盖）均触发失效。报工/销售等业务写入不主动失效，数字最多延迟 60s（前端另有 60s staleTime）。无 `REDIS_URL` 时自动降级为直接计算。
+  - `processEconomicsPrice` 四个 update 函数与 `updateParentMaterialPriceDefaultRule` 签名加 `tenantId` 参数（用于失效缓存）。
   - `FinanceAccountType` 加 `initialBalance/openingDate/accountKind/sortOrder/active`；`FinanceRecord` 加 `accountTypeId` 外键（migration `20260625120000_finance_account_balance` 按 `(tenant_id, name)` 回填，保留 `payment_account` 作展示/回退）。
   - 余额实时聚合（不落库存量）：`GET /api/finance/account-balances`（`finance:account:view`）→ `getAccountBalances` → 纯函数 `accumulateAccountBalances`（含单测 `backend/tests/financeAccountBalances.test.ts`）。
   - 账户间转账：`POST /api/finance/transfers`（`finance:transfer:create`）事务内落 PAYMENT+RECEIPT 同 `transferGroupId`/`ZZD` 单号；前端「财务 - 资金账户」Tab（`AccountBalancesTab` + `AccountTransferModal`），账户流水下钻按 `accountTypeId` 窄拉 `finance.listPage`。

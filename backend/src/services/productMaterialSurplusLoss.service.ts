@@ -348,16 +348,78 @@ function surplusAmountFromMatRows(
  * 按成品 id 聚合「物料结余（损耗）」金额。
  * 口径对齐生产物料面板：结余 = max(0, 净领用 − 报工耗材)；报工耗材 = theoryCost + actual（统一到采购单位）。
  */
+/**
+ * 找出与指定成品相关的工单家族 id 集合：
+ * 生产该成品的工单 + 沿 parentOrderId 向上补全祖先 + 从全部已知节点向下补全子孙。
+ * 用于明细接口按单产品下推过滤，避免全量拉取工单与领退料流水。
+ */
+async function loadScopedOrderIds(
+  db: TenantPrismaClient,
+  finishedProductIds: string[],
+): Promise<Set<string>> {
+  const seed = await db.productionOrder.findMany({
+    where: { productId: { in: finishedProductIds } },
+    select: { id: true, parentOrderId: true },
+  });
+  const known = new Map(seed.map(o => [o.id, o.parentOrderId]));
+
+  let missingParents = [
+    ...new Set(
+      seed.map(o => o.parentOrderId).filter((x): x is string => !!x && !known.has(x)),
+    ),
+  ];
+  for (let i = 0; i < 24 && missingParents.length > 0; i++) {
+    const parents = await db.productionOrder.findMany({
+      where: { id: { in: missingParents } },
+      select: { id: true, parentOrderId: true },
+    });
+    for (const p of parents) known.set(p.id, p.parentOrderId);
+    missingParents = [
+      ...new Set(
+        parents.map(o => o.parentOrderId).filter((x): x is string => !!x && !known.has(x)),
+      ),
+    ];
+  }
+
+  let frontier = [...known.keys()];
+  for (let i = 0; i < 24 && frontier.length > 0; i++) {
+    const children = await db.productionOrder.findMany({
+      where: { parentOrderId: { in: frontier } },
+      select: { id: true, parentOrderId: true },
+    });
+    const fresh = children.filter(c => !known.has(c.id));
+    for (const c of fresh) known.set(c.id, c.parentOrderId);
+    frontier = fresh.map(c => c.id);
+  }
+
+  return new Set(known.keys());
+}
+
 export async function computeMaterialSurplusLossByProduct(
   db: TenantPrismaClient,
   tenantId: string,
   finishedProductIds: string[],
+  /** scoped=true：只拉与这些成品相关的工单家族与领退料流水（明细接口用）；默认全量（列表接口传全部产品时行为不变） */
+  opts: { scoped?: boolean } = {},
 ): Promise<Map<string, number>> {
   const uniqueIds = [...new Set(finishedProductIds.filter(Boolean))];
   if (uniqueIds.length === 0) return new Map();
 
+  const scopedOrderIds = opts.scoped ? await loadScopedOrderIds(db, uniqueIds) : null;
+  const orderWhere = scopedOrderIds ? { id: { in: [...scopedOrderIds] } } : {};
+  const stockWhere = scopedOrderIds
+    ? {
+        type: { in: ['STOCK_OUT', 'STOCK_RETURN'] },
+        OR: [
+          { sourceProductId: { in: uniqueIds } },
+          { orderId: { in: [...scopedOrderIds] } },
+        ],
+      }
+    : { type: { in: ['STOCK_OUT', 'STOCK_RETURN'] } };
+
   const [orders, pmps, stockRecords, globalNodes, units, boms, finishedProducts] = await Promise.all([
     db.productionOrder.findMany({
+      where: orderWhere,
       select: {
         id: true,
         productId: true,
@@ -384,7 +446,7 @@ export async function computeMaterialSurplusLossByProduct(
       },
     }),
     db.productionOpRecord.findMany({
-      where: { type: { in: ['STOCK_OUT', 'STOCK_RETURN'] } },
+      where: stockWhere,
       select: {
         type: true,
         orderId: true,

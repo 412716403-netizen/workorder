@@ -8,17 +8,37 @@ import { sanitizeUpdate, sanitizeCreate, sanitizeItems } from '../utils/request.
 import { validateProductColorSizeForSave } from '../../../shared/productColorSize.js';
 import { getProductionLinkMode, milestoneNodeIdsEqual, productionOrderWhereCountsForProcessLock } from '../utils/productionLinkMode.js';
 import type { ProductionLinkMode } from '../types/index.js';
+import { redisGetJson, redisSetJson } from '../lib/redis.js';
 
 const MSG_PROCESS_LOCKED =
   '该产品已下达生产工单，工序已锁定，不能修改。如需调整工序，请先撤销/完成相关工单。';
 
-async function getProductIdsWithActiveOrders(db: TenantPrismaClient): Promise<Set<string>> {
+/**
+ * Phase 3.F：product 模式下每次列产品都要对全部工单 groupBy 一次，加 60s Redis 缓存兜住。
+ * 仅影响 processLocked 展示标记（真正的写保护 `assertProcessRouteEditableIfNeeded` 实时查库），
+ * 最坏情况是新下达工单后 60s 内产品档案的「工序已锁定」标记延迟出现。
+ */
+const ACTIVE_ORDER_PRODUCT_IDS_TTL_S = 60;
+
+function activeOrderProductIdsCacheKey(tenantId: string): string {
+  return `cache:products:active-order-product-ids:${tenantId}`;
+}
+
+async function getProductIdsWithActiveOrders(
+  db: TenantPrismaClient,
+  tenantId: string,
+): Promise<Set<string>> {
+  const cacheKey = activeOrderProductIdsCacheKey(tenantId);
+  const cached = await redisGetJson<string[]>(cacheKey);
+  if (cached) return new Set(cached);
   const rows = await db.productionOrder.groupBy({
     by: ['productId'],
     where: productionOrderWhereCountsForProcessLock(),
     _count: { _all: true },
   });
-  return new Set(rows.map(r => r.productId));
+  const ids = rows.map(r => r.productId);
+  await redisSetJson(cacheKey, ids, ACTIVE_ORDER_PRODUCT_IDS_TTL_S);
+  return new Set(ids);
 }
 
 function attachProcessLocked<T extends { id: string; milestoneNodeIds?: unknown }>(
@@ -345,30 +365,48 @@ export async function getVariantUsage(
 
 // ── Products CRUD ──
 
+/**
+ * Phase 3.F lite（保守版）：列表只裁「无列表用途」的经营核算规则 JSON。
+ * 前端 Product 类型未声明这些字段，编辑保存也不会回传（absent ≠ 清空），裁掉安全；
+ * 经营核算弹窗走 dashboard/product-economics 服务端聚合接口，不读列表数据。
+ *
+ * 注意：`routeReportValues` / `routeReportDisplayValues` / `nodeRates` / `nodePricingModes`
+ * / `milestoneNodeIds` / variants 全字段（含 nodeBoms）**必须保留**——
+ * 报工弹窗展示项、领退料/外协物料、产品编辑表单都直接消费列表数据，
+ * 裁掉会导致展示缺失甚至保存时把字段覆盖为空（上次工序标签数量错误的同类问题）。
+ */
+const PRODUCT_LIST_LITE_OMIT = {
+  economicsMaterialPricePeriod: true,
+  economicsBomMaterialPrice: true,
+  economicsReportNodePrice: true,
+  economicsOutsourceNodePrice: true,
+} as const;
+
 export async function listProducts(
   db: TenantPrismaClient,
   tenantId: string,
-  opts: { categoryId?: string; search?: string; all?: boolean; page?: number; pageSize?: number },
+  opts: { categoryId?: string; search?: string; all?: boolean; page?: number; pageSize?: number; lite?: boolean },
 ) {
   const where: Record<string, unknown> = {};
   if (opts.categoryId) where.categoryId = opts.categoryId;
   if (opts.search) where.name = { contains: opts.search, mode: 'insensitive' };
   const include = { category: true, variants: { orderBy: { id: 'asc' as const } } };
+  const omit = opts.lite ? PRODUCT_LIST_LITE_OMIT : undefined;
   const orderBy: any = [{ createdAt: 'desc' }, { id: 'asc' }];
 
   const mode = await getProductionLinkMode(tenantId);
   const activeOrderProductIds =
-    mode === 'product' ? await getProductIdsWithActiveOrders(db) : new Set<string>();
+    mode === 'product' ? await getProductIdsWithActiveOrders(db, tenantId) : new Set<string>();
 
   if (opts.all) {
-    const rows = await db.product.findMany({ where, include, orderBy });
+    const rows = await db.product.findMany({ where, include, omit, orderBy });
     return rows.map(p => attachProcessLocked(p, mode, activeOrderProductIds));
   }
 
   const page = Math.max(1, opts.page ?? 1);
   const pageSize = Math.min(Math.max(1, opts.pageSize ?? 50), 200);
   const [data, total] = await Promise.all([
-    db.product.findMany({ where, include, orderBy, skip: (page - 1) * pageSize, take: pageSize }),
+    db.product.findMany({ where, include, omit, orderBy, skip: (page - 1) * pageSize, take: pageSize }),
     db.product.count({ where }),
   ]);
   return {
@@ -387,7 +425,7 @@ export async function getProduct(db: TenantPrismaClient, tenantId: string, id: s
   if (!product) throw new AppError(404, '产品不存在');
   const mode = await getProductionLinkMode(tenantId);
   const activeOrderProductIds =
-    mode === 'product' ? await getProductIdsWithActiveOrders(db) : new Set<string>();
+    mode === 'product' ? await getProductIdsWithActiveOrders(db, tenantId) : new Set<string>();
   return attachProcessLocked(product, mode, activeOrderProductIds);
 }
 
@@ -458,7 +496,7 @@ export async function updateProduct(
     });
     const mode = await getProductionLinkMode(tenantId);
     const activeOrderProductIds =
-      mode === 'product' ? await getProductIdsWithActiveOrders(db) : new Set<string>();
+      mode === 'product' ? await getProductIdsWithActiveOrders(db, tenantId) : new Set<string>();
     return attachProcessLocked(updated, mode, activeOrderProductIds);
   }
 
@@ -512,7 +550,7 @@ export async function updateProduct(
   if (!updated) throw new AppError(404, '产品不存在');
   const mode = await getProductionLinkMode(tenantId);
   const activeOrderProductIds =
-    mode === 'product' ? await getProductIdsWithActiveOrders(db) : new Set<string>();
+    mode === 'product' ? await getProductIdsWithActiveOrders(db, tenantId) : new Set<string>();
   return attachProcessLocked(updated, mode, activeOrderProductIds);
 }
 

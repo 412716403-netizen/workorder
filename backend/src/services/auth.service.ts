@@ -118,18 +118,20 @@ async function loadTenantPayloadFromDb(userId: string, tenantId?: string): Promi
 }
 
 /**
- * Phase 3.E follow-up：
- * - TTL 从 30s 收紧到 5s。原 30s 在管理员"立即踢人 / 立即收回权限"场景下窗口太大；
- *   5s 已能保护 99% 的请求避开 DB（typical 用户操作间隔 > 1s），又把权限变更生效
- *   延迟控制在用户体感不到的范围。
- * - 配合 `invalidateAuthTenantCache(userId)`：roles/tenants/admin 等会修改有效权限的
- *   入口在写操作完成后调用，立即让缓存失效，最坏情况是 5s + 当前 in-flight 请求。
+ * Phase 3.F：TTL 5s → 30s + 进程内 singleflight。
+ * - 权限写路径（roles/tenants/admin 等）都会调 `invalidateAuthTenantCache` 主动失效，
+ *   正常场景权限变更即时生效；30s 只是「漏调 invalidate」时的兜底窗口。
+ * - 首屏 10+ 个并发请求在缓存冷时会同时打同一份 membership/角色查询，
+ *   singleflight 把并发收敛为一次 DB 查询，其余复用同一 Promise。
  */
-const AUTH_TENANT_CACHE_TTL_S = 5;
+const AUTH_TENANT_CACHE_TTL_S = 30;
 
 function tenantCacheKey(userId: string, tenantId?: string): string {
   return `cache:auth:tenant-payload:${userId}:${tenantId ?? '_'}`;
 }
+
+/** 进程内 in-flight 去重（PM2 多 worker 时各自独立，Redis 仍是共享层） */
+const tenantPayloadInFlight = new Map<string, Promise<TenantPayloadResult>>();
 
 /**
  * 给 `requirePermission` / `requireSubPermission` 用：根据 userId+tenantId
@@ -149,11 +151,22 @@ async function buildTenantPayload(userId: string, tenantId?: string): Promise<Te
     const hit = await redisGetJson<TenantPayloadResult>(cacheKey);
     if (hit) return hit;
   }
-  const fresh = await loadTenantPayloadFromDb(userId, tenantId);
-  if (getRedis()) {
-    await redisSetJson(cacheKey, fresh, AUTH_TENANT_CACHE_TTL_S);
+  const inFlight = tenantPayloadInFlight.get(cacheKey);
+  if (inFlight) return inFlight;
+
+  const load = (async () => {
+    const fresh = await loadTenantPayloadFromDb(userId, tenantId);
+    if (getRedis()) {
+      await redisSetJson(cacheKey, fresh, AUTH_TENANT_CACHE_TTL_S);
+    }
+    return fresh;
+  })();
+  tenantPayloadInFlight.set(cacheKey, load);
+  try {
+    return await load;
+  } finally {
+    tenantPayloadInFlight.delete(cacheKey);
   }
-  return fresh;
 }
 
 /**
@@ -163,6 +176,13 @@ async function buildTenantPayload(userId: string, tenantId?: string): Promise<Te
  *   避免 5s TTL 期内用户拿到旧权限。
  */
 export async function invalidateAuthTenantCache(userId: string, tenantId?: string): Promise<void> {
+  // 同步清进程内 in-flight，避免权限写入后并发请求复用旧的加载 Promise
+  const prefix = `cache:auth:tenant-payload:${userId}:`;
+  for (const key of tenantPayloadInFlight.keys()) {
+    if (tenantId ? key === tenantCacheKey(userId, tenantId) : key.startsWith(prefix)) {
+      tenantPayloadInFlight.delete(key);
+    }
+  }
   if (!getRedis()) return;
   if (tenantId) {
     await redisDel(tenantCacheKey(userId, tenantId));
@@ -189,6 +209,10 @@ export async function invalidateAuthTenantCache(userId: string, tenantId?: strin
  * 单租户成员 100~1000 量级时延迟可忽略；无 Redis 时直接返回。
  */
 export async function invalidateAuthCacheForTenant(tenantId: string): Promise<void> {
+  // 同步清进程内 in-flight（key 以 :<tenantId> 结尾的加载 Promise）
+  for (const key of tenantPayloadInFlight.keys()) {
+    if (key.endsWith(`:${tenantId}`)) tenantPayloadInFlight.delete(key);
+  }
   const r = getRedis();
   if (!r) return;
   const suffix = `:${tenantId}`;

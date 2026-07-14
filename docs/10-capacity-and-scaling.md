@@ -209,6 +209,30 @@ ExecStart=/var/www/smarttrack-pro/backend/node_modules/.bin/pm2-runtime start ec
 
 ---
 
+### Phase 3.F 登录首屏提速（安全重做版，已完成）
+
+目标：登录后「加载数据中…」从等 13 个全量请求收敛为等 4 个小请求；其余大数据后台补齐。
+
+**前端**
+
+- `contexts/appDataLoadCore.ts` 拆 `loadCriticalBatch`（getConfig + categories + nodes + warehouses → 撤 spinner）与 `loadSecondaryBatch`（products / boms / partners / dictionaries / financeCategories / financeAccountTypes / partnerCategories / reportableMembers / equipment → 置 `masterDataReady`）。
+- `App.tsx`：`AppLayout` 只判 spinner，真实布局在 `AppLayoutReady`——spinner 期间不挂载协作红点轮询 / feature-plugins / workbench hook。
+- `ProductManagementView` 在 `!masterDataReady && products.length === 0` 时显示局部 loading，避免闪「暂无数据」。
+- `useFeaturePlugins` 用 getConfig 已带的 `featurePlugins` 作 `initialData`；`syncTenantPermissions` 首屏延后 2.5s。
+
+**后端**
+
+- `products?lite=true`（前端列表默认）：Prisma `omit` 只裁 4 个 `economics*` JSON；`routeReportValues / routeReportDisplayValues / nodeRates / variants(nodeBoms)` 必须保留（报工展示、领退料、产品编辑表单直接消费；编辑表单还会把列表字段回存，裁掉会导致保存时清空）。
+- **orders / product-progress 不做 lite**：工序标签数字依赖 `milestones[].reports` 按规格聚合，首拉与刷新结构必须一致（上次事故根源）。
+- `orders?updatedAfter=`：增量条件覆盖工单自身 / milestones / childOrders 任一 `updatedAt >= ts`（报工只 update milestone）；前端 `refreshOrders` 带 2 分钟重叠窗口 + mergeById。增量不含被删除的工单。
+- `buildTenantPayload`：TTL 30s + 进程内 singleflight；invalidate 双清 Redis 与 in-flight。
+- `getProductIdsWithActiveOrders`：60s Redis 缓存（仅 processLocked 展示标记；写保护实时查库）。
+- 索引：`production_orders(plan_order_id)`、`production_orders(tenant_id, dispatch_status)`。
+
+**运维**：生产必配 `REDIS_URL`（缺省时缓存自动降级直查 DB，权限查询回到每请求一次）；发布时 `prisma migrate deploy`。
+
+---
+
 ## Phase 4：React Query
 
 - 根目录已安装 `@tanstack/react-query`，`App.tsx` 挂载 `QueryClientProvider`。

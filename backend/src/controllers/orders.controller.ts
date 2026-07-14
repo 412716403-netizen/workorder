@@ -19,6 +19,7 @@ export const listOrders = asyncHandler(async (req, res) => {
     search: optStr(req.query.search),
     lite: req.query.lite === 'true',
     excludeCompleted: req.query.excludeCompleted === 'true',
+    updatedAfter: optStr(req.query.updatedAfter),
     all,
     page,
     pageSize,

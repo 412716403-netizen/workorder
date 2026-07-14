@@ -37,6 +37,11 @@ import {
 } from './productDocumentLinkedCost.service.js';
 import * as settingsService from './settings.service.js';
 import * as psiService from './psi.service.js';
+import {
+  buildProductEconomicsCacheKey,
+  getProductEconomicsCache,
+  setProductEconomicsCache,
+} from './productEconomicsCache.js';
 
 type PeriodRange = { start: Date; end: Date } | null;
 
@@ -580,9 +585,12 @@ async function loadProductionAggregates(
   priceMap: Map<string, number>,
   nodeNameById: Map<string, string>,
   periodRange: PeriodRange = null,
+  /** 明细接口按单产品下推过滤，避免全租户报工全量拉取 */
+  productId?: string,
 ): Promise<Map<string, ProductAgg>> {
   const ts = timestampWhere(periodRange);
   const opTs = periodRange ? { timestamp: { gte: periodRange.start, lte: periodRange.end } } : {};
+  const opProduct = productId ? { productId } : {};
   const aggs = new Map<string, ProductAgg>();
   const getAgg = (productId: string) => {
     let a = aggs.get(productId);
@@ -596,7 +604,10 @@ async function loadProductionAggregates(
   const [msReports, pmpReports, outsourceAgg, reworkAgg, scrapAgg, globalNodes, unitNameByMaterialId] =
     await Promise.all([
     db.milestoneReport.findMany({
-      where: ts,
+      where: {
+        ...ts,
+        ...(productId ? { milestone: { productionOrder: { productId } } } : {}),
+      },
       select: {
         quantity: true,
         rate: true,
@@ -611,7 +622,10 @@ async function loadProductionAggregates(
       },
     }),
     db.productProgressReport.findMany({
-      where: ts,
+      where: {
+        ...ts,
+        ...(productId ? { progress: { productId } } : {}),
+      },
       select: {
         quantity: true,
         rate: true,
@@ -628,17 +642,17 @@ async function loadProductionAggregates(
     }),
     db.productionOpRecord.groupBy({
       by: ['productId', 'nodeId'],
-      where: { type: 'OUTSOURCE', amount: { not: null }, ...opTs },
+      where: { type: 'OUTSOURCE', amount: { not: null }, ...opTs, ...opProduct },
       _sum: { amount: true },
     }),
     db.productionOpRecord.groupBy({
       by: ['productId', 'nodeId'],
-      where: { type: 'REWORK_REPORT', amount: { not: null }, ...opTs },
+      where: { type: 'REWORK_REPORT', amount: { not: null }, ...opTs, ...opProduct },
       _sum: { amount: true },
     }),
     db.productionOpRecord.groupBy({
       by: ['productId', 'nodeId'],
-      where: { type: 'SCRAP', ...opTs },
+      where: { type: 'SCRAP', ...opTs, ...opProduct },
       _sum: { quantity: true },
     }),
     db.globalNodeTemplate.findMany({
@@ -793,15 +807,18 @@ async function loadProductionAggregates(
 async function loadPsiAggregates(
   db: TenantPrismaClient,
   periodRange: PeriodRange = null,
+  /** 明细接口按单产品下推过滤 */
+  productId?: string,
 ): Promise<Map<string, Pick<ProductAgg, 'salesQty' | 'salesAmount' | 'stockQty'>>> {
+  const productFilter = productId ? { productId } : { productId: { not: null } };
   const salesWhere = periodRange
     ? {
         type: 'SALES_BILL' as const,
-        productId: { not: null },
+        ...productFilter,
         quantity: { gt: 0 },
         timestamp: { gte: periodRange.start, lte: periodRange.end },
       }
-    : { type: 'SALES_BILL' as const, productId: { not: null }, quantity: { gt: 0 } };
+    : { type: 'SALES_BILL' as const, ...productFilter, quantity: { gt: 0 } };
 
   const [salesAgg, stockRows] = await Promise.all([
     db.psiRecord.groupBy({
@@ -809,7 +826,7 @@ async function loadPsiAggregates(
       where: salesWhere,
       _sum: { quantity: true, amount: true },
     }),
-    periodRange ? Promise.resolve([]) : psiService.getStock(db, {}),
+    periodRange ? Promise.resolve([]) : psiService.getStock(db, productId ? { productId } : {}),
   ]);
 
   const map = new Map<string, Pick<ProductAgg, 'salesQty' | 'salesAmount' | 'stockQty'>>();
@@ -981,6 +998,17 @@ export async function computeProductEconomicsList(
   const periodScoped = periodRange != null;
   const documentLinked = materialCostMode === 'document_linked';
 
+  const periodKey = customRange
+    ? `${customRange.startDate}~${customRange.endDate}`
+    : (period ?? 'all');
+  const cacheKey = await buildProductEconomicsCacheKey(tenantId, 'list', [
+    materialCostMode,
+    periodKey,
+    `p${Number(includeProduction)}${Number(includePsi)}${Number(includeFinance)}`,
+  ]);
+  const cached = await getProductEconomicsCache<ProductEconomicsListResponse>(cacheKey);
+  if (cached) return cached;
+
   const [globalNodes, allProducts] = await Promise.all([
     db.globalNodeTemplate.findMany({ select: { id: true, name: true } }),
     db.product.findMany({
@@ -1125,7 +1153,7 @@ export async function computeProductEconomicsList(
   const totalSalesAmount = rows.reduce((s, r) => s + r.salesAmount, 0);
   const totalRevenue = rows.reduce((s, r) => s + r.totalRevenue, 0);
 
-  return {
+  const response: ProductEconomicsListResponse = {
     canProduction: includeProduction,
     canPsi: includePsi,
     canFinance: includeFinance,
@@ -1141,6 +1169,8 @@ export async function computeProductEconomicsList(
     },
     rows,
   };
+  await setProductEconomicsCache(cacheKey, response);
+  return response;
 }
 
 export async function computeProductEconomicsDetail(
@@ -1157,6 +1187,14 @@ export async function computeProductEconomicsDetail(
 
   const materialCostMode = await resolveMaterialCostMode(tenantId, materialCostModeOverride);
   const documentLinked = materialCostMode === 'document_linked';
+
+  const cacheKey = await buildProductEconomicsCacheKey(tenantId, 'detail', [
+    materialCostMode,
+    productId,
+    `p${Number(includeProduction)}${Number(includePsi)}${Number(includeFinance)}`,
+  ]);
+  const cached = await getProductEconomicsCache<ProductEconomicsDetailResponse>(cacheKey);
+  if (cached) return cached;
 
   const product = await db.product.findUnique({
     where: { id: productId },
@@ -1184,10 +1222,10 @@ export async function computeProductEconomicsDetail(
     : 0;
 
   const prodAgg = includeProduction
-    ? (await loadProductionAggregates(db, boms, priceMap, nodeNameById)).get(productId) ?? emptyAgg()
+    ? (await loadProductionAggregates(db, boms, priceMap, nodeNameById, null, productId)).get(productId) ?? emptyAgg()
     : emptyAgg();
   const materialSurplusLoss = includeProduction && !documentLinked
-    ? (await computeMaterialSurplusLossByProduct(db, tenantId, [productId])).get(productId) ?? 0
+    ? (await computeMaterialSurplusLossByProduct(db, tenantId, [productId], { scoped: true })).get(productId) ?? 0
     : 0;
 
   const linkedPurchaseCost = documentLinked && includeProduction
@@ -1228,7 +1266,7 @@ export async function computeProductEconomicsDetail(
   }
 
   if (includePsi) {
-    const psi = (await loadPsiAggregates(db)).get(productId);
+    const psi = (await loadPsiAggregates(db, null, productId)).get(productId);
     if (psi) {
       prodAgg.salesQty = psi.salesQty;
       prodAgg.salesAmount = psi.salesAmount;
@@ -1294,7 +1332,7 @@ export async function computeProductEconomicsDetail(
     )
     .sort((a, b) => a.nodeName.localeCompare(b.nodeName, 'zh-CN'));
 
-  return {
+  const response: ProductEconomicsDetailResponse = {
     canProduction: includeProduction,
     canPsi: includePsi,
     canFinance: includeFinance,
@@ -1325,4 +1363,6 @@ export async function computeProductEconomicsDetail(
     stockInQty: quantityDetail.stockInQty,
     byNode,
   };
+  await setProductEconomicsCache(cacheKey, response);
+  return response;
 }

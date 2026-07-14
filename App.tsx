@@ -126,9 +126,30 @@ function AuthRouter() {
   );
 }
 
+/**
+ * Phase 3.F：spinner 判断与真实布局拆开。
+ * spinner 期间不挂载 AppLayoutReady 里的协作红点轮询 / feature-plugins / workbench 等 hook，
+ * 避免它们的请求与首屏 critical 批抢占连接。
+ */
 function AppLayout() {
-  const auth = useAuth();
   const dataLoading = useDataLoading();
+
+  if (dataLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-10 h-10 animate-spin text-indigo-600" />
+          <span className="text-sm text-slate-400 font-medium">加载数据中…</span>
+        </div>
+      </div>
+    );
+  }
+
+  return <AppLayoutReady />;
+}
+
+function AppLayoutReady() {
+  const auth = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const printEditorFullscreen = location.pathname.startsWith('/print-editor');
@@ -173,17 +194,6 @@ function AppLayout() {
   const showKnowledgeNav = hasPerm('knowledge_base') && isPluginEnabled('knowledge_base');
   const showCollabNavWithPlugin = showCollabNav && isPluginEnabled('collaboration');
   const showWorkbenchNav = useWorkbenchAccess();
-
-  if (dataLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="w-10 h-10 animate-spin text-indigo-600" />
-          <span className="text-sm text-slate-400 font-medium">加载数据中…</span>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="flex h-screen bg-slate-50 text-slate-900 font-sans">

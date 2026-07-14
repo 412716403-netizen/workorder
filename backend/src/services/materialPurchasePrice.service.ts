@@ -24,6 +24,7 @@ import {
   type MaterialPriceSettingsResponse,
 } from '../../../shared/types.js';
 import * as settingsService from './settings.service.js';
+import { invalidateProductEconomicsCache } from './productEconomicsCache.js';
 
 function num(v: unknown): number {
   if (v == null) return 0;
@@ -182,6 +183,7 @@ export async function updateMaterialPriceSettings(
     ...current,
     materialPriceRule: parsed,
   });
+  await invalidateProductEconomicsCache(tenantId);
   return parsed;
 }
 
@@ -300,6 +302,7 @@ export async function listMaterialPriceBomMaterials(
 
 export async function updateParentMaterialPriceDefaultRule(
   db: TenantPrismaClient,
+  tenantId: string,
   parentProductId: string,
   defaultRule: MaterialPriceRule | null,
 ): Promise<{ defaultRule: MaterialPriceRule | null }> {
@@ -319,6 +322,7 @@ export async function updateParentMaterialPriceDefaultRule(
     where: { id: parentProductId },
     data: { economicsBomMaterialPrice: next as Prisma.InputJsonValue },
   });
+  await invalidateProductEconomicsCache(tenantId);
   return { defaultRule: parsedRule };
 }
 
@@ -364,6 +368,7 @@ export async function updateBomMaterialPriceOverride(
     where: { id: parentProductId },
     data: { economicsBomMaterialPrice: stored },
   });
+  await invalidateProductEconomicsCache(tenantId);
 
   const { rows } = await listMaterialPriceBomMaterials(db, tenantId, parentProductId);
   const row = rows.find(r => r.materialId === materialId);

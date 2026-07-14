@@ -7,6 +7,7 @@ import {
   Search,
   X,
   Upload,
+  Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Product, GlobalNodeTemplate, ProductCategory, PartnerCategory, BOM, AppDictionaries, Partner } from '../types';
@@ -19,7 +20,7 @@ import { getProductCategoryCustomFieldEntries } from '../utils/reportCustomDocFi
 import { productMatchesSearchQuery } from '../utils/productSearchMatch';
 import { compareProductsArchiveOrder } from '../utils/productSort';
 import { isProductEnabled } from '../utils/productEnabled';
-import { useConfigData, useOrdersData } from '../contexts/AppDataContext';
+import { useConfigData, useMasterData, useOrdersData } from '../contexts/AppDataContext';
 import { useClientPagination } from '../hooks/useClientPagination';
 import ListPageControls from '../components/ListPageControls';
 import * as api from '../services/api';
@@ -72,6 +73,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   onClearInitialProductId,
 }) => {
   const { productionLinkMode } = useConfigData();
+  const { masterDataReady } = useMasterData();
   const { orders } = useOrdersData();
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>(PRODUCT_ARCHIVE_ALL);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -208,6 +210,18 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
         productionLinkMode={productionLinkMode}
         ordersForProcessLock={orders}
       />
+    );
+  }
+
+  // Phase 3.F：products 属 secondary 批后台加载；未就绪且列表为空时显示局部 loading，避免闪「暂无数据」
+  if (!masterDataReady && products.length === 0) {
+    return (
+      <div className="flex items-center justify-center py-32">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-7 h-7 animate-spin text-indigo-400" />
+          <span className="text-sm text-slate-400 font-medium">产品档案加载中…</span>
+        </div>
+      </div>
     );
   }
 
