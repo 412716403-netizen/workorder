@@ -8,9 +8,26 @@ function generateInviteCode(): string {
   return crypto.randomBytes(4).toString('hex').toUpperCase();
 }
 
+/** 企业名称全局唯一（trim 后精确匹配）；excludeTenantId 用于改名时排除自身 */
+async function assertTenantNameAvailable(rawName: string, excludeTenantId?: string) {
+  const name = String(rawName ?? '').trim();
+  if (!name) throw new AppError(400, '请输入企业名称');
+  if (name.length > 200) throw new AppError(400, '企业名称过长');
+  const existing = await prisma.tenant.findFirst({
+    where: {
+      name,
+      ...(excludeTenantId ? { id: { not: excludeTenantId } } : {}),
+    },
+    select: { id: true },
+  });
+  if (existing) throw new AppError(409, '企业名称已存在，请更换名称');
+  return name;
+}
+
 export async function createTenant(userId: string, body: { name: string; logo?: string }) {
+  const name = await assertTenantNameAvailable(body.name);
   const tenant = await prisma.tenant.create({
-    data: { name: body.name, logo: body.logo, inviteCode: generateInviteCode(), status: 'pending' },
+    data: { name, logo: body.logo, inviteCode: generateInviteCode(), status: 'pending' },
   });
   await prisma.tenantMembership.create({
     data: { userId, tenantId: tenant.id, role: 'owner', permissions: [...ALL_PERMISSIONS] },
@@ -103,9 +120,16 @@ export async function updateTenant(
   });
   if (!membership || membership.role !== 'owner')
     throw new AppError(403, '仅企业创建者可修改企业信息');
+  let nextName: string | undefined;
+  if (body.name !== undefined) {
+    nextName = await assertTenantNameAvailable(body.name, tenantId);
+  }
   return prisma.tenant.update({
     where: { id: tenantId },
-    data: { ...(body.name !== undefined && { name: body.name }), ...(body.logo !== undefined && { logo: body.logo }) },
+    data: {
+      ...(nextName !== undefined && { name: nextName }),
+      ...(body.logo !== undefined && { logo: body.logo }),
+    },
   });
 }
 

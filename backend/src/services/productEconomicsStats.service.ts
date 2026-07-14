@@ -39,8 +39,7 @@ import * as settingsService from './settings.service.js';
 import * as psiService from './psi.service.js';
 import {
   buildProductEconomicsCacheKey,
-  getProductEconomicsCache,
-  setProductEconomicsCache,
+  withProductEconomicsCacheSingleflight,
 } from './productEconomicsCache.js';
 
 type PeriodRange = { start: Date; end: Date } | null;
@@ -587,28 +586,38 @@ async function loadProductionAggregates(
   periodRange: PeriodRange = null,
   /** 明细接口按单产品下推过滤，避免全租户报工全量拉取 */
   productId?: string,
+  /**
+   * document_linked 列表接口：列表行不展示报工物料成本（buildRow 置 0），
+   * 跳过 materialBreakdown JSON 拉取与逐条 BOM 物料计算。
+   */
+  opts?: { skipMaterialCost?: boolean },
 ): Promise<Map<string, ProductAgg>> {
+  const skipMaterialCost = opts?.skipMaterialCost === true;
   const ts = timestampWhere(periodRange);
   const opTs = periodRange ? { timestamp: { gte: periodRange.start, lte: periodRange.end } } : {};
   const opProduct = productId ? { productId } : {};
   const aggs = new Map<string, ProductAgg>();
-  const getAgg = (productId: string) => {
-    let a = aggs.get(productId);
+  const getAgg = (pid: string) => {
+    let a = aggs.get(pid);
     if (!a) {
       a = emptyAgg();
-      aggs.set(productId, a);
+      aggs.set(pid, a);
     }
     return a;
   };
 
-  const [msReports, pmpReports, outsourceAgg, reworkAgg, scrapAgg, globalNodes, unitNameByMaterialId] =
-    await Promise.all([
-    db.milestoneReport.findMany({
-      where: {
-        ...ts,
-        ...(productId ? { milestone: { productionOrder: { productId } } } : {}),
-      },
-      select: {
+  const msSelect = skipMaterialCost
+    ? {
+        quantity: true,
+        rate: true,
+        milestone: {
+          select: {
+            templateId: true,
+            productionOrder: { select: { productId: true } },
+          },
+        },
+      }
+    : {
         quantity: true,
         rate: true,
         materialBreakdown: true,
@@ -619,14 +628,19 @@ async function loadProductionAggregates(
             productionOrder: { select: { productId: true } },
           },
         },
-      },
-    }),
-    db.productProgressReport.findMany({
-      where: {
-        ...ts,
-        ...(productId ? { progress: { productId } } : {}),
-      },
-      select: {
+      };
+  const pmpSelect = skipMaterialCost
+    ? {
+        quantity: true,
+        rate: true,
+        progress: {
+          select: {
+            productId: true,
+            milestoneTemplateId: true,
+          },
+        },
+      }
+    : {
         quantity: true,
         rate: true,
         materialBreakdown: true,
@@ -638,7 +652,23 @@ async function loadProductionAggregates(
             variantId: true,
           },
         },
+      };
+
+  const [msReports, pmpReports, outsourceAgg, reworkAgg, scrapAgg, globalNodes, unitNameByMaterialId] =
+    await Promise.all([
+    db.milestoneReport.findMany({
+      where: {
+        ...ts,
+        ...(productId ? { milestone: { productionOrder: { productId } } } : {}),
       },
+      select: msSelect,
+    }),
+    db.productProgressReport.findMany({
+      where: {
+        ...ts,
+        ...(productId ? { progress: { productId } } : {}),
+      },
+      select: pmpSelect,
     }),
     db.productionOpRecord.groupBy({
       by: ['productId', 'nodeId'],
@@ -655,13 +685,17 @@ async function loadProductionAggregates(
       where: { type: 'SCRAP', ...opTs, ...opProduct },
       _sum: { quantity: true },
     }),
-    db.globalNodeTemplate.findMany({
-      select: { id: true, enableWeightOnReport: true },
-    }),
-    loadMaterialUnitNameByProductId(
-      db,
-      boms.flatMap(b => b.items.map(i => i.productId)),
-    ),
+    skipMaterialCost
+      ? Promise.resolve([] as { id: string; enableWeightOnReport: boolean }[])
+      : db.globalNodeTemplate.findMany({
+          select: { id: true, enableWeightOnReport: true },
+        }),
+    skipMaterialCost
+      ? Promise.resolve(new Map<string, string>())
+      : loadMaterialUnitNameByProductId(
+          db,
+          boms.flatMap(b => b.items.map(i => i.productId)),
+        ),
   ]);
 
   const nodeWeightEnabledMap = new Map(
@@ -686,64 +720,27 @@ async function loadProductionAggregates(
   );
 
   for (const report of msReports) {
-    const productId = report.milestone.productionOrder.productId;
+    const pid = report.milestone.productionOrder.productId;
     const nodeId = report.milestone.templateId;
     const qty = num(report.quantity);
     if (!(qty > 0)) continue;
-    const agg = getAgg(productId);
+    const agg = getAgg(pid);
     const node = ensureNode(agg, nodeId);
-    const rates = nodeRatesByProduct.get(productId) ?? {};
+    const rates = nodeRatesByProduct.get(pid) ?? {};
     const unitRate = report.rate != null ? num(report.rate) : (rates[nodeId] ?? 0);
     const reportAmt = qty * unitRate;
     agg.reportCost += reportAmt;
     node.reportCost += reportAmt;
 
-    const breakdown = parseMaterialBreakdown(report.materialBreakdown);
+    if (skipMaterialCost) continue;
+    const breakdown = parseMaterialBreakdown(
+      'materialBreakdown' in report ? report.materialBreakdown : null,
+    );
     const weightOn = !!nodeWeightEnabledMap.get(nodeId);
+    const variantId = 'variantId' in report ? report.variantId : null;
     const matCost = resolveReportMaterialCost(
       boms,
-      productId,
-      nodeId,
-      report.variantId,
-      qty,
-      breakdown,
-      weightOn,
-      priceMap,
-      unitNameByMaterialId,
-    );
-    const matQty = resolveReportMaterialQty(
-      boms,
-      productId,
-      nodeId,
-      report.variantId,
-      qty,
-      breakdown,
-      weightOn,
-    );
-    agg.materialCost += matCost;
-    node.materialCost += matCost;
-    node.materialQty += matQty;
-  }
-
-  for (const report of pmpReports) {
-    const productId = report.progress.productId;
-    const nodeId = report.progress.milestoneTemplateId;
-    const qty = num(report.quantity);
-    if (!(qty > 0)) continue;
-    const agg = getAgg(productId);
-    const node = ensureNode(agg, nodeId);
-    const rates = nodeRatesByProduct.get(productId) ?? {};
-    const unitRate = report.rate != null ? num(report.rate) : (rates[nodeId] ?? 0);
-    const reportAmt = qty * unitRate;
-    agg.reportCost += reportAmt;
-    node.reportCost += reportAmt;
-
-    const variantId = report.variantId ?? report.progress.variantId;
-    const breakdown = parseMaterialBreakdown(report.materialBreakdown);
-    const weightOn = !!nodeWeightEnabledMap.get(nodeId);
-    const matCost = resolveReportMaterialCost(
-      boms,
-      productId,
+      pid,
       nodeId,
       variantId,
       qty,
@@ -754,7 +751,53 @@ async function loadProductionAggregates(
     );
     const matQty = resolveReportMaterialQty(
       boms,
-      productId,
+      pid,
+      nodeId,
+      variantId,
+      qty,
+      breakdown,
+      weightOn,
+    );
+    agg.materialCost += matCost;
+    node.materialCost += matCost;
+    node.materialQty += matQty;
+  }
+
+  for (const report of pmpReports) {
+    const pid = report.progress.productId;
+    const nodeId = report.progress.milestoneTemplateId;
+    const qty = num(report.quantity);
+    if (!(qty > 0)) continue;
+    const agg = getAgg(pid);
+    const node = ensureNode(agg, nodeId);
+    const rates = nodeRatesByProduct.get(pid) ?? {};
+    const unitRate = report.rate != null ? num(report.rate) : (rates[nodeId] ?? 0);
+    const reportAmt = qty * unitRate;
+    agg.reportCost += reportAmt;
+    node.reportCost += reportAmt;
+
+    if (skipMaterialCost) continue;
+    const variantId =
+      ('variantId' in report ? report.variantId : null)
+      ?? ('variantId' in report.progress ? report.progress.variantId : null);
+    const breakdown = parseMaterialBreakdown(
+      'materialBreakdown' in report ? report.materialBreakdown : null,
+    );
+    const weightOn = !!nodeWeightEnabledMap.get(nodeId);
+    const matCost = resolveReportMaterialCost(
+      boms,
+      pid,
+      nodeId,
+      variantId,
+      qty,
+      breakdown,
+      weightOn,
+      priceMap,
+      unitNameByMaterialId,
+    );
+    const matQty = resolveReportMaterialQty(
+      boms,
+      pid,
       nodeId,
       variantId,
       qty,
@@ -1006,171 +1049,177 @@ export async function computeProductEconomicsList(
     periodKey,
     `p${Number(includeProduction)}${Number(includePsi)}${Number(includeFinance)}`,
   ]);
-  const cached = await getProductEconomicsCache<ProductEconomicsListResponse>(cacheKey);
-  if (cached) return cached;
 
-  const [globalNodes, allProducts] = await Promise.all([
-    db.globalNodeTemplate.findMany({ select: { id: true, name: true } }),
-    db.product.findMany({
-      where: { enabled: true },
-      select: {
-        id: true,
-        name: true,
-        sku: true,
-        imageUrl: true,
-        milestoneNodeIds: true,
-        nodeRates: true,
-      },
-      orderBy: { name: 'asc' },
-    }),
-  ]);
-  const nodeNameById = new Map(globalNodes.map(n => [n.id, n.name]));
-  const productIds = allProducts.map(p => p.id);
+  return withProductEconomicsCacheSingleflight(cacheKey, async () => {
+    const [globalNodes, allProducts] = await Promise.all([
+      db.globalNodeTemplate.findMany({ select: { id: true, name: true } }),
+      db.product.findMany({
+        where: { enabled: true },
+        select: {
+          id: true,
+          name: true,
+          sku: true,
+          imageUrl: true,
+          milestoneNodeIds: true,
+          nodeRates: true,
+        },
+        orderBy: { name: 'asc' },
+      }),
+    ]);
+    const nodeNameById = new Map(globalNodes.map(n => [n.id, n.name]));
+    const productIds = allProducts.map(p => p.id);
 
-  const boms = includeProduction ? await loadBoms(db, productIds) : [];
-  const priceMap = includeProduction
-    ? await buildMaterialPriceMapForEconomics(db, tenantId, buildPriceContextsFromBoms(boms))
-    : new Map();
-  const unitMaterialCostByProduct = new Map<string, number>();
-  if (includeProduction) {
+    const boms = includeProduction ? await loadBoms(db, productIds) : [];
+    const priceMap = includeProduction
+      ? await buildMaterialPriceMapForEconomics(db, tenantId, buildPriceContextsFromBoms(boms))
+      : new Map();
+    const unitMaterialCostByProduct = new Map<string, number>();
+    if (includeProduction) {
+      for (const pid of productIds) {
+        unitMaterialCostByProduct.set(pid, computeUnitMaterialCost(boms, pid, priceMap));
+      }
+    }
+
+    const prodAggs = includeProduction
+      ? await loadProductionAggregates(
+          db,
+          boms,
+          priceMap,
+          nodeNameById,
+          periodRange,
+          undefined,
+          { skipMaterialCost: documentLinked },
+        )
+      : new Map<string, ProductAgg>();
+    const surplusLossByProduct = includeProduction && !periodScoped && !documentLinked
+      ? await computeMaterialSurplusLossByProduct(db, tenantId, productIds)
+      : new Map<string, number>();
+    const psiAggs = includePsi ? await loadPsiAggregates(db, periodRange) : new Map();
+
+    const linkedPurchaseByProduct = documentLinked && includeProduction
+      ? await loadLinkedPurchaseCostByProduct(db, productIds, periodRange)
+      : new Map<string, number>();
+    const linkedFinance = includeFinance
+      ? await loadLinkedFinanceByProduct(db, productIds, periodRange)
+      : { paymentCostMap: new Map<string, number>(), receiptAmountMap: new Map<string, number>() };
+
+    const theoreticalUnitCostByProduct = new Map<string, number>();
+    if (includeProduction && !documentLinked) {
+      const materialIds = boms.flatMap(b => b.items.map(i => i.productId));
+      const materialLabelById = await loadMaterialLabelById(db, materialIds);
+      const theoreticalBoms = toTheoreticalBoms(boms);
+      let reportPriceMap = new Map<string, number>();
+      let outsourcePriceMap = new Map<string, number>();
+      try {
+        const processContexts = buildProcessPriceContexts(allProducts);
+        [reportPriceMap, outsourcePriceMap] = await Promise.all([
+          buildReportPriceMapForEconomics(db, processContexts),
+          buildOutsourcePriceMapForEconomics(db, processContexts),
+        ]);
+      } catch {
+        /* 报工/外协价格表未迁移或流水查询失败时，理论成本仍回退 nodeRates */
+      }
+      for (const p of allProducts) {
+        const breakdown = buildTheoreticalCostBreakdown({
+          boms: theoreticalBoms,
+          productId: p.id,
+          priceMap,
+          nodeRates: parseNodeRates(p.nodeRates),
+          reportPriceMap,
+          outsourcePriceMap,
+          milestoneNodeIds: parseMilestoneNodeIds(p.milestoneNodeIds),
+          materialLabelById,
+          nodeNameById,
+        });
+        theoreticalUnitCostByProduct.set(p.id, breakdown.total);
+      }
+    }
+
+    const merged = new Map<string, ProductAgg>();
     for (const pid of productIds) {
-      unitMaterialCostByProduct.set(pid, computeUnitMaterialCost(boms, pid, priceMap));
+      const base = prodAggs.get(pid) ?? emptyAgg();
+      const psi = psiAggs.get(pid);
+      if (psi) {
+        base.salesQty = psi.salesQty;
+        base.salesAmount = psi.salesAmount;
+        base.stockQty = psi.stockQty;
+      }
+      merged.set(pid, base);
     }
-  }
-
-  const prodAggs = includeProduction
-    ? await loadProductionAggregates(db, boms, priceMap, nodeNameById, periodRange)
-    : new Map<string, ProductAgg>();
-  const surplusLossByProduct = includeProduction && !periodScoped && !documentLinked
-    ? await computeMaterialSurplusLossByProduct(db, tenantId, productIds)
-    : new Map<string, number>();
-  const psiAggs = includePsi ? await loadPsiAggregates(db, periodRange) : new Map();
-
-  const linkedPurchaseByProduct = documentLinked && includeProduction
-    ? await loadLinkedPurchaseCostByProduct(db, productIds, periodRange)
-    : new Map<string, number>();
-  const linkedFinance = includeFinance
-    ? await loadLinkedFinanceByProduct(db, productIds, periodRange)
-    : { paymentCostMap: new Map<string, number>(), receiptAmountMap: new Map<string, number>() };
-
-  const theoreticalUnitCostByProduct = new Map<string, number>();
-  if (includeProduction && !documentLinked) {
-    const materialIds = boms.flatMap(b => b.items.map(i => i.productId));
-    const materialLabelById = await loadMaterialLabelById(db, materialIds);
-    const theoreticalBoms = toTheoreticalBoms(boms);
-    let reportPriceMap = new Map<string, number>();
-    let outsourcePriceMap = new Map<string, number>();
-    try {
-      const processContexts = buildProcessPriceContexts(allProducts);
-      [reportPriceMap, outsourcePriceMap] = await Promise.all([
-        buildReportPriceMapForEconomics(db, processContexts),
-        buildOutsourcePriceMapForEconomics(db, processContexts),
-      ]);
-    } catch {
-      /* 报工/外协价格表未迁移或流水查询失败时，理论成本仍回退 nodeRates */
-    }
-    for (const p of allProducts) {
-      const breakdown = buildTheoreticalCostBreakdown({
-        boms: theoreticalBoms,
-        productId: p.id,
-        priceMap,
-        nodeRates: parseNodeRates(p.nodeRates),
-        reportPriceMap,
-        outsourcePriceMap,
-        milestoneNodeIds: parseMilestoneNodeIds(p.milestoneNodeIds),
-        materialLabelById,
-        nodeNameById,
-      });
-      theoreticalUnitCostByProduct.set(p.id, breakdown.total);
-    }
-  }
-
-  const merged = new Map<string, ProductAgg>();
-  for (const pid of productIds) {
-    const base = prodAggs.get(pid) ?? emptyAgg();
-    const psi = psiAggs.get(pid);
-    if (psi) {
+    for (const [pid, psi] of psiAggs) {
+      if (merged.has(pid)) continue;
+      const base = emptyAgg();
       base.salesQty = psi.salesQty;
       base.salesAmount = psi.salesAmount;
       base.stockQty = psi.stockQty;
+      merged.set(pid, base);
     }
-    merged.set(pid, base);
-  }
-  for (const [pid, psi] of psiAggs) {
-    if (merged.has(pid)) continue;
-    const base = emptyAgg();
-    base.salesQty = psi.salesQty;
-    base.salesAmount = psi.salesAmount;
-    base.stockQty = psi.stockQty;
-    merged.set(pid, base);
-  }
 
-  const rows: ProductEconomicsRow[] = [];
-  for (const p of allProducts) {
-    const agg = merged.get(p.id) ?? emptyAgg();
-    const unitMaterialCost = unitMaterialCostByProduct.get(p.id) ?? 0;
-    const materialSurplusLoss = surplusLossByProduct.get(p.id) ?? 0;
-    const linkedPurchaseCost = linkedPurchaseByProduct.get(p.id) ?? 0;
-    const linkedPaymentCost = linkedFinance.paymentCostMap.get(p.id) ?? 0;
-    const linkedReceiptAmount = linkedFinance.receiptAmountMap.get(p.id) ?? 0;
-    if (
-      !hasActivity(
-        agg,
-        unitMaterialCost,
-        materialSurplusLoss,
-        periodScoped,
-        materialCostMode,
-        linkedPurchaseCost,
-        linkedPaymentCost,
-        linkedReceiptAmount,
-      )
-    ) {
-      continue;
+    const rows: ProductEconomicsRow[] = [];
+    for (const p of allProducts) {
+      const agg = merged.get(p.id) ?? emptyAgg();
+      const unitMaterialCost = unitMaterialCostByProduct.get(p.id) ?? 0;
+      const materialSurplusLoss = surplusLossByProduct.get(p.id) ?? 0;
+      const linkedPurchaseCost = linkedPurchaseByProduct.get(p.id) ?? 0;
+      const linkedPaymentCost = linkedFinance.paymentCostMap.get(p.id) ?? 0;
+      const linkedReceiptAmount = linkedFinance.receiptAmountMap.get(p.id) ?? 0;
+      if (
+        !hasActivity(
+          agg,
+          unitMaterialCost,
+          materialSurplusLoss,
+          periodScoped,
+          materialCostMode,
+          linkedPurchaseCost,
+          linkedPaymentCost,
+          linkedReceiptAmount,
+        )
+      ) {
+        continue;
+      }
+      rows.push(
+        buildRow(
+          p.id,
+          p.name,
+          p.sku,
+          p.imageUrl ?? null,
+          productHasProcessNodes(p.milestoneNodeIds),
+          agg,
+          unitMaterialCost,
+          materialSurplusLoss,
+          materialCostMode,
+          linkedPurchaseCost,
+          linkedPaymentCost,
+          linkedReceiptAmount,
+          includeProduction,
+          includePsi,
+          includeFinance,
+          theoreticalUnitCostByProduct.get(p.id) ?? 0,
+        ),
+      );
     }
-    rows.push(
-      buildRow(
-        p.id,
-        p.name,
-        p.sku,
-        p.imageUrl ?? null,
-        productHasProcessNodes(p.milestoneNodeIds),
-        agg,
-        unitMaterialCost,
-        materialSurplusLoss,
-        materialCostMode,
-        linkedPurchaseCost,
-        linkedPaymentCost,
-        linkedReceiptAmount,
-        includeProduction,
-        includePsi,
-        includeFinance,
-        theoreticalUnitCostByProduct.get(p.id) ?? 0,
-      ),
-    );
-  }
 
-  const totalCost = rows.reduce((s, r) => s + r.totalCost, 0);
-  const totalSalesAmount = rows.reduce((s, r) => s + r.salesAmount, 0);
-  const totalRevenue = rows.reduce((s, r) => s + r.totalRevenue, 0);
+    const totalCost = rows.reduce((s, r) => s + r.totalCost, 0);
+    const totalSalesAmount = rows.reduce((s, r) => s + r.salesAmount, 0);
+    const totalRevenue = rows.reduce((s, r) => s + r.totalRevenue, 0);
 
-  const response: ProductEconomicsListResponse = {
-    canProduction: includeProduction,
-    canPsi: includePsi,
-    canFinance: includeFinance,
-    materialCostMode,
-    period,
-    customRange,
-    summary: {
-      productCount: rows.length,
-      totalCost,
-      totalSalesAmount,
-      totalRevenue,
-      grossProfit: totalRevenue - totalCost,
-    },
-    rows,
-  };
-  await setProductEconomicsCache(cacheKey, response);
-  return response;
+    return {
+      canProduction: includeProduction,
+      canPsi: includePsi,
+      canFinance: includeFinance,
+      materialCostMode,
+      period,
+      customRange,
+      summary: {
+        productCount: rows.length,
+        totalCost,
+        totalSalesAmount,
+        totalRevenue,
+        grossProfit: totalRevenue - totalCost,
+      },
+      rows,
+    };
+  });
 }
 
 export async function computeProductEconomicsDetail(
@@ -1193,176 +1242,174 @@ export async function computeProductEconomicsDetail(
     productId,
     `p${Number(includeProduction)}${Number(includePsi)}${Number(includeFinance)}`,
   ]);
-  const cached = await getProductEconomicsCache<ProductEconomicsDetailResponse>(cacheKey);
-  if (cached) return cached;
 
-  const product = await db.product.findUnique({
-    where: { id: productId },
-    select: {
-      id: true,
-      name: true,
-      sku: true,
-      imageUrl: true,
-      enabled: true,
-      milestoneNodeIds: true,
-      nodeRates: true,
-    },
-  });
-  if (!product) throw new AppError(404, '产品不存在');
-
-  const globalNodes = await db.globalNodeTemplate.findMany({ select: { id: true, name: true } });
-  const nodeNameById = new Map(globalNodes.map(n => [n.id, n.name]));
-
-  const boms = includeProduction ? await loadBoms(db, [productId]) : [];
-  const priceMap = includeProduction
-    ? await buildMaterialPriceMapForEconomics(db, tenantId, buildPriceContextsFromBoms(boms))
-    : new Map();
-  const unitMaterialCost = includeProduction
-    ? computeUnitMaterialCost(boms, productId, priceMap)
-    : 0;
-
-  const prodAgg = includeProduction
-    ? (await loadProductionAggregates(db, boms, priceMap, nodeNameById, null, productId)).get(productId) ?? emptyAgg()
-    : emptyAgg();
-  const materialSurplusLoss = includeProduction && !documentLinked
-    ? (await computeMaterialSurplusLossByProduct(db, tenantId, [productId], { scoped: true })).get(productId) ?? 0
-    : 0;
-
-  const linkedPurchaseCost = documentLinked && includeProduction
-    ? (await loadLinkedPurchaseCostByProduct(db, [productId])).get(productId) ?? 0
-    : 0;
-  const linkedFinance = includeFinance
-    ? await loadLinkedFinanceByProduct(db, [productId])
-    : { paymentCostMap: new Map<string, number>(), receiptAmountMap: new Map<string, number>() };
-  const linkedPaymentCost = linkedFinance.paymentCostMap.get(productId) ?? 0;
-  const linkedReceiptAmount = linkedFinance.receiptAmountMap.get(productId) ?? 0;
-
-  let theoreticalCostBreakdown: TheoreticalCostBreakdown = { total: 0, items: [] };
-  if (includeProduction && !documentLinked) {
-    const materialIds = boms.flatMap(b => b.items.map(i => i.productId));
-    const materialLabelById = await loadMaterialLabelById(db, materialIds);
-    let reportPriceMap = new Map<string, number>();
-    let outsourcePriceMap = new Map<string, number>();
-    try {
-      const processContexts = buildProcessPriceContexts([product]);
-      [reportPriceMap, outsourcePriceMap] = await Promise.all([
-        buildReportPriceMapForEconomics(db, processContexts),
-        buildOutsourcePriceMapForEconomics(db, processContexts),
-      ]);
-    } catch {
-      /* 同上：未迁移时回退 nodeRates */
-    }
-    theoreticalCostBreakdown = computeTheoreticalCostForProduct({
-      boms,
-      productId,
-      priceMap,
-      nodeRates: parseNodeRates(product.nodeRates),
-      reportPriceMap,
-      outsourcePriceMap,
-      milestoneNodeIds: product.milestoneNodeIds,
-      materialLabelById,
-      nodeNameById,
+  return withProductEconomicsCacheSingleflight(cacheKey, async () => {
+    const product = await db.product.findUnique({
+      where: { id: productId },
+      select: {
+        id: true,
+        name: true,
+        sku: true,
+        imageUrl: true,
+        enabled: true,
+        milestoneNodeIds: true,
+        nodeRates: true,
+      },
     });
-  }
+    if (!product) throw new AppError(404, '产品不存在');
 
-  if (includePsi) {
-    const psi = (await loadPsiAggregates(db, null, productId)).get(productId);
-    if (psi) {
-      prodAgg.salesQty = psi.salesQty;
-      prodAgg.salesAmount = psi.salesAmount;
-      prodAgg.stockQty = psi.stockQty;
+    const globalNodes = await db.globalNodeTemplate.findMany({ select: { id: true, name: true } });
+    const nodeNameById = new Map(globalNodes.map(n => [n.id, n.name]));
+
+    const boms = includeProduction ? await loadBoms(db, [productId]) : [];
+    const priceMap = includeProduction
+      ? await buildMaterialPriceMapForEconomics(db, tenantId, buildPriceContextsFromBoms(boms))
+      : new Map();
+    const unitMaterialCost = includeProduction
+      ? computeUnitMaterialCost(boms, productId, priceMap)
+      : 0;
+
+    const prodAgg = includeProduction
+      ? (await loadProductionAggregates(db, boms, priceMap, nodeNameById, null, productId)).get(productId) ?? emptyAgg()
+      : emptyAgg();
+    const materialSurplusLoss = includeProduction && !documentLinked
+      ? (await computeMaterialSurplusLossByProduct(db, tenantId, [productId], { scoped: true })).get(productId) ?? 0
+      : 0;
+
+    const linkedPurchaseCost = documentLinked && includeProduction
+      ? (await loadLinkedPurchaseCostByProduct(db, [productId])).get(productId) ?? 0
+      : 0;
+    const linkedFinance = includeFinance
+      ? await loadLinkedFinanceByProduct(db, [productId])
+      : { paymentCostMap: new Map<string, number>(), receiptAmountMap: new Map<string, number>() };
+    const linkedPaymentCost = linkedFinance.paymentCostMap.get(productId) ?? 0;
+    const linkedReceiptAmount = linkedFinance.receiptAmountMap.get(productId) ?? 0;
+
+    let theoreticalCostBreakdown: TheoreticalCostBreakdown = { total: 0, items: [] };
+    if (includeProduction && !documentLinked) {
+      const materialIds = boms.flatMap(b => b.items.map(i => i.productId));
+      const materialLabelById = await loadMaterialLabelById(db, materialIds);
+      let reportPriceMap = new Map<string, number>();
+      let outsourcePriceMap = new Map<string, number>();
+      try {
+        const processContexts = buildProcessPriceContexts([product]);
+        [reportPriceMap, outsourcePriceMap] = await Promise.all([
+          buildReportPriceMapForEconomics(db, processContexts),
+          buildOutsourcePriceMapForEconomics(db, processContexts),
+        ]);
+      } catch {
+        /* 同上：未迁移时回退 nodeRates */
+      }
+      theoreticalCostBreakdown = computeTheoreticalCostForProduct({
+        boms,
+        productId,
+        priceMap,
+        nodeRates: parseNodeRates(product.nodeRates),
+        reportPriceMap,
+        outsourcePriceMap,
+        milestoneNodeIds: product.milestoneNodeIds,
+        materialLabelById,
+        nodeNameById,
+      });
     }
-  }
 
-  const row = buildRow(
-    product.id,
-    product.name,
-    product.sku,
-    product.imageUrl ?? null,
-    productHasProcessNodes(product.milestoneNodeIds),
-    prodAgg,
-    unitMaterialCost,
-    materialSurplusLoss,
-    materialCostMode,
-    linkedPurchaseCost,
-    linkedPaymentCost,
-    linkedReceiptAmount,
-    includeProduction,
-    includePsi,
-    includeFinance,
-    documentLinked ? 0 : theoreticalCostBreakdown.total,
-  );
+    if (includePsi) {
+      const psi = (await loadPsiAggregates(db, null, productId)).get(productId);
+      if (psi) {
+        prodAgg.salesQty = psi.salesQty;
+        prodAgg.salesAmount = psi.salesAmount;
+        prodAgg.stockQty = psi.stockQty;
+      }
+    }
 
-  const quantityDetail = includeProduction
-    ? await loadProductQuantityDetail(db, productId)
-    : { totalOrderQty: 0, stockInQty: 0, nodeQty: new Map<string, NodeQtyAgg>() };
+    const row = buildRow(
+      product.id,
+      product.name,
+      product.sku,
+      product.imageUrl ?? null,
+      productHasProcessNodes(product.milestoneNodeIds),
+      prodAgg,
+      unitMaterialCost,
+      materialSurplusLoss,
+      materialCostMode,
+      linkedPurchaseCost,
+      linkedPaymentCost,
+      linkedReceiptAmount,
+      includeProduction,
+      includePsi,
+      includeFinance,
+      documentLinked ? 0 : theoreticalCostBreakdown.total,
+    );
 
-  const nodeIds = new Set<string>([
-    ...prodAgg.byNode.keys(),
-    ...quantityDetail.nodeQty.keys(),
-  ]);
+    const quantityDetail = includeProduction
+      ? await loadProductQuantityDetail(db, productId)
+      : { totalOrderQty: 0, stockInQty: 0, nodeQty: new Map<string, NodeQtyAgg>() };
 
-  const byNode: ProductEconomicsNodeRow[] = [...nodeIds]
-    .map(nodeId => {
-      const cost = prodAgg.byNode.get(nodeId);
-      const qty = quantityDetail.nodeQty.get(nodeId);
-      return {
-        nodeId,
-        nodeName: nodeNameById.get(nodeId) ?? nodeId,
-        hasNodeBom: nodeHasBom(boms, productId, nodeId),
-        materialCost: cost?.materialCost ?? 0,
-        materialQty: Math.round((cost?.materialQty ?? 0) * 100) / 100,
-        reportCost: cost?.reportCost ?? 0,
-        outsourceFee: cost?.outsourceFee ?? 0,
-        reworkFee: cost?.reworkFee ?? 0,
-        reportQty: qty?.reportQty ?? 0,
-        outsourceQty: qty?.outsourceQty ?? 0,
-        reworkQty: qty?.reworkQty ?? 0,
-      };
-    })
-    .filter(
-      n =>
-        n.materialCost > 0
-        || n.reportCost > 0
-        || n.outsourceFee > 0
-        || n.reworkFee > 0
-        || n.reportQty > 0
-        || n.outsourceQty > 0
-        || n.reworkQty > 0,
-    )
-    .sort((a, b) => a.nodeName.localeCompare(b.nodeName, 'zh-CN'));
+    const nodeIds = new Set<string>([
+      ...prodAgg.byNode.keys(),
+      ...quantityDetail.nodeQty.keys(),
+    ]);
 
-  const response: ProductEconomicsDetailResponse = {
-    canProduction: includeProduction,
-    canPsi: includePsi,
-    canFinance: includeFinance,
-    materialCostMode,
-    productId: product.id,
-    name: product.name,
-    sku: product.sku,
-    imageUrl: product.imageUrl ?? null,
-    materialCost: row.materialCost,
-    reportCost: row.reportCost,
-    outsourceFee: row.outsourceFee,
-    reworkFee: row.reworkFee,
-    materialSurplusLoss: row.materialSurplusLoss,
-    linkedPurchaseCost: row.linkedPurchaseCost,
-    linkedPaymentCost: row.linkedPaymentCost,
-    linkedReceiptAmount: row.linkedReceiptAmount,
-    scrapQty: row.scrapQty,
-    scrapAmount: row.scrapAmount,
-    stockQty: row.stockQty,
-    salesQty: row.salesQty,
-    salesAmount: row.salesAmount,
-    totalRevenue: row.totalRevenue,
-    totalCost: row.totalCost,
-    grossProfit: row.grossProfit,
-    theoreticalUnitCost: row.theoreticalUnitCost,
-    theoreticalCostBreakdown,
-    totalOrderQty: quantityDetail.totalOrderQty,
-    stockInQty: quantityDetail.stockInQty,
-    byNode,
-  };
-  await setProductEconomicsCache(cacheKey, response);
-  return response;
+    const byNode: ProductEconomicsNodeRow[] = [...nodeIds]
+      .map(nodeId => {
+        const cost = prodAgg.byNode.get(nodeId);
+        const qty = quantityDetail.nodeQty.get(nodeId);
+        return {
+          nodeId,
+          nodeName: nodeNameById.get(nodeId) ?? nodeId,
+          hasNodeBom: nodeHasBom(boms, productId, nodeId),
+          materialCost: cost?.materialCost ?? 0,
+          materialQty: Math.round((cost?.materialQty ?? 0) * 100) / 100,
+          reportCost: cost?.reportCost ?? 0,
+          outsourceFee: cost?.outsourceFee ?? 0,
+          reworkFee: cost?.reworkFee ?? 0,
+          reportQty: qty?.reportQty ?? 0,
+          outsourceQty: qty?.outsourceQty ?? 0,
+          reworkQty: qty?.reworkQty ?? 0,
+        };
+      })
+      .filter(
+        n =>
+          n.materialCost > 0
+          || n.reportCost > 0
+          || n.outsourceFee > 0
+          || n.reworkFee > 0
+          || n.reportQty > 0
+          || n.outsourceQty > 0
+          || n.reworkQty > 0,
+      )
+      .sort((a, b) => a.nodeName.localeCompare(b.nodeName, 'zh-CN'));
+
+    return {
+      canProduction: includeProduction,
+      canPsi: includePsi,
+      canFinance: includeFinance,
+      materialCostMode,
+      productId: product.id,
+      name: product.name,
+      sku: product.sku,
+      imageUrl: product.imageUrl ?? null,
+      materialCost: row.materialCost,
+      reportCost: row.reportCost,
+      outsourceFee: row.outsourceFee,
+      reworkFee: row.reworkFee,
+      materialSurplusLoss: row.materialSurplusLoss,
+      linkedPurchaseCost: row.linkedPurchaseCost,
+      linkedPaymentCost: row.linkedPaymentCost,
+      linkedReceiptAmount: row.linkedReceiptAmount,
+      scrapQty: row.scrapQty,
+      scrapAmount: row.scrapAmount,
+      stockQty: row.stockQty,
+      salesQty: row.salesQty,
+      salesAmount: row.salesAmount,
+      totalRevenue: row.totalRevenue,
+      totalCost: row.totalCost,
+      grossProfit: row.grossProfit,
+      theoreticalUnitCost: row.theoreticalUnitCost,
+      theoreticalCostBreakdown,
+      totalOrderQty: quantityDetail.totalOrderQty,
+      stockInQty: quantityDetail.stockInQty,
+      byNode,
+    };
+  });
 }

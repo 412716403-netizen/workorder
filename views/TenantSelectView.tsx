@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { Building2, ChevronRight, Loader2, Plus, CalendarClock, LogOut, Clock, XCircle } from 'lucide-react';
+import React, { useMemo, useState, useRef } from 'react';
+import { Building2, ChevronRight, Loader2, Plus, CalendarClock, LogOut, Clock } from 'lucide-react';
 import * as api from '../services/api';
 import type { TenantInfo } from '../services/api';
 import { toast } from 'sonner';
@@ -27,6 +27,12 @@ export default function TenantSelectView({ tenants, onSelect, onCreateOrJoin, on
   const [loading, setLoading] = useState<string | null>(null);
   const selectLockRef = useRef(false);
 
+  /** 创建被拒后不再出现在选择列表，避免反复看到「已拒绝」 */
+  const visibleTenants = useMemo(
+    () => tenants.filter(t => t.status !== 'rejected'),
+    [tenants],
+  );
+
   async function handleSelect(tenantId: string) {
     if (selectLockRef.current) return;
     selectLockRef.current = true;
@@ -50,18 +56,16 @@ export default function TenantSelectView({ tenants, onSelect, onCreateOrJoin, on
           <p className="text-gray-500 mt-2">请选择要进入的企业，或创建/加入新企业</p>
         </div>
         <div className="space-y-3">
-          {tenants.map(t => {
+          {visibleTenants.map(t => {
             const expired = isExpired(t.expiresAt);
             const pending = t.status === 'pending';
-            const rejected = t.status === 'rejected';
-            const disabled = !!loading || pending || rejected;
-            const abnormal = expired || pending || rejected;
+            const disabled = !!loading || pending;
+            const abnormal = expired || pending;
 
             return (
-              <button key={t.id} onClick={() => !pending && !rejected && handleSelect(t.id)} disabled={disabled}
+              <button key={t.id} onClick={() => !pending && handleSelect(t.id)} disabled={disabled}
                 className={`w-full bg-white rounded-xl shadow-md border p-4 flex items-center gap-4 transition-all ${
                   pending ? 'border-amber-200 opacity-80 cursor-default' :
-                  rejected ? 'border-red-200 opacity-60 cursor-default' :
                   expired ? 'border-red-200 opacity-70' :
                   loading ? 'opacity-50' :
                   'border-gray-100 hover:border-blue-300 hover:shadow-lg'
@@ -82,12 +86,7 @@ export default function TenantSelectView({ tenants, onSelect, onCreateOrJoin, on
                         <Clock className="w-3 h-3" /> 审核中
                       </span>
                     )}
-                    {rejected && (
-                      <span className="inline-flex items-center gap-0.5 text-red-500 font-bold">
-                        <XCircle className="w-3 h-3" /> 已拒绝
-                      </span>
-                    )}
-                    {!pending && !rejected && expired && (
+                    {!pending && expired && (
                       <span className="inline-flex items-center gap-0.5 text-red-500 font-bold">
                         <CalendarClock className="w-3 h-3" /> 已到期
                       </span>
@@ -96,7 +95,7 @@ export default function TenantSelectView({ tenants, onSelect, onCreateOrJoin, on
                 </div>
                 {loading === t.id ? (
                   <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
-                ) : !pending && !rejected ? (
+                ) : !pending ? (
                   <ChevronRight className={`w-5 h-5 ${expired ? 'text-red-200' : 'text-gray-300'}`} />
                 ) : null}
               </button>

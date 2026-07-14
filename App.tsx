@@ -77,11 +77,14 @@ function AuthRouter() {
     handleLogin, handleLogout, handleTenantReady,
   } = useAuth();
 
+  /** 选择企业页不展示已拒绝租户；若只剩被拒企业则走创建/加入引导 */
+  const selectableTenants = userTenants.filter(t => t.status !== 'rejected');
+
   if (!isLoggedIn) {
     return <LoginView onLogin={handleLogin} />;
   }
 
-  if (userTenants.length === 0 && !tenantCtx) {
+  if (selectableTenants.length === 0 && !tenantCtx) {
     return <OnboardingView onTenantReady={handleTenantReady} onBackToLogin={handleLogout} />;
   }
 
@@ -89,16 +92,16 @@ function AuthRouter() {
     return (
       <OnboardingView
         onTenantReady={handleTenantReady}
-        onBack={userTenants.length > 0 ? () => setShowOnboarding(false) : undefined}
+        onBack={selectableTenants.length > 0 ? () => setShowOnboarding(false) : undefined}
         onBackToLogin={handleLogout}
       />
     );
   }
 
-  if (userTenants.length > 0 && !tenantCtx) {
+  if (selectableTenants.length > 0 && !tenantCtx) {
     return (
       <TenantSelectView
-        tenants={userTenants}
+        tenants={selectableTenants}
         onSelect={handleTenantReady}
         onCreateOrJoin={() => setShowOnboarding(true)}
         onLogout={handleLogout}

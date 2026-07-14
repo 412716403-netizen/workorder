@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   UserCog,
@@ -18,6 +18,7 @@ import {
   XCircle,
   Check,
   X,
+  Search,
 } from 'lucide-react';
 import { adminUsers, adminTenants, type AdminUserRow, type AdminTenantRow } from '../services/api';
 import {
@@ -80,6 +81,8 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
   const [tenantList, setTenantList] = useState<AdminTenantRow[]>([]);
   const [tenantLoading, setTenantLoading] = useState(false);
   const [tenantFilter, setTenantFilter] = useState<'all' | 'pending' | 'active' | 'rejected'>('all');
+  const [tenantSearch, setTenantSearch] = useState('');
+  const [userSearch, setUserSearch] = useState('');
   const [tenantModal, setTenantModal] = useState<{ tenant: AdminTenantRow; action: 'approve' | 'edit' | 'reject' } | null>(null);
   const [tenantNoExpiry, setTenantNoExpiry] = useState(true);
   const [tenantExpiresAtInput, setTenantExpiresAtInput] = useState('');
@@ -102,7 +105,27 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
   }, []);
 
   const pendingCount = tenantList.filter(t => t.status === 'pending').length;
-  const filteredTenants = tenantFilter === 'all' ? tenantList : tenantList.filter(t => t.status === tenantFilter);
+  const filteredTenants = useMemo(() => {
+    const q = tenantSearch.trim().toLowerCase();
+    return tenantList.filter(t => {
+      if (tenantFilter !== 'all' && t.status !== tenantFilter) return false;
+      if (!q) return true;
+      const ownerParts = t.owner
+        ? [t.owner.displayName, t.owner.username, t.owner.phone]
+        : [];
+      const hay = [t.name, ...ownerParts].filter(Boolean).join('\0').toLowerCase();
+      return hay.includes(q);
+    });
+  }, [tenantList, tenantFilter, tenantSearch]);
+
+  const filteredUsers = useMemo(() => {
+    const q = userSearch.trim().toLowerCase();
+    if (!q) return users;
+    return users.filter(u => {
+      const hay = [u.username, u.displayName, u.email].filter(Boolean).join('\0').toLowerCase();
+      return hay.includes(q);
+    });
+  }, [users, userSearch]);
 
   function openTenantModal(t: AdminTenantRow, action: 'approve' | 'edit' | 'reject') {
     setTenantModal({ tenant: t, action });
@@ -350,28 +373,42 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
             <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">{tenantError}</div>
           )}
 
-          <div className="flex gap-2 flex-wrap">
-            {([
-              { key: 'all' as const, label: '全部' },
-              { key: 'pending' as const, label: '待审核' },
-              { key: 'active' as const, label: '已通过' },
-              { key: 'rejected' as const, label: '已拒绝' },
-            ]).map(f => {
-              const count = f.key === 'all' ? tenantList.length : tenantList.filter(t => t.status === f.key).length;
-              return (
-                <button key={f.key} type="button" onClick={() => setTenantFilter(f.key)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${tenantFilter === f.key ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'}`}>
-                  {f.label} ({count})
-                </button>
-              );
-            })}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between flex-wrap">
+            <div className="flex gap-2 flex-wrap">
+              {([
+                { key: 'all' as const, label: '全部' },
+                { key: 'pending' as const, label: '待审核' },
+                { key: 'active' as const, label: '已通过' },
+                { key: 'rejected' as const, label: '已拒绝' },
+              ]).map(f => {
+                const count = f.key === 'all' ? tenantList.length : tenantList.filter(t => t.status === f.key).length;
+                return (
+                  <button key={f.key} type="button" onClick={() => setTenantFilter(f.key)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${tenantFilter === f.key ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'}`}>
+                    {f.label} ({count})
+                  </button>
+                );
+              })}
+            </div>
+            <div className="relative w-full sm:w-72 shrink-0">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+              <input
+                type="search"
+                value={tenantSearch}
+                onChange={e => setTenantSearch(e.target.value)}
+                placeholder="搜索企业名称、创建者…"
+                className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-800 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
           </div>
 
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             {tenantLoading ? (
               <div className="flex items-center justify-center py-24 text-slate-400"><Loader2 className="w-8 h-8 animate-spin" /></div>
             ) : filteredTenants.length === 0 ? (
-              <div className="py-16 text-center text-slate-400 text-sm">暂无数据</div>
+              <div className="py-16 text-center text-slate-400 text-sm">
+                {tenantSearch.trim() || tenantFilter !== 'all' ? '无匹配企业' : '暂无数据'}
+              </div>
             ) : (
               <div className="overflow-x-auto -mx-px">
                 <table className="w-full min-w-[940px] text-sm border-collapse">
@@ -623,10 +660,27 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
         <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">{error}</div>
       )}
 
+      {tab === 'users' && (
+        <div className="mb-4 relative w-full sm:w-72">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+          <input
+            type="search"
+            value={userSearch}
+            onChange={e => setUserSearch(e.target.value)}
+            placeholder="搜索账号、显示名、邮箱…"
+            className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-800 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
+      )}
+
       {tab === 'users' && <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-24 text-slate-400">
             <Loader2 className="w-8 h-8 animate-spin" />
+          </div>
+        ) : filteredUsers.length === 0 ? (
+          <div className="py-16 text-center text-slate-400 text-sm">
+            {userSearch.trim() ? '无匹配用户' : '暂无用户'}
           </div>
         ) : (
           <div className="overflow-x-auto -mx-px">
@@ -667,7 +721,7 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
                 </tr>
               </thead>
               <tbody>
-                {users.map((u) => (
+                {filteredUsers.map((u) => (
                   <tr
                     key={u.id}
                     className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors align-middle"

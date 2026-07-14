@@ -231,8 +231,10 @@
   - 部署提醒：生产环境须配 `REDIS_URL`（无 Redis 时权限/锁定标记缓存自动降级为直查 DB）并执行 `prisma migrate deploy`。
 - **Phase 3.G（已完成）产品经营弹窗提速**（`dashboard/product-economics` 列表 + `:productId` 明细）：
   - **明细接口按 productId 下推过滤**：`loadProductionAggregates`（报工/外协/返工/报废聚合）与 `loadPsiAggregates`（销售/库存）加可选 `productId`；`computeMaterialSurplusLossByProduct` 加 `{ scoped: true }` 模式——先按成品找工单家族（生产该成品的工单 + 沿 `parentOrderId` 向上补祖先 + 向下补子孙，`loadScopedOrderIds`），再只拉家族内工单（嵌套报工）与相关领退料流水（`sourceProductId in ids OR orderId in 家族`）。此前点单个产品明细会全量拉全租户报工重算一遍。列表接口传全部产品时行为不变（不走 scoped）。
-  - **结果 Redis 缓存**（`backend/src/services/productEconomicsCache.ts`，TTL 60s）：key 含 `materialCostMode + period/customRange + 权限位(canProduction/canPsi/canFinance)`，两个物料成本口径独立缓存、不同权限用户不串数据。失效走租户级版本号（`pe:ver:<tenantId>` INCR，旧 key 靠短 TTL 过期），价格写路径（全局物料价规则 / 成品 BOM 物料价 / 报工·外协工序单价的默认规则与覆盖）均触发失效。报工/销售等业务写入不主动失效，数字最多延迟 60s（前端另有 60s staleTime）。无 `REDIS_URL` 时自动降级为直接计算。
+  - **结果缓存**（`backend/src/services/productEconomicsCache.ts`，TTL 60s）：key 含 `materialCostMode + period/customRange + 权限位(canProduction/canPsi/canFinance)`，两个物料成本口径独立缓存、不同权限用户不串数据。读序：进程内内存 → Redis → 计算；无 `REDIS_URL` 时内存兜底仍生效（单实例语义等效）。失效走租户级版本号（内存 + Redis `pe:ver:<tenantId>` INCR），价格写路径（全局物料价规则 / 成品 BOM 物料价 / 报工·外协工序单价的默认规则与覆盖）均触发失效。同 key `singleflight` 合并 widget 预热与弹窗并发首算。报工/销售等业务写入不主动失效，数字最多延迟 60s（前端另有 60s staleTime）。
+  - **document_linked 列表跳过报工物料成本**：该口径下列表行 `materialCost` 恒为 0，`loadProductionAggregates({ skipMaterialCost: true })` 不 select `materialBreakdown`/`variantId`，并跳过逐条 BOM 物料计算；明细接口仍算物料（工序明细卡片需要）。
   - `processEconomicsPrice` 四个 update 函数与 `updateParentMaterialPriceDefaultRule` 签名加 `tenantId` 参数（用于失效缓存）。
+- **资金账户余额与转账（已完成）**：
   - `FinanceAccountType` 加 `initialBalance/openingDate/accountKind/sortOrder/active`；`FinanceRecord` 加 `accountTypeId` 外键（migration `20260625120000_finance_account_balance` 按 `(tenant_id, name)` 回填，保留 `payment_account` 作展示/回退）。
   - 余额实时聚合（不落库存量）：`GET /api/finance/account-balances`（`finance:account:view`）→ `getAccountBalances` → 纯函数 `accumulateAccountBalances`（含单测 `backend/tests/financeAccountBalances.test.ts`）。
   - 账户间转账：`POST /api/finance/transfers`（`finance:transfer:create`）事务内落 PAYMENT+RECEIPT 同 `transferGroupId`/`ZZD` 单号；前端「财务 - 资金账户」Tab（`AccountBalancesTab` + `AccountTransferModal`），账户流水下钻按 `accountTypeId` 窄拉 `finance.listPage`。

@@ -129,6 +129,12 @@ refresh 依赖后端 Cookie 机制，而不是前端直接读写 refresh token�
 - 过去文档没有把它和业务主数据区分开
 - 导致“项目到底有没有迁到后端”变得含糊
 
+### 4.3.1 创建企业：名称唯一
+
+- **规则**：新建企业、修改企业名称时，名称（trim 后精确匹配）不可与**其它企业**同名；冲突返回 **409**「企业名称已存在，请更换名称」。
+- **落点**：`backend/src/services/tenants.service.ts`（`createTenant` / `updateTenant`）应用层校验。
+- **历史数据**：库中已存在的同名企业**不强制改名**；未加库级唯一索引，部署无需清理历史重复名。
+
 ### 4.4 「自动掉线」常见原因（会话层）
 
 - 业务请求使用 **Bearer access JWT**（默认约 **15 分钟** 过期，见 `backend/src/config/env.ts` 的 `JWT_EXPIRES_IN`）。过期后若 **`POST /auth/refresh`** 未成功换新 access，前端在 **401 后刷新仍失败** 时会清理 `localStorage` 并整页回到登录（`services/api.ts`）。
