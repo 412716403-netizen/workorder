@@ -8,7 +8,7 @@ const {
   buildOutOfSequenceTemplateIds,
   sumOrderQty,
 } = require('./orderProcessChips.js');
-const { productHasColorSizeMatrix } = require('./productionPlans.js');
+const { productHasColorSizeMatrix } = require('../../utils/productionPlans.js');
 const { dispatchRowKey } = require('./outsourceReceiveKeys.js');
 const {
   buildDefectiveReworkByOrderMilestone,
@@ -16,7 +16,7 @@ const {
   sumOutsourceableByVariantProductMatrix,
 } = require('./outsourceDispatchMatrix.js');
 const { productGroupMaxReportableSum } = require('./productReportHints.js');
-const { listProductThumbFromProduct } = require('./listProductThumb.js');
+const { listProductThumbFromProduct } = require('../../utils/listProductThumb.js');
 
 function orderCreatedMs(order) {
   if (!order) return 0;

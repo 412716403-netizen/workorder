@@ -5,7 +5,7 @@ const {
   getUnrecognizedScanImeHint,
   rewriteScanApiErrorForIme,
 } = require('../utils/scanPayload.js');
-const { fetchScanByPayload, fetchItemTrace } = require('../utils/scanApi.js');
+const { fetchScanByPayload, fetchItemTrace } = require('../../utils/scanApi.js');
 const {
   buildSerialLabel,
   buildSummaryFields,

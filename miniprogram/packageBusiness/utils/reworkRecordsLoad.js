@@ -3,13 +3,13 @@
  */
 
 const { normalizeListBody } = require('../../utils/listResponse.js');
-const { fetchProductionRecords } = require('./orderApi.js');
-const { getActiveOrderIdsCsv } = require('./materialStatsLite.js');
+const { fetchProductionRecords } = require('../../utils/orderApi.js');
+const { getActiveOrderIdsCsv } = require('../../utils/materialStatsLite.js');
 const {
   localTodayYmd,
   dateInputToIsoStart,
   dateInputToIsoEndExclusive,
-} = require('./orderReportHistory.js');
+} = require('../../utils/orderReportHistory.js');
 const { mergeRecordsById } = require('./outsourceRecordsLoad.js');
 
 const ORDER_IDS_BATCH_SIZE = 40;

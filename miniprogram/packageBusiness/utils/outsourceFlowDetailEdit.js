@@ -1,10 +1,10 @@
 /**
  * 外协流水详情编辑：数量矩阵/行编辑与保存计划（对齐 Web OutsourceFlowDocumentDetailModal）
  */
-const { flattenMatrixVariantIds } = require('./matrixQtyKeyboard.js');
-const { buildVariantMatrixUiModel } = require('./variantQtyMatrix.js');
-const { parseNonNegativeInt } = require('./orderReportForm.js');
-const { productHasColorSizeMatrix } = require('./productionPlans.js');
+const { flattenMatrixVariantIds } = require('../../utils/matrixQtyKeyboard.js');
+const { buildVariantMatrixUiModel } = require('../../utils/variantQtyMatrix.js');
+const { parseNonNegativeInt } = require('../../utils/orderReportForm.js');
+const { productHasColorSizeMatrix } = require('../../utils/productionPlans.js');
 const { editPartsToTimestamp } = require('./reportBatchDetail.js');
 
 function splitOutsourceRecords(records) {

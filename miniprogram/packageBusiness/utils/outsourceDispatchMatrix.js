@@ -7,7 +7,7 @@ const _require =
 
 
   require('./reportVariantMaxQty.js'),isProcessSequential = _require.isProcessSequential,findGatingPredecessorIndex = _require.findGatingPredecessorIndex,buildOutOfSequenceTemplateIds = _require.buildOutOfSequenceTemplateIds;
-const _require2 = require('./productionPlans.js'),productHasColorSizeMatrix = _require2.productHasColorSizeMatrix;
+const _require2 = require('../../utils/productionPlans.js'),productHasColorSizeMatrix = _require2.productHasColorSizeMatrix;
 const _require3 = require('./outsourceReceiveKeys.js'),dispatchRowKey = _require3.dispatchRowKey;
 
 function variantQuantityKey(baseKey, variantId) {
@@ -577,7 +577,7 @@ function computeOutsourceCellMaxAllowed(maxForVariant, variantId, baseKey, quant
 }
 
 function buildOutsourceDispatchMatrixLayout(product, dict, quantities, maxByVariant, baseKey) {
-  const _require4 = require('./variantQtyMatrix.js'),buildVariantMatrixUiModel = _require4.buildVariantMatrixUiModel;
+  const _require4 = require('../../utils/variantQtyMatrix.js'),buildVariantMatrixUiModel = _require4.buildVariantMatrixUiModel;
   const subsetVariantIds = new Set(Object.keys(maxByVariant || {}));
   const subsetVariants = ((product == null ? void 0 : product.variants) || []).filter((v) => (v == null ? void 0 : v.id) && subsetVariantIds.has(v.id));
   if (!subsetVariants.length) return null;

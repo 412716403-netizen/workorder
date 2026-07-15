@@ -3,7 +3,7 @@
  */
 
 const _require = require('./reworkPanelLite.js'),shouldShowOrderInIncompleteList = _require.shouldShowOrderInIncompleteList;
-const _require2 = require('./listProductThumb.js'),listProductNameSkuFields = _require2.listProductNameSkuFields;
+const _require2 = require('../../utils/listProductThumb.js'),listProductNameSkuFields = _require2.listProductNameSkuFields;
 
 function milestoneIndexInOrder(order, nodeId) {
   const idx = (order && order.milestones || []).findIndex((m) => m.templateId === nodeId);

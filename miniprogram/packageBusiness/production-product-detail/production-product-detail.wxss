@@ -1,4 +1,4 @@
-@import '../production-order-detail/production-order-detail.wxss';
+@import '/styles/order-detail-page.wxss';
 
 .product-detail-order-cell {
   min-height: 80rpx;

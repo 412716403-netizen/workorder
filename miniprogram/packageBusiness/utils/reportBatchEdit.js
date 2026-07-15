@@ -1,8 +1,8 @@
 /**
  * 报工批次详情编辑：矩阵数量初始化与保存计划
  */
-const { flattenMatrixVariantIds } = require('./matrixQtyKeyboard.js');
-const { parseNonNegativeInt } = require('./orderReportForm.js');
+const { flattenMatrixVariantIds } = require('../../utils/matrixQtyKeyboard.js');
+const { parseNonNegativeInt } = require('../../utils/orderReportForm.js');
 
 function initBatchEditQuantities(batch) {
   const quantities = {};

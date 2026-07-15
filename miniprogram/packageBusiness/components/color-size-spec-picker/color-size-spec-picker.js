@@ -2,7 +2,7 @@ const {
   openBottomSheet,
   closeBottomSheet,
   clearBottomSheetTimers,
-} = require('../../utils/bottomSheetAnim.js');
+} = require('../../../utils/bottomSheetAnim.js');
 
 function filterItems(items, search) {
   const q = String(search || '').trim().toLowerCase();

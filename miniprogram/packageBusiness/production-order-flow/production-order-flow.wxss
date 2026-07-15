@@ -1,4 +1,4 @@
-@import '../production-plans/production-plans.wxss';
+@import '/styles/production-plans-page.wxss';
 
 .order-flow-page {
   padding: 0 var(--spacing-page) calc(120rpx + env(safe-area-inset-bottom));

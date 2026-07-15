@@ -1,7 +1,7 @@
 {
   "navigationStyle": "custom",
   "usingComponents": {
-    "searchable-partner-select": "/packageBusiness/components/searchable-partner-select/searchable-partner-select",
+    "searchable-partner-select": "/components/searchable-partner-select/searchable-partner-select",
     "color-size-spec-picker": "/packageBusiness/components/color-size-spec-picker/color-size-spec-picker",
     "unit-select": "/packageBusiness/components/unit-select/unit-select"
   }

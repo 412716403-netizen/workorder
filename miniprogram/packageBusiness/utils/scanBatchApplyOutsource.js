@@ -1,7 +1,7 @@
 /**
  * 外协待收回批量扫码：确认后跳转收货录入并预填数量（对齐 Web OutsourceReceiveListModal.handleScanApply）
  */
-const { fetchScanByPayload, validateScanUsage } = require('./scanApi.js');
+const { fetchScanByPayload, validateScanUsage } = require('../../utils/scanApi.js');
 const {
   scanItemResultToRowDetail,
   scanVirtualBatchResultToRowDetail,

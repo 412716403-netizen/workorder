@@ -6,7 +6,7 @@ const {
   fetchProductionRecords,
   listProductProgressAll,
   fetchTenantConfig,
-} = require('./orderApi.js');
+} = require('../../utils/orderApi.js');
 const { computePendingStockOrders } = require('./pendingStockComputeLite.js');
 
 async function fetchAllOrdersPaginated(params) {

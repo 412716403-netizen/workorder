@@ -2,8 +2,8 @@
  * 外协流水列表（对齐 Web OutsourceFlowListModal）
  */
 
-const { flowRecordsEarliestMs } = require('./flowDocSortLite.js');
-const { listProductDisplayFields } = require('./listProductThumb.js');
+const { flowRecordsEarliestMs } = require('../../utils/flowDocSortLite.js');
+const { listProductDisplayFields } = require('../../utils/listProductThumb.js');
 
 const TYPE_FILTER_LABELS = ['全部类型', '外协发出', '外协收回'];
 const TYPE_FILTER_VALUES = ['', 'dispatch', 'receive'];

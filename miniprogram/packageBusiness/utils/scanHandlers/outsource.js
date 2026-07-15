@@ -1,4 +1,4 @@
-const _require = require('../scanApi.js'),validateScanUsage = _require.validateScanUsage,createProductionRecord = _require.createProductionRecord;
+const _require = require('../../../utils/scanApi.js'),validateScanUsage = _require.validateScanUsage,createProductionRecord = _require.createProductionRecord;
 const _require2 =
 
 

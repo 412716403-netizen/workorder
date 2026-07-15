@@ -1,18 +1,18 @@
 /**
  * 工人多工单扫码确认页：展示行与提交条目
  */
-const { getProductUnitName } = require('./planFormCustomField.js');
+const { getProductUnitName } = require('../../utils/planFormCustomField.js');
 const {
   buildQtyHintText,
   resolveReportFormMode,
   buildReportMatrixLayout,
   buildMultiVariantRows,
-} = require('./orderReportForm.js');
+} = require('../../utils/orderReportForm.js');
 const {
   computeOrderReportHints,
   buildVariantMaxGoodMap,
 } = require('./reportVariantMaxQty.js');
-const { variantLabel } = require('./productionPlans.js');
+const { variantLabel } = require('../../utils/productionPlans.js');
 
 function entriesFromQuantities(quantities, defectiveQuantities) {
   const entries = [];

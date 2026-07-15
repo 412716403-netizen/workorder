@@ -5,14 +5,14 @@ const _require3 =
 
 
 
-  require('../utils/partnerApi.js'),fetchPartnersAll = _require3.fetchPartnersAll,createPartner = _require3.createPartner,updatePartner = _require3.updatePartner,deletePartner = _require3.deletePartner;
-const _require4 = require('../utils/planApi.js'),fetchPartnerCategoriesAll = _require4.fetchPartnerCategoriesAll;
+  require('../../utils/partnerApi.js'),fetchPartnersAll = _require3.fetchPartnersAll,createPartner = _require3.createPartner,updatePartner = _require3.updatePartner,deletePartner = _require3.deletePartner;
+const _require4 = require('../../utils/planApi.js'),fetchPartnerCategoriesAll = _require4.fetchPartnerCategoriesAll;
 const _require5 =
 
 
 
   require('../../utils/windowMetrics.js'),readNavBarMetrics = _require5.readNavBarMetrics,readWindowMetrics = _require5.readWindowMetrics,computePlanCreateHeaderHeight = _require5.computePlanCreateHeaderHeight;
-const _require6 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require6.LIST_ROUTES,afterSaveReturnToList = _require6.afterSaveReturnToList;
+const _require6 = require('../../utils/saveNavigation.js'),LIST_ROUTES = _require6.LIST_ROUTES,afterSaveReturnToList = _require6.afterSaveReturnToList;
 const _require7 =
 
 

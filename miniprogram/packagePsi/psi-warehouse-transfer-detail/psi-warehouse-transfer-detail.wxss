@@ -1,0 +1,26 @@
+@import '/styles/psi-purchase-order-detail-page.wxss';
+
+.wh-detail-hero__route {
+  font-size: 34rpx;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.wh-detail-hero__doc {
+  font-size: 26rpx;
+  color: #6b7280;
+  margin-top: 8rpx;
+}
+
+.wh-detail-hero__date {
+  font-size: 24rpx;
+  color: #9ca3af;
+  margin-top: 8rpx;
+}
+
+.wh-detail-note {
+  display: block;
+  margin: 0 var(--spacing-page) 16rpx;
+  font-size: 24rpx;
+  color: var(--color-text-secondary);
+}

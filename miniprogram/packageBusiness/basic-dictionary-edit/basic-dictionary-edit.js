@@ -8,14 +8,14 @@ const {
   updateDictionaryItem,
   deleteDictionaryItem,
 } = require('../utils/dictionaryApi.js');
-const { fetchDictionaries } = require('../utils/planApi.js');
-const { normalizeAppDictionaries } = require('../utils/productionPlans.js');
+const { fetchDictionaries } = require('../../utils/planApi.js');
+const { normalizeAppDictionaries } = require('../../utils/productionPlans.js');
 const {
   readNavBarMetrics,
   readWindowMetrics,
   computePlanCreateHeaderHeight,
 } = require('../../utils/windowMetrics.js');
-const { LIST_ROUTES, afterSaveReturnToList } = require('../utils/saveNavigation.js');
+const { LIST_ROUTES, afterSaveReturnToList } = require('../../utils/saveNavigation.js');
 
 function computeScrollHeight(nav) {
   const win = readWindowMetrics();

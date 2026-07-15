@@ -1,6 +1,6 @@
 @import '../../styles/matrix-keyboard-page.wxss';
-@import '../production-plan-create/production-plan-create.wxss';
-@import '../production-plans/production-plans.wxss';
+@import '/styles/plan-create-form.wxss';
+@import '/styles/production-plans-page.wxss';
 @import '../../styles/outsource-shared.wxss';
 
 .defect-action-shell {

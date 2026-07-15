@@ -1,4 +1,4 @@
-const { LIST_ROUTES } = require('./saveNavigation.js');
+const { LIST_ROUTES } = require('../../utils/saveNavigation.js');
 
 /** @typedef {'categories'|'partner_categories'|'nodes'|'warehouses'|'finance_categories'} SettingsArchiveTabId */
 

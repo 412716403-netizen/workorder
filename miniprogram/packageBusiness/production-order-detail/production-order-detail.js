@@ -14,7 +14,7 @@ const {
   buildOutOfSequenceTemplateIds,
 } = require('../utils/orderProcessChips.js');
 const { buildDefectiveReworkByOrderMilestone } = require('../utils/outsourceDispatchMatrix.js');
-const _require5 = require('../utils/orderReportHistory.js'),buildReportHistoryDateRangeForOrder = _require5.buildReportHistoryDateRangeForOrder;
+const _require5 = require('../../utils/orderReportHistory.js'),buildReportHistoryDateRangeForOrder = _require5.buildReportHistoryDateRangeForOrder;
 const _require6 = require('../utils/pendingStockComputeLite.js'),stockInAggregatesForOrder = _require6.stockInAggregatesForOrder;
 const _require7 =
 
@@ -29,14 +29,14 @@ const _require7 =
 
 
 
-  require('../utils/orderApi.js'),getOrder = _require7.getOrder,updateOrder = _require7.updateOrder,updateOrderDispatchStatus = _require7.updateOrderDispatchStatus,fetchTenantConfig = _require7.fetchTenantConfig,fetchProductsAll = _require7.fetchProductsAll,fetchCategoriesAll = _require7.fetchCategoriesAll,fetchProductionRecords = _require7.fetchProductionRecords,fetchBomsAll = _require7.fetchBomsAll,fetchNodesAll = _require7.fetchNodesAll,listProductProgressAll = _require7.listProductProgressAll,getPlan = _require7.getPlan,listOrdersPaginated = _require7.listOrdersPaginated;
+  require('../../utils/orderApi.js'),getOrder = _require7.getOrder,updateOrder = _require7.updateOrder,updateOrderDispatchStatus = _require7.updateOrderDispatchStatus,fetchTenantConfig = _require7.fetchTenantConfig,fetchProductsAll = _require7.fetchProductsAll,fetchCategoriesAll = _require7.fetchCategoriesAll,fetchProductionRecords = _require7.fetchProductionRecords,fetchBomsAll = _require7.fetchBomsAll,fetchNodesAll = _require7.fetchNodesAll,listProductProgressAll = _require7.listProductProgressAll,getPlan = _require7.getPlan,listOrdersPaginated = _require7.listOrdersPaginated;
 const _require8 =
 
 
 
   require('../utils/orderDetailExtras.js'),buildOrderFamilyIds = _require8.buildOrderFamilyIds,buildOrderDetailMaterialRows = _require8.buildOrderDetailMaterialRows,buildOrderDetailOutsourceCards = _require8.buildOrderDetailOutsourceCards;
 const _require9 = require('../utils/materialStockPanel.js'),buildMaterialIndexes = _require9.buildMaterialIndexes;
-const _require0 = require('../utils/planApi.js'),fetchDictionaries = _require0.fetchDictionaries;
+const _require0 = require('../../utils/planApi.js'),fetchDictionaries = _require0.fetchDictionaries;
 const _require1 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require1.readNavBarMetrics,readWindowMetrics = _require1.readWindowMetrics;
 const {
   fetchAllOrdersByProductId,

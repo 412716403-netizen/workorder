@@ -1,8 +1,8 @@
 /**
  * 工单流水筛选与展示（对齐 views/OrderFlowView.tsx）
  */
-const _require = require('./dateYmd.js'),localTodayYmd = _require.localTodayYmd;
-const _require2 = require('./listProductThumb.js'),DEFAULT_PRODUCT_PLACEHOLDER_ICON = _require2.DEFAULT_PRODUCT_PLACEHOLDER_ICON;
+const _require = require('../../utils/dateYmd.js'),localTodayYmd = _require.localTodayYmd;
+const _require2 = require('../../utils/listProductThumb.js'),DEFAULT_PRODUCT_PLACEHOLDER_ICON = _require2.DEFAULT_PRODUCT_PLACEHOLDER_ICON;
 
 const YMD_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 

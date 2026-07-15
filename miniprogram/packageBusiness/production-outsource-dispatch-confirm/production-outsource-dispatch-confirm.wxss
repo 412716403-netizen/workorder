@@ -1,6 +1,6 @@
-@import '../production-plans/production-plans.wxss';
+@import '/styles/production-plans-page.wxss';
 @import '../../styles/outsource-shared.wxss';
-@import '../production-plan-create/production-plan-create.wxss';
+@import '/styles/plan-create-form.wxss';
 @import '../production-order-report/production-order-report.wxss';
 
 @import '../../styles/matrix-keyboard-page.wxss';

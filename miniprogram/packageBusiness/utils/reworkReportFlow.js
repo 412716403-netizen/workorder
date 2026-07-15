@@ -2,8 +2,8 @@
  * 返工报工流水列表（对齐 Web ReworkReportFlowListModal）
  */
 
-const { flowRecordsEarliestMs } = require('./flowDocSortLite.js');
-const { listProductDisplayFields } = require('./listProductThumb.js');
+const { flowRecordsEarliestMs } = require('../../utils/flowDocSortLite.js');
+const { listProductDisplayFields } = require('../../utils/listProductThumb.js');
 const {
   buildReworkByIdMap,
   buildReworkReportOperatorColumnLabel,

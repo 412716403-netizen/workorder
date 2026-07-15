@@ -18,9 +18,9 @@ const {
   removeMember,
   fetchRolesAll,
 } = require('../utils/memberApi.js');
-const { fetchNodesAll } = require('../utils/planApi.js');
+const { fetchNodesAll } = require('../../utils/planApi.js');
 const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
-const { shouldHubListRefetch, trackHubListHidden, LIST_ROUTES } = require('../utils/saveNavigation.js');
+const { shouldHubListRefetch, trackHubListHidden, LIST_ROUTES } = require('../../utils/saveNavigation.js');
 
 const HUB_LIST_ROUTE = LIST_ROUTES.BASIC_MEMBERS.replace(/^\//, '');
 

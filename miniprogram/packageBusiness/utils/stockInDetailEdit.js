@@ -1,9 +1,9 @@
 /**
  * 入库流水详情编辑：色码矩阵数量初始化与保存计划（对齐 Web StockInFlowModal saveEdit）
  */
-const { flattenMatrixVariantIds } = require('./matrixQtyKeyboard.js');
-const { buildVariantMatrixUiModel } = require('./variantQtyMatrix.js');
-const { parseNonNegativeInt } = require('./orderReportForm.js');
+const { flattenMatrixVariantIds } = require('../../utils/matrixQtyKeyboard.js');
+const { buildVariantMatrixUiModel } = require('../../utils/variantQtyMatrix.js');
+const { parseNonNegativeInt } = require('../../utils/orderReportForm.js');
 
 function initStockInEditMatrixState(rows, product) {
   const quantities = {};

@@ -1,10 +1,10 @@
 /**
  * 报工流水批次分组与详情视图（对齐 Web ReportHistoryModal + ReportBatchDetailModal）
  */
-const { formatReportTime, productMetaFromMap } = require('./orderReportHistory.js');
-const { productHasColorSizeMatrix, variantLabel, normalizeAppDictionaries } = require('./productionPlans.js');
-const { buildReportMatrixLayout } = require('./orderReportForm.js');
-const { DEFAULT_PRODUCT_PLACEHOLDER_ICON, listProductNameSkuFields } = require('./listProductThumb.js');
+const { formatReportTime, productMetaFromMap } = require('../../utils/orderReportHistory.js');
+const { productHasColorSizeMatrix, variantLabel, normalizeAppDictionaries } = require('../../utils/productionPlans.js');
+const { buildReportMatrixLayout } = require('../../utils/orderReportForm.js');
+const { DEFAULT_PRODUCT_PLACEHOLDER_ICON, listProductNameSkuFields } = require('../../utils/listProductThumb.js');
 
 function isOutsourceReceiveReport(r) {
   const customData = r.customData || {};

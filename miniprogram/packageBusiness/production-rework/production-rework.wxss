@@ -1,4 +1,4 @@
-@import '../production-orders/production-orders.wxss';
+@import '/styles/production-orders-page.wxss';
 
 .rework-list-body {
   flex: 1;

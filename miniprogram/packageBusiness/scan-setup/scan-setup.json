@@ -1,7 +1,0 @@
-{
-  "navigationStyle": "custom",
-  "usingComponents": {
-    "page-header": "/components/page-header/page-header",
-    "empty-state": "/components/empty-state/empty-state"
-  }
-}

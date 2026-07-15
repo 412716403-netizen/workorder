@@ -2,7 +2,7 @@
  * 外协收回色码矩阵（对齐 Web OutsourceReceiveQuantityModal）
  */
 
-const _require = require('./productionPlans.js'),productHasColorSizeMatrix = _require.productHasColorSizeMatrix;
+const _require = require('../../utils/productionPlans.js'),productHasColorSizeMatrix = _require.productHasColorSizeMatrix;
 const _require2 =
 
 
@@ -227,7 +227,7 @@ function computeReceiveCellMaxAllowed(maxForVariant, variantId, baseKey, quantit
 }
 
 function buildOutsourceReceiveMatrixLayout(product, dict, quantities, maxByVariant, baseKey, isProductScope) {
-  const _require3 = require('./variantQtyMatrix.js'),buildVariantMatrixUiModel = _require3.buildVariantMatrixUiModel;
+  const _require3 = require('../../utils/variantQtyMatrix.js'),buildVariantMatrixUiModel = _require3.buildVariantMatrixUiModel;
   const subsetVariantIds = new Set(Object.keys(maxByVariant || {}));
   const subsetVariants = ((product == null ? void 0 : product.variants) || []).filter((v) => (v == null ? void 0 : v.id) && subsetVariantIds.has(v.id));
   if (!subsetVariants.length) return null;

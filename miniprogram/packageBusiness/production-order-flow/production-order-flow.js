@@ -1,7 +1,7 @@
-const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../utils/planFilterPanel.js');
+const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../../utils/planFilterPanel.js');
 const { ORDER_DISPATCH_STATUS_LABEL, OrderDispatchStatus } = require('../config/productionOrders.js');
-const { fetchTenantConfig, fetchProductsAll } = require('../utils/orderApi.js');
-const { normalizeMasterList, productNameSkuParts } = require('../utils/productionPlans.js');
+const { fetchTenantConfig, fetchProductsAll } = require('../../utils/orderApi.js');
+const { normalizeMasterList, productNameSkuParts } = require('../../utils/productionPlans.js');
 const { fetchAllOrdersPaginated } = require('../utils/pendingStockBadge.js');
 const {
   localTodayYmd,

@@ -1,5 +1,5 @@
-@import '../production-plan-detail/production-plan-detail.wxss';
-@import '../production-order-report-batch-detail/production-order-report-batch-detail.wxss';
+@import '/styles/plan-detail-page.wxss';
+@import '/styles/report-batch-detail-page.wxss';
 
 .rework-detail-table {
   margin: 0 24rpx;

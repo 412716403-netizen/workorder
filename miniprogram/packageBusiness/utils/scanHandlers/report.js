@@ -1,7 +1,7 @@
 const {
   validateScanUsage,
   createMilestoneReport,
-} = require('../scanApi.js');
+} = require('../../../utils/scanApi.js');
 const {
   scanSummaryLine,
   buildSessionLog,

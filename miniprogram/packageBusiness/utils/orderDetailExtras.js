@@ -12,9 +12,9 @@ const _require =
 
 
 
-  require('./materialStatsLite.js'),computeOrderFamilyMaterialStats = _require.computeOrderFamilyMaterialStats,computeProductMaterialStats = _require.computeProductMaterialStats,filterMaterialRowsWithActivity = _require.filterMaterialRowsWithActivity,buildNodeWeightEnabledMap = _require.buildNodeWeightEnabledMap,getOrderFamilyIds = _require.getOrderFamilyIds,matRowNetIssue = _require.matRowNetIssue,matRowReportCost = _require.matRowReportCost,matRowSurplus = _require.matRowSurplus,roundQty = _require.roundQty;
+  require('../../utils/materialStatsLite.js'),computeOrderFamilyMaterialStats = _require.computeOrderFamilyMaterialStats,computeProductMaterialStats = _require.computeProductMaterialStats,filterMaterialRowsWithActivity = _require.filterMaterialRowsWithActivity,buildNodeWeightEnabledMap = _require.buildNodeWeightEnabledMap,getOrderFamilyIds = _require.getOrderFamilyIds,matRowNetIssue = _require.matRowNetIssue,matRowReportCost = _require.matRowReportCost,matRowSurplus = _require.matRowSurplus,roundQty = _require.roundQty;
 const _require2 = require('./materialStockPanel.js'),buildMaterialIndexes = _require2.buildMaterialIndexes;
-const _require3 = require('./listProductThumb.js'),listProductNameSkuFields = _require3.listProductNameSkuFields;
+const _require3 = require('../../utils/listProductThumb.js'),listProductNameSkuFields = _require3.listProductNameSkuFields;
 
 function resolveRootOrderId(orderId, ordersById) {
   let cur = orderId;

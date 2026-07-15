@@ -1,7 +1,7 @@
-@import '../production-order-detail/production-order-detail.wxss';
-@import '../production-order-report-batch-detail/production-order-report-batch-detail.wxss';
+@import '/styles/order-detail-page.wxss';
+@import '/styles/report-batch-detail-page.wxss';
 @import '../production-order-report/production-order-report.wxss';
-@import '../production-plan-create/production-plan-create.wxss';
+@import '/styles/plan-create-form.wxss';
 @import '../../styles/matrix-keyboard-page.wxss';
 
 .outsource-receive-confirm-page {

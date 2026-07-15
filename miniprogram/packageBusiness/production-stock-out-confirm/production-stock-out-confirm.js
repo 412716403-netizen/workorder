@@ -6,9 +6,9 @@ const _require4 =
 
 
 
-  require('../utils/orderApi.js'),fetchWarehousesAll = _require4.fetchWarehousesAll,fetchCategoriesAll = _require4.fetchCategoriesAll,createProductionRecordBatch = _require4.createProductionRecordBatch,fetchStockBatches = _require4.fetchStockBatches;
-const _require5 = require('../utils/productionPlans.js'),normalizeMasterList = _require5.normalizeMasterList;
-const _require6 = require('../utils/planApi.js'),fetchDictionaries = _require6.fetchDictionaries;
+  require('../../utils/orderApi.js'),fetchWarehousesAll = _require4.fetchWarehousesAll,fetchCategoriesAll = _require4.fetchCategoriesAll,createProductionRecordBatch = _require4.createProductionRecordBatch,fetchStockBatches = _require4.fetchStockBatches;
+const _require5 = require('../../utils/productionPlans.js'),normalizeMasterList = _require5.normalizeMasterList;
+const _require6 = require('../../utils/planApi.js'),fetchDictionaries = _require6.fetchDictionaries;
 const _require7 =
 
 
@@ -16,18 +16,18 @@ const _require7 =
 
 
 
-  require('../utils/materialStockConfirm.js'),buildConfirmRows = _require7.buildConfirmRows,attachConfirmRowUnits = _require7.attachConfirmRowUnits,validateConfirmRows = _require7.validateConfirmRows,buildProductionRecordBatchPayload = _require7.buildProductionRecordBatchPayload,buildReturnDispatchedBatchesByProduct = _require7.buildReturnDispatchedBatchesByProduct,parseBatchErrorMessage = _require7.parseBatchErrorMessage;
+  require('../../utils/materialStockConfirm.js'),buildConfirmRows = _require7.buildConfirmRows,attachConfirmRowUnits = _require7.attachConfirmRowUnits,validateConfirmRows = _require7.validateConfirmRows,buildProductionRecordBatchPayload = _require7.buildProductionRecordBatchPayload,buildReturnDispatchedBatchesByProduct = _require7.buildReturnDispatchedBatchesByProduct,parseBatchErrorMessage = _require7.parseBatchErrorMessage;
 const _require8 =
 
 
 
 
 
-  require('../utils/materialIssueBatch.js'),decorateConfirmRowsWithBatchFlags = _require8.decorateConfirmRowsWithBatchFlags,attachBatchOptionsToConfirmRows = _require8.attachBatchOptionsToConfirmRows,attachReturnBatchOptionsToConfirmRows = _require8.attachReturnBatchOptionsToConfirmRows,confirmRowsNeedBatchColumn = _require8.confirmRowsNeedBatchColumn,applyBatchSelection = _require8.applyBatchSelection;
+  require('../../utils/materialIssueBatch.js'),decorateConfirmRowsWithBatchFlags = _require8.decorateConfirmRowsWithBatchFlags,attachBatchOptionsToConfirmRows = _require8.attachBatchOptionsToConfirmRows,attachReturnBatchOptionsToConfirmRows = _require8.attachReturnBatchOptionsToConfirmRows,confirmRowsNeedBatchColumn = _require8.confirmRowsNeedBatchColumn,applyBatchSelection = _require8.applyBatchSelection;
 const _require9 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require9.readNavBarMetrics,readWindowMetrics = _require9.readWindowMetrics;
-const _require0 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require0.LIST_ROUTES,afterSaveReturnToList = _require0.afterSaveReturnToList;
-const _require1 = require('../utils/materialStatsLite.js'),INTERNAL_PARTNER_KEY = _require1.INTERNAL_PARTNER_KEY;
-const { defaultEntryDate, defaultEntryTimeHm, entryDateAndTimeToIso } = require('../utils/docEntryTime.js');
+const _require0 = require('../../utils/saveNavigation.js'),LIST_ROUTES = _require0.LIST_ROUTES,afterSaveReturnToList = _require0.afterSaveReturnToList;
+const _require1 = require('../../utils/materialStatsLite.js'),INTERNAL_PARTNER_KEY = _require1.INTERNAL_PARTNER_KEY;
+const { defaultEntryDate, defaultEntryTimeHm, entryDateAndTimeToIso } = require('../../utils/docEntryTime.js');
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();

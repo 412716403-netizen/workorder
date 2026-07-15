@@ -2,11 +2,11 @@
  * 领料退料流水（对齐 Web StockFlowListModal + 报工/入库流水列表 UI）
  */
 
-const { productMetaFromMap } = require('./orderReportHistory.js');
+const { productMetaFromMap } = require('../../utils/orderReportHistory.js');
 const { formatStockInTime, resolveWarehouseName } = require('./stockInFlow.js');
-const { getProductUnitName } = require('./planFormCustomField.js');
-const { BATCH_NO_UNTAGGED } = require('./materialStockConfirm.js');
-const { categoryUsesBatchManagement } = require('./materialIssueBatch.js');
+const { getProductUnitName } = require('../../utils/planFormCustomField.js');
+const { BATCH_NO_UNTAGGED } = require('../../utils/materialStockConfirm.js');
+const { categoryUsesBatchManagement } = require('../../utils/materialIssueBatch.js');
 
 const TYPE_LABELS = {
   STOCK_OUT: '领料发出',

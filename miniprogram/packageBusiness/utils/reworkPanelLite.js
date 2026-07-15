@@ -3,7 +3,7 @@
  */
 
 const _require = require('../config/productionOrders.js'),OrderDispatchStatus = _require.OrderDispatchStatus;
-const _require2 = require('./listProductThumb.js'),DEFAULT_PRODUCT_PLACEHOLDER_ICON = _require2.DEFAULT_PRODUCT_PLACEHOLDER_ICON,listProductNameSkuFields = _require2.listProductNameSkuFields;
+const _require2 = require('../../utils/listProductThumb.js'),DEFAULT_PRODUCT_PLACEHOLDER_ICON = _require2.DEFAULT_PRODUCT_PLACEHOLDER_ICON,listProductNameSkuFields = _require2.listProductNameSkuFields;
 
 function buildOutOfSequenceTemplateIds(nodes) {
   const set = new Set();

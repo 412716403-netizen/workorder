@@ -1,7 +1,7 @@
 /**
  * 返工报工批量扫码：确认后累加到表单数量（对齐 Web ReworkReportSubmitModal + scanHandlers/rework）
  */
-const { fetchScanByPayload, validateScanUsage } = require('./scanApi.js');
+const { fetchScanByPayload, validateScanUsage } = require('../../utils/scanApi.js');
 const {
   scanItemResultToRowDetail,
   scanVirtualBatchResultToRowDetail,

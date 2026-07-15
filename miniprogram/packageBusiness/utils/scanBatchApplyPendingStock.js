@@ -1,12 +1,12 @@
 /**
  * 待入库清单批量扫码：确认后跳转入库确认页并预填数量（对齐 Web usePendingStockState.confirmPendingListScan）
  */
-const { fetchScanByPayload, validateScanUsage } = require('./scanApi.js');
+const { fetchScanByPayload, validateScanUsage } = require('../../utils/scanApi.js');
 const {
   scanItemResultToRowDetail,
   scanVirtualBatchResultToRowDetail,
 } = require('./scanBatchRowDetail.js');
-const { productHasColorSizeMatrix } = require('./productionPlans.js');
+const { productHasColorSizeMatrix } = require('../../utils/productionPlans.js');
 const { expandPendingByVariantForMatrix } = require('./stockInForm.js');
 const { scanFail } = require('./scanFeedback.js');
 

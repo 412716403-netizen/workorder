@@ -1,7 +1,7 @@
 /**
  * 批量扫码：按批/按件累计归一化（对齐 Web utils/scanBatchIntent.ts）
  */
-const { fetchScanByPayload } = require('./scanApi.js');
+const { fetchScanByPayload } = require('../../utils/scanApi.js');
 const { rewriteScanApiErrorForIme } = require('./scanPayload.js');
 
 const SCAN_BATCH_NOT_FOUND_RE = /批次码不存在/;

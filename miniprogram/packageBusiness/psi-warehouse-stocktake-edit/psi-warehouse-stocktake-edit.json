@@ -1,8 +1,0 @@
-{
-  "navigationStyle": "custom",
-  "usingComponents": {
-    "searchable-product-select": "/packageBusiness/components/searchable-product-select/searchable-product-select",
-    "matrix-qty-keyboard": "/packageBusiness/components/matrix-qty-keyboard/matrix-qty-keyboard",
-    "batch-return-input": "/packageBusiness/components/batch-return-input/batch-return-input"
-  }
-}

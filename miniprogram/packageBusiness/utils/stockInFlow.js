@@ -2,11 +2,11 @@
  * 入库流水列表（对齐 Web StockInFlowModal）
  */
 
-const { productHasColorSizeMatrix, variantLabel } = require('./productionPlans.js');
-const { buildVariantMatrixUiModel } = require('./variantQtyMatrix.js');
-const { getProductUnitName } = require('./planFormCustomField.js');
-const { productMetaFromMap } = require('./orderReportHistory.js');
-const { DEFAULT_PRODUCT_PLACEHOLDER_ICON } = require('./listProductThumb.js');
+const { productHasColorSizeMatrix, variantLabel } = require('../../utils/productionPlans.js');
+const { buildVariantMatrixUiModel } = require('../../utils/variantQtyMatrix.js');
+const { getProductUnitName } = require('../../utils/planFormCustomField.js');
+const { productMetaFromMap } = require('../../utils/orderReportHistory.js');
+const { DEFAULT_PRODUCT_PLACEHOLDER_ICON } = require('../../utils/listProductThumb.js');
 
 function resolveWarehouseName(warehouseMap, warehouseId, fallbackName) {
   const fb = String(fallbackName || '').trim();

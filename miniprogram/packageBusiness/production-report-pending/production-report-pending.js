@@ -7,11 +7,11 @@ const {
   rejectReport,
   fetchProductsAll,
   fetchTenantConfig,
-} = require('../utils/orderApi.js');
+} = require('../../utils/orderApi.js');
 const {
   mapOrderReportRow,
   mapProductReportRow,
-} = require('../utils/orderReportHistory.js');
+} = require('../../utils/orderReportHistory.js');
 
 function canApprove(permissions) {
   return (

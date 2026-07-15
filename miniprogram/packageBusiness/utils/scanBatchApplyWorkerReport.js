@@ -3,13 +3,13 @@
  */
 const { request } = require('../../utils/request.js');
 const { normalizeListBody } = require('../../utils/listResponse.js');
-const { fetchScanByPayload, validateScanUsage } = require('./scanApi.js');
+const { fetchScanByPayload, validateScanUsage } = require('../../utils/scanApi.js');
 const {
   scanItemResultToRowDetail,
   scanVirtualBatchResultToRowDetail,
 } = require('./scanBatchRowDetail.js');
 const { resolveReportTarget } = require('./resolveReportTarget.js');
-const { productHasColorSizeMatrix } = require('./productionPlans.js');
+const { productHasColorSizeMatrix } = require('../../utils/productionPlans.js');
 const {
   createReportScanMetaSession,
   recordScanMetaEntry,

@@ -2,8 +2,8 @@
  * 待入库表单：矩阵、校验、默认值（对齐 Web PendingStockSingleModal）
  */
 
-const _require = require('./productionPlans.js'),productHasColorSizeMatrix = _require.productHasColorSizeMatrix;
-const _require2 = require('./variantQtyMatrix.js'),buildVariantMatrixUiModel = _require2.buildVariantMatrixUiModel;
+const _require = require('../../utils/productionPlans.js'),productHasColorSizeMatrix = _require.productHasColorSizeMatrix;
+const _require2 = require('../../utils/variantQtyMatrix.js'),buildVariantMatrixUiModel = _require2.buildVariantMatrixUiModel;
 const _require3 = require('./reportVariantMaxQty.js'),sumMatrixQuantities = _require3.sumMatrixQuantities;
 
 const WAREHOUSE_PREF_SINGLE = 'PROD_PENDING_STOCK_IN_WAREHOUSE';

@@ -1,7 +1,7 @@
 {
   "navigationStyle": "custom",
   "usingComponents": {
-    "searchable-partner-select": "/packageBusiness/components/searchable-partner-select/searchable-partner-select",
+    "searchable-partner-select": "/components/searchable-partner-select/searchable-partner-select",
     "scan-batch-modal": "/packageBusiness/components/scan-batch-modal/scan-batch-modal"
   }
 }

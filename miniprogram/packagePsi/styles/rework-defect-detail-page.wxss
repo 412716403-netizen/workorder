@@ -1,0 +1,40 @@
+@import '../../styles/production-plans-page.wxss';
+@import '../../styles/order-detail-page.wxss';
+@import '../../styles/report-batch-detail-page.wxss';
+@import '../../styles/plan-create-form.wxss';
+@import '../../styles/matrix-keyboard-page.wxss';
+
+.rework-defect-detail-page {
+  padding: 0 var(--spacing-page) calc(32rpx + env(safe-area-inset-bottom));
+}
+
+.rework-defect-detail__type {
+  background: rgba(99, 102, 241, 0.12);
+  color: #4f46e5;
+}
+
+.rework-defect-detail__milestone {
+  display: block;
+  margin-top: 6rpx;
+  font-size: 24rpx;
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+}
+
+.rework-defect-detail__partner {
+  font-size: 22rpx;
+  color: var(--color-text-tertiary);
+}
+
+.plan-detail-section__sub {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.report-batch-edit-line__hint {
+  display: block;
+  margin-bottom: 8rpx;
+  font-size: 22rpx;
+  color: var(--color-text-tertiary);
+}

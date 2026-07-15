@@ -2,8 +2,8 @@
  * 处理不良流水列表（对齐 Web DefectTreatmentFlowListModal）
  */
 
-const { flowRecordsEarliestMs } = require('./flowDocSortLite.js');
-const { listProductDisplayFields } = require('./listProductThumb.js');
+const { flowRecordsEarliestMs } = require('../../utils/flowDocSortLite.js');
+const { listProductDisplayFields } = require('../../utils/listProductThumb.js');
 
 const TYPE_FILTER_LABELS = ['全部类型', '返工', '委外返工', '报损'];
 const TYPE_FILTER_VALUES = ['', 'REWORK', 'REWORK_OUTSOURCE', 'SCRAP'];

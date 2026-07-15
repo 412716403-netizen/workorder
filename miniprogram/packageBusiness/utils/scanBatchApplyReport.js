@@ -1,12 +1,12 @@
 /**
  * 工单报工批量扫码：预览 + 确认累加到表单（对齐 Web useReportModalState）
  */
-const { fetchScanByPayload, validateScanUsage } = require('./scanApi.js');
+const { fetchScanByPayload, validateScanUsage } = require('../../utils/scanApi.js');
 const {
   scanItemResultToRowDetail,
   scanVirtualBatchResultToRowDetail,
 } = require('./scanBatchRowDetail.js');
-const { productHasColorSizeMatrix } = require('./productionPlans.js');
+const { productHasColorSizeMatrix } = require('../../utils/productionPlans.js');
 const { recordReportScanMeta } = require('./reportScanMeta.js');
 const { scanFail } = require('./scanFeedback.js');
 

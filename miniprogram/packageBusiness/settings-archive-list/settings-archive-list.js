@@ -8,7 +8,7 @@ const _require4 =
   require('../utils/settingsArchive.js'),getArchiveTabMeta = _require4.getArchiveTabMeta,buildArchiveListRows = _require4.buildArchiveListRows,filterArchiveListByKeyword = _require4.filterArchiveListByKeyword;
 const settingsApi = require('../../utils/settingsApi.js');
 const _require5 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require5.readNavBarMetrics,readWindowMetrics = _require5.readWindowMetrics;
-const _require6 = require('../utils/saveNavigation.js'),shouldHubListRefetch = _require6.shouldHubListRefetch,trackHubListHidden = _require6.trackHubListHidden;
+const _require6 = require('../../utils/saveNavigation.js'),shouldHubListRefetch = _require6.shouldHubListRefetch,trackHubListHidden = _require6.trackHubListHidden;
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();

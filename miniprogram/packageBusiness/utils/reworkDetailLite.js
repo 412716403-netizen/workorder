@@ -3,7 +3,7 @@
  */
 
 const _require = require('./reworkPanelLite.js'),buildReworkStats = _require.buildReworkStats;
-const _require2 = require('./listProductThumb.js'),listProductThumbFromProduct = _require2.listProductThumbFromProduct;
+const _require2 = require('../../utils/listProductThumb.js'),listProductThumbFromProduct = _require2.listProductThumbFromProduct;
 
 function buildReworkDetailView(opts) {
   const

@@ -1,4 +1,4 @@
-const { validateScanUsage, createProductionRecord } = require('../scanApi.js');
+const { validateScanUsage, createProductionRecord } = require('../../../utils/scanApi.js');
 const {
   scanSummaryLine,
   buildSessionLog,

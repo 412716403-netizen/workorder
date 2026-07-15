@@ -1,4 +1,4 @@
-@import '../searchable-partner-select/searchable-partner-select.wxss';
+@import '../../../components/searchable-partner-select/searchable-partner-select.wxss';
 
 .rps__subtitle {
   padding: 0 var(--spacing-page) 16rpx;

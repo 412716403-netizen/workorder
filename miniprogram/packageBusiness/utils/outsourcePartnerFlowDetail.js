@@ -2,9 +2,9 @@
  * 加工厂往来数量明细（对齐 utils/outsourcePartnerFlowDetail.ts）
  */
 
-const { flowRecordsEarliestMs, formatLocalDateTimeZh } = require('./flowDocSortLite.js');
-const { productHasColorSizeMatrix, variantLabel } = require('./productionPlans.js');
-const { sortVariantsByColorThenSize } = require('./variantQtyMatrix.js');
+const { flowRecordsEarliestMs, formatLocalDateTimeZh } = require('../../utils/flowDocSortLite.js');
+const { productHasColorSizeMatrix, variantLabel } = require('../../utils/productionPlans.js');
+const { sortVariantsByColorThenSize } = require('../../utils/variantQtyMatrix.js');
 
 const OUTSOURCE_DISPATCH_DELIVERY_DATE_KEY = 'outsourceDispatchDeliveryDate';
 

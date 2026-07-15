@@ -7,11 +7,11 @@ const _require =
 
   require('../config/productionOrders.js'),OrderDispatchStatus = _require.OrderDispatchStatus,ORDER_DISPATCH_STATUS_LABEL = _require.ORDER_DISPATCH_STATUS_LABEL;
 const _require2 = require('./orderProcessChips.js'),buildOrderProcessChips = _require2.buildOrderProcessChips,sumOrderQty = _require2.sumOrderQty;
-const _require3 = require('./reportCustomDocField.js'),mapProductCustomTags = _require3.mapProductCustomTags;
-const _require4 = require('./listProductThumb.js'),DEFAULT_PRODUCT_PLACEHOLDER_ICON = _require4.DEFAULT_PRODUCT_PLACEHOLDER_ICON;
-const _require5 = require('./variantQtyMatrix.js'),buildVariantMatrixUiModel = _require5.buildVariantMatrixUiModel;
+const _require3 = require('../../utils/reportCustomDocField.js'),mapProductCustomTags = _require3.mapProductCustomTags;
+const _require4 = require('../../utils/listProductThumb.js'),DEFAULT_PRODUCT_PLACEHOLDER_ICON = _require4.DEFAULT_PRODUCT_PLACEHOLDER_ICON;
+const _require5 = require('../../utils/variantQtyMatrix.js'),buildVariantMatrixUiModel = _require5.buildVariantMatrixUiModel;
 const _require6 = require('../../utils/listResponse.js'),normalizeListBody = _require6.normalizeListBody;
-const _require7 = require('./productionPlans.js'),productHasColorSizeMatrix = _require7.productHasColorSizeMatrix,variantLabel = _require7.variantLabel;
+const _require7 = require('../../utils/productionPlans.js'),productHasColorSizeMatrix = _require7.productHasColorSizeMatrix,variantLabel = _require7.variantLabel;
 
 function pad(n) {
   return String(n).padStart(2, '0');

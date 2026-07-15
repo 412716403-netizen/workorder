@@ -2,10 +2,10 @@ const _require = require('../../utils/session.js'),readTenantCtx = _require.read
 const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
 const _require3 = require('../config/partners.js'),PARTNER_ARCHIVE_ALL = _require3.PARTNER_ARCHIVE_ALL,DEFAULT_PAGE_SIZE = _require3.DEFAULT_PAGE_SIZE;
 const _require4 = require('../utils/partners.js'),buildPartnerListRows = _require4.buildPartnerListRows;
-const _require5 = require('../utils/partnerApi.js'),fetchPartnersAll = _require5.fetchPartnersAll;
-const _require6 = require('../utils/planApi.js'),fetchPartnerCategoriesAll = _require6.fetchPartnerCategoriesAll;
+const _require5 = require('../../utils/partnerApi.js'),fetchPartnersAll = _require5.fetchPartnersAll;
+const _require6 = require('../../utils/planApi.js'),fetchPartnerCategoriesAll = _require6.fetchPartnerCategoriesAll;
 const _require7 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require7.readNavBarMetrics,readWindowMetrics = _require7.readWindowMetrics;
-const _require8 = require('../utils/saveNavigation.js'),shouldHubListRefetch = _require8.shouldHubListRefetch,trackHubListHidden = _require8.trackHubListHidden,LIST_ROUTES = _require8.LIST_ROUTES;
+const _require8 = require('../../utils/saveNavigation.js'),shouldHubListRefetch = _require8.shouldHubListRefetch,trackHubListHidden = _require8.trackHubListHidden,LIST_ROUTES = _require8.LIST_ROUTES;
 
 const HUB_LIST_ROUTE = LIST_ROUTES.BASIC_PARTNERS.replace(/^\//, '');
 

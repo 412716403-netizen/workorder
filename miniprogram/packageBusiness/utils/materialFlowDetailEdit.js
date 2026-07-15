@@ -1,7 +1,7 @@
 /**
  * 领退料流水详情编辑（对齐入库流水详情 material STOCK_OUT / STOCK_RETURN）
  */
-const { parseNonNegativeInt } = require('./orderReportForm.js');
+const { parseNonNegativeInt } = require('../../utils/orderReportForm.js');
 
 function initMaterialFlowEditState(rows) {
   const list = rows || [];

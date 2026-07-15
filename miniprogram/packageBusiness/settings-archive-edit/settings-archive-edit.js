@@ -18,7 +18,7 @@ const {
   readWindowMetrics,
   computePlanCreateHeaderHeight,
 } = require('../../utils/windowMetrics.js');
-const { afterSaveReturnToList } = require('../utils/saveNavigation.js');
+const { afterSaveReturnToList } = require('../../utils/saveNavigation.js');
 
 function computeScrollHeight(nav) {
   const win = readWindowMetrics();

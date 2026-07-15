@@ -1,4 +1,4 @@
-@import '../production-plans/production-plans.wxss';
+@import '/styles/production-plans-page.wxss';
 @import '../production-order-material/production-order-material.wxss';
 
 .material-confirm-page {

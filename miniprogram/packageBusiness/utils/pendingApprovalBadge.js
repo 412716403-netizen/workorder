@@ -1,7 +1,7 @@
 /**
  * 待审报工角标（对齐 Web countPendingApprovalBatches / 工单中心工具栏）
  */
-const { listReportHistory, fetchTenantConfig } = require('./orderApi.js');
+const { listReportHistory, fetchTenantConfig } = require('../../utils/orderApi.js');
 
 function countPendingApprovalBatches(orderReports, productReports) {
   const keys = new Set();

@@ -205,14 +205,37 @@ const {
 - **WXML 结构**：`plan-create-matrix-scroll` → `plan-create-matrix` → `__head` / `__row` / `__cell`；格内用 `view.plan-create-matrix__input` + `bindtap="onMatrixCellTap"`，**禁止**矩阵格内 `<input>`。
 - **样式**：`@import` [`production-plan-create.wxss`](../miniprogram/packageBusiness/production-plan-create/production-plan-create.wxss)；需展示「最多 N」时叠加 `report-matrix`（见报工 / 外协发出页）。
 
+## 小程序包体结构（按微信官方代码包体积优化）
+
+参考：[代码包体积优化](https://developers.weixin.qq.com/miniprogram/dev/framework/performance/tips/start_optimizeA.html)、[社区性能优化指南](https://developers.weixin.qq.com/community/develop/doc/00040e5a0846706e893dcc24256009)。
+
+| 包 | root | 内容 |
+|---|---|---|
+| 主包 | `miniprogram/` | Tab/登录等；**多分包共用**的 `utils/`、`components/`（选择器、矩阵键盘等）、`styles/` |
+| 生产分包 | `packageBusiness` | 计划/工单/外协/返工/物料/基础档案等 |
+| 进销存分包 | `packagePsi` | 采购/销售/仓库 |
+| 财务分包 | `packageFinance` | 收款/付款/对账 |
+
+约定：
+
+1. **仅单一分包使用的代码**放在该分包内，不要塞进主包（避免「主包仅被分包依赖」）。例如：`scan-batch-modal` → `packageBusiness`；`batch-return-input` → `packagePsi`。
+2. **两个及以上分包都要用的**组件/工具/样式放主包（主包定位：公共资源），如矩阵键盘、可搜索选择器、`orderApi` / `saveNavigation`。
+3. 分包之间**不可** `require` / `@import` / 引用对方组件；跨包跳转用绝对路径（`/packagePsi/...`）。
+4. `preloadRule` 仅在 Wi‑Fi 下预下载高频的 `business` 分包，避免一进应用就拉满全量业务包。
+5. 已开启 `"lazyCodeLoading": "requiredComponents"`（按需注入）；定期用开发者工具「代码质量 / 依赖分析」清理无依赖文件。
+
 ### 矩阵键盘
 
 - 页面底部挂载 `<matrix-qty-keyboard visible="{{matrixKeyboardVisible}}" bind:action="onMatrixKeyboardAction" />`。
 - 逻辑统一走 [`utils/matrixQtyKeyboard.js`](../miniprogram/utils/matrixQtyKeyboard.js)：`createMatrixKeyboardInputSession`、`activateMatrixKeyboardCell`、`applyMatrixKeyboardKey`（选中格后**首键整格替换**）、`buildMatrixKeyboardPreview`、`getNextMatrixVariantIdInRow`、`getNextMatrixVariantIdInColumn`。
 - 选中待替换时格子上加 `plan-create-matrix__input--replace`（浅蓝底提示）。
-- 键盘弹出时滚动容器加 `matrix-keyboard-page--open`（底部留白）；[`utils/matrixKeyboardLayout.js`](../miniprogram/packageBusiness/utils/matrixKeyboardLayout.js) `afterMatrixKeyboardOpen` 将当前格滚到键盘上方。
+- 键盘弹出时滚动容器加 `matrix-keyboard-page--open`（底部留白）；[`utils/matrixKeyboardLayout.js`](../miniprogram/utils/matrixKeyboardLayout.js) `afterMatrixKeyboardOpen` 将当前格滚到键盘上方。
 - **点空白收起**：键盘组件带全屏透明 mask，点键盘以外区域触发 `confirm`（各页已有收起逻辑）。
 - 处理不良页额外将「处理数量」卡片滚到可视区上部，避免长工序列表占满高度导致格子贴键盘。
+
+### 分包体积
+
+- 单包上限 2MB。超限时优先**按业务再拆分包**，公共能力留主包；勿用「全塞主包」规避。
 
 ### 禁止项
 

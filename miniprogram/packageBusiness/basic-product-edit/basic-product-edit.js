@@ -13,12 +13,12 @@ const _require4 =
 
 
 
-  require('../utils/planApi.js'),fetchCategoriesAll = _require4.fetchCategoriesAll,fetchDictionaries = _require4.fetchDictionaries,fetchPartnersAll = _require4.fetchPartnersAll,fetchPartnerCategoriesAll = _require4.fetchPartnerCategoriesAll;
+  require('../../utils/planApi.js'),fetchCategoriesAll = _require4.fetchCategoriesAll,fetchDictionaries = _require4.fetchDictionaries,fetchPartnersAll = _require4.fetchPartnersAll,fetchPartnerCategoriesAll = _require4.fetchPartnerCategoriesAll;
 const _require5 = require('../utils/dictionaryApi.js'),createDictionaryItem = _require5.createDictionaryItem;
-const _require6 = require('../utils/productionPlans.js'),normalizeAppDictionaries = _require6.normalizeAppDictionaries;
+const _require6 = require('../../utils/productionPlans.js'),normalizeAppDictionaries = _require6.normalizeAppDictionaries;
 const _require7 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require7.readNavBarMetrics,readWindowMetrics = _require7.readWindowMetrics,computePlanCreateHeaderHeight = _require7.computePlanCreateHeaderHeight;
-const _require8 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require8.LIST_ROUTES,afterSaveReturnToList = _require8.afterSaveReturnToList;
-const { applyPartnerCreatedOnPage } = require('../utils/mergePartnerList.js');
+const _require8 = require('../../utils/saveNavigation.js'),LIST_ROUTES = _require8.LIST_ROUTES,afterSaveReturnToList = _require8.afterSaveReturnToList;
+const { applyPartnerCreatedOnPage } = require('../../utils/mergePartnerList.js');
 const _require9 = require('../utils/fileBase64.js'),chooseProductImageAsDataUrl = _require9.chooseProductImageAsDataUrl;
 const _require0 = require('../utils/productLastUnitByCategory.js'),writeLastUnitForCategory = _require0.writeLastUnitForCategory,resolveDefaultUnitForNewProductCategory = _require0.resolveDefaultUnitForNewProductCategory;
 const _require1 = require('../utils/productColorSize.js'),productColorSizeEnabled = _require1.productColorSizeEnabled;

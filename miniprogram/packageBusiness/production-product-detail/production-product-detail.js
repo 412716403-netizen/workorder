@@ -10,11 +10,11 @@ const {
   fetchProductionRecords,
   listOrdersPaginated,
   listProductProgressByProductId,
-} = require('../utils/orderApi.js');
-const { fetchDictionaries } = require('../utils/planApi.js');
+} = require('../../utils/orderApi.js');
+const { fetchDictionaries } = require('../../utils/planApi.js');
 const { normalizeMasterList, getProductUnitName, productNameSkuParts } = require('../utils/productionOrders.js');
-const { DEFAULT_PRODUCT_PLACEHOLDER_ICON } = require('../utils/listProductThumb.js');
-const { mapProductCustomTags } = require('../utils/reportCustomDocField.js');
+const { DEFAULT_PRODUCT_PLACEHOLDER_ICON } = require('../../utils/listProductThumb.js');
+const { mapProductCustomTags } = require('../../utils/reportCustomDocField.js');
 const { fetchOrdersForProductMaterialFamily } = require('../utils/productReportHints.js');
 const {
   aggregateProductReportSummaryByNode,

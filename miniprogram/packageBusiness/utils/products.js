@@ -1,12 +1,12 @@
 const { PRODUCT_ARCHIVE_ALL, DEFAULT_PAGE_SIZE } = require('../config/products.js');
 const { isProductEnabled } = require('./productEnabled.js');
-const { productMatchesSearchQuery } = require('./productSearchMatch.js');
-const { compareProductsArchiveOrder } = require('./productSort.js');
-const { mapProductCustomTags } = require('./reportCustomDocField.js');
+const { productMatchesSearchQuery } = require('../../utils/productSearchMatch.js');
+const { compareProductsArchiveOrder } = require('../../utils/productSort.js');
+const { mapProductCustomTags } = require('../../utils/reportCustomDocField.js');
 const {
   listProductThumbFromProduct,
   DEFAULT_PRODUCT_PLACEHOLDER_ICON,
-} = require('./listProductThumb.js');
+} = require('../../utils/listProductThumb.js');
 
 function buildCategoryMap(categories) {
   const map = new Map();

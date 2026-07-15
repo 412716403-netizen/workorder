@@ -5,9 +5,9 @@ const _require4 = require('../utils/products.js'),buildProductListRows = _requir
 const _require5 = require('../utils/productApi.js'),fetchProductsAll = _require5.fetchProductsAll,updateProduct = _require5.updateProduct;
 const _require6 =
 
-  require('../utils/planApi.js'),fetchCategoriesAll = _require6.fetchCategoriesAll;
+  require('../../utils/planApi.js'),fetchCategoriesAll = _require6.fetchCategoriesAll;
 const _require7 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require7.readNavBarMetrics,readWindowMetrics = _require7.readWindowMetrics;
-const _require8 = require('../utils/saveNavigation.js'),shouldHubListRefetch = _require8.shouldHubListRefetch,trackHubListHidden = _require8.trackHubListHidden,LIST_ROUTES = _require8.LIST_ROUTES;
+const _require8 = require('../../utils/saveNavigation.js'),shouldHubListRefetch = _require8.shouldHubListRefetch,trackHubListHidden = _require8.trackHubListHidden,LIST_ROUTES = _require8.LIST_ROUTES;
 const _require9 = require('../utils/productEnabled.js'),isProductEnabled = _require9.isProductEnabled;
 
 const HUB_LIST_ROUTE = LIST_ROUTES.BASIC_PRODUCTS.replace(/^\//, '');

@@ -2,19 +2,19 @@ const { readTenantCtx, readOperatorDisplayName, readCurrentUserId } = require('.
 const { hasPermission, hasPrefixPermission } = require('../../utils/permissions.js');
 const { readNavBarMetrics, readWindowMetrics, computePlanCreateHeaderHeight } = require('../../utils/windowMetrics.js');
 const { readWorkerReportScanPrefill, deserializeReportScanMeta } = require('../utils/workerReportScanPrefill.js');
-const { createOrderReport, createProductReport, fetchTenantConfig, fetchProductsAll, fetchCategoriesAll, fetchNodesAll, getOrder, fetchProductionRecords } = require('../utils/orderApi.js');
-const { fetchDictionaries } = require('../utils/planApi.js');
-const { normalizeMasterList, normalizeAppDictionaries } = require('../utils/productionPlans.js');
+const { createOrderReport, createProductReport, fetchTenantConfig, fetchProductsAll, fetchCategoriesAll, fetchNodesAll, getOrder, fetchProductionRecords } = require('../../utils/orderApi.js');
+const { fetchDictionaries } = require('../../utils/planApi.js');
+const { normalizeMasterList, normalizeAppDictionaries } = require('../../utils/productionPlans.js');
 const {
   getEffectiveReportTemplate,
   buildReportCustomFields,
   buildInitialReportCustomData,
   buildCustomDataPayload,
   validateReportCustomFields,
-} = require('../utils/orderReportForm.js');
+} = require('../../utils/orderReportForm.js');
 const { buildReportScanPayloadFields } = require('../utils/reportScanMeta.js');
 const { buildWorkerReportDisplayLines, entriesFromQuantities } = require('../utils/workerReportConfirmView.js');
-const { defaultEntryDate, defaultEntryTimeHm, entryDateAndTimeToIso } = require('../utils/docEntryTime.js');
+const { defaultEntryDate, defaultEntryTimeHm, entryDateAndTimeToIso } = require('../../utils/docEntryTime.js');
 
 function computeScrollHeight(nav) {
   const win = readWindowMetrics();

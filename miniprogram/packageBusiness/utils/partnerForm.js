@@ -1,5 +1,5 @@
-const { buildReportCustomFields, buildCustomDataPayload } = require('./orderReportForm.js');
-const { findPartnerByName } = require('./partnerNormalize.js');
+const { buildReportCustomFields, buildCustomDataPayload } = require('../../utils/orderReportForm.js');
+const { findPartnerByName } = require('../../utils/partnerNormalize.js');
 
 function buildEmptyPartner(categoryId) {
   return {

@@ -4,7 +4,7 @@
 
 const _require = require('../config/productionOrders.js'),OrderDispatchStatus = _require.OrderDispatchStatus;
 const _requireOrderSort = require('./productionOrders.js'),orderCreatedMs = _requireOrderSort.orderCreatedMs;
-const _require2 = require('./listProductThumb.js'),listProductNameSkuFields = _require2.listProductNameSkuFields;
+const _require2 = require('../../utils/listProductThumb.js'),listProductNameSkuFields = _require2.listProductNameSkuFields;
 const _require3 =
 
 
@@ -17,7 +17,7 @@ const _require3 =
 
 
 
-  require('./materialStatsLite.js'),computeAllParentMaterialStats = _require3.computeAllParentMaterialStats,computeAllProductMaterialStats = _require3.computeAllProductMaterialStats,visibleMaterialRowsForList = _require3.visibleMaterialRowsForList,displayMaterialsForKeyword = _require3.displayMaterialsForKeyword,filterMaterialRowsWithActivity = _require3.filterMaterialRowsWithActivity,matRowReportCost = _require3.matRowReportCost,matRowNetIssue = _require3.matRowNetIssue,matRowSurplus = _require3.matRowSurplus,roundQty = _require3.roundQty,INTERNAL_PARTNER_KEY = _require3.INTERNAL_PARTNER_KEY,computePartnerMaterialGroups = _require3.computePartnerMaterialGroups;
+  require('../../utils/materialStatsLite.js'),computeAllParentMaterialStats = _require3.computeAllParentMaterialStats,computeAllProductMaterialStats = _require3.computeAllProductMaterialStats,visibleMaterialRowsForList = _require3.visibleMaterialRowsForList,displayMaterialsForKeyword = _require3.displayMaterialsForKeyword,filterMaterialRowsWithActivity = _require3.filterMaterialRowsWithActivity,matRowReportCost = _require3.matRowReportCost,matRowNetIssue = _require3.matRowNetIssue,matRowSurplus = _require3.matRowSurplus,roundQty = _require3.roundQty,INTERNAL_PARTNER_KEY = _require3.INTERNAL_PARTNER_KEY,computePartnerMaterialGroups = _require3.computePartnerMaterialGroups;
 
 const DEFAULT_PAGE_SIZE = 10;
 const PARTNER_PAGE_SIZE = 5;
@@ -561,7 +561,7 @@ function buildMaterialPanelCards(params) {
     params.orders,products = params.products,boms = params.boms,stockRecords = params.stockRecords,outsourceRecords = params.outsourceRecords,globalNodes = params.globalNodes,productMilestoneProgresses = params.productMilestoneProgresses,productionLinkMode = params.productionLinkMode,materialPanelSettings = params.materialPanelSettings,searchKeyword = params.searchKeyword,materialKw = params.materialKw;
 
   const idx = buildMaterialIndexes(products, boms, orders);
-  const nodeWeightEnabledMap = require('./materialStatsLite.js').buildNodeWeightEnabledMap(globalNodes);
+  const nodeWeightEnabledMap = require('../../utils/materialStatsLite.js').buildNodeWeightEnabledMap(globalNodes);
   const groupByPartner = !!(materialPanelSettings && materialPanelSettings.groupByOutsourcePartner);
 
   if (groupByPartner) {

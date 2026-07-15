@@ -2,10 +2,10 @@ const { readTenantCtx } = require('../../utils/session.js');
 const { hasPermission } = require('../../utils/permissions.js');
 const { DICT_KIND_ALL, DEFAULT_PAGE_SIZE } = require('../config/dictionaries.js');
 const { buildDictionaryListRows, flattenDictionaryRows } = require('../utils/dictionaries.js');
-const { fetchDictionaries } = require('../utils/planApi.js');
-const { normalizeAppDictionaries } = require('../utils/productionPlans.js');
+const { fetchDictionaries } = require('../../utils/planApi.js');
+const { normalizeAppDictionaries } = require('../../utils/productionPlans.js');
 const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
-const { shouldHubListRefetch, trackHubListHidden, LIST_ROUTES } = require('../utils/saveNavigation.js');
+const { shouldHubListRefetch, trackHubListHidden, LIST_ROUTES } = require('../../utils/saveNavigation.js');
 
 const HUB_LIST_ROUTE = LIST_ROUTES.BASIC_DICTIONARIES.replace(/^\//, '');
 

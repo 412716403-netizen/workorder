@@ -10,8 +10,8 @@ function buildReportFlowEditMatrixLayout(product, dictionaries, lineItems) {
     const vid = item.variantId || '';
     qtyMap[vid] = String(item.quantity || 0);
   });
-  const { buildVariantMatrixUiModel } = require('./variantQtyMatrix.js');
-  const { productHasColorSizeMatrix } = require('./productionPlans.js');
+  const { buildVariantMatrixUiModel } = require('../../utils/variantQtyMatrix.js');
+  const { productHasColorSizeMatrix } = require('../../utils/productionPlans.js');
   if (!product || !productHasColorSizeMatrix(product)) return null;
   return buildVariantMatrixUiModel(product, dictionaries, qtyMap);
 }

@@ -5,7 +5,7 @@ const { normalizeListBody } = require('../../utils/listResponse.js');
 const { readNavBarMetrics, readWindowMetrics, computeFixedFooterInsetPx } = require('../../utils/windowMetrics.js');
 const { buildOutsourceReceiveAggregates } = require('../utils/outsourceReceiveAggregates.js');
 const { buildOutsourcePartnerOptions } = require('../utils/outsourcePartnerOptions.js');
-const { mergePartnerIntoList } = require('../utils/mergePartnerList.js');
+const { mergePartnerIntoList } = require('../../utils/mergePartnerList.js');
 const { fetchOutsourceRecordsForPanel } = require('../utils/outsourceRecordsLoad.js');
 const { fetchAllOrdersPaginated } = require('../utils/pendingStockBadge.js');
 const {
@@ -14,8 +14,8 @@ const {
   fetchNodesAll,
   fetchCategoriesAll,
   listProductProgressAll,
-} = require('../utils/orderApi.js');
-const { normalizeMasterList } = require('../utils/productionPlans.js');
+} = require('../../utils/orderApi.js');
+const { normalizeMasterList } = require('../../utils/productionPlans.js');
 const { createScanBatchController } = require('../utils/scanBatchController.js');
 const { createOutsourceReceiveScanBatchHandlers } = require('../utils/scanBatchApplyOutsource.js');
 const { loadTraceabilityScanEnabled } = require('../../utils/featurePlugins.js');

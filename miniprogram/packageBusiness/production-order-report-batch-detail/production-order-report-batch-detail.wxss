@@ -1,5 +1,5 @@
-@import '../production-order-detail/production-order-detail.wxss';
-@import '../production-plan-create/production-plan-create.wxss';
+@import '/styles/order-detail-page.wxss';
+@import '/styles/plan-create-form.wxss';
 
 @import '../../styles/matrix-keyboard-page.wxss';
 

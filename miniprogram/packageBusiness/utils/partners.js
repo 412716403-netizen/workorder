@@ -1,5 +1,5 @@
 const { PARTNER_ARCHIVE_ALL, DEFAULT_PAGE_SIZE } = require('../config/partners.js');
-const { filterPartners } = require('./filterPartners.js');
+const { filterPartners } = require('../../utils/filterPartners.js');
 const { formatPartnerListNo, getPartnerPhoneDisplay } = require('./partnerForm.js');
 
 function buildCategoryMap(categories) {

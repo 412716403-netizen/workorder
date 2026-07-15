@@ -1,0 +1,8 @@
+{
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "searchable-product-select": "/components/searchable-product-select/searchable-product-select",
+    "searchable-partner-select": "/components/searchable-partner-select/searchable-partner-select",
+    "matrix-qty-keyboard": "/components/matrix-qty-keyboard/matrix-qty-keyboard"
+  }
+}

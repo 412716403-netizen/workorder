@@ -16,10 +16,6 @@
         "value": "packageBusiness/scan-session"
       },
       {
-        "type": "folder",
-        "value": "packageBusiness/scan-setup"
-      },
-      {
         "type": "suffix",
         "value": ".example"
       }

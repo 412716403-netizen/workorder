@@ -2,7 +2,7 @@ const {
   openBottomSheet,
   closeBottomSheet,
   clearBottomSheetTimers,
-} = require('../../utils/bottomSheetAnim.js');
+} = require('../../../utils/bottomSheetAnim.js');
 const { createDictionaryItem } = require('../../utils/dictionaryApi.js');
 
 function filterUnits(units, search) {

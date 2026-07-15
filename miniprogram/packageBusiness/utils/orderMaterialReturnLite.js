@@ -3,7 +3,7 @@
  */
 
 const { roundQty, formatQtyDisplay } = require('./orderMaterialLite.js');
-const { BATCH_NO_UNTAGGED, buildReturnDispatchedBatchesByProduct } = require('./materialStockConfirm.js');
+const { BATCH_NO_UNTAGGED, buildReturnDispatchedBatchesByProduct } = require('../../utils/materialStockConfirm.js');
 
 function computeConsumedByPartnerMat(params) {
   const {

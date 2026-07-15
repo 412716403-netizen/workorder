@@ -1,7 +1,7 @@
 /**
- * 列表/流水/详情产品缩略图（主包与分包共用约定）
+ * 列表/流水/详情产品缩略图（小程序列表默认带图约定）
  *
- * 无产品图时占位图标与工单中心（production-orders）一致。
+ * 无产品图时占位图标与工单中心（production-orders）一致，新增单据/流水请复用本模块。
  * 产品名称 + 编号展示约定见 listProductNameSkuFields / listProductDisplayFields。
  */
 
@@ -65,9 +65,17 @@ function listProductDisplayFieldsFromMap(productMap, productId, fallback = {}) {
   return listProductDisplayFields(product, fallback);
 }
 
+/** 列表取图：优先 imageThumb（lite），回退 imageUrl */
+function productImageSrc(product) {
+  if (!product) return '';
+  const thumb = product.imageThumb ? String(product.imageThumb).trim() : '';
+  if (thumb) return thumb;
+  return product.imageUrl ? String(product.imageUrl).trim() : '';
+}
+
 function listProductThumbFromProduct(product, opts) {
   const placeholderIconSrc = (opts && opts.placeholderIconSrc) || DEFAULT_PRODUCT_PLACEHOLDER_ICON;
-  const productImageUrl = product && product.imageUrl ? String(product.imageUrl).trim() : '';
+  const productImageUrl = productImageSrc(product);
   return {
     productId: (product && product.id) || '',
     productImageUrl,
@@ -88,6 +96,7 @@ function listProductThumbFromUrl(imageUrl, opts) {
 
 module.exports = {
   DEFAULT_PRODUCT_PLACEHOLDER_ICON,
+  productImageSrc,
   productNameSkuParts,
   listProductNameSkuFields,
   listProductNameSkuFromMap,

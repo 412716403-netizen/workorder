@@ -1,8 +1,8 @@
 const { productColorSizeEnabled, validateProductColorSizeSelection } = require('./productColorSize.js');
 const { validateProductCatalogUnique } = require('./productCatalogUnique.js');
 const { resolveProductSkuForSave } = require('./productSkuAutoGen.js');
-const { sortVariantsByColorThenSize } = require('./variantQtyMatrix.js');
-const { effectiveCustomDocFieldType, getShowInFormCategoryFields } = require('./reportCustomDocField.js');
+const { sortVariantsByColorThenSize } = require('../../utils/variantQtyMatrix.js');
+const { effectiveCustomDocFieldType, getShowInFormCategoryFields } = require('../../utils/reportCustomDocField.js');
 
 function genDraftProductId() {
   return `p-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

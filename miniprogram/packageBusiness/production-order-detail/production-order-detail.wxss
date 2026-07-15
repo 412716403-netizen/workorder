@@ -1,4 +1,4 @@
-@import '../production-plan-detail/production-plan-detail.wxss';
+@import '/styles/plan-detail-page.wxss';
 @import '../../styles/outsource-shared.wxss';
 
 .plan-detail-header__edit {

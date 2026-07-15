@@ -1,4 +1,4 @@
-@import '../searchable-partner-select/searchable-partner-select.wxss';
+@import '../../../components/searchable-partner-select/searchable-partner-select.wxss';
 
 .unit-select__quick {
   display: flex;

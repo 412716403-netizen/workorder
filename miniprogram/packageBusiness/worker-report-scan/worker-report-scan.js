@@ -9,8 +9,8 @@ const {
   buildReportableKeySet,
 } = require('../utils/scanBatchApplyWorkerReport.js');
 const { listMyReportableTasks, fetchTenantConfig } = require('../../utils/workerReportApi.js');
-const { fetchProductsAll, fetchCategoriesAll } = require('../utils/orderApi.js');
-const { normalizeMasterList } = require('../utils/productionPlans.js');
+const { fetchProductsAll, fetchCategoriesAll } = require('../../utils/orderApi.js');
+const { normalizeMasterList } = require('../../utils/productionPlans.js');
 
 Page({
   data: {

@@ -1,10 +1,10 @@
 const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
 const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
 const _require3 = require('../utils/pendingStockBadge.js'),loadPendingStockRows = _require3.loadPendingStockRows;
-const _require4 = require('../utils/orderApi.js'),fetchTenantConfig = _require4.fetchTenantConfig,fetchProductsAll = _require4.fetchProductsAll,fetchCategoriesAll = _require4.fetchCategoriesAll;
-const _require5 = require('../utils/productionPlans.js'),normalizeMasterList = _require5.normalizeMasterList;
-const _require6 = require('../utils/orderReportHistory.js'),productMetaFromMap = _require6.productMetaFromMap;
-const _require7 = require('../utils/listProductThumb.js'),DEFAULT_PRODUCT_PLACEHOLDER_ICON = _require7.DEFAULT_PRODUCT_PLACEHOLDER_ICON;
+const _require4 = require('../../utils/orderApi.js'),fetchTenantConfig = _require4.fetchTenantConfig,fetchProductsAll = _require4.fetchProductsAll,fetchCategoriesAll = _require4.fetchCategoriesAll;
+const _require5 = require('../../utils/productionPlans.js'),normalizeMasterList = _require5.normalizeMasterList;
+const _require6 = require('../../utils/orderReportHistory.js'),productMetaFromMap = _require6.productMetaFromMap;
+const _require7 = require('../../utils/listProductThumb.js'),DEFAULT_PRODUCT_PLACEHOLDER_ICON = _require7.DEFAULT_PRODUCT_PLACEHOLDER_ICON;
 const _require8 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require8.readNavBarMetrics,readWindowMetrics = _require8.readWindowMetrics;
 const _require9 = require('../utils/scanBatchController.js'),createScanBatchController = _require9.createScanBatchController;
 const _require0 = require('../utils/scanBatchApplyPendingStock.js'),createPendingStockScanBatchHandlers = _require0.createPendingStockScanBatchHandlers;

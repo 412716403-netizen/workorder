@@ -2,12 +2,12 @@
  * 处理不良流水详情视图
  */
 
-const { formatReportTime } = require('./orderReportHistory.js');
-const { flowRecordsEarliestMs } = require('./flowDocSortLite.js');
-const { listProductThumbFromProduct, listProductNameSkuFields } = require('./listProductThumb.js');
-const { productHasColorSizeMatrix, variantLabel } = require('./productionPlans.js');
-const { buildVariantMatrixUiModel } = require('./variantQtyMatrix.js');
-const { getProductUnitName } = require('./planFormCustomField.js');
+const { formatReportTime } = require('../../utils/orderReportHistory.js');
+const { flowRecordsEarliestMs } = require('../../utils/flowDocSortLite.js');
+const { listProductThumbFromProduct, listProductNameSkuFields } = require('../../utils/listProductThumb.js');
+const { productHasColorSizeMatrix, variantLabel } = require('../../utils/productionPlans.js');
+const { buildVariantMatrixUiModel } = require('../../utils/variantQtyMatrix.js');
+const { getProductUnitName } = require('../../utils/planFormCustomField.js');
 const { timestampToEditParts } = require('./reportBatchDetail.js');
 const {
   isOutsourceReworkRecord,

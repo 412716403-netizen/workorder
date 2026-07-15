@@ -42,15 +42,15 @@ const WORKBENCH_SHORTCUT_CATALOG = [
   { id: 'production-outsource', label: '外协管理', group: '生产管理', icon: 'Truck', module: 'production', permAnyOf: ['outsource_form_config', 'outsource_list', 'outsource_send', 'outsource_receive', 'outsource_records', 'outsource_material'], path: '/packageBusiness/production-outsource/production-outsource' },
   { id: 'production-rework', label: '返工管理', group: '生产管理', icon: 'RotateCcw', module: 'production', permAnyOf: ['rework_list', 'rework_defective', 'rework_records', 'rework_report_records', 'rework_outsource', 'rework_detail', 'rework_material', 'rework_form_config'], path: '/packageBusiness/production-rework/production-rework' },
 
-  { id: 'psi-purchase-order', label: '采购订单', group: '进销存', icon: 'ClipboardList', module: 'psi', perm: 'psi:purchase_order:view', path: '/packageBusiness/psi-purchase-orders/psi-purchase-orders' },
-  { id: 'psi-purchase-bill', label: '采购入库', group: '进销存', icon: 'Receipt', module: 'psi', perm: 'psi:purchase_bill:view', path: '/packageBusiness/psi-purchase-bills/psi-purchase-bills' },
-  { id: 'psi-sales-order', label: '销售订单', group: '进销存', icon: 'ShoppingBag', module: 'psi', perm: 'psi:sales_order:view', path: '/packageBusiness/psi-sales-orders/psi-sales-orders' },
-  { id: 'psi-sales-bill', label: '销售单', group: '进销存', icon: 'CreditCard', module: 'psi', perm: 'psi:sales_bill:view', path: '/packageBusiness/psi-sales-bills/psi-sales-bills' },
-  { id: 'psi-warehouse', label: '仓库管理', group: '进销存', icon: 'Warehouse', module: 'psi', permAnyOf: ['warehouse_list', 'warehouse_stocktake', 'warehouse_transfer', 'warehouse_flow'], path: '/packageBusiness/psi-warehouses/psi-warehouses' },
+  { id: 'psi-purchase-order', label: '采购订单', group: '进销存', icon: 'ClipboardList', module: 'psi', perm: 'psi:purchase_order:view', path: '/packagePsi/psi-purchase-orders/psi-purchase-orders' },
+  { id: 'psi-purchase-bill', label: '采购入库', group: '进销存', icon: 'Receipt', module: 'psi', perm: 'psi:purchase_bill:view', path: '/packagePsi/psi-purchase-bills/psi-purchase-bills' },
+  { id: 'psi-sales-order', label: '销售订单', group: '进销存', icon: 'ShoppingBag', module: 'psi', perm: 'psi:sales_order:view', path: '/packagePsi/psi-sales-orders/psi-sales-orders' },
+  { id: 'psi-sales-bill', label: '销售单', group: '进销存', icon: 'CreditCard', module: 'psi', perm: 'psi:sales_bill:view', path: '/packagePsi/psi-sales-bills/psi-sales-bills' },
+  { id: 'psi-warehouse', label: '仓库管理', group: '进销存', icon: 'Warehouse', module: 'psi', permAnyOf: ['warehouse_list', 'warehouse_stocktake', 'warehouse_transfer', 'warehouse_flow'], path: '/packagePsi/psi-warehouses/psi-warehouses' },
 
-  { id: 'finance-receipt', label: '收款单', group: '财务结算', icon: 'ArrowDownCircle', module: 'finance', perm: 'finance:receipt:view', path: '/packageBusiness/finance-receipts/finance-receipts' },
-  { id: 'finance-payment', label: '付款单', group: '财务结算', icon: 'ArrowUpCircle', module: 'finance', perm: 'finance:payment:view', path: '/packageBusiness/finance-payments/finance-payments' },
-  { id: 'finance-reconciliation', label: '财务对账', group: '财务结算', icon: 'Scale', module: 'finance', perm: 'finance:reconciliation:allow', path: '/packageBusiness/finance-reconciliation/finance-reconciliation' },
+  { id: 'finance-receipt', label: '收款单', group: '财务结算', icon: 'ArrowDownCircle', module: 'finance', perm: 'finance:receipt:view', path: '/packageFinance/finance-receipts/finance-receipts' },
+  { id: 'finance-payment', label: '付款单', group: '财务结算', icon: 'ArrowUpCircle', module: 'finance', perm: 'finance:payment:view', path: '/packageFinance/finance-payments/finance-payments' },
+  { id: 'finance-reconciliation', label: '财务对账', group: '财务结算', icon: 'Scale', module: 'finance', perm: 'finance:reconciliation:allow', path: '/packageFinance/finance-reconciliation/finance-reconciliation' },
 
   { id: 'basic-products', label: '产品档案', group: '基础信息', icon: 'Boxes', module: 'basic', perm: 'basic:products:view', path: '/packageBusiness/basic-products/basic-products' },
   { id: 'basic-partners', label: '合作单位', group: '基础信息', icon: 'Building2', module: 'basic', perm: 'basic:partners:view', path: '/packageBusiness/basic-partners/basic-partners' },
