@@ -9,6 +9,7 @@ import type {
   BOM,
 } from '../../types';
 import ProductQuickDetailBody from '../shared/ProductQuickDetailBody';
+import { productThumbSrc } from '../../utils/productImageSrc';
 
 interface PlanProductDetailProps {
   viewProductId: string;
@@ -43,8 +44,8 @@ const PlanProductDetail: React.FC<PlanProductDetailProps> = ({
       <div className="relative bg-white w-full max-w-2xl rounded-[32px] shadow-2xl overflow-hidden max-h-[90vh] flex flex-col min-h-0" onClick={e => e.stopPropagation()}>
         <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-4 min-w-0">
-            {p.imageUrl ? (
-              <img loading="lazy" decoding="async" src={p.imageUrl} alt={p.name} className="w-16 h-16 rounded-2xl object-cover border border-slate-200 shrink-0" />
+            {productThumbSrc(p) ? (
+              <img loading="lazy" decoding="async" src={productThumbSrc(p)} alt={p.name} className="w-16 h-16 rounded-2xl object-cover border border-slate-200 shrink-0" />
             ) : (
               <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-400 shrink-0"><Package className="w-8 h-8" /></div>
             )}

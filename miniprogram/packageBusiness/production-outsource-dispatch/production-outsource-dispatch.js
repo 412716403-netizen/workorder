@@ -8,7 +8,7 @@ const _require3 =
 
   require('../utils/outsourceDispatchLite.js'),buildOutsourceDispatchRows = _require3.buildOutsourceDispatchRows,buildDispatchMilestoneOptions = _require3.buildDispatchMilestoneOptions,mapDispatchRowForUi = _require3.mapDispatchRowForUi,filterDispatchRows = _require3.filterDispatchRows,dispatchRowKey = _require3.dispatchRowKey;
 const _require4 = require('../utils/pendingStockBadge.js'),fetchAllOrdersPaginated = _require4.fetchAllOrdersPaginated;
-const _require5 = require('../utils/outsourceRecordsLoad.js'),fetchOutsourceRecordsForPanel = _require5.fetchOutsourceRecordsForPanel;
+const _require5 = require('../utils/outsourceRecordsLoad.js'),fetchOutsourceRecordsForPanel = _require5.fetchOutsourceRecordsForPanel,fetchReworkRecordsForOutsourcePanel = _require5.fetchReworkRecordsForOutsourcePanel,mergeRecordsById = _require5.mergeRecordsById;
 const _require6 =
 
 
@@ -18,7 +18,7 @@ const _require6 =
   require('../utils/orderApi.js'),fetchTenantConfig = _require6.fetchTenantConfig,fetchProductsAll = _require6.fetchProductsAll,fetchNodesAll = _require6.fetchNodesAll,fetchCategoriesAll = _require6.fetchCategoriesAll,listProductProgressAll = _require6.listProductProgressAll;
 const _require7 = require('../utils/productionPlans.js'),normalizeMasterList = _require7.normalizeMasterList;
 const _require8 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require8.readNavBarMetrics,readWindowMetrics = _require8.readWindowMetrics;
-const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../../utils/planFilterPanel.js');
+const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../utils/planFilterPanel.js');
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
@@ -187,8 +187,23 @@ Page({
     const key = e.currentTarget.dataset.key;
     const row = (this._allRows || []).find((r) => dispatchRowKey(r) === key);
     if (!row) return;
-    if (this._selectedKeys.has(key)) this._selectedKeys.delete(key);else
-    this._selectedKeys.add(key);
+    if (this._selectedKeys.has(key)) {
+      this._selectedKeys.delete(key);
+    } else {
+      // 对齐 Web OutsourceDispatchListModal：同一批次只能选同一工序
+      if (this._selectedKeys.size > 0) {
+        const firstKey = this._selectedKeys.values().next().value;
+        const selectedNodeId = String(firstKey || '').split('|')[1];
+        if (selectedNodeId && selectedNodeId !== row.nodeId) {
+          wx.showToast({
+            title: '只能选择同一工序同时发出，请先取消其他工序的勾选',
+            icon: 'none',
+          });
+          return;
+        }
+      }
+      this._selectedKeys.add(key);
+    }
     this.applyRows();
   },
 
@@ -258,11 +273,16 @@ Page({
       this._processSequenceMode = config.processSequenceMode || 'sequential';
       this._orders = orders || [];
 
-      this._records = await fetchOutsourceRecordsForPanel({
-        productionLinkMode: this._productionLinkMode,
-        orders: this._orders,
-        products
-      });
+      const _await$Promise$all2 = await Promise.all([
+        fetchOutsourceRecordsForPanel({
+          productionLinkMode: this._productionLinkMode,
+          orders: this._orders,
+          products
+        }),
+        // 返工完成数量需回补到可外协基数（对齐 Web reworkByOrderQuery）
+        fetchReworkRecordsForOutsourcePanel(this._orders).catch(() => [])]
+        ),outsourceRecords = _await$Promise$all2[0],reworkRecords = _await$Promise$all2[1];
+      this._records = mergeRecordsById(outsourceRecords, reworkRecords);
       this._allRows = buildOutsourceDispatchRows({
         productionLinkMode: this._productionLinkMode,
         records: this._records,

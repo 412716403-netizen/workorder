@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Package, X, ArrowUpFromLine } from 'lucide-react';
+import { Package, X, ArrowUpFromLine, Trash2 } from 'lucide-react';
 import {
   ProductionOrder,
   Product,
@@ -113,6 +113,8 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
   const [materialIssueLineBatch, setMaterialIssueLineBatch] = useState<Record<string, string>>({});
   const [materialIssueWarehouseId, setMaterialIssueWarehouseId] = useState<string>(warehouses[0]?.id ?? '');
   const [materialIssueEntryTimestamp, setMaterialIssueEntryTimestamp] = useState(() => defaultEntryDatetimeLocal());
+  /** 本次发料单据中临时移除的物料行（不改变 BOM；关闭弹窗后重置） */
+  const [removedMaterialIds, setRemovedMaterialIds] = useState<Set<string>>(() => new Set());
   const materialIssueOpenKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -124,10 +126,31 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
     if (!key) return;
     if (materialIssueOpenKeyRef.current === key) return;
     materialIssueOpenKeyRef.current = key;
+    setRemovedMaterialIds(new Set());
     const pref = readWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.PROD_MATERIAL_ISSUE);
     const wid = resolvePreferredSingleWarehouse(warehouses, pref, warehouses[0]?.id ?? '');
     setMaterialIssueWarehouseId(wid || '');
   }, [orderId, forProduct?.productId, forProduct, warehouses, tenantCtx?.tenantId, userId]);
+
+  const removeMaterialRow = (productId: string) => {
+    setRemovedMaterialIds(prev => {
+      const next = new Set(prev);
+      next.add(productId);
+      return next;
+    });
+    setMaterialIssueQty(prev => {
+      if (!(productId in prev)) return prev;
+      const next = { ...prev };
+      delete next[productId];
+      return next;
+    });
+    setMaterialIssueLineBatch(prev => {
+      if (!(productId in prev)) return prev;
+      const next = { ...prev };
+      delete next[productId];
+      return next;
+    });
+  };
 
   const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
   const categoryById = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
@@ -216,7 +239,7 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
     if (!order) return null;
     const product = productMap.get(order.productId);
     const orderQty = order.items.reduce((s, i) => s + i.quantity, 0);
-    const bomMaterials: BomMaterial[] = [];
+    let bomMaterials: BomMaterial[] = [];
     const matMap = new Map<string, { name: string; sku: string; unitNeeded: number; nodeNames: Set<string> }>();
     const addBomItems = (bom: BOM, qty: number, nodeName: string) => {
       bom.items.forEach(bi => {
@@ -274,6 +297,8 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
     matMap.forEach((v, productId) => {
       bomMaterials.push({ productId, ...v, nodeNames: Array.from(v.nodeNames) });
     });
+    const bomMaterialTotal = bomMaterials.length;
+    bomMaterials = bomMaterials.filter(m => !removedMaterialIds.has(m.productId));
     /** 领料进度 = 本厂生产领料 − 本厂生产退料（与工单中心物料表「净领用」一致；不含外协 partner、不含返工领料） */
     const issuedMap = new Map<string, number>();
     prodRecords.filter(r => r.type === 'STOCK_OUT' && !r.partner && r.orderId === order.id && r.reason !== '来自于返工').forEach(r => {
@@ -383,8 +408,10 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
                 </select>
               </div>
             )}
-            {bomMaterials.length === 0 ? (
+            {bomMaterialTotal === 0 ? (
               <p className="py-8 text-center text-slate-400 text-sm">该工单未配置 BOM 物料，无法进行物料发出</p>
+            ) : bomMaterials.length === 0 ? (
+              <p className="py-8 text-center text-slate-400 text-sm">已移除全部物料行，关闭后重新打开可恢复</p>
             ) : (
               <div className="overflow-x-auto rounded-2xl border border-slate-100">
               <table className="w-full min-w-[760px] text-left border-collapse">
@@ -397,6 +424,7 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
                       <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest whitespace-nowrap w-48">批次</th>
                     ) : null}
                     <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest text-center whitespace-nowrap w-36">本次领料</th>
+                    <th className="px-2 py-3 text-[10px] font-black text-slate-400 tracking-widest text-center whitespace-nowrap w-14">操作</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
@@ -477,6 +505,17 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
                           className="w-full rounded-2xl border border-slate-200 bg-white py-2.5 px-3 text-base font-black text-slate-800 text-right focus:ring-2 focus:ring-indigo-500 outline-none"
                           placeholder="0"
                         />
+                      </td>
+                      <td className="px-2 py-4 text-center align-middle">
+                        <button
+                          type="button"
+                          onClick={() => removeMaterialRow(m.productId)}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+                          title="删除此行"
+                          aria-label={`删除物料 ${m.name}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </td>
                     </tr>
                     );
@@ -592,10 +631,12 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
       mergeLocal(local);
     };
     groupOrders.forEach(addOrderBom);
-    const bomMaterials: BomMaterial[] = [];
+    let bomMaterials: BomMaterial[] = [];
     matMap.forEach((v, pid) => {
       bomMaterials.push({ productId: pid, ...v, nodeNames: Array.from(v.nodeNames) });
     });
+    const bomMaterialTotal = bomMaterials.length;
+    bomMaterials = bomMaterials.filter(m => !removedMaterialIds.has(m.productId));
     const familyIds = new Set(groupOrders.map(o => o.id));
     const materialIssueHit = (r: ProductionOpRecord): boolean =>
       r.sourceProductId === sourceProductId ||
@@ -726,8 +767,10 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
                 </select>
               </div>
             )}
-            {bomMaterials.length === 0 ? (
+            {bomMaterialTotal === 0 ? (
               <p className="py-8 text-center text-slate-400 text-sm">该产品未配置 BOM 物料，无法进行物料发出</p>
+            ) : bomMaterials.length === 0 ? (
+              <p className="py-8 text-center text-slate-400 text-sm">已移除全部物料行，关闭后重新打开可恢复</p>
             ) : (
               <div className="overflow-x-auto rounded-2xl border border-slate-100">
               <table className="w-full min-w-[760px] text-left border-collapse">
@@ -740,6 +783,7 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
                       <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest whitespace-nowrap w-48">批次</th>
                     ) : null}
                     <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest text-center whitespace-nowrap w-36">本次领料</th>
+                    <th className="px-2 py-3 text-[10px] font-black text-slate-400 tracking-widest text-center whitespace-nowrap w-14">操作</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
@@ -828,6 +872,17 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
                             className="w-full rounded-2xl border border-slate-200 bg-white py-2.5 px-3 text-base font-black text-slate-800 text-right focus:ring-2 focus:ring-indigo-500 outline-none"
                             placeholder="0"
                           />
+                        </td>
+                        <td className="px-2 py-4 text-center align-middle">
+                          <button
+                            type="button"
+                            onClick={() => removeMaterialRow(m.productId)}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+                            title="删除此行"
+                            aria-label={`删除物料 ${m.name}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
                         </td>
                       </tr>
                     );

@@ -15,6 +15,7 @@ const {
   productOutsourceDispatchUsesAggregateVariantPool,
   sumOutsourceableByVariantProductMatrix,
 } = require('./outsourceDispatchMatrix.js');
+const { productGroupMaxReportableSum } = require('./productReportHints.js');
 const { listProductThumbFromProduct } = require('./listProductThumb.js');
 
 function orderCreatedMs(order) {
@@ -42,10 +43,6 @@ function milestoneIndexInProduct(product, nodeId) {
   return idx >= 0 ? idx : 9999;
 }
 
-function sumDefectiveAtMilestone(ms) {
-  return (ms.reports || []).reduce((s, r) => s + (Number(r.defectiveQuantity) || 0), 0);
-}
-
 function combinedCompletedAtTemplate(blockOrders, pmp, productId, nodeId) {
   let sum = 0;
   (blockOrders || []).forEach((order) => {
@@ -57,29 +54,6 @@ function combinedCompletedAtTemplate(blockOrders, pmp, productId, nodeId) {
     (row.reports || []).forEach((r) => {
       sum += Number(r.quantity) || 0;
     });
-  });
-  return sum;
-}
-
-function productGroupMaxReportableSum(blockOrders, nodeId, productId, pmp, processSequenceMode, outOfSequenceTemplateIds) {
-  let sum = 0;
-  (blockOrders || []).forEach((order) => {
-    const rawOrderTotalQty = sumOrderQty(order);
-    const milestones = order.milestones || [];
-    const ms = milestones.find((m) => m.templateId === nodeId);
-    if (!ms) return;
-    const templateIds = milestones.map((m) => m.templateId);
-    const msIdx = milestones.findIndex((m) => m.id === ms.id);
-    let baseQty = rawOrderTotalQty;
-    if (isProcessSequential(processSequenceMode, nodeId, outOfSequenceTemplateIds)) {
-      const gateIdx = findGatingPredecessorIndex(templateIds, msIdx, outOfSequenceTemplateIds);
-      if (gateIdx >= 0) {
-        const prev = milestones[gateIdx];
-        baseQty = Number(prev && prev.completedQuantity) || 0;
-      }
-    }
-    const defective = sumDefectiveAtMilestone(ms);
-    sum += Math.max(0, baseQty - defective);
   });
   return sum;
 }
@@ -136,6 +110,7 @@ function buildOutsourceDispatchRows(params) {
 
       nodeIds.forEach((nodeId) => {
         const node = nodesById.get(nodeId);
+        // 对齐 Web：含不良扣减 + 返工完成回补（getDr.rework）
         const maxReportable = blockOrders.length > 0
           ? productGroupMaxReportableSum(
             blockOrders,
@@ -143,6 +118,8 @@ function buildOutsourceDispatchRows(params) {
             productId,
             productMilestoneProgresses,
             processSequenceMode,
+            getDr,
+            orders,
             outOfSequenceTemplateIds,
           )
           : 0;
@@ -242,8 +219,9 @@ function buildOutsourceDispatchRows(params) {
           baseQty = Number(prev && prev.completedQuantity) || 0;
         }
       }
-      const defective = sumDefectiveAtMilestone(ms);
-      const maxReportable = Math.max(0, baseQty - defective);
+      // 对齐 Web：返工完成数量（rework）回补到可外协基数
+      const dr = getDr(order.id, ms.templateId);
+      const maxReportable = Math.max(0, baseQty - dr.defective + dr.rework);
       const key = `${order.id}|${ms.templateId}`;
       const dispatchedQty = Math.max(
         0,

@@ -3,7 +3,7 @@
  */
 const { formatReportTime, productMetaFromMap } = require('./orderReportHistory.js');
 const { productHasColorSizeMatrix, variantLabel, normalizeAppDictionaries } = require('./productionPlans.js');
-const { buildVariantMatrixUiModel } = require('./variantQtyMatrix.js');
+const { buildReportMatrixLayout } = require('./orderReportForm.js');
 const { DEFAULT_PRODUCT_PLACEHOLDER_ICON, listProductNameSkuFields } = require('./listProductThumb.js');
 
 function isOutsourceReceiveReport(r) {
@@ -236,16 +236,19 @@ function buildBatchDetailView(batch, ctx) {
   });
 
   const qtyMap = {};
+  const defectiveQtyMap = {};
   batch.rows.forEach((row) => {
     const r = row.raw;
     if (r.variantId != null) {
       qtyMap[r.variantId] = String(Number(r.quantity) || 0);
+      defectiveQtyMap[r.variantId] = String(Number(r.defectiveQuantity) || 0);
     }
   });
 
   let matrixLayout = null;
   if (product && productHasColorSizeMatrix(product, category)) {
-    matrixLayout = buildVariantMatrixUiModel(product, dictionaries, qtyMap);
+    // 与报工录入一致：矩阵 cell 同时带 quantity / defectiveQty，详情页可切换查看
+    matrixLayout = buildReportMatrixLayout(product, dictionaries, qtyMap, defectiveQtyMap);
   }
 
   let totalAmount = 0;
@@ -318,6 +321,8 @@ function buildBatchDetailView(batch, ctx) {
     timeLabel: formatReportTime(first.timestamp),
     operator: first.operator || '—',
     unitName,
+    totalGood: batch.totalGood || 0,
+    totalDefective: batch.totalDefective || 0,
     totalGoodText: `${batch.totalGood} ${unitName}`,
     totalDefectiveText: batch.totalDefective > 0 ? `${batch.totalDefective} ${unitName}` : '',
     showDefectiveTotal: batch.totalDefective > 0,
@@ -340,8 +345,8 @@ function buildBatchDetailView(batch, ctx) {
     editDate: tsParts.date,
     editTime: tsParts.time,
     editOperator: first.operator || '',
-    productImageUrl: (product && product.imageUrl) || '',
-    showProductImage: Boolean(product && product.imageUrl),
+    productImageUrl: (product && (product.imageThumb || product.imageUrl)) || '',
+    showProductImage: Boolean(product && (product.imageThumb || product.imageUrl)),
     placeholderIconSrc: DEFAULT_PRODUCT_PLACEHOLDER_ICON,
   };
 }

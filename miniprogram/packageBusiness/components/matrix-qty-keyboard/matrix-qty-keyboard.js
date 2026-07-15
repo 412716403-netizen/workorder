@@ -9,6 +9,9 @@ Component({
     onConfirm() {
       this.emit('confirm');
     },
+    /** 阻止点按键盘区域冒泡到 mask */
+    onKeyboardCatch() {},
+    onMaskTouchMove() {},
     onKeyTap(e) {
       const { key } = e.currentTarget.dataset;
       if (!key) return;

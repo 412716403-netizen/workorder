@@ -9,6 +9,7 @@ import { validateProductColorSizeForSave } from '../../../shared/productColorSiz
 import { getProductionLinkMode, milestoneNodeIdsEqual, productionOrderWhereCountsForProcessLock } from '../utils/productionLinkMode.js';
 import type { ProductionLinkMode } from '../types/index.js';
 import { redisGetJson, redisSetJson } from '../lib/redis.js';
+import { buildImageThumb } from '../lib/imageThumb.js';
 
 const MSG_PROCESS_LOCKED =
   '该产品已下达生产工单，工序已锁定，不能修改。如需调整工序，请先撤销/完成相关工单。';
@@ -366,9 +367,10 @@ export async function getVariantUsage(
 // ── Products CRUD ──
 
 /**
- * Phase 3.F lite（保守版）：列表只裁「无列表用途」的经营核算规则 JSON。
- * 前端 Product 类型未声明这些字段，编辑保存也不会回传（absent ≠ 清空），裁掉安全；
- * 经营核算弹窗走 dashboard/product-economics 服务端聚合接口，不读列表数据。
+ * Phase 3.F / 3.H lite：
+ * - 裁 4 个 `economics*` 经营核算规则 JSON（列表无用途；经营弹窗走 dashboard 接口）。
+ * - Phase 3.H：再裁 `imageUrl` 原图（base64 体积巨大）；列表改用 `imageThumb`。
+ *   编辑/详情走 `GET /products/:id` 按需拉原图，禁止把缺省 imageUrl 回写成空。
  *
  * 注意：`routeReportValues` / `routeReportDisplayValues` / `nodeRates` / `nodePricingModes`
  * / `milestoneNodeIds` / variants 全字段（含 nodeBoms）**必须保留**——
@@ -380,7 +382,23 @@ const PRODUCT_LIST_LITE_OMIT = {
   economicsBomMaterialPrice: true,
   economicsReportNodePrice: true,
   economicsOutsourceNodePrice: true,
+  imageUrl: true,
 } as const;
+
+/** 客户端不得直写 imageThumb；由服务端根据 imageUrl 生成 */
+function stripClientImageThumb(data: Record<string, unknown>): void {
+  delete data.imageThumb;
+}
+
+async function applyImageThumbFromUrl(data: Record<string, unknown>): Promise<void> {
+  if (!('imageUrl' in data)) return;
+  const url = data.imageUrl;
+  if (url == null || url === '') {
+    data.imageThumb = null;
+    return;
+  }
+  data.imageThumb = await buildImageThumb(typeof url === 'string' ? url : String(url));
+}
 
 export async function listProducts(
   db: TenantPrismaClient,
@@ -437,6 +455,7 @@ export async function createProduct(
   const { variants, category, boms: _boms, ...rest } = body;
   const data = sanitizeCreate(rest);
   if (!data.id) data.id = genId('prod');
+  stripClientImageThumb(data);
 
   const { name, sku } = normalizeProductNameSku(data);
   if (!name) throw new AppError(400, '产品名称不能为空');
@@ -445,6 +464,7 @@ export async function createProduct(
   data.sku = sku;
   coerceProductJsonFields(data);
   omitUndefinedValues(data);
+  await applyImageThumbFromUrl(data);
 
   await assertProductCategoryIdForWrite(db, data, 'create');
   await assertProductColorSizeForWrite(db, data, 'create');
@@ -480,6 +500,7 @@ export async function updateProduct(
 ) {
   const { variants, category, boms: _boms, ...rest } = body;
   const data = sanitizeUpdate(rest);
+  stripClientImageThumb(data);
   const existing = await db.product.findUnique({ where: { id: productId } });
   if (!existing) throw new AppError(404, '产品不存在');
 
@@ -507,6 +528,8 @@ export async function updateProduct(
   data.sku = sku;
   coerceProductJsonFields(data);
   omitUndefinedValues(data);
+  // lite 列表缺 imageUrl 时前端可能不带该字段；absent ≠ 清空，勿强制重算 thumb
+  await applyImageThumbFromUrl(data);
 
   await assertProductCategoryIdForWrite(db, data, 'update');
   await assertProductColorSizeForWrite(db, data, 'update', {
@@ -798,6 +821,9 @@ export async function importProducts(
         nodeRates: {} as Prisma.InputJsonValue, nodePricingModes: {} as Prisma.InputJsonValue,
         enabled: true,
       };
+      productData.imageThumb = await buildImageThumb(
+        typeof productData.imageUrl === 'string' ? productData.imageUrl : null,
+      );
 
       const variants: Array<{ id: string; colorId: string; sizeId: string; skuSuffix: string; nodeBoms: Prisma.InputJsonValue; nodeUnitWeights: Prisma.InputJsonValue }> = [];
       if (colorIds.length > 0 && sizeIds.length > 0) {

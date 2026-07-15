@@ -64,19 +64,31 @@ function fetchPlanRelated(planId, planNumbers) {
 }
 
 function fetchTenantConfig() {
+  const { cachedFetch } = require('../../utils/masterDataCache.js');
   // 无 settings:config:view 时后端返回 403，生产计划页用默认配置即可
-  return request({ path: '/settings/config', method: 'GET', timeout: 30000 }).catch((err) => {
-    if (err && err.statusCode === 401) throw err;
-    return {};
-  });
+  return cachedFetch(
+    'tenant:config',
+    () =>
+      request({ path: '/settings/config', method: 'GET', timeout: 30000 }).catch((err) => {
+        if (err && err.statusCode === 401) throw err;
+        return {};
+      }),
+    90 * 1000,
+  );
 }
 
 function fetchDictionaries() {
-  return request({ path: '/master/dictionaries', method: 'GET' }).catch(() => ({
-    colors: [],
-    sizes: [],
-    units: [],
-  }));
+  const { cachedFetch } = require('../../utils/masterDataCache.js');
+  return cachedFetch(
+    'dictionaries',
+    () =>
+      request({ path: '/master/dictionaries', method: 'GET' }).catch(() => ({
+        colors: [],
+        sizes: [],
+        units: [],
+      })),
+    90 * 1000,
+  );
 }
 
 function getProduct(id) {
@@ -85,11 +97,21 @@ function getProduct(id) {
 }
 
 function fetchProductsAll() {
-  return request({ path: '/products?all=true', method: 'GET', timeout: 60000 }).catch(() => []);
+  const { cachedFetch } = require('../../utils/masterDataCache.js');
+  return cachedFetch(
+    'products:all',
+    () => request({ path: '/products?all=true&lite=true', method: 'GET', timeout: 60000 }).catch(() => []),
+    90 * 1000,
+  );
 }
 
 function fetchCategoriesAll() {
-  return request({ path: '/settings/categories?all=true', method: 'GET' }).catch(() => []);
+  const { cachedFetch } = require('../../utils/masterDataCache.js');
+  return cachedFetch(
+    'categories:all',
+    () => request({ path: '/settings/categories?all=true', method: 'GET' }).catch(() => []),
+    90 * 1000,
+  );
 }
 
 function fetchPartnersAll() {
@@ -101,7 +123,12 @@ function fetchPartnerCategoriesAll() {
 }
 
 function fetchNodesAll() {
-  return request({ path: '/settings/nodes?all=true', method: 'GET' }).catch(() => []);
+  const { cachedFetch } = require('../../utils/masterDataCache.js');
+  return cachedFetch(
+    'nodes:all',
+    () => request({ path: '/settings/nodes?all=true', method: 'GET', timeout: 60000 }).catch(() => []),
+    90 * 1000,
+  );
 }
 
 function fetchEquipmentAll() {

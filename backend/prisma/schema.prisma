@@ -382,6 +382,8 @@ model Product {
   name               String   @db.VarChar(200)
   description        String?  @db.Text
   imageUrl           String?  @map("image_url") @db.Text
+  /** 列表/打印用缩略图（约 512px JPEG data URL；http(s) 外链时与 imageUrl 同值） */
+  imageThumb         String?  @map("image_thumb") @db.Text
   categoryId         String?  @map("category_id") @db.VarChar(50)
   salesPrice         Decimal? @map("sales_price") @db.Decimal(12, 2)
   purchasePrice      Decimal? @map("purchase_price") @db.Decimal(12, 2)

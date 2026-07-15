@@ -104,8 +104,19 @@ async function fetchStockRecordsForOutsourcePanel(orders) {
   return fetchProductionRecordsBatched(params, orderIdsCsv);
 }
 
+/** 对齐 Web OutsourcePanel reworkByOrderQuery：待发清单可外协数需要返工完成回补 */
+async function fetchReworkRecordsForOutsourcePanel(orders) {
+  const orderIdsCsv = getActiveOrderIdsCsv(orders || []);
+  if (!orderIdsCsv) return [];
+  return fetchProductionRecordsBatched(
+    { types: 'REWORK,REWORK_REPORT', all: 'true' },
+    orderIdsCsv,
+  );
+}
+
 module.exports = {
   fetchOutsourceRecordsForPanel,
   fetchStockRecordsForOutsourcePanel,
+  fetchReworkRecordsForOutsourcePanel,
   mergeRecordsById,
 };

@@ -12,7 +12,7 @@ function buildQs(params) {
 }
 
 function fetchProductsAll() {
-  return request({ path: '/products?all=true', method: 'GET', timeout: 60000 })
+  return request({ path: '/products?all=true&lite=true', method: 'GET', timeout: 60000 })
     .then((body) => normalizeListBody(body))
     .catch(() => []);
 }

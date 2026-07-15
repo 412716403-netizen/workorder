@@ -54,6 +54,7 @@ import { useConfirm } from '../../contexts/ConfirmContext';
 import { isProductProcessLocked, milestoneNodeIdsEqual } from '../../shared/productProcessLock';
 import { isProductEnabled } from '../../utils/productEnabled';
 import * as api from '../../services/api';
+import { compressImageFile, readFileAsDataUrl } from '../../utils/compressImageFile';
 import { SearchableProductSelect } from '../../components/SearchableProductSelect';
 import { SupplierSelect } from '../../components/SupplierSelect';
 import { useAuthOptional } from '../../contexts/AuthContext';
@@ -566,11 +567,26 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
         milestoneNodeIds: p.milestoneNodeIds ?? [],
         processLocked: p.processLocked,
       });
+      // lite 列表不带原图：补齐 imageUrl，避免编辑保存时 absent 原图；用户已本地换图则不覆盖
+      setWorkingProduct(wp => {
+        const local = (wp.imageUrl ?? '').trim();
+        const initialThumb = (initialProduct.imageThumb ?? '').trim();
+        const initialFull = (initialProduct.imageUrl ?? '').trim();
+        const userChangedImage = Boolean(local && local !== initialThumb && local !== initialFull);
+        if (userChangedImage) {
+          return { ...wp, imageThumb: p.imageThumb ?? wp.imageThumb };
+        }
+        return {
+          ...wp,
+          imageUrl: p.imageUrl ?? wp.imageUrl,
+          imageThumb: p.imageThumb ?? wp.imageThumb,
+        };
+      });
     }).catch(() => {
       /* 拉取失败时沿用列表数据 + 本地 orders 推算 */
     });
     return () => { cancelled = true; };
-  }, [isPersistedProduct, initialProduct.id]);
+  }, [isPersistedProduct, initialProduct.id, initialProduct.imageThumb, initialProduct.imageUrl]);
 
   const processLocked = useMemo(
     () => isProductProcessLocked(
@@ -628,9 +644,16 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
       toast.error('请使用图片文件（JPG、PNG、GIF 等）');
       return;
     }
-    const r = new FileReader();
-    r.onload = () => setWorkingProduct(wp => ({ ...wp, imageUrl: r.result as string }));
-    r.readAsDataURL(file);
+    void (async () => {
+      try {
+        const compressed = await compressImageFile(file);
+        const dataUrl = await readFileAsDataUrl(compressed);
+        if (!dataUrl) return;
+        setWorkingProduct(wp => ({ ...wp, imageUrl: dataUrl }));
+      } catch {
+        toast.error('图片读取失败');
+      }
+    })();
   }, []);
 
   useEffect(() => () => {

@@ -6,6 +6,7 @@ import {
   isPartnerReconOutsourceReceiveDocType,
   outsourceReceiveRecordMatchesReconDocType,
 } from './partnerReconLedger';
+import { productThumbSrc } from './productImageSrc';
 
 const PSI_LABEL: Record<string, string> = { PURCHASE_BILL: PSI_PURCHASE_BILL_LABEL, SALES_BILL: '销售单' };
 const UNKNOWN_PRODUCT_ID = '__unknown__';
@@ -66,7 +67,7 @@ function resolveProductMeta(
   return {
     name: resolveProductName(productId, productMap, fallback),
     sku: (p?.sku ?? '').trim() || null,
-    imageUrl: (p?.imageUrl ?? '').trim() || null,
+    imageUrl: productThumbSrc(p) || null,
   };
 }
 

@@ -88,7 +88,7 @@ RBAC 字段单一事实源：[`shared/workbenchShortcuts.ts`](../shared/workbenc
 |------|----------|
 | 首页 | **蓝色顶栏**：头像 + 用户名 + 企业名；单行白色快捷图标；**白色圆角内容区**含数据看板；下拉刷新 |
 | 应用 | `tab-shell`：标题「应用」+ 分组宫格卡片（左侧色条分区标题） |
-| 报工 | `tab-shell`：需 `process_report`；双段「可报任务 / 我的报工」；**可报任务**按工序 Chip 筛选 + 分组（**工序顺序 = 系统设置工序节点库 sortOrder**）；**我的报工**按审核状态 Chip 筛选（「全部」及单状态均为按报工时间倒序平铺，不按状态分组标题）；列表含产品缩略图；右下扫码 FAB → `worker-report-scan` → `worker-report-confirm`；无权限空态 |
+| 报工 | `tab-shell`：需 `process_report`；双段「可报任务 / 我的报工」；**可报任务**按工序 Chip 筛选 + 分组（**工序顺序 = 系统设置工序节点库 sortOrder**；**产品模式**卡片为产品×工序、无工单号）；**我的报工**按审核状态 Chip 筛选（「全部」及单状态均为按报工时间倒序平铺，不按状态分组标题）；列表含产品缩略图；右下扫码 FAB → `worker-report-scan` → `worker-report-confirm`；无权限空态 |
 | 消息 | 蓝色顶栏（标题+未读数）+ 全宽搜索框；微信风格会话列表；详情页 `messages-chat` |
 | 我的 | `tab-shell` 自定义顶栏（头像 + 用户/企业）+ 菜单白卡片 + 退出按钮 |
 
@@ -210,7 +210,9 @@ const {
 - 页面底部挂载 `<matrix-qty-keyboard visible="{{matrixKeyboardVisible}}" bind:action="onMatrixKeyboardAction" />`。
 - 逻辑统一走 [`utils/matrixQtyKeyboard.js`](../miniprogram/utils/matrixQtyKeyboard.js)：`createMatrixKeyboardInputSession`、`activateMatrixKeyboardCell`、`applyMatrixKeyboardKey`（选中格后**首键整格替换**）、`buildMatrixKeyboardPreview`、`getNextMatrixVariantIdInRow`、`getNextMatrixVariantIdInColumn`。
 - 选中待替换时格子上加 `plan-create-matrix__input--replace`（浅蓝底提示）。
-- 键盘弹出时滚动容器加 `plan-create-page--keyboard`（底部留白，避免被键盘遮挡）。
+- 键盘弹出时滚动容器加 `matrix-keyboard-page--open`（底部留白）；[`utils/matrixKeyboardLayout.js`](../miniprogram/packageBusiness/utils/matrixKeyboardLayout.js) `afterMatrixKeyboardOpen` 将当前格滚到键盘上方。
+- **点空白收起**：键盘组件带全屏透明 mask，点键盘以外区域触发 `confirm`（各页已有收起逻辑）。
+- 处理不良页额外将「处理数量」卡片滚到可视区上部，避免长工序列表占满高度导致格子贴键盘。
 
 ### 禁止项
 
@@ -225,7 +227,7 @@ const {
 ### 规则
 
 1. **新建 / 确认 / 处置类**（一次性提交）→ 回到**模块 Hub 主列表**（见下表 `MODULE_HUB_ROUTES`）
-   - 例外：从明确**子清单**进入的确认页（待发/待收回/待入库）→ 回到该子清单
+   - 例外：从明确**子清单**进入的确认页（待入库）→ 回到该子清单；**外协发出 / 外协收回确认**成功后回到外协 Hub（`OUTSOURCE_HUB`），不再停留在待发/待收回清单
 2. **流水 / 批次详情**编辑或删除 → 回到对应**流水列表**（不跳详情、不停留在编辑页）
 3. 栈内已有目标列表时 `navigateBack` + `_refreshOnNextShow`；否则 `redirectTo`
 4. 成功后先 `wx.showToast`，约 400ms 后跳转
@@ -244,8 +246,8 @@ const {
 | 工单报工 | `PRODUCTION_ORDERS` |
 | 报工批次详情 | `buildReportHistoryListUrl(...)` |
 | 工单领料 / 退料 | `PRODUCTION_ORDERS` |
-| 外协发出确认 | `OUTSOURCE_DISPATCH` |
-| 外协收回确认 | `OUTSOURCE_RECEIVE` |
+| 外协发出确认 | `OUTSOURCE_HUB` |
+| 外协收回确认 | `OUTSOURCE_HUB` |
 | 外协领退料 | `OUTSOURCE_HUB` |
 | 外协流水详情 | `OUTSOURCE_FLOW` |
 | 待入库确认 | `PENDING_STOCK` |
@@ -362,9 +364,11 @@ npm run miniprogram:icons
 
 | 页面 | 路径 | 职责 |
 |------|------|------|
-| 工单列表 | [`packageBusiness/production-orders/`](../miniprogram/packageBusiness/production-orders/) | 分页列表、搜索/仅未完成、父子/产品分组、工序横向卡、点按报工；**筛选面板**内含工单流水 / 报工流水 / 待入库清单入口 |
+| 工单列表 | [`packageBusiness/production-orders/`](../miniprogram/packageBusiness/production-orders/) | **订单模式**：分页工单行、搜索/仅未完成、父子分组、工序横向卡；**产品模式**：一产品一聚合卡（合计件数 + PMP 双路工序数字），点 chip 进产品报工；本地分批渲染；隐藏派发 pill / 仅未完成 / 工单详情与返工入口；筛选面板含工单流水 / 报工流水 / 待入库清单入口 |
 | 工单流水 | [`packageBusiness/production-order-flow/`](../miniprogram/packageBusiness/production-order-flow/) | 按日期/工单号/产品筛选的只读工单流水列表 + 底部汇总 |
-| 工单详情 | [`packageBusiness/production-order-detail/`](../miniprogram/packageBusiness/production-order-detail/) | 基础信息/数量/工序进度；编辑客户/交期/开始日期；派发状态切换 |
+| 工单详情 | [`packageBusiness/production-order-detail/`](../miniprogram/packageBusiness/production-order-detail/) | **订单模式**：基础信息、工序进度 chips（可点报工）、数量明细、报工汇总、物料、外协；派发状态切换 |
+| 产品生产详情 | [`packageBusiness/production-product-detail/`](../miniprogram/packageBusiness/production-product-detail/) | **产品模式**工单中心产品组卡「详情」：对齐 Web `ProductProductionDetailModal`（摘要、工序报工汇总、物料、外协、关联工单） |
+| 工单报工 | [`packageBusiness/production-order-report/`](../miniprogram/packageBusiness/production-order-report/) | 单规格/多规格/矩阵报工（良品·不良切换）；工序开启「报工时记录重量」时额外录入本次交货总重量并实时预览按 BOM 占比（多规格合并，[`utils/bomWeightUsageLite.js`](../miniprogram/packageBusiness/utils/bomWeightUsageLite.js)）拆分的物料消耗，提交按良品数量分摊 `weight` 逐条落库 |
 | 报工流水 | [`packageBusiness/production-order-report-history/`](../miniprogram/packageBusiness/production-order-report-history/) | 全局或单工单报工流水；按批次聚合；顶栏单搜索框 + 日期筛选；点击进入批次详情 |
 | 报工批次详情 | [`packageBusiness/production-order-report-batch-detail/`](../miniprogram/packageBusiness/production-order-report-batch-detail/) | 对齐 Web `ReportBatchDetailModal`：汇总、颜色尺码矩阵、明细行；支持编辑/删除（外协收回仅电脑端） |
 | 待入库 | [`packageBusiness/production-order-pending-stock/`](../miniprogram/packageBusiness/production-order-pending-stock/) | **清单模式**：多工单待入库列表；**单工单模式**：摘要 + 简入库 + 跳转扫码 |
@@ -378,8 +382,10 @@ npm run miniprogram:icons
 | [`utils/orderReportHistory.js`](../miniprogram/utils/orderReportHistory.js) | 报工流水行模型、日期转换、客户端筛选 |
 | [`utils/reportBatchDetail.js`](../miniprogram/utils/reportBatchDetail.js) | 报工批次分组、详情视图、编辑时间工具 |
 | [`utils/pendingStockBadge.js`](../miniprogram/utils/pendingStockBadge.js) | 待入库角标与清单数据加载 |
-| [`utils/orderProcessChips.js`](../miniprogram/packageBusiness/utils/orderProcessChips.js) | 工序进度卡：已报仅计审核通过；可报不扣待审（与 Web 工单中心一致） |
-| [`utils/orderApi.js`](../miniprogram/utils/orderApi.js) | `/orders`、`/production/records` 等 API |
+| [`utils/orderProcessChips.js`](../miniprogram/packageBusiness/utils/orderProcessChips.js) | 订单模式工序进度卡：已报仅计审核通过；可报不扣待审（与 Web 工单中心一致） |
+| [`utils/productGroupChips.js`](../miniprogram/packageBusiness/utils/productGroupChips.js) | 产品模式产品组卡工序：已报 = PMP.completedQuantity + 里程碑 completedQuantity；可报 = `productGroupMaxReportableSum` |
+| [`utils/productReportHints.js`](../miniprogram/packageBusiness/utils/productReportHints.js) | 产品模式报工页可报上限（与 Web / 组卡 `productGroupMaxReportableSum` 对齐） |
+| [`utils/orderApi.js`](../miniprogram/packageBusiness/utils/orderApi.js) | `/orders`、`/orders/product-progress`、`/production/records` 等 API |
 | [`components/report-sheet/`](../miniprogram/components/report-sheet/) | 手输报工底部弹层 |
 | [`components/order-process-scroll/`](../miniprogram/components/order-process-scroll/) | 列表行内工序横向卡 |
 
@@ -667,10 +673,10 @@ npm run miniprogram:icons
 | 页面 | 路径 | 职责 |
 |------|------|------|
 | 外协 Hub | [`packageBusiness/production-outsource/`](../miniprogram/packageBusiness/production-outsource/) | 主列表（工单/产品 × 加工厂工序标签）、搜索/筛选、待发/待收回/流水快捷入口、物料外发/退回 |
-| 待发清单 | [`packageBusiness/production-outsource-dispatch/`](../miniprogram/packageBusiness/production-outsource-dispatch/) | 可外协行多选 → 发出录入 |
+| 待发清单 | [`packageBusiness/production-outsource-dispatch/`](../miniprogram/packageBusiness/production-outsource-dispatch/) | 可外协行多选 → 发出录入；同一批次只能勾选同一工序（对齐 Web） |
 | 外协发出 | [`packageBusiness/production-outsource-dispatch-confirm/`](../miniprogram/packageBusiness/production-outsource-dispatch-confirm/) | 合作单位选择 + 色码矩阵 + 矩阵键盘 → `POST /production/records/batch` |
 | 待收回清单 | [`packageBusiness/production-outsource-receive/`](../miniprogram/packageBusiness/production-outsource-receive/) | 待收回聚合列表、扫码收货入口、多选收回 |
-| 外协收回 | [`packageBusiness/production-outsource-receive-confirm/`](../miniprogram/packageBusiness/production-outsource-receive-confirm/) | 收回数量/单价录入 |
+| 外协收回 | [`packageBusiness/production-outsource-receive-confirm/`](../miniprogram/packageBusiness/production-outsource-receive-confirm/) | 收回数量/单价录入；工序开启「报工时记录重量」时额外录入本次交货总重量并预览按 BOM 占比（多规格合并）拆分的物料消耗，提交按数量分摊 `weight` 逐条落库 |
 | 外协流水 | [`packageBusiness/production-outsource-flow/`](../miniprogram/packageBusiness/production-outsource-flow/) | 按日期/类型/工序筛选；列表带产品缩略图，顶栏为「类型 · 工单 · 时间」 |
 | 流水详情 | [`packageBusiness/production-outsource-flow-detail/`](../miniprogram/packageBusiness/production-outsource-flow-detail/) | 发出/收回明细只读 |
 | 往来明细 | [`packageBusiness/production-outsource-partner-detail/`](../miniprogram/packageBusiness/production-outsource-partner-detail/) | 加工厂×工序维度 doc 列表 |
@@ -683,8 +689,10 @@ npm run miniprogram:icons
 | [`utils/outsourceReceiveAggregates.js`](../miniprogram/utils/outsourceReceiveAggregates.js) | 待收回聚合（跨模式方案 A） |
 | [`utils/outsourceFlow.js`](../miniprogram/utils/outsourceFlow.js) | 流水 doc 分组与筛选 |
 | [`utils/outsourcePartnerFlowDetail.js`](../miniprogram/utils/outsourcePartnerFlowDetail.js) | 加工厂往来明细 |
-| [`utils/outsourceConfirm.js`](../miniprogram/utils/outsourceConfirm.js) | 发出/收回 payload 与单号 |
-| [`utils/outsourceMaterialLite.js`](../miniprogram/utils/outsourceMaterialLite.js) | Hub 卡片物料外发/退回 → 复用 `production-stock-out-confirm?source=outsource` |
+| [`utils/outsourceConfirm.js`](../miniprogram/packageBusiness/utils/outsourceConfirm.js) | 发出/收回 payload 与单号 |
+| [`utils/outsourceMaterialLite.js`](../miniprogram/packageBusiness/utils/outsourceMaterialLite.js) | 外协物料外发：按「OUTSOURCE·加工中」工序×BOM 筛物料；加工厂选项；Hub / `production-order-material?source=outsource` |
+
+物料外发/退回进入 [`production-order-material`](../miniprogram/packageBusiness/production-order-material/)（`source=outsource`）：Hub 不弹加工厂选择；加工厂在物料页内选择（多个外协工厂时默认「请选择外协工厂」，不预选）。外发清单口径对齐 Web `OutsourceMaterialDispatchModal`（仅在途外协工序对应物料，非全工序 BOM）。
 
 **API**：`GET /production/records`（`types=OUTSOURCE` / 物料 `STOCK_OUT,STOCK_RETURN`）· `POST /production/records/batch` · `GET /settings/config`（`productionLinkMode` / `outsourceFormSettings`）
 
@@ -698,9 +706,9 @@ npm run miniprogram:icons
 
 | 页面 | 路径 | 职责 |
 |------|------|------|
-| 报工 Tab | [`pages/scan/`](../miniprogram/pages/scan/) | 可报任务 + 我的报工（工人）；列表「可报 N」与报工详情一致（[`utils/enrichReportableTasks.js`](../miniprogram/utils/enrichReportableTasks.js) 本地重算，扣外协/待审）；可报任务右下圆形「扫码报工」→ 工序选择弹层 → 工人扫码页 |
-| 工人扫码报工 | [`packageBusiness/worker-report-scan/`](../miniprogram/packageBusiness/worker-report-scan/) | 按预选工序模板批量扫码；可跨多张可报工单累加；确认后跳转确认页 |
-| 工人报工确认 | [`packageBusiness/worker-report-confirm/`](../miniprogram/packageBusiness/worker-report-confirm/) | 布局对齐 `production-order-report`（工单信息卡、生产人员、报工数量矩阵只读、良品/不良品切换）；多工单逐张展示；一次提交共用 `reportBatchId`（`PENDING`） |
+| 报工 Tab | [`pages/scan/`](../miniprogram/pages/scan/) | 可报任务 + 我的报工（工人）；**产品模式**任务卡按「产品×工序」展示（无工单号），`order` 模式仍为工单×工序；`order` 模式「可报 N」经 [`utils/enrichReportableTasks.js`](../miniprogram/utils/enrichReportableTasks.js) 本地重算；产品模式信任后端 `remaining`；可报任务右下圆形「扫码报工」→ 工序选择弹层 → 工人扫码页 |
+| 工人扫码报工 | [`packageBusiness/worker-report-scan/`](../miniprogram/packageBusiness/worker-report-scan/) | 按预选工序模板批量扫码；可跨多张可报工单累加；**产品模式**按产品×工序聚合可报 key 与扫码校验 `PRODUCT_REPORT`；确认后跳转确认页 |
+| 工人报工确认 | [`packageBusiness/worker-report-confirm/`](../miniprogram/packageBusiness/worker-report-confirm/) | 布局对齐 `production-order-report`；工单模式逐张 `createOrderReport`；**产品模式**合并后 `createProductReport`；一次提交共用 `reportBatchId`（`PENDING`） |
 | 扫码会话 | [`packageBusiness/scan-session/`](../miniprogram/packageBusiness/scan-session/) | 连续扫码作业 |
 | 预备 | [`packageBusiness/scan-setup/`](../miniprogram/packageBusiness/scan-setup/) | 已废弃，自动跳转会话页 |
 | 会话 | [`packageBusiness/scan-session/`](../miniprogram/packageBusiness/scan-session/) | 条件选择 + 取景扫码 + 下方本次扫码记录 |
@@ -709,7 +717,7 @@ npm run miniprogram:icons
 
 | 类型 | 页内条件 | 扫码后解析 | 写入 |
 |------|----------|------------|------|
-| 报工 | 工序（底部弹窗选择） | 按码反查工单 + 里程碑 | `POST .../milestones/.../reports` |
+| 报工 | 工序（底部弹窗选择） | 按码反查工单 + 里程碑；产品模式校验产品可报 key | 工单：`POST .../milestones/.../reports`；产品：`POST /orders/product-progress/report` |
 | 外协 | 可搜索加工厂（底栏弹层 + 分类 Tab） | 按产品匹配待收回行 | `POST /production/records`（OUTSOURCE 已收回） |
 | 返工 | 返工工序（底部弹窗选择） | 按产品匹配返工路径 | `POST /production/records`（REWORK_REPORT） |
 | 入库 | —（默认仓库） | 按码反查工单 | `POST /production/records`（STOCK_IN） |

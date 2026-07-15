@@ -91,9 +91,11 @@ function buildReceiveBatchPayload(params) {
     ordersById,
     customValues,
     timestamp,
+    weights,
   } = params;
 
   const { collectReceiveQuantityEntries } = require('./outsourceReceiveMatrix.js');
+  const { distributeWeightByQty } = require('./bomWeightUsageLite.js');
 
   const ts = timestamp || undefined;
   const collabExtra = customValues && Object.keys(customValues).length
@@ -102,10 +104,37 @@ function buildReceiveBatchPayload(params) {
 
   const batch = [];
   const entries = collectReceiveQuantityEntries(rows, quantities);
-  entries.forEach(({ row, baseKey, variantId, quantity: qty }) => {
+
+  // 称重工序：行总重按数量分摊到组内各规格条目（对齐 Web buildWeightMapForKeyedEntries），后端按 variant BOM 固化快照
+  const weightByEntry = new Map();
+  if (weights) {
+    const byBase = new Map();
+    entries.forEach((e) => {
+      const w = Number(weights[e.baseKey]) || 0;
+      if (!(w > 0)) return;
+      if (!byBase.has(e.baseKey)) byBase.set(e.baseKey, []);
+      byBase.get(e.baseKey).push(e);
+    });
+    byBase.forEach((items, baseKey) => {
+      const parts = distributeWeightByQty(
+        Number(weights[baseKey]) || 0,
+        items.map((it) => ({ quantity: it.quantity })),
+      );
+      items.forEach((it, idx) => {
+        if (parts[idx] > 0) weightByEntry.set(it, parts[idx]);
+      });
+    });
+  }
+
+  entries.forEach((entry) => {
+    const row = entry.row,baseKey = entry.baseKey,variantId = entry.variantId,qty = entry.quantity;
     const unitPrice = Number(unitPrices && unitPrices[baseKey]) || 0;
     const amount = unitPrice > 0 ? Math.round(unitPrice * qty * 100) / 100 : undefined;
-    const variantExtra = variantId ? { variantId } : {};
+    const entryWeight = weightByEntry.get(entry);
+    const variantExtra = {
+      ...(variantId ? { variantId } : {}),
+      ...(entryWeight > 0 ? { weight: entryWeight } : {}),
+    };
 
     if (row.orderId) {
       const order = ordersById.get(row.orderId);

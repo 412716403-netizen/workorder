@@ -45,6 +45,8 @@ import {
 } from '../../styles/uiDensity';
 import { dataUrlToBlobUrl } from '../../utils/routeReportFileUrls';
 import { findPartnerByName } from '../../utils/partnerNormalize';
+import { compressImageFile, readFileAsDataUrl } from '../../utils/compressImageFile';
+import { productThumbSrc } from '../../utils/productImageSrc';
 
 function resolveDefaultPartnerCategoryId(categories: PartnerCategory[]): string {
   return categories.find((c) => c.name.includes('供应商'))?.id ?? categories[0]?.id ?? '';
@@ -194,9 +196,16 @@ const ProductCategoryInfoFields: React.FC<ProductCategoryInfoFieldsProps> = ({
       toast.error('请使用图片文件（JPG、PNG、GIF 等）');
       return;
     }
-    const r = new FileReader();
-    r.onload = () => setWorking((wp) => ({ ...wp, imageUrl: r.result as string }));
-    r.readAsDataURL(file);
+    void (async () => {
+      try {
+        const compressed = await compressImageFile(file);
+        const dataUrl = await readFileAsDataUrl(compressed);
+        if (!dataUrl) return;
+        setWorking((wp) => ({ ...wp, imageUrl: dataUrl }));
+      } catch {
+        toast.error('图片读取失败');
+      }
+    })();
   }, [readOnly, setWorking]);
 
   useEffect(() => () => {
@@ -632,9 +641,9 @@ const ProductCategoryInfoFields: React.FC<ProductCategoryInfoFieldsProps> = ({
               }}
             >
               <div className="w-20 h-20 bg-slate-50 rounded-2xl flex items-center justify-center overflow-hidden border-2 border-dashed border-slate-200 shrink-0">
-                {working.imageUrl ? (
-                  <button type="button" onClick={() => setLightboxImageUrl(working.imageUrl ?? null)} className="w-full h-full">
-                    <img src={working.imageUrl} alt="" className="w-full h-full object-cover" />
+                {productThumbSrc(working) ? (
+                  <button type="button" onClick={() => setLightboxImageUrl((working.imageUrl ?? '').trim() || productThumbSrc(working) || null)} className="w-full h-full">
+                    <img src={productThumbSrc(working)} alt="" className="w-full h-full object-cover" />
                   </button>
                 ) : (
                   <ImageIcon className="w-8 h-8 text-slate-300" />

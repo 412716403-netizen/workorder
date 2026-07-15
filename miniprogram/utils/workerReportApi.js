@@ -1,8 +1,12 @@
 /**
  * 报工 Tab（主包 pages/scan）专用 API，避免跨分包 require。
+ * 主数据走短 TTL 缓存，减轻开发者工具反复 onShow 时的卡顿。
  */
 
 const { request } = require('./request.js');
+const { cachedFetch } = require('./masterDataCache.js');
+
+const MASTER_TTL_MS = 90 * 1000;
 
 function buildQs(params) {
   const parts = [];
@@ -31,19 +35,43 @@ function listMyReportHistory(params) {
 }
 
 function fetchProductsAll() {
-  return request({ path: '/products?all=true', method: 'GET', timeout: 60000 }).catch(() => []);
+  return cachedFetch(
+    'products:all',
+    () => request({ path: '/products?all=true&lite=true', method: 'GET', timeout: 60000 }).catch(() => []),
+    MASTER_TTL_MS,
+  );
 }
 
 function fetchDictionaries() {
-  return request({ path: '/master/dictionaries', method: 'GET', timeout: 60000 }).catch(() => ({}));
+  return cachedFetch(
+    'dictionaries',
+    () => request({ path: '/master/dictionaries', method: 'GET', timeout: 60000 }).catch(() => ({})),
+    MASTER_TTL_MS,
+  );
 }
 
 function fetchNodesAll() {
-  return request({ path: '/settings/nodes?all=true', method: 'GET', timeout: 60000 }).catch(() => []);
+  return cachedFetch(
+    'nodes:all',
+    () => request({ path: '/settings/nodes?all=true', method: 'GET', timeout: 60000 }).catch(() => []),
+    MASTER_TTL_MS,
+  );
 }
 
 function fetchCategoriesAll() {
-  return request({ path: '/settings/categories?all=true', method: 'GET', timeout: 60000 }).catch(() => []);
+  return cachedFetch(
+    'categories:all',
+    () => request({ path: '/settings/categories?all=true', method: 'GET', timeout: 60000 }).catch(() => []),
+    MASTER_TTL_MS,
+  );
+}
+
+function fetchTenantConfig() {
+  return cachedFetch(
+    'tenant:config',
+    () => request({ path: '/settings/config', method: 'GET', timeout: 60000 }).catch(() => ({})),
+    MASTER_TTL_MS,
+  );
 }
 
 module.exports = {
@@ -53,4 +81,5 @@ module.exports = {
   fetchDictionaries,
   fetchNodesAll,
   fetchCategoriesAll,
+  fetchTenantConfig,
 };

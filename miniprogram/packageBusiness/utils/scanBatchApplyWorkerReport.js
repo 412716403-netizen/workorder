@@ -24,15 +24,23 @@ function sessionTargetKey(orderId, milestoneId) {
   return `${orderId}:${milestoneId}`;
 }
 
+function sessionProductTargetKey(productId, milestoneTemplateId) {
+  return `product:${productId}:${milestoneTemplateId}`;
+}
+
 function getOrCreateTargetGroup(page, prepared, order) {
   if (!page._targetGroups) page._targetGroups = new Map();
   const key = prepared.targetKey;
   let group = page._targetGroups.get(key);
   if (!group) {
     group = {
-      orderId: prepared.orderId,
-      milestoneId: prepared.milestoneId,
-      productId: order && order.productId ? order.productId : '',
+      mode: prepared.mode || 'order',
+      orderId: prepared.orderId || '',
+      milestoneId: prepared.milestoneId || '',
+      productId:
+        prepared.productId ||
+        (order && order.productId ? order.productId : ''),
+      milestoneTemplateId: prepared.milestoneTemplateId || '',
       orderNumber: (order && order.orderNumber) || prepared.detail.orderLabel || '',
       productName: (order && order.productName) || (prepared.detail && prepared.detail.productName) || '',
       productSku: (order && order.sku) || '',
@@ -49,9 +57,11 @@ function groupsToPrefillLines(targetGroups) {
   const lines = [];
   targetGroups.forEach((group) => {
     lines.push({
+      mode: group.mode || 'order',
       orderId: group.orderId,
       milestoneId: group.milestoneId,
       productId: group.productId,
+      milestoneTemplateId: group.milestoneTemplateId,
       orderNumber: group.orderNumber,
       productName: group.productName,
       productSku: group.productSku,
@@ -100,15 +110,20 @@ function createWorkerReportScanHandlers(page) {
         return null;
       }
 
-      const targetKey = sessionTargetKey(orderId, milestoneId);
+      const productMode = page._productionLinkMode === 'product';
+      const orderTargetKey = sessionTargetKey(orderId, milestoneId);
+      const productTargetKey = sessionProductTargetKey(order.productId, milestone.templateId || templateId);
       const reportableKeys = page._reportableKeys;
-      if (!reportableKeys || !reportableKeys.has(targetKey)) {
-        scanFail(page, '该工单工序暂不可报');
+      const reportableOk = productMode
+        ? reportableKeys && reportableKeys.has(productTargetKey)
+        : reportableKeys && reportableKeys.has(orderTargetKey);
+      if (!reportableOk) {
+        scanFail(page, productMode ? '该产品工序暂不可报' : '该工单工序暂不可报');
         return null;
       }
 
       const anchorPlanOrderId = order.planOrderId || null;
-      if (!anchorPlanOrderId) {
+      if (!productMode && !anchorPlanOrderId) {
         scanFail(page, '当前工单未关联计划，无法校验扫码');
         return null;
       }
@@ -124,7 +139,7 @@ function createWorkerReportScanHandlers(page) {
 
       if (payload.kind === 'ITEM') {
         const codePlanId = (res.callerContext && res.callerContext.callerPlanOrderId) || res.planOrderId;
-        if (codePlanId && codePlanId !== anchorPlanOrderId) {
+        if (!productMode && codePlanId && codePlanId !== anchorPlanOrderId) {
           scanFail(page, '此码不属于当前工单所在计划');
           return null;
         }
@@ -138,7 +153,7 @@ function createWorkerReportScanHandlers(page) {
         payloadKind = 'ITEM';
       } else if (payload.kind === 'BATCH') {
         const codePlanId = (res.callerContext && res.callerContext.callerPlanOrderId) || res.planOrderId;
-        if (codePlanId && codePlanId !== anchorPlanOrderId) {
+        if (!productMode && codePlanId && codePlanId !== anchorPlanOrderId) {
           scanFail(page, '此码不属于当前工单所在计划');
           return null;
         }
@@ -158,9 +173,16 @@ function createWorkerReportScanHandlers(page) {
         return null;
       }
 
+      const vid = res.variantId || '';
       const validation = await validateScanUsage({
-        purpose: 'MILESTONE_REPORT',
-        scope: { milestoneId },
+        purpose: productMode ? 'PRODUCT_REPORT' : 'MILESTONE_REPORT',
+        scope: productMode
+          ? {
+              productId: order.productId,
+              milestoneTemplateId: milestone.templateId || templateId,
+              variantId: vid || null,
+            }
+          : { milestoneId },
         itemCodeId: payload.kind === 'ITEM' ? (res.itemCodeId || null) : null,
         virtualBatchId: res.batchId || null,
         addQty: qty,
@@ -175,19 +197,21 @@ function createWorkerReportScanHandlers(page) {
         return null;
       }
 
-      const vid = res.variantId || '';
       const prepared = {
+        mode: productMode ? 'product' : 'order',
         vid,
         qty,
         payloadKind,
         detail: {
           ...detail,
-          orderLabel,
+          orderLabel: productMode ? (order.productName || orderLabel) : orderLabel,
           milestoneName: milestone.name || page.data.templateName,
         },
         orderId,
         milestoneId,
-        targetKey,
+        productId: order.productId,
+        milestoneTemplateId: milestone.templateId || templateId,
+        targetKey: productMode ? productTargetKey : orderTargetKey,
         order,
       };
       preparedByToken.set(payload.token, prepared);
@@ -262,7 +286,9 @@ async function loadOrdersForWorkerScan() {
 function buildReportableKeySet(tasks) {
   const keys = new Set();
   (tasks || []).forEach((task) => {
-    if (task.orderId && task.milestoneId) {
+    if (task.mode === 'product' && task.productId && task.milestoneTemplateId) {
+      keys.add(sessionProductTargetKey(task.productId, task.milestoneTemplateId));
+    } else if (task.orderId && task.milestoneId) {
       keys.add(sessionTargetKey(task.orderId, task.milestoneId));
     }
   });
@@ -274,4 +300,5 @@ module.exports = {
   loadOrdersForWorkerScan,
   buildReportableKeySet,
   sessionTargetKey,
+  sessionProductTargetKey,
 };

@@ -124,8 +124,8 @@ onHide() {
 | 工单报工 | `PRODUCTION_ORDERS` |
 | 报工批次详情（保存/删除） | `buildReportHistoryListUrl(...)` |
 | 工单领料 / 退料 | `PRODUCTION_ORDERS` |
-| 外协发出确认 | `OUTSOURCE_DISPATCH` |
-| 外协收回确认 | `OUTSOURCE_RECEIVE` |
+| 外协发出确认 | `OUTSOURCE_HUB` |
+| 外协收回确认 | `OUTSOURCE_HUB` |
 | 外协领退料 | `OUTSOURCE_HUB` |
 | 外协流水详情（保存/删除） | `OUTSOURCE_FLOW` |
 | 待入库确认 | `PENDING_STOCK` |

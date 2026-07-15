@@ -54,6 +54,7 @@ import {
 import FlowListSummaryFooter from '../../components/flow/FlowListSummaryFooter';
 import FlowListProductCell from '../../components/flow/FlowListProductCell';
 import FlowListTableShell from '../../components/flow/FlowListTableShell';
+import { productThumbSrc } from '../../utils/productImageSrc';
 
 function StockInFlowEditSavePortal({ active, onSave }: { active: boolean; onSave: () => void }) {
   const host = React.useContext(DocPhaseEditToolbarPortalContext);
@@ -722,9 +723,9 @@ export const StockInFlowModal: React.FC<StockInFlowModalProps> = ({
                           <tr>
                             <td className="px-3 py-2.5 align-top">
                               <div className="flex min-w-0 items-start gap-2">
-                                {g.product?.imageUrl ? (
+                                {productThumbSrc(g.product) ? (
                                   <div className="flex h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-white">
-                                    <img src={g.product.imageUrl} alt={g.product.name} className="h-full w-full object-cover" loading="lazy" decoding="async" />
+                                    <img src={productThumbSrc(g.product)} alt={g.product.name} className="h-full w-full object-cover" loading="lazy" decoding="async" />
                                   </div>
                                 ) : (
                                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-slate-300">
@@ -782,9 +783,9 @@ export const StockInFlowModal: React.FC<StockInFlowModalProps> = ({
                           <tr>
                             <td className="px-3 py-2.5 align-top">
                               <div className="flex min-w-0 items-start gap-2">
-                                {g.product?.imageUrl ? (
+                                {productThumbSrc(g.product) ? (
                                   <div className="flex h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-white">
-                                    <img src={g.product.imageUrl} alt={g.product.name} className="h-full w-full object-cover" loading="lazy" decoding="async" />
+                                    <img src={productThumbSrc(g.product)} alt={g.product.name} className="h-full w-full object-cover" loading="lazy" decoding="async" />
                                   </div>
                                 ) : (
                                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-slate-300">
@@ -888,9 +889,9 @@ export const StockInFlowModal: React.FC<StockInFlowModalProps> = ({
                           <tr>
                             <td className="px-3 py-2.5 align-top">
                               <div className="flex min-w-0 items-start gap-2">
-                                {g.product?.imageUrl ? (
+                                {productThumbSrc(g.product) ? (
                                   <div className="flex h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-white">
-                                    <img src={g.product.imageUrl} alt={g.product.name} className="h-full w-full object-cover" loading="lazy" decoding="async" />
+                                    <img src={productThumbSrc(g.product)} alt={g.product.name} className="h-full w-full object-cover" loading="lazy" decoding="async" />
                                   </div>
                                 ) : (
                                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-slate-300">
@@ -960,9 +961,9 @@ export const StockInFlowModal: React.FC<StockInFlowModalProps> = ({
                               <tr key={row.id}>
                                 <td className="px-3 py-2.5 align-top">
                                   <div className="flex min-w-0 items-start gap-2">
-                                    {g.product?.imageUrl ? (
+                                    {productThumbSrc(g.product) ? (
                                       <div className="flex h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-white">
-                                        <img src={g.product.imageUrl} alt={g.product.name} className="h-full w-full object-cover" loading="lazy" decoding="async" />
+                                        <img src={productThumbSrc(g.product)} alt={g.product.name} className="h-full w-full object-cover" loading="lazy" decoding="async" />
                                       </div>
                                     ) : (
                                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-slate-300">

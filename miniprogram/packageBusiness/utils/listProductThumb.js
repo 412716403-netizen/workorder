@@ -65,9 +65,17 @@ function listProductDisplayFieldsFromMap(productMap, productId, fallback = {}) {
   return listProductDisplayFields(product, fallback);
 }
 
+/** 列表取图：优先 imageThumb（lite），回退 imageUrl */
+function productImageSrc(product) {
+  if (!product) return '';
+  const thumb = product.imageThumb ? String(product.imageThumb).trim() : '';
+  if (thumb) return thumb;
+  return product.imageUrl ? String(product.imageUrl).trim() : '';
+}
+
 function listProductThumbFromProduct(product, opts) {
   const placeholderIconSrc = (opts && opts.placeholderIconSrc) || DEFAULT_PRODUCT_PLACEHOLDER_ICON;
-  const productImageUrl = product && product.imageUrl ? String(product.imageUrl).trim() : '';
+  const productImageUrl = productImageSrc(product);
   return {
     productId: (product && product.id) || '',
     productImageUrl,
@@ -88,6 +96,7 @@ function listProductThumbFromUrl(imageUrl, opts) {
 
 module.exports = {
   DEFAULT_PRODUCT_PLACEHOLDER_ICON,
+  productImageSrc,
   productNameSkuParts,
   listProductNameSkuFields,
   listProductNameSkuFromMap,

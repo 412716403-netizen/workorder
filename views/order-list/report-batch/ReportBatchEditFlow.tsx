@@ -40,6 +40,7 @@ import type { EditingReportState, ReportDetailBatch } from '../../../hooks/useRe
 import type { BatchDetailMatrix } from './ReportBatchItemsTable';
 import { formStandardLabelClass } from '../../../styles/uiDensity';
 import { buildOutOfSequenceTemplateIds, findGatingPredecessorIndex, isProcessSequential } from '../../../shared/processSequence';
+import { productThumbSrc } from '../../../utils/productImageSrc';
 
 function reportNodeUsesWeight(globalNodes: GlobalNodeTemplate[], templateId: string): boolean {
   return !!globalNodes.find(n => n.id === templateId)?.enableWeightOnReport;
@@ -448,9 +449,9 @@ const MatrixEditTable: React.FC<MatrixEditTableProps> = ({
     };
   });
 
-  const productThumbEdit = matrixProduct.imageUrl ? (
+  const productThumbEdit = productThumbSrc(matrixProduct) ? (
     <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-100 bg-white">
-      <img src={matrixProduct.imageUrl} alt={matrixProduct.name} className="h-full w-full object-cover" loading="lazy" decoding="async" />
+      <img src={productThumbSrc(matrixProduct)} alt={matrixProduct.name} className="h-full w-full object-cover" loading="lazy" decoding="async" />
     </div>
   ) : (
     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-slate-300">

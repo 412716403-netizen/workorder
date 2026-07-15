@@ -26,20 +26,30 @@ const _require5 =
 
 
   require('../utils/orderReportForm.js'),getEffectiveReportTemplate = _require5.getEffectiveReportTemplate,buildReportCustomFields = _require5.buildReportCustomFields,buildInitialReportCustomData = _require5.buildInitialReportCustomData,buildCustomDataPayload = _require5.buildCustomDataPayload,normalizeWorkersList = _require5.normalizeWorkersList,filterEntitiesForNode = _require5.filterEntitiesForNode,needEquipmentOnReport = _require5.needEquipmentOnReport,buildQtyHintText = _require5.buildQtyHintText,resolveReportFormMode = _require5.resolveReportFormMode,buildReportMatrixLayout = _require5.buildReportMatrixLayout,patchReportMatrixLayout = _require5.patchReportMatrixLayout,buildMultiVariantRows = _require5.buildMultiVariantRows,parseNonNegativeInt = _require5.parseNonNegativeInt,parsePositiveInt = _require5.parsePositiveInt,sumMatrixQuantities = _require5.sumMatrixQuantities,validateReportCustomFields = _require5.validateReportCustomFields,buildSubmitEntries = _require5.buildSubmitEntries,computeCanSubmit = _require5.computeCanSubmit;
-const _require6 =
-
-
-
-
-
-
-
-
-  require('../utils/orderApi.js'),getOrder = _require6.getOrder,createOrderReport = _require6.createOrderReport,fetchTenantConfig = _require6.fetchTenantConfig,fetchProductsAll = _require6.fetchProductsAll,fetchCategoriesAll = _require6.fetchCategoriesAll,fetchNodesAll = _require6.fetchNodesAll,fetchWorkersForReport = _require6.fetchWorkersForReport,fetchProductionRecords = _require6.fetchProductionRecords;
-const _require7 =
-
-
-  require('../utils/planApi.js'),fetchEquipmentAll = _require7.fetchEquipmentAll,fetchDictionaries = _require7.fetchDictionaries;
+const {
+  getOrder,
+  createOrderReport,
+  createProductReport,
+  fetchTenantConfig,
+  fetchCategoriesAll,
+  fetchNodesAll,
+  fetchWorkersForReport,
+  fetchProductionRecords,
+  listOrdersPaginated,
+  listProductProgressByProductId,
+} = require('../utils/orderApi.js');
+const {
+  computeProductReportHints,
+  buildProductVariantMaxGoodMap,
+  aggregateProductItems,
+  fetchAllOrdersByProductId,
+  buildSyntheticMilestone,
+} = require('../utils/productReportHints.js');
+const {
+  fetchEquipmentAll,
+  fetchDictionaries,
+  getProduct,
+} = require('../utils/planApi.js');
 const _require8 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require8.readNavBarMetrics,readWindowMetrics = _require8.readWindowMetrics,computePlanCreateHeaderHeight = _require8.computePlanCreateHeaderHeight;
 const _require9 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require9.LIST_ROUTES,afterSaveReturnToList = _require9.afterSaveReturnToList;
 const { defaultEntryDate, defaultEntryTimeHm, entryDateAndTimeToIso } = require('../utils/docEntryTime.js');
@@ -52,6 +62,8 @@ const {
   readWorkerReportScanPrefill,
   deserializeReportScanMeta,
 } = require('../utils/workerReportScanPrefill.js');
+const _requireWeight =
+  require('../utils/bomWeightUsageLite.js'),roundWeightKg = _requireWeight.roundWeightKg,distributeWeightByQty = _requireWeight.distributeWeightByQty,calcUsageByWeightMultiVariant = _requireWeight.calcUsageByWeightMultiVariant,resolveBomForVariant = _requireWeight.resolveBomForVariant,buildWeightPreviewViewRows = _requireWeight.buildWeightPreviewViewRows;
 
 function computeHeaderBlockHeight(nav) {
   return computePlanCreateHeaderHeight(nav);
@@ -208,8 +220,17 @@ Page({
     scanEnabled: false,
     /** 小程序 Tab 自报工：锁定本人 + requireApproval */
     selfReport: false,
+    /** 产品模式：无工单号展示 */
+    productReportMode: false,
+    productId: '',
+    milestoneTemplateId: '',
     entryDate: '',
     entryTime: '',
+    /** 工序开启「报工时记录重量」时展示重量输入 + 预估物料消耗（对齐 Web ReportWeightBomSection） */
+    weightReportEnabled: false,
+    weightInput: '',
+    weightPreviewRows: [],
+    weightNoBomHint: false,
   },
 
   _quantities: {},
@@ -222,13 +243,21 @@ Page({
     const fromWorkerScan = options.fromWorkerScan === '1' || options.fromWorkerScan === 'true';
     const meId = readCurrentUserId();
     this._fromWorkerScan = fromWorkerScan;
+    const orderId = options.orderId ? decodeURIComponent(options.orderId) : '';
+    const milestoneId = options.milestoneId ? decodeURIComponent(options.milestoneId) : '';
+    const productId = options.productId ? decodeURIComponent(options.productId) : '';
+    const milestoneTemplateId = options.milestoneTemplateId
+      ? decodeURIComponent(options.milestoneTemplateId)
+      : '';
     this.setData({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
       headerBlockHeight: computeHeaderBlockHeight(nav),
       scrollHeight: computeScrollHeight(nav),
-      orderId: options.orderId ? decodeURIComponent(options.orderId) : '',
-      milestoneId: options.milestoneId ? decodeURIComponent(options.milestoneId) : '',
+      orderId,
+      milestoneId,
+      productId,
+      milestoneTemplateId,
       selfReport,
       workerId: selfReport && meId ? meId : '',
       workerName: selfReport ? (readOperatorDisplayName() || '本人') : '',
@@ -236,7 +265,9 @@ Page({
       entryTime: defaultEntryTimeHm(),
     });
 
-    if (!this.data.orderId || !this.data.milestoneId) {
+    const hasOrderParams = Boolean(orderId && milestoneId);
+    const hasProductParams = Boolean(productId && milestoneTemplateId);
+    if (!hasOrderParams && !hasProductParams) {
       wx.showToast({ title: '参数不完整', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 800);
       return;
@@ -283,114 +314,242 @@ Page({
   },
 
   async bootstrap() {
-    const _this$data = this.data,orderId = _this$data.orderId,milestoneId = _this$data.milestoneId;
+    const orderId = this.data.orderId;
+    const milestoneId = this.data.milestoneId;
+    const entryProductId = this.data.productId;
+    const entryTemplateId = this.data.milestoneTemplateId;
     const ctx = readTenantCtx();
-    try {var _readTenantCtx;
-      const _await$Promise$all =
+    try {
+      const config = await fetchTenantConfig();
+      const productionLinkMode =
+        config && config.productionLinkMode === 'product' ? 'product' : 'order';
+      const productEntry = Boolean(entryProductId && entryTemplateId && !orderId);
+      const productReportMode = productionLinkMode === 'product' || productEntry;
+      this._productionLinkMode = productionLinkMode;
+      this._productReportMode = productReportMode;
 
+      let order = null;
+      let milestone = null;
+      let productId = entryProductId;
+      let blockOrders = [];
+      let pmpList = [];
+      let prodRecordsRaw = [];
 
+      // 先解析 productId / 工单，再窄拉主数据（避免 products?all=true）
+      if (productReportMode) {
+        if (orderId) {
+          order = await getOrder(orderId);
+          if (!order) {
+            wx.showToast({ title: '工单不存在', icon: 'none' });
+            setTimeout(() => wx.navigateBack(), 800);
+            return;
+          }
+          milestone = (order.milestones || []).find((m) => m.id === milestoneId);
+          if (!milestone) {
+            wx.showToast({ title: '工序不存在', icon: 'none' });
+            setTimeout(() => wx.navigateBack(), 800);
+            return;
+          }
+          productId = order.productId;
+        } else {
+          productId = entryProductId;
+        }
+      } else {
+        order = await getOrder(orderId);
+        if (!order) {
+          wx.showToast({ title: '工单不存在', icon: 'none' });
+          setTimeout(() => wx.navigateBack(), 800);
+          return;
+        }
+        milestone = (order.milestones || []).find((m) => m.id === milestoneId);
+        if (!milestone) {
+          wx.showToast({ title: '工序不存在', icon: 'none' });
+          setTimeout(() => wx.navigateBack(), 800);
+          return;
+        }
+        productId = order.productId;
+        blockOrders = [order];
+      }
 
-
-
-
-
-
-
-        await Promise.all([
-        fetchTenantConfig(),
-        getOrder(orderId),
-        fetchProductsAll(),
+      const [
+        productRaw,
+        categoriesRaw,
+        nodesRaw,
+        workersRaw,
+        equipmentRaw,
+        dictionariesRaw,
+        relatedOrders,
+        pmpRaw,
+        orderModeProdRecords,
+      ] = await Promise.all([
+        getProduct(productId).catch(() => null),
         fetchCategoriesAll(),
         fetchNodesAll(),
         fetchWorkersForReport(ctx && ctx.tenantId),
         fetchEquipmentAll(),
         fetchDictionaries(),
-        fetchProductionRecords({
-          orderIds: orderId,
-          types: 'OUTSOURCE,REWORK,REWORK_REPORT',
-          all: 'true'
-        })]
-        ),config = _await$Promise$all[0],order = _await$Promise$all[1],productsRaw = _await$Promise$all[2],categoriesRaw = _await$Promise$all[3],nodesRaw = _await$Promise$all[4],workersRaw = _await$Promise$all[5],equipmentRaw = _await$Promise$all[6],dictionariesRaw = _await$Promise$all[7],prodRecordsRaw = _await$Promise$all[8];
+        productReportMode
+          ? fetchAllOrdersByProductId(listOrdersPaginated, productId)
+          : Promise.resolve([]),
+        productReportMode
+          ? listProductProgressByProductId(productId).catch(() => [])
+          : Promise.resolve([]),
+        productReportMode
+          ? Promise.resolve([])
+          : fetchProductionRecords({
+              orderIds: orderId,
+              types: 'OUTSOURCE,REWORK,REWORK_REPORT',
+              all: 'true',
+            }).catch(() => []),
+      ]);
 
-      const products = normalizeMasterList(productsRaw);
       const categories = normalizeMasterList(categoriesRaw);
       const globalNodes = normalizeMasterList(nodesRaw);
       const dictionaries = normalizeAppDictionaries(dictionariesRaw);
-      const product = products.find((p) => p.id === order.productId) || null;
-      const category = product && product.categoryId ?
-      categories.find((c) => c.id === product.categoryId) :
-      null;
-      const milestone = (order.milestones || []).find((m) => m.id === milestoneId);
-      if (!milestone) {
-        wx.showToast({ title: '工序不存在', icon: 'none' });
-        setTimeout(() => wx.navigateBack(), 800);
-        return;
+      const product = productRaw || null;
+
+      if (productReportMode) {
+        if (!milestone) {
+          milestone = buildSyntheticMilestone(entryTemplateId, '', globalNodes);
+        }
+        // 与 Web 工单中心一致：产品组统计含全部工单（不排除已发货）
+        blockOrders = (relatedOrders || []).filter(Boolean);
+        if (!blockOrders.length && order) blockOrders = [order];
+        if (!blockOrders.length) {
+          wx.showToast({ title: '该产品暂无在产工单', icon: 'none' });
+          setTimeout(() => wx.navigateBack(), 800);
+          return;
+        }
+        if (!order) order = blockOrders[0];
+        pmpList = Array.isArray(pmpRaw) ? pmpRaw : (pmpRaw && pmpRaw.data) || [];
+        const orderIds = blockOrders.map((o) => o.id).join(',');
+        prodRecordsRaw = await fetchProductionRecords({
+          orderIds,
+          productIds: productId,
+          types: 'OUTSOURCE,REWORK,REWORK_REPORT',
+          all: 'true',
+        }).catch(() => []);
+      } else {
+        prodRecordsRaw = orderModeProdRecords || [];
       }
 
-      const equipmentFeaturesEnabled = ((_readTenantCtx = readTenantCtx()) == null ? void 0 : _readTenantCtx.equipmentFeaturesEnabled) !== false;
+      const category =
+        product && product.categoryId
+          ? categories.find((c) => c.id === product.categoryId)
+          : null;
+      const templateId = milestone.templateId || entryTemplateId;
+      if (!milestone.name && templateId) {
+        const node = globalNodes.find((n) => n.id === templateId);
+        if (node) milestone = { ...milestone, name: node.name || templateId, templateId };
+      }
+
+      const equipmentFeaturesEnabled =
+        readTenantCtx() == null ? true : readTenantCtx().equipmentFeaturesEnabled !== false;
       const needEquipment = needEquipmentOnReport(
         globalNodes,
-        milestone.templateId,
-        equipmentFeaturesEnabled
+        templateId,
+        equipmentFeaturesEnabled,
       );
+
+      // 称重报工：工序开启 enableWeightOnReport 时展示重量录入 + 预估物料消耗
+      const nodeForTemplate = globalNodes.find((n) => n.id === templateId);
+      const weightReportEnabled = !!(nodeForTemplate && nodeForTemplate.enableWeightOnReport);
+      this._weightReportEnabled = weightReportEnabled;
+      this._boms = (product && product.boms) || [];
+      this._materialNameById = {};
 
       const template = getEffectiveReportTemplate(milestone, globalNodes);
       const reportCustomFields = buildReportCustomFields(template);
       const customData = buildInitialReportCustomData(reportCustomFields, product);
       const unitName = getProductUnitName(product, dictionaries);
-      const orderItems = order.items || [];
+      const orderItems = productReportMode
+        ? aggregateProductItems(blockOrders)
+        : order.items || [];
       let formMode = resolveReportFormMode(product, category, orderItems);
 
-      const reportHints = computeOrderReportHints(
-        order,
-        milestone,
-        globalNodes,
-        config,
-        prodRecordsRaw || []
-      );
-      const variantMaxGoodMap = buildVariantMaxGoodMap(
-        order,
-        milestone,
-        product,
-        reportHints.opts,
-        prodRecordsRaw || []
-      );
+      let reportHints;
+      let variantMaxGoodMap;
+      if (productReportMode) {
+        reportHints = computeProductReportHints({
+          blockOrders,
+          pmp: pmpList,
+          productId,
+          milestoneTemplateId: templateId,
+          product,
+          globalNodes,
+          config,
+          prodRecords: prodRecordsRaw || [],
+        });
+        variantMaxGoodMap = buildProductVariantMaxGoodMap({
+          blockOrders,
+          pmp: pmpList,
+          productId,
+          milestoneTemplateId: templateId,
+          product,
+          reportHints,
+          prodRecords: prodRecordsRaw || [],
+        });
+      } else {
+        reportHints = computeOrderReportHints(
+          order,
+          milestone,
+          globalNodes,
+          config,
+          prodRecordsRaw || [],
+        );
+        variantMaxGoodMap = buildVariantMaxGoodMap(
+          order,
+          milestone,
+          product,
+          reportHints.opts,
+          prodRecordsRaw || [],
+        );
+      }
+
       const allowExceedMaxReportQty = !!(config && config.allowExceedMaxReportQty);
       const remaining = reportHints.hintRemaining;
       const layoutOpts = {
         variantMaxGoodMap,
         effectiveRemainingForModal: reportHints.effectiveRemainingForModal,
-        allowExceedMaxReportQty
+        allowExceedMaxReportQty,
       };
 
-      const qtySummary = formMode === 'matrix' ?
-      { show: false } :
-      buildReportQtySummaryView({
-        totalQty: reportHints.hintTotalQty,
-        maxReportable: reportHints.hintMaxReportable,
-        reported: reportHints.hintCompletedDisplay,
-        remaining: reportHints.hintRemaining,
-        defective: reportHints.defectiveQtyForHint,
-        totalOutsourcedAtNode: reportHints.totalOutsourcedAtNode,
-        totalRework: reportHints.totalRework,
-        pendingApprovalQty: reportHints.pendingApprovalQty,
-        reworkRemaining: reportHints.reworkRemainingQty,
-      }, unitName);
+      const qtySummary =
+        formMode === 'matrix'
+          ? { show: false }
+          : buildReportQtySummaryView(
+              {
+                totalQty: reportHints.hintTotalQty,
+                maxReportable: reportHints.hintMaxReportable,
+                reported: reportHints.hintCompletedDisplay,
+                remaining: reportHints.hintRemaining,
+                defective: reportHints.defectiveQtyForHint,
+                totalOutsourcedAtNode: reportHints.totalOutsourcedAtNode,
+                totalRework: reportHints.totalRework,
+                pendingApprovalQty: reportHints.pendingApprovalQty,
+                reworkRemaining: reportHints.reworkRemainingQty,
+              },
+              unitName,
+            );
       const qtyHint = buildReportQtyHint(reportHints, unitName);
 
       const workersNormalized = normalizeWorkersList(workersRaw).filter(
-        (w) => !w.status || w.status === 'ACTIVE'
+        (w) => !w.status || w.status === 'ACTIVE',
       );
       const processNodes = globalNodes.map((n) => ({ id: n.id, name: n.name || n.id }));
-      const equipment = needEquipment ?
-      filterEntitiesForNode(equipmentRaw, milestone.templateId) :
-      [];
+      const equipment = needEquipment
+        ? filterEntitiesForNode(equipmentRaw, templateId)
+        : [];
       const equipmentNames = equipment.map((e) => e.name || e.code || e.id);
 
       this._order = order;
+      this._blockOrders = blockOrders;
+      this._pmpList = pmpList;
       this._orderItems = orderItems;
       this._milestone = milestone;
       this._product = product;
+      this._productId = productId;
+      this._milestoneTemplateId = templateId;
       this._category = category;
       this._dictionaries = dictionaries;
       this._reportCustomFields = reportCustomFields;
@@ -402,13 +561,12 @@ Page({
       this._quantities = {};
       this._defectiveQuantities = {};
 
-      const prefill = this._fromWorkerScan
-        ? readWorkerReportScanPrefill()
-        : null;
+      const prefill = this._fromWorkerScan ? readWorkerReportScanPrefill() : null;
       const prefillOk =
         prefill &&
-        prefill.orderId === orderId &&
-        prefill.milestoneId === milestoneId;
+        ((prefill.orderId === orderId && prefill.milestoneId === milestoneId) ||
+          (prefill.productId === productId &&
+            prefill.milestoneTemplateId === templateId));
       if (prefillOk) {
         this._quantities = { ...(prefill.quantities || {}) };
         this._defectiveQuantities = { ...(prefill.defectiveQuantities || {}) };
@@ -447,22 +605,25 @@ Page({
           this._quantities,
           this._defectiveQuantities,
           variantMaxGoodMap,
-          unitName
+          unitName,
         );
         if (!variantRows.length) {
           formMode = 'single';
         }
       }
       if (formMode === 'single') {
-        const uniqueVariantIds = [...new Set(orderItems.map((it) => it.variantId).filter(Boolean))];
+        const uniqueVariantIds = [
+          ...new Set(orderItems.map((it) => it.variantId).filter(Boolean)),
+        ];
         if (uniqueVariantIds.length === 1) {
           variantId = uniqueVariantIds[0];
         } else if (uniqueVariantIds.length > 1) {
           variantOptions = uniqueVariantIds.map((vid) => {
-            const variant = (product && product.variants || []).find((v) => v.id === vid);
+            const variant =
+              ((product && product.variants) || []).find((v) => v.id === vid);
             return {
               id: vid,
-              label: variant ? variantLabel(variant, dictionaries) : vid
+              label: variant ? variantLabel(variant, dictionaries) : vid,
             };
           });
           variantId = variantOptions[0].id;
@@ -477,20 +638,28 @@ Page({
         }
       }
 
-      const singleMaxQty = formMode === 'single' ?
-      getSingleMaxQty(
-        variantMaxGoodMap,
-        variantId,
-        reportHints.effectiveRemainingForModal,
-        allowExceedMaxReportQty
-      ) :
-      0;
-      const singleMaxQtyLabel = singleMaxQty > 0 ? `最多 ${singleMaxQty} ${unitName}` : '';
+      const singleMaxQty =
+        formMode === 'single'
+          ? getSingleMaxQty(
+              variantMaxGoodMap,
+              variantId,
+              reportHints.effectiveRemainingForModal,
+              allowExceedMaxReportQty,
+            )
+          : 0;
+      const singleMaxQtyLabel =
+        singleMaxQty > 0 ? `最多 ${singleMaxQty} ${unitName}` : '';
 
       const statePatch = {
         loading: false,
-        orderNumber: order.orderNumber || '',
-        productName: order.productName || product && product.name || '',
+        productReportMode,
+        productId: productId || '',
+        milestoneTemplateId: templateId || '',
+        orderNumber: productReportMode ? '' : order.orderNumber || '',
+        productName:
+          (product && product.name) ||
+          order.productName ||
+          '',
         milestoneName: milestone.name || '',
         qtyHint,
         qtySummary,
@@ -507,9 +676,13 @@ Page({
         variantLabel: variantLabelText,
         workers: workersNormalized,
         processNodes,
-        currentNodeId: milestone.templateId,
-        workerId: this.data.selfReport ? (this.data.workerId || readCurrentUserId()) : '',
-        workerName: this.data.selfReport ? (this.data.workerName || readOperatorDisplayName() || '本人') : '',
+        currentNodeId: templateId,
+        workerId: this.data.selfReport
+          ? this.data.workerId || readCurrentUserId()
+          : '',
+        workerName: this.data.selfReport
+          ? this.data.workerName || readOperatorDisplayName() || '本人'
+          : '',
         equipment,
         equipmentNames,
         equipmentPickerIndex: 0,
@@ -522,14 +695,16 @@ Page({
         singleMaxQty,
         singleMaxQtyLabel,
         allowExceedMaxReportQty,
-        qtyInputMode: 'good'
+        qtyInputMode: 'good',
+        weightReportEnabled,
       };
 
       this.setData(statePatch);
       this.refreshCanSubmit();
+      if (weightReportEnabled) this.loadWeightMaterialNames();
     } catch (err) {
       this.setData({ loading: false });
-      wx.showToast({ title: err && err.message || '加载失败', icon: 'none' });
+      wx.showToast({ title: (err && err.message) || '加载失败', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 1200);
     }
   },
@@ -550,6 +725,70 @@ Page({
     if (canSubmit !== this.data.canSubmit) {
       this.setData({ canSubmit });
     }
+    this.refreshWeightPreview();
+  },
+
+  /** 称重工序：BOM 子物料名称（仅本工序 BOM 涉及的少量物料，逐个窄拉） */
+  async loadWeightMaterialNames() {
+    const nodeId = this._milestoneTemplateId || this.data.milestoneTemplateId;
+    const ids = new Set();
+    (this._boms || []).forEach((b) => {
+      if (!b || b.nodeId !== nodeId) return;
+      (b.items || []).forEach((it) => {
+        if (it && it.productId) ids.add(it.productId);
+      });
+    });
+    if (!ids.size) return;
+    const list = await Promise.all(
+      [...ids].map((id) => getProduct(id).catch(() => null)),
+    );
+    const nameById = {};
+    list.forEach((p) => {
+      if (p && p.id) nameById[p.id] = p.name || '';
+    });
+    this._materialNameById = nameById;
+    this.refreshWeightPreview();
+  },
+
+  /** 良品数量或重量变化后重算预估物料消耗（多规格合并，对齐 Web） */
+  refreshWeightPreview() {
+    if (!this._weightReportEnabled) return;
+    const weightKg = roundWeightKg(Number(this.data.weightInput) || 0);
+    const entries = buildSubmitEntries({
+      formMode: this.data.formMode,
+      singleQuantity: this.data.singleQuantity,
+      singleDefectiveQty: this.data.singleDefectiveQty,
+      variantId: this.data.variantId,
+      quantities: this._quantities,
+      defectiveQuantities: this._defectiveQuantities,
+      variantRows: this.data.variantRows
+    }).filter((e) => e.quantity > 0);
+
+    let viewRows = [];
+    let noBomHint = false;
+    if (weightKg > 0 && entries.length > 0) {
+      const nodeId = this._milestoneTemplateId || this.data.milestoneTemplateId;
+      const productId = this._productId || this.data.productId;
+      const nameById = this._materialNameById || {};
+      const parts = entries.map((e) => ({
+        bom: resolveBomForVariant(this._boms, productId, nodeId, e.variantId),
+        quantity: e.quantity
+      }));
+      const rows = calcUsageByWeightMultiVariant(parts, weightKg, (pid) => nameById[pid] || '');
+      viewRows = buildWeightPreviewViewRows(rows);
+      noBomHint = viewRows.length === 0;
+    }
+    const same =
+      JSON.stringify(viewRows) === JSON.stringify(this.data.weightPreviewRows) &&
+      noBomHint === this.data.weightNoBomHint;
+    if (!same) {
+      this.setData({ weightPreviewRows: viewRows, weightNoBomHint: noBomHint });
+    }
+  },
+
+  onWeightInput(e) {
+    this.setData({ weightInput: (e.detail && e.detail.value) || '' });
+    this.refreshWeightPreview();
   },
 
   onWorkerChange(e) {
@@ -901,6 +1140,25 @@ Page({
     const operator = this._tenantDisplayName || '';
     const timestamp = entryDateAndTimeToIso(this.data.entryDate, this.data.entryTime);
 
+    // 称重工序：总重按良品数量分摊到各规格条目（对齐 Web distributeWeightByQty），后端按 variant BOM 固化 materialBreakdown
+    const weightByEntryIndex = {};
+    if (this._weightReportEnabled) {
+      const totalWeightKg = roundWeightKg(Number(this.data.weightInput) || 0);
+      const goodIdx = [];
+      entries.forEach((e, i) => {
+        if (e.quantity > 0) goodIdx.push(i);
+      });
+      if (totalWeightKg > 0 && goodIdx.length > 0) {
+        const parts = distributeWeightByQty(
+          totalWeightKg,
+          goodIdx.map((i) => ({ quantity: entries[i].quantity })),
+        );
+        goodIdx.forEach((entryIdx, j) => {
+          if (parts[j] > 0) weightByEntryIndex[entryIdx] = parts[j];
+        });
+      }
+    }
+
     this.setData({ submitting: true });
     try {
       for (let i = 0; i < entries.length; i += 1) {
@@ -910,9 +1168,10 @@ Page({
           entry.variantId || null,
           customData || {},
         );
-        await createOrderReport(this.data.orderId, this.data.milestoneId, {
+        const commonBody = {
           quantity: entry.quantity,
           defectiveQuantity: entry.defectiveQuantity > 0 ? entry.defectiveQuantity : undefined,
+          weight: weightByEntryIndex[i] > 0 ? weightByEntryIndex[i] : undefined,
           variantId: entry.variantId || undefined,
           workerId: this.data.workerId,
           equipmentId: this.data.equipmentId || undefined,
@@ -923,7 +1182,17 @@ Page({
           itemCodeId: scanFields.itemCodeId,
           virtualBatchId: scanFields.virtualBatchId,
           requireApproval: this.data.selfReport ? true : undefined,
-        });
+        };
+        if (this._productReportMode) {
+          await createProductReport({
+            productId: this._productId || this.data.productId,
+            milestoneTemplateId:
+              this._milestoneTemplateId || this.data.milestoneTemplateId,
+            ...commonBody,
+          });
+        } else {
+          await createOrderReport(this.data.orderId, this.data.milestoneId, commonBody);
+        }
       }
       wx.hideLoading();
       if (this.data.selfReport) {

@@ -253,6 +253,40 @@
         </block>
       </view>
 
+      <view wx:if="{{weightReportEnabled}}" class="plan-form-card report-weight-card">
+        <view class="report-weight-head">
+          <text class="report-weight-head__label">本次交货总重量 (kg)</text>
+          <text class="report-weight-head__hint">将按 BOM 自动分摊到各子物料</text>
+        </view>
+        <input
+          class="report-weight-input"
+          type="digit"
+          value="{{weightInput}}"
+          bindinput="onWeightInput"
+          placeholder="0"
+        />
+        <view wx:if="{{weightPreviewRows.length}}" class="report-weight-preview">
+          <view class="report-weight-preview__title">预估物料消耗（按 BOM 占比 × 输入重量）</view>
+          <view class="report-weight-preview__row report-weight-preview__row--head">
+            <text class="report-weight-preview__col report-weight-preview__col--name">物料</text>
+            <text class="report-weight-preview__col">占比</text>
+            <text class="report-weight-preview__col">理论 (kg)</text>
+            <text class="report-weight-preview__col">实际 (kg)</text>
+          </view>
+          <view
+            wx:for="{{weightPreviewRows}}"
+            wx:key="materialProductId"
+            class="report-weight-preview__row"
+          >
+            <text class="report-weight-preview__col report-weight-preview__col--name">{{item.name}}</text>
+            <text class="report-weight-preview__col">{{item.ratioText}}</text>
+            <text class="report-weight-preview__col">{{item.theoryText}}</text>
+            <text class="report-weight-preview__col report-weight-preview__col--actual">{{item.actualText}}</text>
+          </view>
+        </view>
+        <text wx:elif="{{weightNoBomHint}}" class="report-weight-nobom">未找到适用 BOM 或无可分摊子项，提交后将仅保存重量</text>
+      </view>
+
       <view wx:if="{{reportCustomFields.length}}" class="plan-form-card">
         <plan-form-custom-field
           fields="{{reportCustomFields}}"

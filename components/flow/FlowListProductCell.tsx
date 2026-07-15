@@ -1,11 +1,13 @@
 import React from 'react';
 import { Package } from 'lucide-react';
+import { productThumbSrc } from '../../utils/productImageSrc';
 
 export interface FlowListProductCellProps {
   product?: {
     name?: string | null;
     sku?: string | null;
     imageUrl?: string | null;
+    imageThumb?: string | null;
   } | null;
   name?: string | null;
   sku?: string | null;
@@ -22,7 +24,7 @@ const FlowListProductCell: React.FC<FlowListProductCellProps> = ({
 }) => {
   const displayName = (product?.name ?? name)?.trim() || emptyNameLabel;
   const displaySku = (product?.sku ?? sku)?.trim() ?? '';
-  const imageUrl = product?.imageUrl?.trim() || '';
+  const imageUrl = productThumbSrc(product);
 
   return (
     <div className="flex items-center gap-2">

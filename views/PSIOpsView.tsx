@@ -133,6 +133,7 @@ import {
 } from '../utils/planFromSalesOrder';
 import { resolvePrimaryOrderIdForPlan } from '../utils/resolvePrimaryOrderIdForPlan';
 import { hasOpsPerm } from './production-ops/types';
+import { productThumbSrc } from '../utils/productImageSrc';
 
 /** 避免 `records ?? []` 每次渲染新引用导致 react-query / useMemo 无意义抖动 */
 const EMPTY_PSI_CTX: unknown[] = [];
@@ -1715,18 +1716,18 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                               <tr key={gid} className="hover:bg-slate-50/30 transition-colors">
                                 <td className="py-2.5 pr-3">
                                   <div className="flex items-start gap-2 min-w-0">
-                                    {product?.imageUrl ? (
+                                    {productThumbSrc(product) ? (
                                       <button
                                         type="button"
                                         onClick={e => {
                                           e.stopPropagation();
-                                          setPsiProductImagePreviewUrl(product.imageUrl!);
+                                          setPsiProductImagePreviewUrl(productThumbSrc(product));
                                         }}
                                         className="h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-slate-50 transition-opacity hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                         aria-label="查看产品图片"
                                       >
                                         <img
-                                          src={product.imageUrl}
+                                          src={productThumbSrc(product)}
                                           alt={rowProductName || product.name || ''}
                                           className="h-full w-full object-cover"
                                           loading="lazy"

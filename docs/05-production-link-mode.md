@@ -125,7 +125,7 @@
 | 模块 | 目标行为 |
 |------|------|
 | 计划单 | 更强调产品本身，客户字段可弱化或隐藏 |
-| 工单中心 | 可按产品分组，弱化父子工单层级 |
+| 工单中心 | 一产品一聚合卡（合计件数 + PMP 双路工序数字）；不进入单个工单；点 chip 走产品报工 |
 | 报工 | 围绕“产品 + 工序 + 规格”记录 |
 | 生产操作 | 允许 `orderId` 为空，只关联产品 |
 | 进度归属 | 主要写入 `ProductMilestoneProgress` |
@@ -276,6 +276,22 @@ API 列表/详情返回运行时字段 `processLocked: boolean`（非持久化�
 写口径仍按当前 `productionLinkMode` 分流：
 - `order` 模式：写 `Milestone` + `MilestoneReport`
 - `product` 模式：写 `ProductMilestoneProgress` + `ProductProgressReport`
+
+### 12.1 小程序报工（产品模式）
+
+小程序报工 Tab（`pages/scan`）与 Web 写/读口径对齐：
+
+| 环节 | 产品模式行为 |
+|------|----------------|
+| 可报任务 | `GET /orders/my-reportable-tasks?productionLinkMode=product` 按「产品 × 工序模板」聚合；卡片不展示工单号；`可报 N = productGroupMaxReportableSum − 已报(PMP+milestone completedQuantity) − 待审(两路 PENDING) − 产品级外协净额`；列表以后端 remaining 为准（不再本地 N+1 enrichment）；主数据短 TTL 缓存；`onShow` 45s 防抖（下拉刷新强制） |
+| 进入报工页 | `production-order-report?productId=&milestoneTemplateId=&selfReport=1` |
+| 可报上限 | `productReportHints.js` 逐字移植 Web 口径：「可报最多」= `productGroupMaxReportableSum`（工单中心产品组卡 availableQty，逐工单 clamp + PMP 比例摊分 + `max(0, pmpDef − mileDef)` 校正）；「剩余」= 可报最多 − 已报(completedQuantity 双路) − 待审(PENDING 双路) − **产品级**外协净额；按规格上限走 `variantMaxGoodProductMode`。数据拉取：`GET /products/:id` + `GET /orders/product-progress?all=true&productId=`（窄拉）+ 按产品分页工单，避免 `products?all=true` / 全租户 PMP |
+| 提交 | `POST /orders/product-progress/report`（`requireApproval: true` → `ProductProgressReport` PENDING） |
+| 扫码校验 | `purpose: PRODUCT_REPORT`，scope `{ productId, milestoneTemplateId, variantId? }` |
+| 扫码批量确认 | 按产品×工序×规格合并后走 `createProductReport`（同一 `reportBatchId`） |
+| 我的报工 | `GET /orders/my-report-history` + `groupMyReportHistory(..., productionLinkMode)` 同时收 `orderReports` / `productReports` |
+
+工单中心点工序 chip：产品模式跳 `production-order-report?productId=&milestoneTemplateId=`；订单模式仍为 `orderId+milestoneId`。产品模式下列表为一产品一卡，工序数字与 Web 产品组卡同口径。
 
 切回旧模式时**新增数据**走旧路径，但**历史数据保留在 PMP**，因此读口径必须双路合并才不会"丢"。
 

@@ -27,7 +27,7 @@ const _require7 =
 
   require('../utils/materialStatsLite.js'),getActiveOrderIdsCsv = _require7.getActiveOrderIdsCsv,getActiveSourceProductIdsCsv = _require7.getActiveSourceProductIdsCsv;
 const _require8 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require8.readNavBarMetrics,readWindowMetrics = _require8.readWindowMetrics;
-const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../../utils/planFilterPanel.js');
+const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../utils/planFilterPanel.js');
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
@@ -314,7 +314,8 @@ Page({
 
       let stockRecords = [];
       if (orderIdsCsv || sourceProductIdsCsv) {
-        const params = { types: 'STOCK_OUT,STOCK_RETURN,OUTSOURCE' };
+        // all=true：与网页 fetchAllPages 对齐；默认分页只取首屏约 50 条会导致生产物料数量偏小
+        const params = { types: 'STOCK_OUT,STOCK_RETURN,OUTSOURCE', all: 'true' };
         if (orderIdsCsv) params.orderIds = orderIdsCsv;
         if (sourceProductIdsCsv) params.sourceProductIds = sourceProductIdsCsv;
         const raw = await fetchProductionRecords(params);

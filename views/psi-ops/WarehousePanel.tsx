@@ -42,6 +42,7 @@ import WarehouseFlowModal from './WarehouseFlowModal';
 import ProductFlowDetailModal from './ProductFlowDetailModal';
 import WarehouseFlowDocumentDetailModal from './WarehouseFlowDocumentDetailModal';
 import { hasModulePerm } from '../../utils/hasModulePerm';
+import { productThumbSrc } from '../../utils/productImageSrc';
 
 type TransferLineDraft = {
   id: string;
@@ -828,7 +829,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
             sku: ps.sku,
             categoryName: ps.categoryName,
             qty: qtyForLine,
-            imageUrl: ps.imageUrl,
+            imageUrl: productThumbSrc(ps),
             variantBreakdown,
             usesBatch: (ps as { usesBatch?: boolean }).usesBatch ?? false,
           };
@@ -1196,9 +1197,9 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
                                     ) : null}
                                   </td>
                                   <td className="px-4 py-3">
-                                    {ps.imageUrl ? (
-                                      <button type="button" onClick={() => setImagePreviewUrl(ps.imageUrl!)} className="w-10 h-10 rounded-xl overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer hover:opacity-90 transition-opacity">
-                                        <img loading="lazy" decoding="async" src={ps.imageUrl} alt={ps.name} className="w-full h-full object-cover block" />
+                                    {productThumbSrc(ps) ? (
+                                      <button type="button" onClick={() => setImagePreviewUrl(productThumbSrc(ps))} className="w-10 h-10 rounded-xl overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer hover:opacity-90 transition-opacity">
+                                        <img loading="lazy" decoding="async" src={productThumbSrc(ps)} alt={ps.name} className="w-full h-full object-cover block" />
                                       </button>
                                     ) : (
                                       <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-300">

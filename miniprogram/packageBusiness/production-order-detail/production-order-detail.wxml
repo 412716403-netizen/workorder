@@ -75,13 +75,38 @@
       </view>
 
 
+      <view wx:if="{{showProcessChips}}" class="plan-detail-section">
+        <view class="plan-detail-section__head">
+          <text class="plan-detail-section__title">工序进度</text>
+        </view>
+        <view class="order-detail-process-wrap">
+          <order-process-scroll
+            chips="{{processChips}}"
+            canReport="{{canReport}}"
+            bind:chiptap="onProcessChipTap"
+          />
+        </view>
+      </view>
+
       <block wx:for="{{sections}}" wx:key="id">
         <view class="plan-detail-section">
           <view class="plan-detail-section__head">
             <text class="plan-detail-section__title">{{item.title}}</text>
           </view>
 
-          <view wx:if="{{item.id === 'quantity' && item.kind === 'matrix' && item.matrixLayout}}" class="plan-form-card">
+          <view wx:if="{{item.id === 'basic'}}" class="plan-form-card">
+            <view
+              wx:for="{{item.rows}}"
+              wx:for-item="row"
+              wx:key="label"
+              class="plan-form-cell"
+            >
+              <text class="plan-form-cell__label">{{row.label}}</text>
+              <text class="plan-form-cell__value">{{row.value}}</text>
+            </view>
+          </view>
+
+          <view wx:elif="{{item.id === 'quantity' && item.kind === 'matrix' && item.matrixLayout}}" class="plan-form-card">
             <view class="plan-detail-matrix-wrap">
               <view class="plan-form-cell plan-form-cell--matrix-head">
                 <text class="plan-form-cell__label">总量 ({{item.unitName}})</text>
@@ -185,7 +210,7 @@
                 <text class="order-detail-material-table__td order-detail-material-table__td--num">{{item.returnText}}</text>
                 <text class="order-detail-material-table__td order-detail-material-table__td--num">{{item.netText}}</text>
                 <text class="order-detail-material-table__td order-detail-material-table__td--num">{{item.reportCostText}}</text>
-                <text class="order-detail-material-table__td order-detail-material-table__td--num">{{item.surplusText}}</text>
+                <text class="order-detail-material-table__td order-detail-material-table__td--num {{item.surplusNeg ? 'order-detail-material-table__td--surplus-neg' : ''}}">{{item.surplusText}}</text>
               </view>
             </view>
           </scroll-view>

@@ -39,6 +39,7 @@ import {
 import { psiCustomFieldHasFilledDisplayValue } from '../psi-ops/psiOpsListFormatting';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 import { useAuth } from '../../contexts/AuthContext';
+import { productThumbSrc } from '../../utils/productImageSrc';
 
 const defectTreatmentCustomFieldEditControlClass =
   'h-9 w-full max-w-md rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500';
@@ -430,10 +431,10 @@ const DefectTreatmentFlowDetailModal: React.FC<DefectTreatmentFlowDetailModalPro
                         <tr>
                           <td className="py-2.5 px-3 align-top">
                             <div className="flex min-w-0 items-start gap-2">
-                              {product?.imageUrl ? (
+                              {productThumbSrc(product) ? (
                                 <div className="flex h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-white">
                                   <img
-                                    src={product.imageUrl}
+                                    src={productThumbSrc(product)}
                                     alt={product.name}
                                     className="h-full w-full object-cover"
                                     loading="lazy"
@@ -575,10 +576,10 @@ const DefectTreatmentFlowDetailModal: React.FC<DefectTreatmentFlowDetailModalPro
                         <tr>
                           <td className="py-2.5 px-3 align-top">
                             <div className="flex min-w-0 items-start gap-2">
-                              {product?.imageUrl ? (
+                              {productThumbSrc(product) ? (
                                 <div className="flex h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-white">
                                   <img
-                                    src={product.imageUrl}
+                                    src={productThumbSrc(product)}
                                     alt={product.name}
                                     className="h-full w-full object-cover"
                                     loading="lazy"
@@ -822,10 +823,10 @@ const DefectTreatmentFlowDetailModal: React.FC<DefectTreatmentFlowDetailModalPro
                           <tr>
                             <td className="py-2.5 px-3 align-top">
                               <div className="flex min-w-0 items-start gap-2">
-                                {product?.imageUrl ? (
+                                {productThumbSrc(product) ? (
                                   <div className="flex h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-white">
                                     <img
-                                      src={product.imageUrl}
+                                      src={productThumbSrc(product)}
                                       alt={product.name}
                                       className="h-full w-full object-cover"
                                       loading="lazy"
@@ -910,10 +911,10 @@ const DefectTreatmentFlowDetailModal: React.FC<DefectTreatmentFlowDetailModalPro
                           <tr>
                             <td className="py-2.5 px-3 align-top">
                               <div className="flex min-w-0 items-start gap-2">
-                                {product?.imageUrl ? (
+                                {productThumbSrc(product) ? (
                                   <div className="flex h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-white">
                                     <img
-                                      src={product.imageUrl}
+                                      src={productThumbSrc(product)}
                                       alt={product.name}
                                       className="h-full w-full object-cover"
                                       loading="lazy"
@@ -979,10 +980,10 @@ const DefectTreatmentFlowDetailModal: React.FC<DefectTreatmentFlowDetailModalPro
                           <tr>
                             <td className="py-2.5 px-3 align-top">
                               <div className="flex min-w-0 items-start gap-2">
-                                {product?.imageUrl ? (
+                                {productThumbSrc(product) ? (
                                   <div className="flex h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-white">
                                     <img
-                                      src={product.imageUrl}
+                                      src={productThumbSrc(product)}
                                       alt={product.name}
                                       className="h-full w-full object-cover"
                                       loading="lazy"

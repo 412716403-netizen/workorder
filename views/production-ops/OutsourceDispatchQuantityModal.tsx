@@ -41,6 +41,7 @@ import {
 } from '../../styles/uiDensity';
 import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
 import DocEntryTimeField from '../../components/DocEntryTimeField';
+import { productThumbSrc } from '../../utils/productImageSrc';
 
 export interface DispatchRow {
   orderId?: string;
@@ -625,9 +626,9 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
                     <div className="min-w-0 flex-1 space-y-1">
                       <label className={psiOrderBillCompactLineLabelClass}>委外明细</label>
                       <div className="flex min-w-0 items-start gap-2">
-                        {product?.imageUrl ? (
+                        {productThumbSrc(product) ? (
                           <img
-                            src={product.imageUrl}
+                            src={productThumbSrc(product)}
                             alt=""
                             className="h-9 w-9 shrink-0 rounded-lg border border-slate-100 object-cover"
                             loading="lazy"
@@ -746,9 +747,9 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
                     <div className="min-w-0 flex-1 space-y-1">
                       <label className={psiOrderBillCompactLineLabelClass}>委外明细</label>
                       <div className="flex min-w-0 items-start gap-2">
-                        {product?.imageUrl ? (
+                        {productThumbSrc(product) ? (
                           <img
-                            src={product.imageUrl}
+                            src={productThumbSrc(product)}
                             alt=""
                             className="h-9 w-9 shrink-0 rounded-lg border border-slate-100 object-cover"
                             loading="lazy"
@@ -822,9 +823,9 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
                   <div className="min-w-0 flex-1 space-y-1">
                     <label className={psiOrderBillCompactLineLabelClass}>委外明细</label>
                     <div className="flex min-w-0 items-start gap-2">
-                      {product?.imageUrl ? (
+                      {productThumbSrc(product) ? (
                         <img
-                          src={product.imageUrl}
+                          src={productThumbSrc(product)}
                           alt=""
                           className="h-9 w-9 shrink-0 rounded-lg border border-slate-100 object-cover"
                           loading="lazy"

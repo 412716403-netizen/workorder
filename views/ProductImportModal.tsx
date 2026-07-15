@@ -7,6 +7,7 @@ import { ProductCategory, AppDictionaries, Product, DictionaryItem } from '../ty
 import * as api from '../services/api';
 import { toast } from 'sonner';
 import { effectiveCustomDocFieldType } from '../utils/reportCustomDocField';
+import { compressImageFile, readFileAsDataUrl } from '../utils/compressImageFile';
 
 interface ProductImportModalProps {
   isOpen: boolean;
@@ -335,36 +336,41 @@ export default function ProductImportModal({
     const files = e.target.files;
     if (!files) return;
     const newMap = new Map(imageFiles);
-    let count = 0;
     const fileArr: File[] = [];
     for (let i = 0; i < files.length; i++) fileArr.push(files[i]);
-    fileArr.forEach(file => {
-      if (!file.type.startsWith('image/')) return;
-      const reader = new FileReader();
-      reader.onload = (evt) => {
-        newMap.set(file.name, evt.target?.result as string);
-        count++;
-        if (count === fileArr.length) {
-          setImageFiles(new Map(newMap));
-          toast.success(`已加载 ${newMap.size} 张图片`);
-          if (parsedRows.length > 0) {
-            setParsedRows(prev => prev.map(row => {
-              if (row.imageFileName && !row.imageDataUrl) {
-                const dataUrl = newMap.get(row.imageFileName);
-                if (dataUrl) {
-                  const newIssues = row.issues.filter(i => !i.includes('未上传'));
-                  const newStatus: ParsedRow['status'] = newIssues.length === 0 ? 'valid' :
-                    newIssues.some(i => !i.includes('将自动创建')) ? 'error' : 'warning';
-                  return { ...row, imageDataUrl: dataUrl, issues: newIssues, status: newStatus };
-                }
-              }
-              return row;
-            }));
-          }
+    const imageFilesOnly = fileArr.filter(f => f.type.startsWith('image/'));
+    if (imageFilesOnly.length === 0) {
+      if (imageInputRef.current) imageInputRef.current.value = '';
+      return;
+    }
+    void (async () => {
+      for (const file of imageFilesOnly) {
+        try {
+          const compressed = await compressImageFile(file);
+          const dataUrl = await readFileAsDataUrl(compressed);
+          // 键保持原始文件名，与 Excel「图片文件名」列对齐（压缩后扩展名可能变 .jpg）
+          if (dataUrl) newMap.set(file.name, dataUrl);
+        } catch {
+          /* 单张失败跳过 */
         }
-      };
-      reader.readAsDataURL(file);
-    });
+      }
+      setImageFiles(new Map(newMap));
+      toast.success(`已加载 ${newMap.size} 张图片`);
+      if (parsedRows.length > 0) {
+        setParsedRows(prev => prev.map(row => {
+          if (row.imageFileName && !row.imageDataUrl) {
+            const dataUrl = newMap.get(row.imageFileName);
+            if (dataUrl) {
+              const newIssues = row.issues.filter(i => !i.includes('未上传'));
+              const newStatus: ParsedRow['status'] = newIssues.length === 0 ? 'valid' :
+                newIssues.some(i => !i.includes('将自动创建')) ? 'error' : 'warning';
+              return { ...row, imageDataUrl: dataUrl, issues: newIssues, status: newStatus };
+            }
+          }
+          return row;
+        }));
+      }
+    })();
     if (imageInputRef.current) imageInputRef.current.value = '';
   };
 

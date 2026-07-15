@@ -6,9 +6,19 @@ Component({
   },
   methods: {
     onChipTap(e) {
-      const { orderId, milestoneId, disabled } = e.currentTarget.dataset;
+      const dataset = e.currentTarget.dataset || {};
+      const orderId = dataset.orderId;
+      const milestoneId = dataset.milestoneId;
+      const productId = dataset.productId;
+      const templateId = dataset.templateId;
+      const disabled = dataset.disabled;
       if (disabled) return;
-      this.triggerEvent('chiptap', { orderId, milestoneId });
+      this.triggerEvent('chiptap', {
+        orderId,
+        milestoneId,
+        productId,
+        templateId: templateId || milestoneId,
+      });
     },
   },
 });

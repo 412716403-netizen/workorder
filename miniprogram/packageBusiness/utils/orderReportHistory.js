@@ -53,7 +53,7 @@ function productMetaFromMap(productMap, productId, fallbackName, fallbackSku) {
     name: nameSku.productName,
     sku: nameSku.productSku,
     showSku: nameSku.showProductSku,
-    imageUrl: (product && product.imageUrl) || '',
+    imageUrl: (product && (product.imageThumb || product.imageUrl)) || '',
   };
 }
 

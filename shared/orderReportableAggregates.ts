@@ -37,6 +37,7 @@ export interface ReportablePmpReport {
   quantity?: number;
   defectiveQuantity?: number;
   variantId?: string | null;
+  approvalStatus?: string | null;
 }
 
 export interface ReportablePmp {

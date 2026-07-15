@@ -36,7 +36,7 @@ import { SCAN_ITEM_CODE_IDS_KEY } from '../types';
 import type { ScanBatchRowDetail } from '../utils/scanBatchRowDetail';
 import type { ScanBatchApplyMeta } from '../components/scan/ScanBatchSessionModal';
 import { scanItemResultToRowDetail, scanVirtualBatchResultToRowDetail } from '../utils/scanBatchRowDetail';
-import { calcUsageByWeight } from '../utils/bomMaterialUsageByWeight';
+import { calcUsageByWeight, calcUsageByWeightMultiVariant } from '../utils/bomMaterialUsageByWeight';
 import { coerceRouteReportDefaultForField, getEffectiveReportTemplate } from '../utils/effectiveReportTemplate';
 import { buildOutOfSequenceTemplateIds, findGatingPredecessorIndex, isProcessSequential } from '../shared/processSequence';
 import { productHasColorSizeMatrix } from '../utils/productColorSize';
@@ -272,12 +272,17 @@ export function useReportModalState(args: UseReportModalStateArgs) {
         ? Object.values(form.variantQuantities).reduce<number>((s, q) => s + (q as number), 0)
         : form.quantity;
       if (!(form.weight > 0) || !(totalQty > 0)) return [];
-      const variantForBom = form.variantQuantities
-        ? Object.entries(form.variantQuantities).find(([, q]) => (q as number) > 0)?.[0]
-        : form.variantId;
-      const bom = resolveBomForProductVariant(productId, variantForBom);
-      if (!bom) return [];
       const productsById = new Map(products.map(p => [p.id, p]));
+      if (form.variantQuantities) {
+        // 多规格：各规格 BOM 可能物料不同（如按颜色配不同纱线），必须逐规格分摊后合并，
+        // 与提交时 distributeWeightByQty + 后端按 variant BOM 落库的口径一致
+        const parts = (Object.entries(form.variantQuantities) as Array<[string, number]>)
+          .filter(([, q]) => q > 0)
+          .map(([vId, q]) => ({ bom: resolveBomForProductVariant(productId, vId), quantity: q }));
+        return calcUsageByWeightMultiVariant(parts, form.weight, productsById);
+      }
+      const bom = resolveBomForProductVariant(productId, form.variantId);
+      if (!bom) return [];
       return calcUsageByWeight(bom, totalQty, form.weight, productsById);
     },
     [weightReportEnabled, resolveBomForProductVariant, products],

@@ -8,7 +8,7 @@ const {
   loadOrdersForWorkerScan,
   buildReportableKeySet,
 } = require('../utils/scanBatchApplyWorkerReport.js');
-const { listMyReportableTasks } = require('../../utils/workerReportApi.js');
+const { listMyReportableTasks, fetchTenantConfig } = require('../../utils/workerReportApi.js');
 const { fetchProductsAll, fetchCategoriesAll } = require('../utils/orderApi.js');
 const { normalizeMasterList } = require('../utils/productionPlans.js');
 
@@ -107,12 +107,18 @@ Page({
   async bootstrap() {
     this.setData({ loading: true });
     try {
-      const [orders, productsRaw, categoriesRaw, reportable] = await Promise.all([
+      const [config, orders, productsRaw, categoriesRaw] = await Promise.all([
+        fetchTenantConfig().catch(() => ({})),
         loadOrdersForWorkerScan(),
         fetchProductsAll().catch(() => []),
         fetchCategoriesAll().catch(() => []),
-        listMyReportableTasks().catch(() => ({ tasks: [] })),
       ]);
+      const productionLinkMode =
+        config && config.productionLinkMode === 'product' ? 'product' : 'order';
+      this._productionLinkMode = productionLinkMode;
+      const reportable = await listMyReportableTasks({ productionLinkMode }).catch(() => ({
+        tasks: [],
+      }));
       this._orders = orders;
       this._reportableKeys = buildReportableKeySet(reportable.tasks || []);
       const products = normalizeMasterList(productsRaw);

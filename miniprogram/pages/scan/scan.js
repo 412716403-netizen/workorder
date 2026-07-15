@@ -8,7 +8,7 @@ const {
   listMyReportHistory,
   fetchProductsAll,
   fetchNodesAll,
-  fetchCategoriesAll,
+  fetchTenantConfig,
 } = require('../../utils/workerReportApi.js');
 const { loadTraceabilityScanEnabled } = require('../../utils/featurePlugins.js');
 const {
@@ -20,7 +20,6 @@ const {
 const {
   listProductDisplayFieldsFromMap,
 } = require('../../utils/listProductThumb.js');
-const { enrichReportableTasksRemaining } = require('../../utils/enrichReportableTasks.js');
 
 const APPROVAL_LABEL = {
   PENDING: '未审核',
@@ -47,7 +46,8 @@ function mapTaskRow(task, options) {
   const remaining = Math.max(0, Number(task.remaining) || 0);
   const milestoneName = task.milestoneName || '工序';
   const milestoneTemplateId = task.milestoneTemplateId || '';
-  const orderNumber = task.orderNumber || '';
+  const mode = task.mode === 'product' ? 'product' : 'order';
+  const orderNumber = mode === 'product' ? '' : (task.orderNumber || '');
   const showOrderNumber = Boolean(orderNumber);
   let orderHeadline = milestoneName;
   if (showOrderNumber) {
@@ -55,8 +55,13 @@ function mapTaskRow(task, options) {
       ? orderNumber
       : `${orderNumber} · ${milestoneName}`;
   }
+  const key =
+    mode === 'product'
+      ? `product-${task.productId || ''}-${milestoneTemplateId}`
+      : `${task.orderId || task.productId}-${task.milestoneId || task.milestoneTemplateId}`;
   return {
-    key: `${task.orderId || task.productId}-${task.milestoneId || task.milestoneTemplateId}`,
+    key,
+    mode,
     orderId: task.orderId || '',
     milestoneId: task.milestoneId || '',
     milestoneTemplateId,
@@ -314,11 +319,12 @@ Page({
       this.setData({ scanEnabled });
       this.syncScanFabVisibility();
     });
-    this.reload();
+    // 切 Tab / 回前台不每次全量重拉；下拉刷新与切 segment 强制刷新
+    this.reload({ force: false });
   },
 
   onPullDownRefresh() {
-    this.reload()
+    this.reload({ force: true })
       .catch(() => {})
       .finally(() => wx.stopPullDownRefresh());
   },
@@ -328,7 +334,7 @@ Page({
     if (!segment || segment === this.data.segment) return;
     this.setData({ segment, milestonePickerOpen: false });
     this.syncScanFabVisibility();
-    this.reload();
+    this.reload({ force: true });
   },
 
   syncScanFabVisibility() {
@@ -341,28 +347,50 @@ Page({
     this.setData({ showScanFab });
   },
 
-  async reload() {
+  async reload(opts) {
     if (!this.data.hasProcessReport) return;
-    this.setData({ loading: true });
-    try {
-      if (this.data.segment === 'tasks') {
-        await this.loadTasks();
-      } else {
-        await this.loadMyReports();
-      }
-    } catch (err) {
-      const statusCode = err && err.statusCode;
-      let title = (err && err.message) || '加载失败';
-      if (statusCode === 404) {
-        title = '报工接口未部署，请更新服务端';
-      } else if (/timeout|超时/i.test(title)) {
-        title = '加载超时，请稍后重试';
-      }
-      wx.showToast({ title, icon: 'none', duration: 3000 });
-    } finally {
-      this.setData({ loading: false });
-      this.syncScanFabVisibility();
+    const force = !!(opts && opts.force);
+    const segment = this.data.segment;
+    const now = Date.now();
+    // 45s 内同 segment 且本段已成功加载过：跳过网络（开发者工具 onShow 频繁触发）
+    if (
+      !force &&
+      this._lastReloadAt &&
+      this._lastReloadSegment === segment &&
+      now - this._lastReloadAt < 45000 &&
+      ((segment === 'tasks' && this._tasksLoaded) || (segment === 'mine' && this._myReportsLoaded))
+    ) {
+      return;
     }
+    if (this._reloadInflight) return this._reloadInflight;
+    this.setData({ loading: true });
+    this._reloadInflight = (async () => {
+      try {
+        if (segment === 'tasks') {
+          await this.loadTasks();
+          this._tasksLoaded = true;
+        } else {
+          await this.loadMyReports();
+          this._myReportsLoaded = true;
+        }
+        this._lastReloadAt = Date.now();
+        this._lastReloadSegment = segment;
+      } catch (err) {
+        const statusCode = err && err.statusCode;
+        let title = (err && err.message) || '加载失败';
+        if (statusCode === 404) {
+          title = '报工接口未部署，请更新服务端';
+        } else if (/timeout|超时/i.test(title)) {
+          title = '加载超时，请稍后重试';
+        }
+        wx.showToast({ title, icon: 'none', duration: 3000 });
+      } finally {
+        this.setData({ loading: false });
+        this.syncScanFabVisibility();
+        this._reloadInflight = null;
+      }
+    })();
+    return this._reloadInflight;
   },
 
   navigateToWorkerReportScan(templateId, templateName) {
@@ -453,21 +481,19 @@ Page({
   },
 
   async loadTasks() {
-    const [res, nodesRaw, productsRaw, categoriesRaw] = await Promise.all([
-      listMyReportableTasks(),
+    const [config, nodesRaw, productsRaw] = await Promise.all([
+      fetchTenantConfig(),
       fetchNodesAll(),
       fetchProductsAll().catch(() => []),
-      fetchCategoriesAll().catch(() => []),
     ]);
+    const productionLinkMode =
+      config && config.productionLinkMode === 'product' ? 'product' : 'order';
+    this._productionLinkMode = productionLinkMode;
+    const taskRes = await listMyReportableTasks({ productionLinkMode });
     const productMap = new Map((productsRaw || []).map((p) => [p.id, p]));
-    const categoryMap = new Map((categoriesRaw || []).map((c) => [c.id, c]));
-    let rawTasks = res.tasks || [];
-    try {
-      rawTasks = await enrichReportableTasksRemaining(rawTasks, productMap, categoryMap);
-    } catch {
-      /* 分包未就绪时沿用 API 口径 */
-    }
-    const assignedIds = res.assignedMilestoneIds || [];
+    // remaining 以后端 listMyReportableTasks 为准（已含外协/待审/产品聚合），避免 N 次 getOrder 二次 enrichment
+    const rawTasks = taskRes.tasks || [];
+    const assignedIds = taskRes.assignedMilestoneIds || [];
     const globalNodes = Array.isArray(nodesRaw) ? nodesRaw : [];
     const nodeMap = new Map(
       globalNodes.map((n) => [n.id, n.name || n.id]),
@@ -485,10 +511,13 @@ Page({
       name: nodeMap.get(id) || id,
     }));
     let emptyTasksText = '暂无可报任务';
-    if (res.emptyReason === 'unassigned') {
+    if (taskRes.emptyReason === 'unassigned') {
       emptyTasksText = '未分配生产工序，请联系管理员';
-    } else if (!rawTasks.length && (res.assignedMilestoneIds || []).length > 0) {
-      emptyTasksText = '分配工序下暂无可报内容（请确认工单工序已在成员管理中分配给您）';
+    } else if (!rawTasks.length && (taskRes.assignedMilestoneIds || []).length > 0) {
+      emptyTasksText =
+        productionLinkMode === 'product'
+          ? '分配工序下暂无可报内容（请确认产品工序已在成员管理中分配给您）'
+          : '分配工序下暂无可报内容（请确认工单工序已在成员管理中分配给您）';
     }
     this.setData({
       tasks: grouping.tasks,
@@ -497,7 +526,7 @@ Page({
       visibleTaskGroups: grouping.visibleTaskGroups,
       showTaskGroupHeaders: grouping.showTaskGroupHeaders,
       taskCount: rawTasks.length,
-      emptyReason: res.emptyReason || '',
+      emptyReason: taskRes.emptyReason || '',
       emptyTasksText,
       assignedMilestoneOptions,
     });
@@ -546,16 +575,21 @@ Page({
     const range = defaultDateRange();
     this._myReportsDateFrom = range.start;
     this._myReportsDateTo = range.end;
-    const [hist, products] = await Promise.all([
-      listMyReportHistory({
-        startDate: dateInputToIsoStart(range.start),
-        endDate: dateInputToIsoEndExclusive(range.end),
-        productionLinkMode: 'product',
-      }),
+    const [config, products] = await Promise.all([
+      fetchTenantConfig(),
       fetchProductsAll().catch(() => []),
     ]);
+    const productionLinkMode =
+      this._productionLinkMode ||
+      (config && config.productionLinkMode === 'product' ? 'product' : 'order');
+    this._productionLinkMode = productionLinkMode;
+    const hist = await listMyReportHistory({
+      startDate: dateInputToIsoStart(range.start),
+      endDate: dateInputToIsoEndExclusive(range.end),
+      productionLinkMode,
+    });
     const productMap = new Map((products || []).map((p) => [p.id, p]));
-    const grouped = groupMyReportHistory(hist, productMap, 'order');
+    const grouped = groupMyReportHistory(hist, productMap, productionLinkMode);
     const myReports = grouped.map((row) =>
       withApprovalBadge(row, row._raw || row),
     );
@@ -612,7 +646,23 @@ Page({
   },
 
   onTaskTap(e) {
-    const { orderId, milestoneId } = e.currentTarget.dataset;
+    const { orderId, milestoneId, productId, milestoneTemplateId, mode } =
+      e.currentTarget.dataset;
+    if (mode === 'product' || (!orderId && productId && milestoneTemplateId)) {
+      if (!productId || !milestoneTemplateId) {
+        wx.showToast({ title: '任务参数不完整', icon: 'none' });
+        return;
+      }
+      const q = [
+        `productId=${encodeURIComponent(productId)}`,
+        `milestoneTemplateId=${encodeURIComponent(milestoneTemplateId)}`,
+        'selfReport=1',
+      ].join('&');
+      wx.navigateTo({
+        url: `/packageBusiness/production-order-report/production-order-report?${q}`,
+      });
+      return;
+    }
     if (!orderId || !milestoneId) {
       wx.showToast({ title: '任务参数不完整', icon: 'none' });
       return;

@@ -164,6 +164,7 @@ Page({
     headerBlockHeight: 88,
     scrollHeight: 400,
     matrixScrollTop: 0,
+    matrixScrollIntoView: '',
     entryDate: '',
     entryTime: ''
   },
@@ -428,7 +429,7 @@ Page({
       matrixKeyboardValue: preview.value,
       scrollHeight: fullScroll
     }, () => {
-      afterMatrixKeyboardOpen(this, '.defect-action-scroll');
+      afterMatrixKeyboardOpen(this, '.defect-action-scroll', '#defect-action-qty-anchor');
     });
   },
 
@@ -440,6 +441,7 @@ Page({
       activeMatrixVariantId: '',
       matrixKeyboardLabel: '',
       matrixKeyboardValue: '',
+      matrixScrollIntoView: '',
       scrollHeight: computeScrollHeight(nav)
     });
   },
@@ -478,7 +480,7 @@ Page({
       matrixKeyboardLabel: preview.label,
       matrixKeyboardValue: preview.value
     }, () => {
-      afterMatrixKeyboardOpen(this, '.defect-action-scroll');
+      afterMatrixKeyboardOpen(this, '.defect-action-scroll', '#defect-action-qty-anchor');
     });
   },
 

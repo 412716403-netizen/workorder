@@ -1,27 +1,39 @@
 const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
 const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission,filterByPermission = _require2.filterByPermission;
 const _require3 = require('../config/productionOrders.js'),DEFAULT_PAGE_SIZE = _require3.DEFAULT_PAGE_SIZE,ORDER_CENTER_SHORTCUTS = _require3.ORDER_CENTER_SHORTCUTS;
-const _require4 =
-
-
-
-
-
-
-  require('../utils/productionOrders.js'),parseOrderSearch = _require4.parseOrderSearch,buildOrderListBlocks = _require4.buildOrderListBlocks,flattenBlockOrders = _require4.flattenBlockOrders,mapOrderListRow = _require4.mapOrderListRow,normalizeMasterList = _require4.normalizeMasterList,productNameSkuParts = _require4.productNameSkuParts;
-const _require5 = require('../utils/orderProcessChips.js'),buildOrderProcessChips = _require5.buildOrderProcessChips,buildOutOfSequenceTemplateIds = _require5.buildOutOfSequenceTemplateIds;
+const {
+  parseOrderSearch,
+  buildOrderListBlocks,
+  flattenBlockOrders,
+  mapOrderListRow,
+  mapProductGroupRow,
+  normalizeMasterList,
+  productNameSkuParts,
+} = require('../utils/productionOrders.js');
+const {
+  buildOrderProcessChips,
+  buildOutOfSequenceTemplateIds,
+} = require('../utils/orderProcessChips.js');
+const {
+  buildProductGroupProcessChips,
+  productGroupNeedsConfigureProcess,
+} = require('../utils/productGroupChips.js');
 const { buildDefectiveReworkByOrderMilestone } = require('../utils/outsourceDispatchMatrix.js');
-const _require6 =
+const {
+  listOrdersPaginated,
+  fetchTenantConfig,
+  fetchProductsAll,
+  fetchCategoriesAll,
+  fetchNodesAll,
+  listReportHistory,
+  fetchProductionRecords,
+  listProductProgressAll,
+} = require('../utils/orderApi.js');
 
-
-
-
-
-
-  require('../utils/orderApi.js'),listOrdersPaginated = _require6.listOrdersPaginated,fetchTenantConfig = _require6.fetchTenantConfig,fetchProductsAll = _require6.fetchProductsAll,fetchCategoriesAll = _require6.fetchCategoriesAll,fetchNodesAll = _require6.fetchNodesAll,listReportHistory = _require6.listReportHistory,fetchProductionRecords = _require6.fetchProductionRecords;
+const PRODUCT_CARD_BATCH_SIZE = 15;
 const _require7 = require('../utils/reportCustomDocField.js'),mapProductCustomTags = _require7.mapProductCustomTags;
 const _require8 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require8.readNavBarMetrics,readWindowMetrics = _require8.readWindowMetrics;
-const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../../utils/planFilterPanel.js');
+const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../utils/planFilterPanel.js');
 const _require9 = require('../utils/pendingStockBadge.js'),computePendingStockCount = _require9.computePendingStockCount,loadPendingStockRows = _require9.loadPendingStockRows,fetchAllOrdersPaginated = _require9.fetchAllOrdersPaginated;
 const _require11 = require('../utils/pendingApprovalBadge.js'),computePendingApprovalCount = _require11.computePendingApprovalCount;
 const _require0 =
@@ -134,8 +146,10 @@ function slimOrderListRow(row) {
     label: t.label,
     display: String(t.display || '').slice(0, 48)
   }));
+  const isProductGroup = row.blockType === 'productGroup' && row.rowType === 'productGroup';
   return {
     rowKey: row.rowKey,
+    rowType: row.rowType || (isProductGroup ? 'productGroup' : 'order'),
     id: row.id,
     navigateId: row.navigateId,
     orderNumber: row.orderNumber,
@@ -153,10 +167,13 @@ function slimOrderListRow(row) {
     showQuantity: row.showQuantity,
     dispatchLabel: row.dispatchLabel,
     dispatchPillClass: row.dispatchPillClass,
+    showDispatchPill: row.showDispatchPill !== false && !isProductGroup,
     dueDateLabel: row.dueDateLabel || '',
     showDueDate: row.showDueDate,
     processChips: row.processChips,
     showProcessChips: row.showProcessChips,
+    showConfigureProcessHint: !!row.showConfigureProcessHint,
+    configureProcessHintText: row.configureProcessHintText || '',
     reworkOrderId: row.reworkOrderId,
     productId: row.productId,
     depth: row.depth,
@@ -165,7 +182,10 @@ function slimOrderListRow(row) {
     showProductGroupLabel: row.showProductGroupLabel,
     expanded: row.expanded,
     hasChildren: row.hasChildren,
-    blockKey: row.blockKey
+    blockKey: row.blockKey,
+    showDetailAction: row.showDetailAction !== false,
+    showReworkAction: isProductGroup ? false : row.showReworkAction !== false,
+    showMaterialAction: row.showMaterialAction !== false,
   };
 }
 
@@ -176,6 +196,7 @@ Page({
     rows: [],
     searchKeyword: '',
     excludeCompleted: false,
+    isProductMode: false,
     page: 1,
     pageSize: DEFAULT_PAGE_SIZE,
     total: 0,
@@ -185,6 +206,7 @@ Page({
     canMaterial: false,
     canRework: false,
     emptyText: '暂无工单',
+    searchPlaceholder: '工单号 / 产品 / 客户',
     statusBarHeight: 20,
     navBarHeight: 44,
     headerBlockHeight: 120,
@@ -568,17 +590,49 @@ Page({
   onSearchInput(e) {
     this.setData({ searchKeyword: e.detail.value || '' });
     clearTimeout(this._searchTimer);
-    this._searchTimer = setTimeout(() => this.reloadList(), 350);
+    this._searchTimer = setTimeout(() => {
+      if (this._productionLinkMode === 'product') {
+        const sliced = this.sliceProductRows(1);
+        this.setData({
+          rows: sliced.rows,
+          page: 1,
+          total: sliced.total,
+          hasMore: sliced.hasMore,
+          emptyText: this.data.searchKeyword ? '无搜索结果' : '暂无产品',
+        });
+        return;
+      }
+      this.reloadList();
+    }, 350);
   },
 
   onSearchClear() {
     this.setData({ searchKeyword: '' });
+    if (this._productionLinkMode === 'product') {
+      const sliced = this.sliceProductRows(1);
+      this.setData({
+        rows: sliced.rows,
+        page: 1,
+        total: sliced.total,
+        hasMore: sliced.hasMore,
+        emptyText: '暂无产品',
+      });
+      return;
+    }
     this.reloadList();
   },
 
   onDetailTap(e) {
     this.closeFilterPanel();
-    const id = e.currentTarget.dataset.id;
+    const ds = e.currentTarget.dataset || {};
+    const productId = ds.productId;
+    if (this._productionLinkMode === 'product' && productId) {
+      wx.navigateTo({
+        url: `/packageBusiness/production-product-detail/production-product-detail?productId=${encodeURIComponent(productId)}`
+      });
+      return;
+    }
+    const id = ds.id;
     if (!id) return;
     wx.navigateTo({
       url: `/packageBusiness/production-order-detail/production-order-detail?id=${encodeURIComponent(id)}`
@@ -627,7 +681,17 @@ Page({
       wx.showToast({ title: '暂无报工权限', icon: 'none' });
       return;
     }
-    const _ref = e.detail || {},orderId = _ref.orderId,milestoneId = _ref.milestoneId;
+    const detail = e.detail || {};
+    const productId = detail.productId;
+    const templateId = detail.templateId || detail.milestoneId;
+    if (this._productionLinkMode === 'product' && productId && templateId) {
+      wx.navigateTo({
+        url: `/packageBusiness/production-order-report/production-order-report?productId=${encodeURIComponent(productId)}&milestoneTemplateId=${encodeURIComponent(templateId)}`
+      });
+      return;
+    }
+    const orderId = detail.orderId;
+    const milestoneId = detail.milestoneId;
     if (!orderId || !milestoneId) return;
     wx.navigateTo({
       url: `/packageBusiness/production-order-report/production-order-report?orderId=${encodeURIComponent(orderId)}&milestoneId=${encodeURIComponent(milestoneId)}`
@@ -638,7 +702,7 @@ Page({
     const id = e.currentTarget.dataset.id;
     if (!id) return;
     const rows = (this.data.rows || []).map((row) =>
-    row.id === id ? { ...row, showProductImage: false } : row
+      row.id === id ? { ...row, showProductImage: false } : row
     );
     this.setData({ rows });
   },
@@ -661,12 +725,74 @@ Page({
       name: display.name,
       sku: display.sku,
       showSku: display.showSku,
-      imageUrl: product.imageUrl || '',
+      imageUrl: (product.imageThumb || product.imageUrl) || '',
       customTags
     };
   },
 
+  filterProductGroupRowsBySearch(rows) {
+    const kw = String(this.data.searchKeyword || '').trim().toLowerCase();
+    if (!kw) return rows || [];
+    return (rows || []).filter((row) => {
+      const name = String(row.productName || '').toLowerCase();
+      const sku = String(row.productSku || '').toLowerCase();
+      return name.includes(kw) || sku.includes(kw);
+    });
+  },
+
+  buildProductGroupRows(orders) {
+    const blocks = buildOrderListBlocks(orders, 'product', this._productMap);
+    const canReport = this.data.canReport;
+    const getDefectiveRework = this._getDefectiveReworkForChips || (() => ({
+      defective: 0,
+      rework: 0,
+      reworkByVariant: {},
+    }));
+    const nodes = this._nodesList || [];
+    const out = [];
+
+    blocks.forEach((block) => {
+      if (block.type !== 'productGroup') return;
+      const product = this._productMap.get(block.productId) || null;
+      const category = product && product.categoryId ? this._categoryMap.get(product.categoryId) : null;
+      const customTags = mapProductCustomTags(product, category, { includeFile: false });
+      const chips = buildProductGroupProcessChips({
+        block,
+        product,
+        pmp: this._pmpList || [],
+        nodes,
+        processSequenceMode: this._processSequenceMode || 'sequential',
+        outOfSequenceTemplateIds: this._outOfSequenceIds || new Set(),
+        getDefectiveRework,
+        orderForest: this._allOrders || block.orders,
+        canReport,
+        allowExceedMaxReportQty: !!this._allowExceedMaxReportQty,
+      });
+      const showConfigureProcessHint = productGroupNeedsConfigureProcess(product, block.orders);
+      const row = mapProductGroupRow(block, {
+        product,
+        processChips: chips,
+        productCustomTags: customTags,
+        showConfigureProcessHint,
+        canReport,
+        canViewDetail: this.data.canViewDetail,
+        canMaterial: this.data.canMaterial,
+      });
+      out.push(slimOrderListRow({
+        ...row,
+        rowKey: `pg-${block.productId}`,
+        blockKey: block.productId,
+      }));
+    });
+
+    return out;
+  },
+
   buildRowsFromOrders(orders) {
+    if (this._productionLinkMode === 'product') {
+      return this.buildProductGroupRows(orders);
+    }
+
     const blocks = buildOrderListBlocks(
       orders,
       this._productionLinkMode || 'order',
@@ -680,13 +806,13 @@ Page({
     }));
     const out = [];
 
-    blocks.forEach((block) => {var _flat$;
+    blocks.forEach((block) => {
       const flat = flattenBlockOrders(block);
-      const blockKey = block.type === 'parentChild' ?
-      block.parent.id :
-      block.type === 'productGroup' ?
-      block.productId :
-      ((_flat$ = flat[0]) == null || (_flat$ = _flat$.order) == null ? void 0 : _flat$.id) || '';
+      const blockKey = block.type === 'parentChild'
+        ? block.parent.id
+        : block.type === 'productGroup'
+          ? block.productId
+          : (flat[0] && flat[0].order && flat[0].order.id) || '';
       const hasChildren = block.type === 'parentChild' && (block.children || []).length > 0;
       const expanded = !hasChildren || this._expandedBlocks.has(blockKey);
 
@@ -734,14 +860,20 @@ Page({
       this._getDefectiveReworkForChips = null;
       return;
     }
-    const cacheKey = ids.slice().sort().join(',');
+    const productIds = [...new Set(list.map((o) => o.productId).filter(Boolean))];
+    const cacheKey = `${ids.slice().sort().join(',')}|${productIds.slice().sort().join(',')}|${this._productionLinkMode || 'order'}`;
     if (this._chipProdCacheKey === cacheKey && this._chipDrMap) return;
 
-    const prodRecords = await fetchProductionRecords({
+    const params = {
       orderIds: ids.join(','),
       types: 'REWORK,REWORK_REPORT',
       all: 'true',
-    }).catch(() => []);
+    };
+    if (this._productionLinkMode === 'product' && productIds.length) {
+      params.productIds = productIds.join(',');
+    }
+
+    const prodRecords = await fetchProductionRecords(params).catch(() => []);
 
     this._chipDrMap = buildDefectiveReworkByOrderMilestone(list, prodRecords);
     this._getDefectiveReworkForChips = (orderId, templateId) =>
@@ -758,6 +890,9 @@ Page({
     this._productMap = new Map();
     this._categoryMap = new Map();
     this._expandedBlocks = new Set();
+    this._nodesList = [];
+    this._pmpList = [];
+    this._allProductRows = [];
 
     try {
       const config = await fetchTenantConfig();
@@ -768,30 +903,35 @@ Page({
       this._productionLinkMode = config.productionLinkMode || 'order';
       this._processSequenceMode = config.processSequenceMode || 'sequential';
       this._showDeliveryDate = planListDisplay.showDeliveryDate !== false;
+      this._allowExceedMaxReportQty = !!config.allowExceedMaxReportQty;
 
+      const isProductMode = this._productionLinkMode === 'product';
       this.setData({
-        excludeCompleted: !!listDisplay.onlyShowNotCompleted,
-        filterActive: !!listDisplay.onlyShowNotCompleted
+        isProductMode,
+        excludeCompleted: isProductMode ? false : !!listDisplay.onlyShowNotCompleted,
+        filterActive: isProductMode ? false : !!listDisplay.onlyShowNotCompleted,
+        searchPlaceholder: isProductMode ? '产品名称 / SKU' : '工单号 / 产品 / 客户',
+        emptyText: isProductMode ? '暂无产品' : '暂无工单',
       });
 
       const results = await Promise.all([
-      fetchProductsAll(),
-      fetchCategoriesAll(),
-      fetchNodesAll()]
-      );
-      const productsRaw = results[0];
-      const categoriesRaw = results[1];
-      const nodesRaw = results[2];
-      const products = normalizeMasterList(productsRaw);
-      const categories = normalizeMasterList(categoriesRaw);
-      const nodes = normalizeMasterList(nodesRaw);
+        fetchProductsAll(),
+        fetchCategoriesAll(),
+        fetchNodesAll(),
+      ]);
+      const products = normalizeMasterList(results[0]);
+      const categories = normalizeMasterList(results[1]);
+      const nodes = normalizeMasterList(results[2]);
       this._productMap = new Map(products.map((p) => [p.id, p]));
       this._categoryMap = new Map(categories.map((c) => [c.id, c]));
+      this._nodesList = nodes;
       this._outOfSequenceIds = buildOutOfSequenceTemplateIds(nodes);
     } catch {
       this._productionLinkMode = 'order';
       this._processSequenceMode = 'sequential';
       this._outOfSequenceIds = new Set();
+      this._nodesList = [];
+      this.setData({ isProductMode: false, searchPlaceholder: '工单号 / 产品 / 客户' });
     }
 
     await this.reloadList();
@@ -800,13 +940,83 @@ Page({
 
   async reloadList() {
     this._allOrders = [];
+    this._allProductRows = [];
     this.setData({ page: 1, rows: [], hasMore: false, loading: true });
-    await this.loadPage(1, false);
+    if (this._productionLinkMode === 'product') {
+      await this.loadProductModeList();
+    } else {
+      await this.loadPage(1, false);
+    }
+  },
+
+  sliceProductRows(page) {
+    const all = this.filterProductGroupRowsBySearch(this._allProductRows || []);
+    const end = page * PRODUCT_CARD_BATCH_SIZE;
+    return {
+      rows: all.slice(0, end),
+      total: all.length,
+      hasMore: end < all.length,
+    };
+  },
+
+  async loadProductModeList() {
+    this.setData({ loading: true, loadingMore: false });
+    try {
+      const params = {};
+      // 产品模式隐藏「仅未完成」开关；默认拉全量未派发完成单以对齐 Web 产品组聚合基线
+      // 若租户订单列表配置了仅未完成，bootstrap 已在产品模式下强制 excludeCompleted=false
+      const allOrders = await fetchAllOrdersPaginated(params);
+      this._allOrders = allOrders;
+
+      const pmpRaw = await listProductProgressAll().catch(() => []);
+      this._pmpList = Array.isArray(pmpRaw)
+        ? pmpRaw
+        : (pmpRaw && Array.isArray(pmpRaw.data) ? pmpRaw.data : []);
+
+      await this.ensureChipProdContext(allOrders);
+      this._allProductRows = this.buildProductGroupRows(allOrders);
+      const sliced = this.sliceProductRows(1);
+      this.setData({
+        rows: sliced.rows,
+        page: 1,
+        total: sliced.total,
+        hasMore: sliced.hasMore,
+        emptyText: this.data.searchKeyword ? '无搜索结果' : '暂无产品',
+        loading: false,
+        loadingMore: false,
+      });
+    } catch (err) {
+      this.setData({
+        loading: false,
+        loadingMore: false,
+        rows: [],
+        hasMore: false,
+      });
+      wx.showToast({ title: '加载失败', icon: 'none' });
+    }
+  },
+
+  loadProductModeMore(page) {
+    this.setData({ loadingMore: true });
+    const sliced = this.sliceProductRows(page);
+    this.setData({
+      rows: sliced.rows,
+      page,
+      total: sliced.total,
+      hasMore: sliced.hasMore,
+      loadingMore: false,
+    });
   },
 
   async loadPage(page, append) {
-    if (append) this.setData({ loadingMore: true });else
-    if (!this.data.loading) this.setData({ loading: true });
+    if (this._productionLinkMode === 'product') {
+      if (append) this.loadProductModeMore(page);
+      else await this.loadProductModeList();
+      return;
+    }
+
+    if (append) this.setData({ loadingMore: true });
+    else if (!this.data.loading) this.setData({ loading: true });
 
     try {
       const parsed = parseOrderSearch(this.data.searchKeyword);

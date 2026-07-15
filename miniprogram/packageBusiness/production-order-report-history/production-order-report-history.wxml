@@ -25,7 +25,7 @@
         <image class="plan-tool-btn__icon" src="/assets/icons/list-filter.png" mode="aspectFit" />
       </view>
     </view>
-  
+
     <view wx:if="{{showFilterPanel}}" class="plan-filter-panel plan-filter-panel--header-dropdown">
       <view class="plan-filter-panel__row">
         <text class="plan-filter-panel__label">开始时间</text>
@@ -55,14 +55,12 @@
         <view class="plan-filter-reset" bindtap="onFilterReset">重置</view>
         <view class="plan-filter-apply" bindtap="onFilterApply">确定</view>
       </view>
-    </view></view>
-    
+    </view>
+  </view>
 
   <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
 
   <view class="report-history-page">
-    
-
     <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
 
     <view wx:elif="{{rows.length}}">
@@ -89,27 +87,32 @@
               </view>
             </view>
           </view>
+
           <view class="report-history-row__content">
-            <view class="report-history-row__head">
-              <view class="report-history-row__head-main">
-                <text wx:if="{{item.showOrderNumber}}" class="report-history-row__order-no">{{item.orderNumber}}</text>
-                <text wx:if="{{item.showOrderNumber}}" class="report-history-row__head-dot">·</text>
-                <text class="report-history-row__time">{{item.timeLabel}}</text>
-              </view>
-              <text wx:if="{{item.showReportNo}}" class="report-history-row__report-no">{{item.reportNo}}</text>
-            </view>
+            <!-- 主行：工序 · 时间 · 工单号 | 良品 -->
             <view class="report-history-row__main">
-              <text class="report-history-row__milestone">{{item.milestoneName}}</text>
-              <view class="report-history-row__aside">
-                <text class="report-history-row__qty">{{item.goodQtyText}}</text>
-                <text wx:if="{{item.showDefective}}" class="report-history-row__defective">{{item.defectiveText}}</text>
-                <text wx:if="{{item.showOperator}}" class="report-history-row__operator">{{item.operatorLine}}</text>
+              <view class="report-history-row__title">
+                <text class="report-history-row__milestone">{{item.milestoneName}}</text>
+                <text class="report-history-row__head-dot">·</text>
+                <text class="report-history-row__time">{{item.timeLabel}}</text>
+                <block wx:if="{{item.showOrderNumber}}">
+                  <text class="report-history-row__head-dot">·</text>
+                  <text class="report-history-row__order-no">{{item.orderNumber}}</text>
+                </block>
               </view>
+              <text class="report-history-row__qty">{{item.goodQtyText}}</text>
             </view>
-            <view class="report-history-row__product">
-              <view class="report-history-row__product-left">
+
+            <!-- 次行：产品名称 · 产品编号 | 不良 · 操作人 · 报工单号 -->
+            <view class="report-history-row__sub">
+              <view class="report-history-row__sub-left">
                 <text class="report-history-row__product-name">{{item.productName}}</text>
                 <text wx:if="{{item.showProductSku}}" class="report-history-row__sku">{{item.productSku}}</text>
+              </view>
+              <view class="report-history-row__sub-right">
+                <text wx:if="{{item.showDefective}}" class="report-history-row__defective">{{item.defectiveText}}</text>
+                <text wx:if="{{item.showOperator}}" class="report-history-row__operator">{{item.operatorLine}}</text>
+                <text wx:if="{{item.showReportNo}}" class="report-history-row__report-no">{{item.reportNo}}</text>
               </view>
             </view>
           </view>

@@ -1,0 +1,40 @@
+@import '../production-order-detail/production-order-detail.wxss';
+
+.product-detail-order-cell {
+  min-height: 80rpx;
+  padding-top: 16rpx;
+  padding-bottom: 16rpx;
+}
+
+.product-detail-order-label {
+  font-size: 26rpx;
+  min-width: 140rpx;
+}
+
+.product-detail-order-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2rpx;
+  /* 覆盖 .plan-form-cell__value 单行省略，以便数量+入库两行展示 */
+  overflow: visible;
+  white-space: normal;
+}
+
+.product-detail-order-qty {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  line-height: 1.3;
+}
+
+.product-detail-order-stockin {
+  font-size: 22rpx;
+  font-weight: 600;
+  color: #059669;
+  line-height: 1.3;
+}
+
+.order-detail-material-table__td--surplus-neg {
+  color: #e11d48;
+}

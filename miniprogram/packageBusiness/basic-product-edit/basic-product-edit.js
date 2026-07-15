@@ -202,7 +202,7 @@ Page({
         id: this._workingProduct.id,
         name: this._workingProduct.name || '',
         sku: this._workingProduct.sku || '',
-        imageUrl: this._workingProduct.imageUrl || '',
+        imageUrl: this._workingProduct.imageUrl || this._workingProduct.imageThumb || '',
         colorIds: this._workingProduct.colorIds || [],
         sizeIds: this._workingProduct.sizeIds || [],
         salesPriceText: this._workingProduct.salesPrice != null ? String(this._workingProduct.salesPrice) : '',

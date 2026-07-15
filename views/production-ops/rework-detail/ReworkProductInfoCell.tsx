@@ -8,6 +8,7 @@ import React from 'react';
 import { Package } from 'lucide-react';
 import type { Product } from '../../../types';
 import type { getProductCategoryCustomFieldEntries } from '../../../utils/reportCustomDocField';
+import { productThumbSrc } from '../../../utils/productImageSrc';
 
 type CustomTags = ReturnType<typeof getProductCategoryCustomFieldEntries>;
 
@@ -21,10 +22,10 @@ interface Props {
 
 const ReworkProductInfoCell: React.FC<Props> = ({ product, fallbackProductId, customTags, showOrderNumber }) => (
   <div className="flex min-w-0 items-start gap-2">
-    {product?.imageUrl ? (
+    {productThumbSrc(product) ? (
       <div className="flex h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-white">
         <img
-          src={product.imageUrl}
+          src={productThumbSrc(product)}
           alt={product?.name ?? '—'}
           className="h-full w-full object-cover"
           loading="lazy"

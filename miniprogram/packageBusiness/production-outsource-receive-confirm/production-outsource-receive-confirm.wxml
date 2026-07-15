@@ -141,6 +141,42 @@
               </view>
             </view>
           </view>
+
+          <view wx:if="{{item.weightEnabled}}" class="plan-form-card report-weight-card">
+            <view class="report-weight-head">
+              <text class="report-weight-head__label">本次交货总重量 (kg)</text>
+              <text class="report-weight-head__hint">将按 BOM 占比分摊为各子物料实际消耗</text>
+            </view>
+            <input
+              class="report-weight-input"
+              type="digit"
+              value="{{item.weightInput}}"
+              data-key="{{item.rowKey}}"
+              bindinput="onWeightInput"
+              placeholder="0"
+            />
+            <view wx:if="{{item.weightPreviewRows.length}}" class="report-weight-preview">
+              <view class="report-weight-preview__title">预估物料消耗（按 BOM 占比 × 输入重量）</view>
+              <view class="report-weight-preview__row report-weight-preview__row--head">
+                <text class="report-weight-preview__col report-weight-preview__col--name">物料</text>
+                <text class="report-weight-preview__col">占比</text>
+                <text class="report-weight-preview__col">理论 (kg)</text>
+                <text class="report-weight-preview__col">实际 (kg)</text>
+              </view>
+              <view
+                wx:for="{{item.weightPreviewRows}}"
+                wx:for-item="prow"
+                wx:key="materialProductId"
+                class="report-weight-preview__row"
+              >
+                <text class="report-weight-preview__col report-weight-preview__col--name">{{prow.name}}</text>
+                <text class="report-weight-preview__col">{{prow.ratioText}}</text>
+                <text class="report-weight-preview__col">{{prow.theoryText}}</text>
+                <text class="report-weight-preview__col report-weight-preview__col--actual">{{prow.actualText}}</text>
+              </view>
+            </view>
+            <text wx:elif="{{item.weightNoBomHint}}" class="report-weight-nobom">未找到该工序下适用的 BOM 或无可分摊子项，提交后将仅保存重量</text>
+          </view>
         </view>
       </view>
     </view>

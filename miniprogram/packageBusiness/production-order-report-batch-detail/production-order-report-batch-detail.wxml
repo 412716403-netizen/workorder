@@ -79,6 +79,21 @@
           <text class="plan-detail-section__title">报工明细</text>
         </view>
         <view wx:if="{{detail.showMatrix && detail.matrixLayout}}" class="plan-form-card">
+          <view class="plan-form-cell plan-form-cell--matrix-head report-qty-head">
+            <text class="plan-form-cell__label">{{qtyInputMode === 'good' ? '良品数量' : '不良品数量'}}</text>
+            <view class="report-qty-toggle">
+              <view
+                class="report-qty-toggle__item {{qtyInputMode === 'good' ? 'report-qty-toggle__item--active' : ''}}"
+                data-mode="good"
+                bindtap="onQtyModeTap"
+              >良品</view>
+              <view
+                class="report-qty-toggle__item {{qtyInputMode === 'defective' ? 'report-qty-toggle__item--active' : ''}}"
+                data-mode="defective"
+                bindtap="onQtyModeTap"
+              >不良品</view>
+            </view>
+          </view>
           <view class="plan-detail-matrix-wrap">
             <scroll-view class="plan-detail-matrix-scroll" scroll-x enhanced show-scrollbar="{{false}}">
               <view class="plan-detail-matrix">
@@ -92,8 +107,13 @@
                     <text class="plan-detail-matrix__color-text">{{colorRow.colorLabel}}</text>
                   </view>
                   <view wx:for="{{colorRow.cells}}" wx:for-item="cell" wx:key="index" class="plan-detail-matrix__cell">
-                    <text wx:if="{{cell.variantId && cell.quantity}}" class="plan-detail-matrix__qty">{{cell.quantity}}</text>
-                    <text wx:elif="{{cell.variantId}}" class="plan-detail-matrix__dash">0</text>
+                    <block wx:if="{{cell.variantId}}">
+                      <text
+                        wx:if="{{qtyInputMode === 'good' ? cell.quantity : cell.defectiveQty}}"
+                        class="plan-detail-matrix__qty {{qtyInputMode === 'defective' ? 'plan-detail-matrix__qty--defective' : ''}}"
+                      >{{qtyInputMode === 'good' ? cell.quantity : cell.defectiveQty}}</text>
+                      <text wx:else class="plan-detail-matrix__dash">0</text>
+                    </block>
                     <text wx:else class="plan-detail-matrix__dash">—</text>
                   </view>
                 </view>

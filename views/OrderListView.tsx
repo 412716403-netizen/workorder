@@ -79,6 +79,9 @@ import {
   type OrderCenterListBlock as OrderListBlock,
 } from '../utils/orderCenterSort';
 import { buildOutOfSequenceTemplateIds, findGatingPredecessorIndex, isProcessSequential } from '../shared/processSequence';
+import { productThumbSrc } from '../utils/productImageSrc';
+import { useAppActions } from '../contexts/AppDataContext';
+import { useRefreshReportScopeWhileActive } from '../hooks/useRefreshReportScopeWhileActive';
 
 interface OrderListViewProps {
   productionLinkMode?: 'order' | 'product';
@@ -203,6 +206,15 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   userPermissions,
   tenantRole
 }) => {
+  const { refreshOrders, refreshPMP } = useAppActions();
+  // 停留在工单中心时：切回浏览器窗口补刷完成量，使「待入库清单」角标能跟上小程序报工（不轮询，避免额外压力）
+  useRefreshReportScopeWhileActive(true, {
+    productionLinkMode,
+    refreshOrders,
+    refreshPMP,
+    pollIntervalMs: 0,
+  });
+
   const _isOwner = tenantRole === 'owner';
   const hasOrderPerm = (permKey: string): boolean => {
     if (_isOwner) return true;
@@ -333,7 +345,8 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   }, [fetchedOrders, orders, debouncedSearch, currentPage]);
 
   /** 工单中心：按当前列表涉及工单 + 产品窄拉生产流水（避免父级全量 refreshProdRecords） */
-  const ORDER_CENTER_PRODUCTION_TYPES = 'REWORK,OUTSOURCE,REWORK_REPORT,STOCK_IN';
+  /** 含 SCRAP：工单/产品工序详情「报损」列依赖返工报损流水 */
+  const ORDER_CENTER_PRODUCTION_TYPES = 'REWORK,OUTSOURCE,REWORK_REPORT,STOCK_IN,SCRAP';
   const narrowOrderIdsForProd = useMemo(() => {
     const ids = new Set<string>();
     for (const o of displayOrders) {
@@ -907,9 +920,9 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                 return (
                   <div key={order.id} className={cardClass} style={indentPx != null && indentPx > 0 ? { marginLeft: `${indentPx}px` } : undefined}>
                     <div className="flex items-center gap-4 min-w-0">
-                      {product?.imageUrl ? (
+                      {productThumbSrc(product) ? (
                         <button type="button" onClick={() => hasOrderPerm('production:orders_detail:view') && openOrderDetail(order.id)} className={`${isChild ? 'w-12 h-12 rounded-xl' : 'w-14 h-14 rounded-2xl'} overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none block`}>
-                          <img loading="lazy" decoding="async" src={product.imageUrl} alt={order.productName} className="w-full h-full object-cover block" />
+                          <img loading="lazy" decoding="async" src={productThumbSrc(product)} alt={order.productName} className="w-full h-full object-cover block" />
                         </button>
                       ) : (
                         <button type="button" onClick={() => hasOrderPerm('production:orders_detail:view') && openOrderDetail(order.id)} className={`${isChild ? 'w-12 h-12 rounded-xl' : 'w-14 h-14 rounded-2xl'} flex items-center justify-center flex-shrink-0 bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100 transition-colors`}>
@@ -1256,9 +1269,9 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                     <div className="pt-0">
                         <div className="bg-white rounded-2xl border border-slate-200 px-5 py-2 hover:shadow-lg hover:border-indigo-200 transition-all grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-3 lg:gap-4 items-center">
                           <div className="flex items-center gap-4 min-w-0">
-                            {product?.imageUrl ? (
+                            {productThumbSrc(product) ? (
                               <div className="w-14 h-14 rounded-2xl overflow-hidden border border-slate-100 flex-shrink-0">
-                                <img loading="lazy" decoding="async" src={product.imageUrl} alt={block.productName} className="w-full h-full object-cover block" />
+                                <img loading="lazy" decoding="async" src={productThumbSrc(product)} alt={block.productName} className="w-full h-full object-cover block" />
                               </div>
                             ) : (
                               <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 bg-indigo-50 text-indigo-600">

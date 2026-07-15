@@ -17,7 +17,6 @@ const _require7 =
 
 
   require('../utils/outsourceRecordsLoad.js'),fetchOutsourceRecordsForPanel = _require7.fetchOutsourceRecordsForPanel,fetchStockRecordsForOutsourcePanel = _require7.fetchStockRecordsForOutsourcePanel;
-const _require8 = require('../utils/planApi.js'),fetchPartnersAll = _require8.fetchPartnersAll;
 const _require9 = require('../utils/pendingStockBadge.js'),fetchAllOrdersPaginated = _require9.fetchAllOrdersPaginated;
 const _require0 =
 
@@ -27,7 +26,7 @@ const _require0 =
   require('../utils/orderApi.js'),fetchTenantConfig = _require0.fetchTenantConfig,fetchProductsAll = _require0.fetchProductsAll,fetchNodesAll = _require0.fetchNodesAll,fetchBomsAll = _require0.fetchBomsAll;
 const _require1 = require('../utils/productionPlans.js'),normalizeMasterList = _require1.normalizeMasterList;
 const _require10 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require10.readNavBarMetrics,readWindowMetrics = _require10.readWindowMetrics;
-const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../../utils/planFilterPanel.js');
+const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../utils/planFilterPanel.js');
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
@@ -225,12 +224,7 @@ Page({
 
   openMaterialConfirmAfterDeps(e, mode) {
     const d = e.currentTarget.dataset;
-    let partners = [];
-    try {
-      partners = JSON.parse(d.partners || '[]');
-    } catch {
-      partners = [];
-    }
+    // 加工厂在物料页内选择，Hub 不弹 ActionSheet
     if (mode === 'stock_return') {
       const stockRecords = this._stockRecords || [];
       const scope = { orderId: d.orderId, productId: d.productId };
@@ -243,36 +237,11 @@ Page({
         wx.showToast({ title: '暂无领料记录，无法退料', icon: 'none' });
         return;
       }
-      partners = dispatchPartners;
     }
-    if (!partners.length && mode === 'stock_out') {
-      this.pickPartnerThenMaterial(d, mode);
-      return;
-    }
-    this.navigateMaterialConfirm(d, mode, partners[0] || '');
+    this.navigateMaterialConfirm(d, mode);
   },
 
-  async pickPartnerThenMaterial(d, mode) {
-    try {
-      const partnersRaw = await fetchPartnersAll();
-      const names = (partnersRaw || []).map((p) => p.name).filter(Boolean);
-      if (!names.length) {
-        wx.showToast({ title: '请先在基础档案添加合作单位', icon: 'none' });
-        return;
-      }
-      wx.showActionSheet({
-        itemList: names.slice(0, 6),
-        success: (res) => {
-          const partnerKey = names[res.tapIndex] || '';
-          this.navigateMaterialConfirm(d, mode, partnerKey);
-        }
-      });
-    } catch {
-      wx.showToast({ title: '加载加工厂失败', icon: 'none' });
-    }
-  },
-
-  navigateMaterialConfirm(d, mode, partnerKey) {
+  navigateMaterialConfirm(d, mode) {
     if (mode === 'stock_out') {
       const q = ['source=outsource'];
       if (d.orderId) {
@@ -280,7 +249,6 @@ Page({
       } else if (d.productId) {
         q.push(`productId=${encodeURIComponent(d.productId)}`);
       }
-      if (partnerKey) q.push(`partner=${encodeURIComponent(partnerKey)}`);
       wx.navigateTo({
         url: `/packageBusiness/production-order-material/production-order-material?${q.join('&')}`
       });
@@ -293,7 +261,6 @@ Page({
     } else if (d.productId) {
       q.push(`productId=${encodeURIComponent(d.productId)}`);
     }
-    if (partnerKey) q.push(`partner=${encodeURIComponent(partnerKey)}`);
     wx.navigateTo({
       url: `/packageBusiness/production-order-material/production-order-material?${q.join('&')}`
     });

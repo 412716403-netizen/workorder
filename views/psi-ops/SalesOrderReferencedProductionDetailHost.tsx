@@ -60,7 +60,7 @@ const SalesOrderReferencedProductionDetailHost: React.FC<
       const acc: ProductionOpRecord[] = [];
       let page = 1;
       const pageSize = 200;
-      const types = 'REWORK,OUTSOURCE,REWORK_REPORT,STOCK_IN';
+      const types = 'REWORK,OUTSOURCE,REWORK_REPORT,STOCK_IN,SCRAP';
       for (;;) {
         const res = await productionApi.listPage({
           page,

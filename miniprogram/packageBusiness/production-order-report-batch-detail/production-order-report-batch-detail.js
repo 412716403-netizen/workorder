@@ -227,10 +227,16 @@ Page({
       && canMutate
       && !this.data.editing
     );
+    // 仅不良无良品时默认展示不良明细，否则默认良品（与录入切换同交互）
+    const qtyInputMode =
+      detail.showMatrix && detail.totalGood <= 0 && detail.totalDefective > 0
+        ? 'defective'
+        : 'good';
     this.setData({
       loading: false,
       editing: false,
       detail,
+      qtyInputMode,
       canEdit: this._canEdit && canMutate,
       canDelete: this._canDelete && canMutate,
       showFooter,

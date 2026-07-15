@@ -8,6 +8,11 @@ function clearSession() {
   } catch (_err) {
     /* ignore */
   }
+  try {
+    require('./masterDataCache.js').invalidateMasterDataCache();
+  } catch (_err) {
+    /* ignore */
+  }
   wx.removeStorageSync('accessToken');
   wx.removeStorageSync('refreshToken');
   wx.removeStorageSync('tenantCtx');

@@ -2,8 +2,9 @@ import { useCallback, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
 /**
- * 报工弹窗打开期间同步工单 / 产品进度，使「待审 N」等 hint 能反映手机端新提交的 PENDING 报工。
- * 打开时立即刷一次；窗口重新聚焦时补刷；可选短间隔轮询（弹窗仍开着时）。
+ * 同步工单 / 产品进度，使网页侧能反映小程序等其它端刚提交的报工。
+ * 用于：报工弹窗「待审 N」hint、工单中心待入库清单（末道完成量 − 已入库）。
+ * 激活时立即刷一次；窗口重新聚焦时补刷；可选短间隔轮询（仍激活时）。
  */
 export function useRefreshReportScopeWhileActive(
   active: boolean,
@@ -28,6 +29,8 @@ export function useRefreshReportScopeWhileActive(
       productionLinkMode === 'product' ? refreshPMP() : Promise.resolve(),
     ]);
     void queryClient.invalidateQueries({ queryKey: ['flow.reportPendingApproval'] });
+    // 待入库角标 / 清单与 AppData 工单进度一并失效，避免仅刷完成量、已入库仍旧
+    void queryClient.invalidateQueries({ queryKey: ['pendingStockPanel.stockIn'] });
   }, [productionLinkMode, refreshOrders, refreshPMP, queryClient]);
 
   useEffect(() => {

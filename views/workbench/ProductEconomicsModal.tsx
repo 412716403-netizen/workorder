@@ -12,6 +12,7 @@ import {
   formatWorkbenchAmount,
   formatWorkbenchCount,
 } from './widgets/WorkbenchKpiCard';
+import { productThumbSrc } from '../../utils/productImageSrc';
 
 interface ProductEconomicsModalProps {
   open: boolean;

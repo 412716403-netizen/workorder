@@ -45,7 +45,12 @@ const _require7 =
 
   require('../utils/orderMaterialReturnLite.js'),computeOutsourceReturnMaterials = _require7.computeOutsourceReturnMaterials,buildOutsourceReturnUiRows = _require7.buildOutsourceReturnUiRows,buildInternalReturnUiRows = _require7.buildInternalReturnUiRows,pickPreferredReturnWarehouse = _require7.pickPreferredReturnWarehouse,validateReturnRows = _require7.validateReturnRows,buildReturnDispatchedBatchesMap = _require7.buildReturnDispatchedBatchesMap;
 const _require8 = require('../utils/productionOrders.js'),normalizeMasterList = _require8.normalizeMasterList;
-const _require9 = require('../utils/outsourceMaterialLite.js'),buildPartnerIssuedMap = _require9.buildPartnerIssuedMap;
+const _require9 = require('../utils/outsourceMaterialLite.js'),
+  buildPartnerIssuedMap = _require9.buildPartnerIssuedMap,
+  buildBomMaterialsByOutsourceQty = _require9.buildBomMaterialsByOutsourceQty,
+  buildOpenOutsourceQtyMaps = _require9.buildOpenOutsourceQtyMaps,
+  listOpenOutsourcePartnersForScope = _require9.listOpenOutsourcePartnersForScope,
+  listOutsourceDispatchPartnersForCard = _require9.listOutsourceDispatchPartnersForCard;
 const _require0 = require('../utils/materialStatsLite.js'),INTERNAL_PARTNER_KEY = _require0.INTERNAL_PARTNER_KEY;
 const _require1 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require1.readNavBarMetrics,readWindowMetrics = _require1.readWindowMetrics;
 const _require10 = require('../utils/saveNavigation.js'),LIST_ROUTES = _require10.LIST_ROUTES,afterSaveReturnToList = _require10.afterSaveReturnToList;
@@ -74,6 +79,37 @@ async function fetchOrdersByProductId(productId) {
   return all;
 }
 
+const OUTSOURCE_PARTNER_PLACEHOLDER = '请选择外协工厂';
+
+function mergePartnerOptions(options) {
+  return Array.from(new Set((options || []).map((p) => String(p || '').trim()).filter(Boolean)));
+}
+
+function applyPartnerUi(page, partnerNames) {
+  const names = mergePartnerOptions(partnerNames);
+  // 仅 1 个工厂时自动选中；多个时默认空，由用户选择
+  const key = names.length === 1 ? names[0] : '';
+  page._partnerKey = key;
+  const multi = names.length > 1;
+  const pickerRange = multi ? [OUTSOURCE_PARTNER_PLACEHOLDER, ...names] : names;
+  let idx = 0;
+  if (key) {
+    const found = pickerRange.indexOf(key);
+    idx = found >= 0 ? found : 0;
+  }
+  const showPartnerPicker = names.length > 0;
+  page.setData({
+    partnerNames: names,
+    partnerPickerRange: pickerRange,
+    partnerIndex: idx,
+    partnerLabel: key || '',
+    canSelectPartner: showPartnerPicker,
+    showPartner: false,
+    showPartnerPicker,
+  });
+  return key;
+}
+
 function applyPageLabels(page, opts) {
   const
     isReturn =
@@ -91,7 +127,8 @@ function applyPageLabels(page, opts) {
       inputColLabel: '本次领料',
       submitLabel: '确认返工领料',
       emptyText: '该工单未配置 BOM 物料，无法进行返工领料',
-      showPartner: false
+      showPartner: false,
+      showPartnerPicker: false,
     });
     return;
   }
@@ -119,8 +156,10 @@ function applyPageLabels(page, opts) {
     progressColLabel: '领料进度',
     inputColLabel: '本次领料',
     submitLabel: isOutsource ? '确认外协领料' : '确认领料发出',
-    emptyText: '该工单未配置 BOM 物料，无法进行物料发出',
-    showPartner: isOutsource && !!page._partnerKey
+    emptyText: isOutsource
+      ? '暂无外协在途工序对应物料（请先外协发出并保持「加工中」）'
+      : '该工单未配置 BOM 物料，无法进行物料发出',
+    showPartner: isOutsource && !!page._partnerKey,
   });
 }
 
@@ -151,6 +190,12 @@ Page({
     emptyText: '该工单未配置 BOM 物料，无法进行物料发出',
     partnerLabel: '',
     showPartner: false,
+    showPartnerPicker: false,
+    canSelectPartner: false,
+    partnerNames: [],
+    partnerPickerRange: [],
+    partnerIndex: 0,
+    pageReady: false,
     statusBarHeight: 20,
     navBarHeight: 44,
     headerBlockHeight: 88,
@@ -185,12 +230,6 @@ Page({
       if (!this._partnerKey && prefill.partnerKey && prefill.partnerKey !== INTERNAL_PARTNER_KEY) {
         this._partnerKey = prefill.partnerKey;
       }
-    }
-
-    if (this._isOutsource && !this._partnerKey) {
-      wx.showToast({ title: '缺少加工厂', icon: 'none' });
-      setTimeout(() => wx.navigateBack(), 800);
-      return;
     }
 
     let canMaterial = false;
@@ -296,6 +335,14 @@ Page({
     this.syncRows(rows);
   },
 
+  /** 本次单据临时删除物料行（关闭页后重新进入可恢复 BOM 清单） */
+  onRemoveMaterialRow(e) {
+    const id = e.currentTarget.dataset.id;
+    if (!id) return;
+    const rows = (this.data.rows || []).filter((r) => r.materialProductId !== id);
+    this.syncRows(rows);
+  },
+
   onBatchChange(e) {
     const id = e.currentTarget.dataset.id;
     const idx = Number(e.detail.value);
@@ -311,11 +358,15 @@ Page({
       const qty = Number(r.issueQty);
       return Number.isFinite(qty) && qty > 0;
     });
-    this.setData({
+    const patch = {
       rows,
       hasRows: rows.length > 0,
       canSubmit: canSubmit && this.data.canMaterial
-    });
+    };
+    if (rows.length === 0 && this._hadInitialRows) {
+      patch.emptyText = '已移除全部物料行，返回后重新进入可恢复';
+    }
+    this.setData(patch);
   },
 
   async refreshBatchOptions(rows, warehouse) {
@@ -345,21 +396,122 @@ Page({
     }
   },
 
+  async onPartnerChange(e) {
+    if (!this._isOutsource) return;
+    const idx = Number(e.detail.value);
+    const range = this.data.partnerPickerRange || this.data.partnerNames || [];
+    const picked = range[idx] || '';
+    const key = picked === OUTSOURCE_PARTNER_PLACEHOLDER ? '' : picked;
+    if (key === this._partnerKey && idx === this.data.partnerIndex) return;
+    this._partnerKey = key;
+    this.setData({
+      partnerIndex: idx,
+      partnerLabel: key,
+      showPartner: false,
+      emptyText: !key && (this.data.partnerNames || []).length > 1
+        ? '请先选择外协工厂'
+        : (this._isReturn ? '暂无可退的外协物料' : '暂无外协在途工序对应物料（请先外协发出并保持「加工中」）'),
+    });
+    if (this._isReturn) {
+      await this.rebuildReturnRowsForPartner();
+    } else {
+      await this.rebuildIssueRowsForPartner();
+    }
+  },
+
+  async rebuildIssueRowsForPartner() {
+    const bomMaterials = this._outsourceBomMaterials || [];
+    const records = this._stockRecords || [];
+    let issuedMap = new Map();
+    if (this._scopeMode === 'product') {
+      const groupOrders = this._groupOrders || [];
+      issuedMap = buildPartnerIssuedMap(records, {
+        sourceProductId: this._productId,
+        orderIds: new Set(groupOrders.map((o) => o.id)),
+      }, this._partnerKey);
+    } else if (this._order) {
+      issuedMap = buildPartnerIssuedMap(records, {
+        orderId: this._order.id,
+        sourceProductId: this._order.productId || '',
+        orderIds: new Set([this._order.id]),
+      }, this._partnerKey);
+    }
+    let rows = buildMaterialIssueUiRows(bomMaterials, issuedMap);
+    rows = decorateRowsWithBatchFlags(rows, this._productsById, this._categoryById);
+    const showBatchCol = rowsNeedBatchColumn(rows, this._productsById, this._categoryById);
+    rows = await attachBatchOptionsToRows(
+      rows,
+      this._selectedWarehouse ? this._selectedWarehouse.id : '',
+      fetchStockBatches
+    );
+    this._hadInitialRows = rows.length > 0;
+    this.setData({ showBatchCol });
+    this.syncRows(rows);
+  },
+
+  async rebuildReturnRowsForPartner() {
+    const ctx = this._returnContext;
+    if (!ctx) return;
+    const materials = computeOutsourceReturnMaterials({
+      productionLinkMode: this._productionLinkMode,
+      orderId: this._orderId,
+      productId: this._productId,
+      partnerKey: this._partnerKey,
+      orders: ctx.orders,
+      products: ctx.products,
+      boms: ctx.boms,
+      stockRecords: ctx.stockRecords,
+      outsourceRecords: ctx.outsourceRecords,
+    });
+    let rows = buildOutsourceReturnUiRows(materials);
+    this._returnDispatchedByProduct = buildReturnDispatchedBatchesMap({
+      records: ctx.stockRecords,
+      orderId: this._orderId || '',
+      sourceProductId: this._scopeMode === 'product' ? this._productId : this._sourceProductId || '',
+      orders: ctx.orders,
+      partnerKey: this._partnerKey,
+    });
+    rows = decorateRowsWithBatchFlags(rows, this._productsById, this._categoryById);
+    const showBatchCol = rowsNeedBatchColumn(rows, this._productsById, this._categoryById);
+    rows = attachReturnBatchOptionsToRows(rows, this._returnDispatchedByProduct);
+    this._hadInitialRows = rows.length > 0;
+    const warehouseIndex = pickPreferredReturnWarehouse({
+      stockRecords: ctx.stockRecords,
+      productionLinkMode: this._productionLinkMode,
+      orderId: this._orderId,
+      productId: this._productId,
+      partnerKey: this._partnerKey,
+      orders: ctx.orders,
+      warehouses: ctx.whList,
+    });
+    this._selectedWarehouse = (ctx.whList || [])[warehouseIndex] || (ctx.whList || [])[0] || null;
+    this.setData({ showBatchCol, warehouseIndex });
+    this.syncRows(rows);
+  },
+
+
   async loadReturnData(context) {
-    const
-      boms =
+    const boms = context.boms;
+    const products = context.products;
+    const whList = context.whList;
+    const globalNodes = context.globalNodes;
+    const orderNumber = context.orderNumber;
+    const productName = context.productName;
+    const productSku = context.productSku;
+    const showProductSku = context.showProductSku;
+    const showOrderNumber = context.showOrderNumber;
+    const stockRecords = context.stockRecords;
+    const outsourceRecords = context.outsourceRecords;
+    const orders = context.orders;
 
-
-
-
-
-
-
-
-
-
-
-      context.boms,products = context.products,whList = context.whList,globalNodes = context.globalNodes,orderNumber = context.orderNumber,productName = context.productName,productSku = context.productSku,showProductSku = context.showProductSku,showOrderNumber = context.showOrderNumber,stockRecords = context.stockRecords,outsourceRecords = context.outsourceRecords,orders = context.orders;
+    this._returnContext = {
+      boms,
+      products,
+      whList,
+      stockRecords,
+      outsourceRecords,
+      orders,
+    };
 
     let rows = [];
     let warehouseIndex = 0;
@@ -381,6 +533,17 @@ Page({
         partnerKey: this._partnerKey || INTERNAL_PARTNER_KEY
       });
     } else if (this._isOutsource) {
+      const partnerOpts = listOutsourceDispatchPartnersForCard(
+        stockRecords,
+        { orderId: this._orderId, productId: this._productId },
+        this._productionLinkMode
+      );
+      applyPartnerUi(this, partnerOpts);
+
+      if (!this._partnerKey && (this.data.partnerNames || []).length > 1) {
+        this.setData({ emptyText: '请先选择外协工厂' });
+      }
+
       const materials = computeOutsourceReturnMaterials({
         productionLinkMode: this._productionLinkMode,
         orderId: this._orderId,
@@ -421,6 +584,7 @@ Page({
     rows = decorateRowsWithBatchFlags(rows, this._productsById, this._categoryById);
     const showBatchCol = rowsNeedBatchColumn(rows, this._productsById, this._categoryById);
     rows = attachReturnBatchOptionsToRows(rows, this._returnDispatchedByProduct);
+    this._hadInitialRows = rows.length > 0;
 
     this._selectedWarehouse = whList[warehouseIndex] || whList[0] || null;
 
@@ -431,6 +595,7 @@ Page({
 
     this.setData({
       loading: false,
+      pageReady: true,
       orderNumber: this._returnPrefill ? this._returnPrefill.orderNumber || orderNumber : orderNumber,
       productName: this._returnPrefill ? this._returnPrefill.productName || productName : productName,
       productSku,
@@ -444,12 +609,11 @@ Page({
   },
 
   async loadIssueData(context) {
-    const
-      boms =
-
-
-
-      context.boms,products = context.products,whList = context.whList,globalNodes = context.globalNodes;
+    const boms = context.boms;
+    const products = context.products;
+    const whList = context.whList;
+    const globalNodes = context.globalNodes;
+    const outsourceRecords = context.outsourceRecords || [];
 
     let bomMaterials = [];
     let issuedMap = new Map();
@@ -458,6 +622,7 @@ Page({
     let productSku = '';
     let showProductSku = false;
     let showOrderNumber = false;
+    let stockRecords = [];
 
     if (this._scopeMode === 'product') {
       const groupOrders = await fetchOrdersByProductId(this._productId);
@@ -470,28 +635,50 @@ Page({
 
       const recordsRaw = await fetchProductionRecords({
         types: 'STOCK_OUT,STOCK_RETURN',
+        all: 'true',
         sourceProductIds: this._productId,
         orderIds: groupOrders.map((o) => o.id).join(',')
       });
-      const records = Array.isArray(recordsRaw) ? recordsRaw : recordsRaw.data || [];
+      stockRecords = Array.isArray(recordsRaw) ? recordsRaw : recordsRaw.data || [];
+      this._stockRecords = stockRecords;
 
-      bomMaterials = buildBomMaterialsForProductGroup(
-        groupOrders,
-        this._productId,
-        products,
-        boms,
-        globalNodes
-      );
       if (this._isOutsource) {
-        const orderIds = new Set(groupOrders.map((o) => o.id));
-        issuedMap = buildPartnerIssuedMap(records, {
+        const orderIds = groupOrders.map((o) => o.id);
+        const partnerOpts = listOpenOutsourcePartnersForScope(
+          outsourceRecords,
+          { productId: this._productId, orderIds: new Set(orderIds) },
+          'product'
+        );
+        applyPartnerUi(this, partnerOpts);
+        const qtyMaps = buildOpenOutsourceQtyMaps(outsourceRecords, {
           sourceProductId: this._productId,
-          orderIds
+          orderIds,
+        });
+        bomMaterials = buildBomMaterialsByOutsourceQty({
+          product,
+          products,
+          boms,
+          globalNodes,
+          outsourceQtyByNode: qtyMaps.outsourceQtyByNode,
+          outsourceQtyByNodeVar: qtyMaps.outsourceQtyByNodeVar,
+        });
+        issuedMap = buildPartnerIssuedMap(stockRecords, {
+          sourceProductId: this._productId,
+          orderIds: new Set(orderIds),
         }, this._partnerKey);
-      } else if (this._isRework) {
-        issuedMap = buildReworkIssuedMapForProduct(records, groupOrders, this._productId);
       } else {
-        issuedMap = buildIssuedMapForProduct(records, groupOrders, this._productId);
+        bomMaterials = buildBomMaterialsForProductGroup(
+          groupOrders,
+          this._productId,
+          products,
+          boms,
+          globalNodes
+        );
+        if (this._isRework) {
+          issuedMap = buildReworkIssuedMapForProduct(stockRecords, groupOrders, this._productId);
+        } else {
+          issuedMap = buildIssuedMapForProduct(stockRecords, groupOrders, this._productId);
+        }
       }
       this._sourceProductId = this._productId;
       this._order = null;
@@ -507,24 +694,46 @@ Page({
 
       const recordsRaw = await fetchProductionRecords({
         types: 'STOCK_OUT,STOCK_RETURN',
+        all: 'true',
         orderIds: this._orderId
       });
-      const records = Array.isArray(recordsRaw) ? recordsRaw : recordsRaw.data || [];
+      stockRecords = Array.isArray(recordsRaw) ? recordsRaw : recordsRaw.data || [];
+      this._stockRecords = stockRecords;
 
-      bomMaterials = buildBomMaterialsForOrder(order, products, boms, globalNodes);
       if (this._isOutsource) {
-        const orderIds = new Set([order.id]);
-        issuedMap = buildPartnerIssuedMap(records, {
+        const partnerOpts = listOpenOutsourcePartnersForScope(
+          outsourceRecords,
+          { orderId: this._orderId },
+          'order'
+        );
+        applyPartnerUi(this, partnerOpts);
+        const qtyMaps = buildOpenOutsourceQtyMaps(outsourceRecords, { orderId: this._orderId });
+        bomMaterials = buildBomMaterialsByOutsourceQty({
+          product,
+          products,
+          boms,
+          globalNodes,
+          outsourceQtyByNode: qtyMaps.outsourceQtyByNode,
+          outsourceQtyByNodeVar: qtyMaps.outsourceQtyByNodeVar,
+        });
+        issuedMap = buildPartnerIssuedMap(stockRecords, {
           orderId: order.id,
           sourceProductId: order.productId || '',
-          orderIds
+          orderIds: new Set([order.id]),
         }, this._partnerKey);
-      } else if (this._isRework) {
-        issuedMap = buildReworkIssuedMapForOrder(records, order.id);
       } else {
-        issuedMap = buildIssuedMapForOrder(records, order.id);
+        bomMaterials = buildBomMaterialsForOrder(order, products, boms, globalNodes);
+        if (this._isRework) {
+          issuedMap = buildReworkIssuedMapForOrder(stockRecords, order.id);
+        } else {
+          issuedMap = buildIssuedMapForOrder(stockRecords, order.id);
+        }
       }
       this._sourceProductId = order.productId || '';
+    }
+
+    if (this._isOutsource) {
+      this._outsourceBomMaterials = bomMaterials;
     }
 
     let rows = this._isRework ?
@@ -537,6 +746,7 @@ Page({
       this._selectedWarehouse ? this._selectedWarehouse.id : '',
       fetchStockBatches
     );
+    this._hadInitialRows = rows.length > 0;
 
     const warehouseNames = whList.map((w) => {
       const code = w.code ? ` (${w.code})` : '';
@@ -545,6 +755,7 @@ Page({
 
     this.setData({
       loading: false,
+      pageReady: true,
       orderNumber,
       productName,
       productSku,
@@ -573,7 +784,7 @@ Page({
         fetchCategoriesAll(),
         fetchWarehousesAll(),
         fetchNodesAll(),
-        this._isReturn && this._isOutsource ?
+        this._isOutsource ?
         fetchTenantConfig().catch(() => ({})) :
         Promise.resolve({})]
         ),bomsRaw = _await$Promise$all[0],productsRaw = _await$Promise$all[1],categoriesRaw = _await$Promise$all[2],warehousesRaw = _await$Promise$all[3],nodesRaw = _await$Promise$all[4],configRaw = _await$Promise$all[5];
@@ -603,6 +814,7 @@ Page({
             this._order = null;
             const recordsRaw = await fetchProductionRecords({
               types: 'STOCK_OUT,STOCK_RETURN',
+              all: 'true',
               sourceProductIds: this._productId,
               orderIds: orders.map((o) => o.id).join(',')
             });
@@ -613,6 +825,7 @@ Page({
             orders = [order];
             const recordsRaw = await fetchProductionRecords({
               types: 'STOCK_OUT,STOCK_RETURN',
+              all: 'true',
               orderIds: this._orderId
             });
             stockRecords = Array.isArray(recordsRaw) ? recordsRaw : recordsRaw.data || [];
@@ -663,10 +876,16 @@ Page({
         return;
       }
 
-      await this.loadIssueData({ boms, products, whList, globalNodes });
+      let outsourceRecords = [];
+      if (this._isOutsource) {
+        const outsourceRaw = await fetchProductionRecords({ type: 'OUTSOURCE', all: 'true' });
+        outsourceRecords = Array.isArray(outsourceRaw) ? outsourceRaw : outsourceRaw.data || [];
+      }
+      await this.loadIssueData({ boms, products, whList, globalNodes, outsourceRecords });
     } catch {
       this.setData({
         loading: false,
+        pageReady: false,
         rows: [],
         hasRows: false,
         canSubmit: false,
@@ -678,6 +897,11 @@ Page({
 
   async onSubmitTap() {
     if (!this.data.canMaterial || this.data.submitting) return;
+
+    if (this._isOutsource && !this._partnerKey) {
+      wx.showToast({ title: '请选择加工厂', icon: 'none' });
+      return;
+    }
 
     const warehouse = this._selectedWarehouse || this._warehouses && this._warehouses[0];
     if (!warehouse) {

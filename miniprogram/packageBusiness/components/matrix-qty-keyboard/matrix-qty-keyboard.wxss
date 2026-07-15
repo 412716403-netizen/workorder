@@ -1,11 +1,31 @@
 @import '../../../styles/tokens.wxss';
 
-.mqk {
+.mqk-root {
   position: fixed;
   left: 0;
   right: 0;
+  top: 0;
   bottom: 0;
-  z-index: 1200;
+  z-index: 2000;
+  pointer-events: none;
+}
+
+.mqk__mask {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background: transparent;
+  pointer-events: auto;
+}
+
+.mqk {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: auto;
   background: var(--color-bg-page);
   padding-bottom: env(safe-area-inset-bottom);
   box-shadow: 0 -8rpx 32rpx rgba(31, 35, 41, 0.1);

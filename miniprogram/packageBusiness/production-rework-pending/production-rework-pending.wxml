@@ -11,7 +11,7 @@
           class="plan-search__input"
           value="{{searchKeyword}}"
           bindinput="onSearchInput"
-          placeholder="工单 / 产品"
+          placeholder="产品 / 编号 / 工序"
           placeholder-class="plan-search__ph"
         />
         <view wx:if="{{searchKeyword}}" class="plan-search__clear" bindtap="onSearchClear">×</view>

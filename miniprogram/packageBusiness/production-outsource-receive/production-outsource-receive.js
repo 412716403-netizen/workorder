@@ -1,6 +1,6 @@
 const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
 const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
-const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../../utils/planFilterPanel.js');
+const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../utils/planFilterPanel.js');
 const _require3 = require('../utils/outsourceReceiveAggregates.js'),buildOutsourceReceiveAggregates = _require3.buildOutsourceReceiveAggregates;
 const _require4 = require('../utils/outsourceReceiveKeys.js'),outsourceReceiveBaseKey = _require4.outsourceReceiveBaseKey;
 const _require5 = require('../utils/outsourceDispatchLite.js'),buildDispatchMilestoneOptions = _require5.buildDispatchMilestoneOptions;
@@ -16,6 +16,7 @@ const _require11 =
 const _require12 = require('../utils/productionPlans.js'),normalizeMasterList = _require12.normalizeMasterList;
 const _require13 = require('../utils/listProductThumb.js'),listProductThumbFromProduct = _require13.listProductThumbFromProduct;
 const _require15 = require('../../utils/featurePlugins.js'),loadTraceabilityScanEnabled = _require15.loadTraceabilityScanEnabled;
+const _require16 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require16.readNavBarMetrics,readWindowMetrics = _require16.readWindowMetrics;
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();

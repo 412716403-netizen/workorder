@@ -230,7 +230,7 @@ function buildDispatchPayload(product: any, records: any[], aLinkMode: string, d
   const sizeNames = [...new Set(jsonToStringIds(product.sizeIds).map((id: string) => normalizeSpecLabel(dictById[id])).filter((n): n is string => n != null))];
   return {
     productName: product.name, productSku: product.sku, description: product.description,
-    imageUrl: product.imageUrl, categoryName: product.category?.name ?? null,
+    imageUrl: product.imageThumb ?? product.imageUrl, categoryName: product.category?.name ?? null,
     colorNames, sizeNames, items, aLinkMode,
     senderRef: { productId: product.id, docNos: [...new Set(records.map((r: any) => r.docNo).filter(Boolean))] },
   };

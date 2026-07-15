@@ -94,7 +94,7 @@ Component({
         categoryId,
         categories,
       }).map((p) => {
-        const imageUrl = p.imageUrl || '';
+        const imageUrl = (p.imageThumb || p.imageUrl) || '';
         const category = p.categoryId ? catMap.get(p.categoryId) : null;
         const categoryLabel = category && category.name ? category.name : '';
         const customTags = mapProductCustomTags(p, category, { includeFile: false });

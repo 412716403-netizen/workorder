@@ -31,6 +31,8 @@ import {
   PrintTemplate,
 } from '../../types';
 import DocPhaseModal from '../../components/DocPhaseModal';
+import { useAppActions } from '../../contexts/AppDataContext';
+import { useRefreshReportScopeWhileActive } from '../../hooks/useRefreshReportScopeWhileActive';
 import { usePendingStockState } from '../../hooks/usePendingStockState';
 import PendingStockTable from './pending-stock/PendingStockTable';
 import PendingStockBatchModal from './pending-stock/PendingStockBatchModal';
@@ -89,6 +91,9 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
   tenantRole,
 }) => {
   const stockInCustomFieldDefs = orderFormSettings.stockInCustomFields ?? [];
+  const { refreshOrders, refreshPMP } = useAppActions();
+  // 小程序报工后末道完成量只在服务端更新；打开/聚焦清单时同步工单与 PMP，避免整页刷新才能看见新待入库
+  useRefreshReportScopeWhileActive(open, { productionLinkMode, refreshOrders, refreshPMP });
 
   const helper = usePendingStockState({
     open,

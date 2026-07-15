@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Undo2, X } from 'lucide-react';
+import { Check, Undo2, X, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import type {
   ProductionOpRecord,
@@ -83,6 +83,7 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
   const [matReturnCustomValues, setMatReturnCustomValues] = useState<Record<string, unknown>>({});
   const [lineBatchByProduct, setLineBatchByProduct] = useState<Record<string, string>>({});
   const [entryTimestamp, setEntryTimestamp] = useState(() => defaultEntryDatetimeLocal());
+  const [removedMaterialIds, setRemovedMaterialIds] = useState<Set<string>>(() => new Set());
   const categoryById = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
   const { listAvailableBatches } = useStockSnapshot({ enabled: !!(matReturnOrderId || matReturnProductId) });
   const productById = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
@@ -108,11 +109,32 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
   useEffect(() => {
     setMatReturnCustomValues({});
     setLineBatchByProduct({});
+    setRemovedMaterialIds(new Set());
   }, [matReturnOrderId, matReturnProductId]);
 
   useEffect(() => {
     setLineBatchByProduct({});
   }, [matReturnPartner, matReturnWarehouseId]);
+
+  const removeMaterialRow = (productId: string) => {
+    setRemovedMaterialIds(prev => {
+      const next = new Set(prev);
+      next.add(productId);
+      return next;
+    });
+    setMatReturnQty(prev => {
+      if (!(productId in prev)) return prev;
+      const next = { ...prev };
+      delete next[productId];
+      return next;
+    });
+    setLineBatchByProduct(prev => {
+      if (!(productId in prev)) return prev;
+      const next = { ...prev };
+      delete next[productId];
+      return next;
+    });
+  };
 
   /**
    * 自动校正退回仓库：
@@ -231,7 +253,7 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
       });
     });
   })();
-  const returnableMaterials = Array.from(dispatchedByPartnerMat.entries()).map(([pid, dispatched]) => ({
+  const returnableMaterialsAll = Array.from(dispatchedByPartnerMat.entries()).map(([pid, dispatched]) => ({
     productId: pid,
     name: matInfoMap.get(pid)?.name ?? '未知物料',
     sku: matInfoMap.get(pid)?.sku ?? '',
@@ -239,6 +261,8 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
     consumed: consumedByPartnerMat.get(pid) ?? 0,
     returned: returnedByPartnerMat.get(pid) ?? 0,
   })).filter(m => m.dispatched > 0);
+  const returnableMaterialTotal = returnableMaterialsAll.length;
+  const returnableMaterials = returnableMaterialsAll.filter(m => !removedMaterialIds.has(m.productId));
   const showReturnBatchCol = returnableMaterials.some(m => {
     const p = products.find(x => x.id === m.productId);
     return categoryUsesBatchManagement(categoryById.get(p?.categoryId ?? ''));
@@ -440,6 +464,7 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
                   }}
                   className={`${psiOrderBillCompactLineInputClass} cursor-pointer bg-white`}
                 >
+                  <option value="">请选择外协工厂</option>
                   {matReturnPartnerOptions.map(p => (
                     <option key={p} value={p}>{p}</option>
                   ))}
@@ -486,19 +511,22 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
               </div>
             </div>
           ) : null}
-          {returnableMaterials.length === 0 ? (
+          {returnableMaterialTotal === 0 ? (
             <p className="py-8 text-center text-slate-400 text-sm">该工厂暂无外发记录</p>
+          ) : returnableMaterials.length === 0 ? (
+            <p className="py-8 text-center text-slate-400 text-sm">已移除全部物料行，关闭后重新打开可恢复</p>
           ) : (
             <div className="rounded-2xl border border-slate-100 overflow-hidden">
             <table className="w-full table-fixed border-collapse text-sm">
               <colgroup>
-                <col style={{ width: showReturnBatchCol ? '26%' : '34%' }} />
+                <col style={{ width: showReturnBatchCol ? '24%' : '30%' }} />
+                <col style={{ width: '10%' }} />
                 <col style={{ width: '11%' }} />
-                <col style={{ width: '12%' }} />
-                <col style={{ width: '11%' }} />
-                <col style={{ width: '11%' }} />
-                {showReturnBatchCol ? <col style={{ width: '13%' }} /> : null}
-                <col style={{ width: showReturnBatchCol ? '16%' : '21%' }} />
+                <col style={{ width: '10%' }} />
+                <col style={{ width: '10%' }} />
+                {showReturnBatchCol ? <col style={{ width: '12%' }} /> : null}
+                <col style={{ width: showReturnBatchCol ? '15%' : '20%' }} />
+                <col style={{ width: '8%' }} />
               </colgroup>
               <thead>
                 <tr className="bg-slate-50/90 border-b border-slate-100">
@@ -513,6 +541,7 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
                   <th className="min-w-0 px-2 py-2.5 text-right text-[10px] font-black text-slate-400 tracking-widest align-bottom leading-tight">
                     本次退回
                   </th>
+                  <th className="px-1 py-2.5 text-center text-[10px] font-black text-slate-400 tracking-widest align-bottom">操作</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
@@ -580,6 +609,17 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
                           title={remaining > 0 ? `最多可退 ${remaining}` : '当前可退为 0'}
                           aria-label={`${m.name} 本次退回数量`}
                         />
+                      </td>
+                      <td className="px-1 py-3 text-center align-middle">
+                        <button
+                          type="button"
+                          onClick={() => removeMaterialRow(m.productId)}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+                          title="删除此行"
+                          aria-label={`删除物料 ${m.name}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </td>
                     </tr>
                   );

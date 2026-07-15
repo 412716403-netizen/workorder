@@ -655,7 +655,7 @@ function resolveProductMeta(productId, productMap, fallback) {
   return {
     name: resolveProductName(productId, productMap, fallback),
     sku: (p && p.sku && String(p.sku).trim()) || null,
-    imageUrl: (p && p.imageUrl && String(p.imageUrl).trim()) || null,
+    imageUrl: (p && ((p.imageThumb && String(p.imageThumb).trim()) || (p.imageUrl && String(p.imageUrl).trim()))) || null,
   };
 }
 

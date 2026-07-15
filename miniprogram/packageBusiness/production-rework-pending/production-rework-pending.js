@@ -16,7 +16,7 @@ const _require6 =
 const _require7 = require('../utils/productionOrders.js'),normalizeMasterList = _require7.normalizeMasterList;
 const _require8 = require('../utils/listProductThumb.js'),listProductThumbFromProduct = _require8.listProductThumbFromProduct;
 const _require9 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require9.readNavBarMetrics,readWindowMetrics = _require9.readWindowMetrics;
-const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../../utils/planFilterPanel.js');
+const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../utils/planFilterPanel.js');
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
@@ -64,12 +64,14 @@ function milestoneOptionAt(options, index) {
 function mapPendingRowForUi(row, productionLinkMode, productsById) {
   const product = productsById && row.productId ? productsById.get(row.productId) : null;
   const thumb = listProductThumbFromProduct(product);
-  const productLabel = row.showProductSku ?
-  `${row.productName} ${row.productSku}` :
-  row.productName;
-  const subtitleLine = productionLinkMode === 'product' ?
-  row.productOrdersLine || productLabel || '—' :
-  `${row.orderNumber || '—'} · ${productLabel || '—'}`;
+  const productLabel = row.showProductSku
+    ? `${row.productName} ${row.productSku}`
+    : (row.productName || '—');
+  // 工单模式：只展示产品名称 + 编号（不展示工单号）
+  // 产品模式：优先产品信息；无编号时回退关联工单摘要
+  const subtitleLine = productionLinkMode === 'product'
+    ? (productLabel || row.productOrdersLine || '—')
+    : productLabel;
   return {
     ...row,
     ...thumb,

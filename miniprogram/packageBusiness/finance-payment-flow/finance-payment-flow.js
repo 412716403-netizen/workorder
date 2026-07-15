@@ -16,7 +16,7 @@ const _require6 = require('../utils/planApi.js'),fetchProductsAll = _require6.fe
 const _require7 = require('../utils/orderApi.js'),fetchWorkersAll = _require7.fetchWorkersAll;
 const _require8 = require('../utils/purchaseOrders.js'),buildProductMap = _require8.buildProductMap;
 const _require9 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require9.readNavBarMetrics,readWindowMetrics = _require9.readWindowMetrics;
-const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../../utils/planFilterPanel.js');
+const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../utils/planFilterPanel.js');
 const _require0 = require('../utils/dateYmd.js'),localTodayYmd = _require0.localTodayYmd;
 const _require1 = require('../utils/saveNavigation.js'),shouldHubListRefetch = _require1.shouldHubListRefetch,trackHubListHidden = _require1.trackHubListHidden,LIST_ROUTES = _require1.LIST_ROUTES;
 

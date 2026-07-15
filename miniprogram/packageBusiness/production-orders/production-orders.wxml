@@ -12,7 +12,7 @@
           class="plan-search__input"
           value="{{searchKeyword}}"
           bindinput="onSearchInput"
-          placeholder="工单号 / 产品 / 客户"
+          placeholder="{{searchPlaceholder}}"
           confirm-type="search"
           placeholder-class="plan-search__ph"
         />
@@ -48,8 +48,8 @@
       </view>
     </view>
 
-    <!-- 仅显示未完成开关：仅当 activeShortcut 为空时显示 -->
-    <view wx:if="{{!activeShortcut}}" class="plan-filter-panel__row">
+    <!-- 仅显示未完成开关：仅订单模式显示 -->
+    <view wx:if="{{!activeShortcut && !isProductMode}}" class="plan-filter-panel__row">
       <text class="plan-filter-panel__label">仅显示未完成</text>
       <view
         class="plan-filter-switch {{excludeCompleted ? 'plan-filter-switch--on' : ''}}"
@@ -207,7 +207,7 @@
       <view
         wx:for="{{rows}}"
         wx:key="rowKey"
-        class="order-list-row {{item.depth > 0 ? 'order-list-row--child' : ''}}"
+        class="order-list-row {{item.rowType === 'productGroup' ? 'order-list-row--product' : ''}} {{item.depth > 0 ? 'order-list-row--child' : ''}}"
         style="{{item.depth > 0 ? 'padding-left: ' + (32 + item.depth * 20) + 'rpx;' : ''}}"
       >
         <view class="order-list-row__top">
@@ -236,15 +236,30 @@
 
           <view class="order-list-row__content">
             <text wx:if="{{item.showProductGroupLabel}}" class="order-list-row__group-label">{{item.productGroupLabel}}</text>
-            <view class="order-list-row__head">
+            <!-- 产品组卡：产品名 + 合计件数 -->
+            <view wx:if="{{item.rowType === 'productGroup'}}" class="order-list-row__head">
+              <text class="order-list-row__product order-list-row__product--title">{{item.productName}}</text>
+              <text wx:if="{{item.showProductSku}}" class="order-list-row__sku">{{item.productSku}}</text>
+              <text wx:if="{{item.showQuantity}}" class="order-list-row__qty">{{item.quantityText}}</text>
+            </view>
+            <!-- 工单行：工单号 + 派发 -->
+            <view wx:else class="order-list-row__head">
               <text class="order-list-row__number">{{item.orderNumber}}</text>
-              <view class="st-pill {{item.dispatchPillClass}}">{{item.dispatchLabel}}</view>
+              <view wx:if="{{item.showDispatchPill}}" class="st-pill {{item.dispatchPillClass}}">{{item.dispatchLabel}}</view>
               <text wx:if="{{item.showQuantity}}" class="order-list-row__qty">{{item.quantityText}}</text>
               <text wx:if="{{item.showDueDate}}" class="order-list-row__due">{{item.dueDateLabel}}</text>
             </view>
-            <view class="order-list-row__product-line">
+            <view wx:if="{{item.rowType !== 'productGroup'}}" class="order-list-row__product-line">
               <text class="order-list-row__product">{{item.productName}}</text>
               <text wx:if="{{item.showProductSku}}" class="order-list-row__sku">{{item.productSku}}</text>
+              <text
+                wx:for="{{item.productCustomTags}}"
+                wx:for-item="tag"
+                wx:key="id"
+                class="order-list-row__custom-tag"
+              >{{tag.label}}: {{tag.display}}</text>
+            </view>
+            <view wx:elif="{{item.showProductCustomTags}}" class="order-list-row__product-line">
               <text
                 wx:for="{{item.productCustomTags}}"
                 wx:for-item="tag"
@@ -260,11 +275,15 @@
               />
               <text class="order-list-row__customer-text">{{item.customer}}</text>
             </view>
+            <view wx:if="{{item.showConfigureProcessHint}}" class="order-list-row__config-hint">
+              <text class="order-list-row__config-hint-badge">待配工序</text>
+              <text class="order-list-row__config-hint-text">{{item.configureProcessHintText}}</text>
+            </view>
           </view>
         </view>
 
         <view
-          wx:if="{{item.showProcessChips || canViewDetail || canMaterial || canRework}}"
+          wx:if="{{item.showProcessChips || item.showConfigureProcessHint || (canViewDetail && item.showDetailAction) || (canMaterial && item.showMaterialAction) || (canRework && item.showReworkAction)}}"
           class="order-list-row__process"
         >
           <view class="order-list-row__process-scroll">
@@ -276,15 +295,20 @@
               bind:chiptap="onProcessChipTap"
             />
           </view>
-          <view wx:if="{{canViewDetail || canMaterial || canRework}}" class="order-list-row__actions">
+          <view
+            wx:if="{{(canViewDetail && item.showDetailAction) || (canMaterial && item.showMaterialAction) || (canRework && item.showReworkAction)}}"
+            class="order-list-row__actions"
+          >
             <view
-              wx:if="{{canViewDetail}}"
+              wx:if="{{canViewDetail && item.showDetailAction}}"
               class="order-list-row__action order-list-row__action--detail"
               catchtap="onDetailTap"
-              data-id="{{item.navigateId}}"
+              data-id="{{item.navigateId || item.id}}"
+              data-product-id="{{item.productId}}"
+              data-block-type="{{item.blockType}}"
             >详情</view>
             <view
-              wx:if="{{canMaterial}}"
+              wx:if="{{canMaterial && item.showMaterialAction}}"
               class="order-list-row__action order-list-row__action--detail"
               catchtap="onMaterialTap"
               data-id="{{item.id}}"
@@ -292,7 +316,7 @@
               data-block-type="{{item.blockType}}"
             >物料</view>
             <view
-              wx:if="{{canRework}}"
+              wx:if="{{canRework && item.showReworkAction}}"
               class="order-list-row__action order-list-row__action--detail"
               catchtap="onReworkTap"
               data-id="{{item.reworkOrderId}}"
@@ -314,4 +338,5 @@
   <navigator url="/packageBusiness/production-order-report-batch-detail/production-order-report-batch-detail" style="display:none"></navigator>
   <navigator url="/packageBusiness/production-order-pending-stock/production-order-pending-stock" style="display:none"></navigator>
   <navigator url="/packageBusiness/production-rework-detail/production-rework-detail" style="display:none"></navigator>
+  <navigator url="/packageBusiness/production-product-detail/production-product-detail" style="display:none"></navigator>
 </view>

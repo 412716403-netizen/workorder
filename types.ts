@@ -599,7 +599,9 @@ export interface Product {
   sku: string;
   name: string;
   description?: string;
-  imageUrl?: string; // base64 data URL 或外部链接
+  imageUrl?: string; // base64 data URL 或外部链接（详情/编辑按需拉取；lite 列表不返回）
+  /** 列表/打印用缩略图（约 512px）；优先于 imageUrl 展示 */
+  imageThumb?: string;
   categoryId?: string; 
   salesPrice?: number;    
   purchasePrice?: number; 

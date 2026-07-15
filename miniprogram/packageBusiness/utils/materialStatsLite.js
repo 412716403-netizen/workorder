@@ -246,8 +246,9 @@ function computeOrderFamilyMaterialStats(params) {
     if (!r.orderId || !familyIds.has(r.orderId)) return;
     if (!prodMap.has(r.productId)) prodMap.set(r.productId, emptyAcc());
     const cur = prodMap.get(r.productId);
-    if (r.type === 'STOCK_OUT') cur.issue += r.quantity;else
-    cur.returnQty += r.quantity;
+    const qty = Number(r.quantity) || 0;
+    if (r.type === 'STOCK_OUT') cur.issue += qty;
+    else cur.returnQty += qty;
   });
 
   return matMapToRows(prodMap);
@@ -392,8 +393,9 @@ function computeProductMaterialStats(params) {
     if (!bySource && !byOrder) return;
     if (!prodMap.has(r.productId)) prodMap.set(r.productId, emptyAcc());
     const cur = prodMap.get(r.productId);
-    if (r.type === 'STOCK_OUT') cur.issue += r.quantity;else
-    cur.returnQty += r.quantity;
+    const qty = Number(r.quantity) || 0;
+    if (r.type === 'STOCK_OUT') cur.issue += qty;
+    else cur.returnQty += qty;
   });
 
   return matMapToRows(prodMap);
@@ -453,10 +455,11 @@ function matRowNetIssue(row) {
   return roundQty((Number(row.issue) || 0) - (Number(row.returnQty) || 0));
 }
 
+/** 结余 = 净领用 − 报工耗材（可负，两位小数；对齐 Web MaterialStatsTable） */
 function matRowSurplus(row) {
-  const net = matRowNetIssue(row);
+  const net = (Number(row.issue) || 0) - (Number(row.returnQty) || 0);
   const report = matRowReportCost(row);
-  return roundQty(Math.max(0, net - report));
+  return Math.round((net - report) * 100) / 100;
 }
 
 const INTERNAL_PARTNER_KEY = '__internal__';

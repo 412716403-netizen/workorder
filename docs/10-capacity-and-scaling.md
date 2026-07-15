@@ -111,7 +111,7 @@ ExecStart=/var/www/smarttrack-pro/backend/node_modules/.bin/pm2-runtime start ec
 
 - `services/api.ts` 暴露 `production.listPage(filter)` / `production.summary(filter)` / `ProductionFilter.types`（逗号分隔多 type）。
 - ✅ **生产物料 / 外协 / 返工**：`StockMaterialPanel` / `OutsourcePanel` / `ReworkPanel` 各自按 `activeOrderIds`、status、今日窗口多条 `useQuery` 窄拉（见 Phase 3.E）；`ProductionMgmtOpsView` 不再下发全量 `records`。
-- ✅ **工单中心**：`OrderListView` 内用 `useQuery` + `production.listPage`，按当前列表工单 id / 产品 id 窄拉 `REWORK,OUTSOURCE,REWORK_REPORT,STOCK_IN`。`MaterialIssueModal` 也已切换为内部 useQuery 拉 `STOCK_OUT/STOCK_RETURN`（按 orderId/forProduct family）以及今日 `STOCK_OUT` 用于生成单号。
+- ✅ **工单中心**：`OrderListView` 内用 `useQuery` + `production.listPage`，按当前列表工单 id / 产品 id 窄拉 `REWORK,OUTSOURCE,REWORK_REPORT,STOCK_IN,SCRAP`（`SCRAP` 供工单/产品工序详情「报损」列）。`MaterialIssueModal` 也已切换为内部 useQuery 拉 `STOCK_OUT/STOCK_RETURN`（按 orderId/forProduct family）以及今日 `STOCK_OUT` 用于生成单号。
 - ✅ **`CollaborationInboxView`** 按 transfers 涉及的 `productIds` 用 `useQuery` 自取 `STOCK_IN/STOCK_OUT/STOCK_RETURN/OUTSOURCE`，不再依赖 context 大包，且本地 invalidate 触发刷新。
 - ✅ **`WarehousePanel`** 在 PSI 业务页内 useQuery 自取 STOCK_* 流水。
 - ✅ 由 `AppDataContext` 提供的 `refreshProdRecords / refreshPsiRecords / refreshFinanceRecords` 已删除；写动作完成后由 `invalidateAllProdRecords/PsiRecords/FinanceRecords` 触发各窄查询 `queryKey` 刷新。
@@ -183,6 +183,7 @@ ExecStart=/var/www/smarttrack-pro/backend/node_modules/.bin/pm2-runtime start ec
 - `WarehousePanel` 保留原 `warehousePanel.prodStockRecords` 自取；`warehouseFlowRows` 聚合搬到 `WarehouseFlowModal` 内部。
 - ✅ `PendingStockPanel` 「生产入库流水」子弹窗换成独立 useQuery。
 - ✅ 主面板「待入库清单」改为本地 `useQuery(['pendingStockPanel.stockIn', orderIdsCsv, productIdsCsv])` 按当前 `orders` 全集的 `orderIds + productIds` 窄拉 `STOCK_IN` 全集，`computePendingStockOrders` 与 `OrderListView` 顶部按钮 badge 走同一份数据源（之前曾错按 `OrderListView.orderCenterProdQuery` 的分页/产品 id 窄拉，导致"badge 显示 3 但弹窗为空"等不一致）。跨日累计不再依赖 `props.prodRecords`。
+- ✅ 小程序报工后网页待入库：`useRefreshReportScopeWhileActive` 在工单中心（窗口聚焦）与打开待入库清单时重拉工单/PMP，并 `invalidateQueries(['pendingStockPanel.stockIn'])`，无需整页刷新。
 - ✅ `getNextStockInDocNo` 已下线：所有 RK/LL/TL/WX 取号统一由后端 `POST /production/records/batch` + `pg_advisory_xact_lock` 串行化分配（前端 `StockMaterialPanel` / `StockMaterialFormModal` / `ReworkMaterialIssueModal` / `MaterialIssueModal` 均不再自算单号；`onAddProdRecord(Batch)` 返回服务端记录供 view 层读真实 docNo）。
 
 **invalidate bug 修复**
@@ -222,7 +223,7 @@ ExecStart=/var/www/smarttrack-pro/backend/node_modules/.bin/pm2-runtime start ec
 
 **后端**
 
-- `products?lite=true`（前端列表默认）：Prisma `omit` 只裁 4 个 `economics*` JSON；`routeReportValues / routeReportDisplayValues / nodeRates / variants(nodeBoms)` 必须保留（报工展示、领退料、产品编辑表单直接消费；编辑表单还会把列表字段回存，裁掉会导致保存时清空）。
+- `products?lite=true`（前端列表默认）：Prisma `omit` 裁 4 个 `economics*` JSON + Phase 3.H 起裁 `imageUrl` 原图（保留 `imageThumb`）；`routeReportValues / routeReportDisplayValues / nodeRates / variants(nodeBoms)` 必须保留（报工展示、领退料、产品编辑表单直接消费；编辑表单还会把列表字段回存，裁掉会导致保存时清空）。
 - **orders / product-progress 不做 lite**：工序标签数字依赖 `milestones[].reports` 按规格聚合，首拉与刷新结构必须一致（上次事故根源）。
 - `orders?updatedAfter=`：增量条件覆盖工单自身 / milestones / childOrders 任一 `updatedAt >= ts`（报工只 update milestone）；前端 `refreshOrders` 带 2 分钟重叠窗口 + mergeById。增量不含被删除的工单。
 - `buildTenantPayload`：TTL 30s + 进程内 singleflight；invalidate 双清 Redis 与 in-flight。
@@ -230,6 +231,26 @@ ExecStart=/var/www/smarttrack-pro/backend/node_modules/.bin/pm2-runtime start ec
 - 索引：`production_orders(plan_order_id)`、`production_orders(tenant_id, dispatch_status)`。
 
 **运维**：生产必配 `REDIS_URL`（缺省时缓存自动降级直查 DB，权限查询回到每请求一次）；发布时 `prisma migrate deploy`。
+
+---
+
+### Phase 3.H 产品主图缩略图（已完成）
+
+目标：登录后 products/boms/partners secondary 批被产品 base64 原图拖慢；生产管理列表图等 products 整包就绪才显示。
+
+**后端**
+
+- `products.image_thumb` 字段；create/update/import 用 `sharp` 生成约 512px JPEG data URL（http 外链复用）。
+- `lite` 再 omit `imageUrl`；`GET /products/:id` 仍返回原图。
+- 回填：`npm run db:backfill-product-thumbs`（`backend/`，可加 `--force`）。
+
+**前端 / 小程序**
+
+- `utils/productImageSrc.ts`：`productThumbSrc`；列表/打印用缩略图；编辑打开时 get 详情补原图；AppData 写入列表缓存时去掉原图防回灌。
+- 上传压缩：`utils/compressImageFile.ts`（max 1600px）。
+- 小程序 `/products?all=true&lite=true`，取图 `imageThumb || imageUrl`。
+
+**运维**：`prisma migrate deploy` + 跑一次回填脚本；未回填时前端回退 `imageUrl`（若 lite 已裁则列表暂无图，直至回填完成）。
 
 ---
 

@@ -97,9 +97,20 @@ function rejectReport(reportId, reason) {
   });
 }
 
-function listProductProgressAll() {
-  return request({ path: '/orders/product-progress?all=true', method: 'GET', timeout: 60000 })
+function listProductProgressAll(params) {
+  const qs = buildQs({ all: 'true', ...(params || {}) });
+  return request({ path: `/orders/product-progress${qs}`, method: 'GET', timeout: 60000 })
     .catch(() => []);
+}
+
+/** 按产品窄拉 PMP（含 reports）；用于产品模式报工页，避免全租户 all=true */
+function listProductProgressByProductId(productId) {
+  if (!productId) return Promise.resolve([]);
+  return listProductProgressAll({ productId }).then((body) => {
+    if (Array.isArray(body)) return body;
+    if (body && Array.isArray(body.data)) return body.data;
+    return [];
+  });
 }
 
 function createProductReport(body) {
@@ -149,18 +160,43 @@ function fetchWarehousesAll() {
 }
 
 function fetchTenantConfig() {
-  return request({ path: '/settings/config', method: 'GET', timeout: 60000 }).catch((err) => {
-    if (err && err.statusCode === 401) throw err;
-    return {};
-  });
+  const { cachedFetch } = require('../../utils/masterDataCache.js');
+  return cachedFetch(
+    'tenant:config',
+    () =>
+      request({ path: '/settings/config', method: 'GET', timeout: 60000 }).catch((err) => {
+        if (err && err.statusCode === 401) throw err;
+        return {};
+      }),
+    90 * 1000,
+  );
 }
 
 function fetchProductsAll() {
-  return request({ path: '/products?all=true', method: 'GET', timeout: 60000 }).catch(() => []);
+  const { cachedFetch } = require('../../utils/masterDataCache.js');
+  return cachedFetch(
+    'products:all',
+    () => request({ path: '/products?all=true&lite=true', method: 'GET', timeout: 60000 }).catch(() => []),
+    90 * 1000,
+  );
 }
 
 function fetchCategoriesAll() {
-  return request({ path: '/settings/categories?all=true', method: 'GET' }).catch(() => []);
+  const { cachedFetch } = require('../../utils/masterDataCache.js');
+  return cachedFetch(
+    'categories:all',
+    () => request({ path: '/settings/categories?all=true', method: 'GET' }).catch(() => []),
+    90 * 1000,
+  );
+}
+
+function fetchNodesAll() {
+  const { cachedFetch } = require('../../utils/masterDataCache.js');
+  return cachedFetch(
+    'nodes:all',
+    () => request({ path: '/settings/nodes?all=true', method: 'GET', timeout: 60000 }).catch(() => []),
+    90 * 1000,
+  );
 }
 
 function fetchStockBatches(params) {
@@ -176,10 +212,6 @@ function fetchStockSnapshot(params) {
       byBatch: Array.isArray(body && body.byBatch) ? body.byBatch : [],
     }))
     .catch(() => ({ byWarehouse: [], byVariant: [], byBatch: [] }));
-}
-
-function fetchNodesAll() {
-  return request({ path: '/settings/nodes?all=true', method: 'GET' }).catch(() => []);
 }
 
 function fetchWorkersAll() {
@@ -266,6 +298,7 @@ module.exports = {
   approveReport,
   rejectReport,
   listProductProgressAll,
+  listProductProgressByProductId,
   createProductReport,
   fetchProductionRecords,
   createProductionRecord,

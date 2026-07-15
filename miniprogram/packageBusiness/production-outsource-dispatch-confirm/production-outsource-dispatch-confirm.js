@@ -394,7 +394,7 @@ Page({
       }
       wx.hideLoading();
       afterSaveReturnToList({
-        listUrl: LIST_ROUTES.OUTSOURCE_DISPATCH,
+        listUrl: LIST_ROUTES.OUTSOURCE_HUB,
         toastTitle: '发出成功'
       });
     } catch (err) {

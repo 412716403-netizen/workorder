@@ -16,7 +16,7 @@ const _require6 = require('../utils/psiApi.js'),fetchAllPsiRecords = _require6.f
 const _require7 = require('../utils/planApi.js'),fetchProductsAll = _require7.fetchProductsAll,fetchDictionaries = _require7.fetchDictionaries;
 const _require8 = require('../utils/productionPlans.js'),normalizeAppDictionaries = _require8.normalizeAppDictionaries;
 const _require9 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require9.readNavBarMetrics,readWindowMetrics = _require9.readWindowMetrics;
-const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../../utils/planFilterPanel.js');
+const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../utils/planFilterPanel.js');
 const _require0 = require('../utils/saveNavigation.js'),shouldHubListRefetch = _require0.shouldHubListRefetch,trackHubListHidden = _require0.trackHubListHidden,LIST_ROUTES = _require0.LIST_ROUTES;
 
 const HUB_LIST_ROUTE = LIST_ROUTES.PSI_PURCHASE_ORDERS.replace(/^\//, '');

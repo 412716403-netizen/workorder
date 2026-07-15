@@ -19,7 +19,9 @@ const _require8 = require('../utils/planApi.js'),fetchDictionaries = _require8.f
 const _require9 =
 
 
-  require('../utils/orderApi.js'),fetchTenantConfig = _require9.fetchTenantConfig,createProductionRecordBatch = _require9.createProductionRecordBatch;
+  require('../utils/orderApi.js'),fetchTenantConfig = _require9.fetchTenantConfig,createProductionRecordBatch = _require9.createProductionRecordBatch,fetchNodesAll = _require9.fetchNodesAll;
+const _requireWeight =
+  require('../utils/bomWeightUsageLite.js'),roundWeightKg = _requireWeight.roundWeightKg,calcUsageByWeight = _requireWeight.calcUsageByWeight,calcUsageByWeightMultiVariant = _requireWeight.calcUsageByWeightMultiVariant,resolveBomForVariant = _requireWeight.resolveBomForVariant,buildWeightPreviewViewRows = _requireWeight.buildWeightPreviewViewRows;
 const _require0 = require('../utils/productionPlans.js'),normalizeMasterList = _require0.normalizeMasterList;
 const _require1 = require('../utils/listProductThumb.js'),listProductThumbFromProduct = _require1.listProductThumbFromProduct;
 const _require10 = require('../utils/pendingStockBadge.js'),fetchAllOrdersPaginated = _require10.fetchAllOrdersPaginated;
@@ -111,6 +113,10 @@ Page({
     this._detail = detail;
     this._quantities = {};
     this._unitPrices = {};
+    this._weights = {};
+    this._nodeWeightEnabled = new Map();
+    this._bomsByProductId = {};
+    this._materialNameById = {};
     this._matrixKbInput = createMatrixKeyboardInputSession();
     this.setData({
       statusBarHeight: nav.statusBarHeight,
@@ -191,6 +197,14 @@ Page({
         hasMatrix: matrixCtx.hasMatrix,
         isProductScope: matrixCtx.isProductScope
       };
+      const weightEnabled = !!(this._nodeWeightEnabled && this._nodeWeightEnabled.get(row.nodeId));
+      line.weightEnabled = weightEnabled;
+      if (weightEnabled) {
+        line.weightInput = this._weights[rowKey] != null ? String(this._weights[rowKey]) : '';
+        const preview = this.buildLineWeightPreview(row, rowKey, matrixCtx.isProductScope, totalQty);
+        line.weightPreviewRows = preview.rows;
+        line.weightNoBomHint = preview.noBom;
+      }
       if (matrixCtx.hasMatrix) {
         line.matrixLayout = buildOutsourceReceiveMatrixLayout(
           matrixCtx.product || product,
@@ -227,8 +241,12 @@ Page({
         detail.orders && detail.orders.length ?
         Promise.resolve(detail.orders) :
         fetchAllOrdersPaginated({}),
-        fetchDictionaries().catch(() => ({}))]
-        ),config = _await$Promise$all[0],orders = _await$Promise$all[1],dictionariesRaw = _await$Promise$all[2];
+        fetchDictionaries().catch(() => ({})),
+        fetchNodesAll().catch(() => [])]
+        ),config = _await$Promise$all[0],orders = _await$Promise$all[1],dictionariesRaw = _await$Promise$all[2],nodesRaw = _await$Promise$all[3];
+      this._nodeWeightEnabled = new Map(
+        normalizeMasterList(nodesRaw).map((n) => [n.id, !!n.enableWeightOnReport]),
+      );
       this._allowExceed = config.allowExceedMaxOutsourceReceiveQty === true;
       this._productionLinkMode = detail.productionLinkMode || config.productionLinkMode || 'order';
       this._orders = orders || [];
@@ -248,10 +266,84 @@ Page({
 
       this.rebuildLines();
       this.setData({ loading: false });
+      this.loadWeightBoms();
     } catch (err) {
       this.setData({ loading: false });
       wx.showToast({ title: err && err.message || '初始化失败', icon: 'none' });
     }
+  },
+
+  /** 称重行：窄拉产品 BOM（含子物料）与子物料名称，用于预估物料消耗 */
+  async loadWeightBoms() {
+    const rows = (this._detail && this._detail.rows) || [];
+    const nodeIdsByProduct = new Map();
+    rows.forEach((r) => {
+      if (!r || !r.productId || !this._nodeWeightEnabled.get(r.nodeId)) return;
+      if (!nodeIdsByProduct.has(r.productId)) nodeIdsByProduct.set(r.productId, new Set());
+      nodeIdsByProduct.get(r.productId).add(r.nodeId);
+    });
+    if (!nodeIdsByProduct.size) return;
+    const { getProduct } = require('../utils/planApi.js');
+    const prods = await Promise.all(
+      [...nodeIdsByProduct.keys()].map((id) => getProduct(id).catch(() => null)),
+    );
+    const bomsByProductId = {};
+    const matIds = new Set();
+    prods.forEach((p) => {
+      if (!p || !p.id) return;
+      bomsByProductId[p.id] = p.boms || [];
+      const nodeIds = nodeIdsByProduct.get(p.id) || new Set();
+      (p.boms || []).forEach((b) => {
+        if (!b || !nodeIds.has(b.nodeId)) return;
+        (b.items || []).forEach((it) => {
+          if (it && it.productId) matIds.add(it.productId);
+        });
+      });
+    });
+    this._bomsByProductId = bomsByProductId;
+    if (matIds.size) {
+      const mats = await Promise.all(
+        [...matIds].map((id) => getProduct(id).catch(() => null)),
+      );
+      const nameById = {};
+      mats.forEach((p) => {
+        if (p && p.id) nameById[p.id] = p.name || '';
+      });
+      this._materialNameById = nameById;
+    }
+    this.rebuildLines();
+  },
+
+  /** 单行预估物料消耗：按规格明细逐规格取 BOM 合并；无规格明细时用单 BOM（对齐 Web 外协收货弹窗） */
+  buildLineWeightPreview(row, rowKey, isProductScope, totalQty) {
+    const weightKg = roundWeightKg(Number(this._weights[rowKey]) || 0);
+    if (!(weightKg > 0) || !(totalQty > 0)) return { rows: [], noBom: false };
+    const boms = (this._bomsByProductId && this._bomsByProductId[row.productId]) || [];
+    const nameById = this._materialNameById || {};
+    const nameOf = (pid) => nameById[pid] || '';
+    const variantQtyMap = this._quantitiesForVariant(rowKey, isProductScope);
+    const variantIds = Object.keys(variantQtyMap).filter(
+      (vid) => (Number(variantQtyMap[vid]) || 0) > 0,
+    );
+    let rows;
+    if (variantIds.length > 0) {
+      const parts = variantIds.map((vid) => ({
+        bom: resolveBomForVariant(boms, row.productId, row.nodeId, vid),
+        quantity: Number(variantQtyMap[vid]) || 0
+      }));
+      rows = calcUsageByWeightMultiVariant(parts, weightKg, nameOf);
+    } else {
+      const bom = resolveBomForVariant(boms, row.productId, row.nodeId);
+      rows = bom ? calcUsageByWeight(bom, totalQty, weightKg, nameOf) : [];
+    }
+    return { rows: buildWeightPreviewViewRows(rows), noBom: rows.length === 0 };
+  },
+
+  onWeightInput(e) {
+    const key = e.currentTarget.dataset.key;
+    if (!key) return;
+    this._weights[key] = e.detail.value || '';
+    this.rebuildLines();
   },
 
   onProductImageError(e) {
@@ -457,6 +549,13 @@ Page({
       return;
     }
 
+    // 称重行的本次交货总重量（仅工序开启称重的行会有输入）
+    const weights = {};
+    Object.keys(this._weights || {}).forEach((k) => {
+      const w = Number(this._weights[k]);
+      if (Number.isFinite(w) && w > 0) weights[k] = w;
+    });
+
     this.setData({ submitting: true });
     wx.showLoading({ title: '提交中' });
     try {
@@ -464,6 +563,7 @@ Page({
         rows: this._detail.rows,
         quantities,
         unitPrices,
+        weights,
         operator: readOperatorDisplayName(readTenantCtx()),
         ordersById: this._ordersById,
         timestamp: entryDateAndTimeToIso(this.data.entryDate, this.data.entryTime)
@@ -478,7 +578,7 @@ Page({
       }
       wx.hideLoading();
       afterSaveReturnToList({
-        listUrl: LIST_ROUTES.OUTSOURCE_RECEIVE,
+        listUrl: LIST_ROUTES.OUTSOURCE_HUB,
         toastTitle: '收回成功'
       });
     } catch (submitErr) {

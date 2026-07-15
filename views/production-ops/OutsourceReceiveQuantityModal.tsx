@@ -17,7 +17,7 @@ import DocEntryTimeField from '../../components/DocEntryTimeField';
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import { RECEIVE_VARIANT_SEP, outsourceReceiveBaseKey } from './outsourceReceiveKeys';
-import { calcUsageByWeight } from '../../utils/bomMaterialUsageByWeight';
+import { calcUsageByWeight, calcUsageByWeightMultiVariant } from '../../utils/bomMaterialUsageByWeight';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
 import { AMOUNT_PERMISSION_KEYS, useCanViewAmount } from '../../utils/canViewAmount';
@@ -38,6 +38,7 @@ import {
   psiOrderBillCompactSummaryValueClass,
   psiOrderBillCompactSummaryUnitClass,
 } from '../../styles/uiDensity';
+import { productThumbSrc } from '../../utils/productImageSrc';
 
 /** 外协收货矩阵：与明细行 `psiOrderBillCompactLineInputClass` 同高 (h-9)；「最多」在输入框右侧由 hint 展示 */
 const receiveQtyMatrixInputClass =
@@ -345,6 +346,18 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                   .reduce((s, [, q]) => s + (q as number), 0);
             const weightPreviewRows = (() => {
               if (!weightReportEnabled || !(currentRowWeight > 0) || !(totalQtyForWeight > 0)) return [] as ReturnType<typeof calcUsageByWeight>;
+              // 按规格明细收回时逐规格取 BOM 再合并（各规格 BOM 物料可能不同），与提交时按 variant 分摊落库一致
+              const variantParts = Object.entries(receiveFormQuantities)
+                .filter(([k, q]) => (q as number) > 0 && (k.startsWith(`${baseKey}${RECEIVE_VARIANT_SEP}`) || k.startsWith(`${baseKey}|`)))
+                .map(([k, q]) => {
+                  const variantId = k.startsWith(`${baseKey}${RECEIVE_VARIANT_SEP}`)
+                    ? k.slice(baseKey.length + RECEIVE_VARIANT_SEP.length)
+                    : k.slice(baseKey.length + 1);
+                  return { bom: resolveBom(row.productId, row.nodeId, variantId), quantity: q as number };
+                });
+              if (variantParts.length > 0) {
+                return calcUsageByWeightMultiVariant(variantParts, currentRowWeight, productsById);
+              }
               const bom = resolveBom(row.productId, row.nodeId);
               if (!bom) return [];
               return calcUsageByWeight(bom, totalQtyForWeight, currentRowWeight, productsById);
@@ -472,9 +485,9 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                     <div className="min-w-0 flex-1 space-y-1">
                       <label className={psiOrderBillCompactLineLabelClass}>收货明细</label>
                       <div className="flex min-w-0 items-start gap-2">
-                        {product?.imageUrl ? (
+                        {productThumbSrc(product) ? (
                           <img
-                            src={product.imageUrl}
+                            src={productThumbSrc(product)}
                             alt=""
                             className="h-9 w-9 shrink-0 rounded-lg border border-slate-100 object-cover"
                             loading="lazy"
@@ -610,9 +623,9 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                     <div className="min-w-0 flex-1 space-y-1">
                       <label className={psiOrderBillCompactLineLabelClass}>收货明细</label>
                       <div className="flex min-w-0 items-start gap-2">
-                        {product?.imageUrl ? (
+                        {productThumbSrc(product) ? (
                           <img
-                            src={product.imageUrl}
+                            src={productThumbSrc(product)}
                             alt=""
                             className="h-9 w-9 shrink-0 rounded-lg border border-slate-100 object-cover"
                             loading="lazy"
@@ -715,9 +728,9 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                   <div className="min-w-0 flex-1 space-y-1">
                     <label className={psiOrderBillCompactLineLabelClass}>收货明细</label>
                     <div className="flex min-w-0 items-start gap-2">
-                      {product?.imageUrl ? (
+                      {productThumbSrc(product) ? (
                         <img
-                          src={product.imageUrl}
+                          src={productThumbSrc(product)}
                           alt=""
                           className="h-9 w-9 shrink-0 rounded-lg border border-slate-100 object-cover"
                           loading="lazy"

@@ -552,7 +552,8 @@
 
 针对毛衣类横机工序、外协收货等“件数同口径但每件克重浮动”的业务场景，`GlobalNodeTemplate.enableWeightOnReport` 提供**工序级开关**：
 
-- 开启后，对应工序的**工单报工 / 外协收货**两个入口会额外出现“本次交货总重量 (kg)”输入框，并实时预览按 BOM 占比拆分出的各子物料实际消耗。（返工报工**不**录入重量。）
+- 开启后，对应工序的**工单报工 / 外协收货**两个入口会额外出现“本次交货总重量 (kg)”输入框，并实时预览按 BOM 占比拆分出的各子物料实际消耗。（返工报工**不**录入重量。）Web 与小程序（报工页 / 外协收回确认页）均支持。
+- **多规格预估合并**：当一次报工/收货覆盖多个规格、且各规格挂了不同的规格级 BOM（如按颜色配不同纱线）时，预估先按各规格良品数量把总重分摊（`distributeWeightByQty`，末行吸收舍入误差），再逐规格用各自 BOM 拆分后按子物料合并展示（`calcUsageByWeightMultiVariant`），与提交后逐条落库（per-variant BOM）口径一致；不再只显示第一个规格的物料。
 - BOM 子项 (`BomItem.excludeFromWeightShare`) 可勾选“不参与重量分摊”，用于标签、纽扣、吊牌这类辅料；参与分摊的子项占比 = 子项 `quantity` / Σ 参与分摊子项 `quantity`（无需用户手填比例）。
 - 写入时：
   - `ProductionOpRecord.weight` / `MilestoneReport.weight` / `ProductProgressReport.weight` 固化本次交货总重量；

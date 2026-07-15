@@ -113,6 +113,8 @@
 
 - **读口径双路求和**：`order` 与 `product` 模式切换时为防数据"看起来消失"，前后端报工口径统一为 `combinedCompletedAtTemplate = PMP(同 product+template) + milestone.completedQuantity`。
 - **小程序自报工审核**：`MilestoneReport` / `ProductProgressReport.approvalStatus`；进度只计 `APPROVED`；可报 `remaining` 扣 `PENDING`；审核 API 与 Web 流水 / 小程序待审列表已通。
+  - **产品模式报工 Tab（已对齐）**：可报任务按「产品×工序」聚合（`listMyReportableTasks`）；提交写 `POST /orders/product-progress/report`；扫码 `PRODUCT_REPORT`；详见 `docs/05` §12.1。
+  - **报工链路性能**：主数据短 TTL 缓存；报工 Tab `onShow` 45s 防抖；报工页改 `GET /products/:id` + `product-progress?productId=` 窄拉；报工 Tab 去掉 business 分包预加载。
   - 已对齐：`ReportModal`、`OrderDetailModal` 工序表、`OrderListView` 产品组卡、后端 `GET /orders/:id/reportable`。
   - 工单卡圆心采用 `items.quantity` 比例摊回 PMP 的**估算值**（hover tip 已标注），精确数字以产品维度详情为准。
 - **列表小卡 hover tooltip 增补外协未收回**：`OrderListView` 工单卡 / 产品组卡圆下数字保持原口径（`可报 - 已报`，不扣外协，避免日常列表数字反复跳动），**hover tooltip** 上额外追加「外协剩余 Z 件」作为补充信息，与 `ReportModal` 的"扣外协剩余"口径互补。产品模式下工单卡的外协未收回按 `items.quantity` 比例摊回（与 PMP 摊回对称），产品组卡合并产品维度 + 旗下所有工单维度的外协。
@@ -221,7 +223,7 @@
   - `AppDataContext.invalidateAll{Prod,Psi}Records` 改 predicate 风格批量匹配 queryKey 前缀，修复旧 `psiOps.warehouseStockProd` 与实际 key 不一致的 invalidate bug。
 - **Phase 3.F（已完成）登录首屏提速（安全重做版）**：
   - **首屏拆两批**（`contexts/appDataLoadCore.ts`）：critical 批（getConfig + 产品分类 + 工序节点 + 仓库）完成即撤全屏 spinner；secondary 批（products / boms / partners / 字典 / 财务分类 / 成员 / 设备）后台补齐，完成后置 `masterDataReady=true`。产品档案页在未就绪且列表为空时显示局部 loading。`App.tsx` 的 `AppLayout` 拆出 `AppLayoutReady`，spinner 期间不挂载协作红点 / feature-plugins / workbench hook。
-  - **products lite（保守版）**：`GET /products?lite=true`（前端 `api.products.list` 默认带）只用 Prisma `omit` 裁 4 个 `economics*` 经营核算规则 JSON；**保留** `routeReportValues / routeReportDisplayValues / nodeRates / nodePricingModes / milestoneNodeIds` 与 variants 全字段（含 `nodeBoms`）——这些被报工弹窗展示项、领退料/外协物料、产品编辑表单直接消费，裁掉会复现「工序标签数量错误」同类问题。
+  - **products lite（保守版）**：`GET /products?lite=true`（前端 `api.products.list` 默认带）用 Prisma `omit` 裁 4 个 `economics*` 经营核算规则 JSON，以及 Phase 3.H 起再裁 `imageUrl` 原图（列表改用 `imageThumb`）；**保留** `routeReportValues / routeReportDisplayValues / nodeRates / nodePricingModes / milestoneNodeIds` 与 variants 全字段（含 `nodeBoms`）——这些被报工弹窗展示项、领退料/外协物料、产品编辑表单直接消费，裁掉会复现「工序标签数量错误」同类问题。编辑/详情走 `GET /products/:id` 按需拉原图。
   - **orders / product-progress 不做 lite**：`milestones[].reports` 明细是前端按规格聚合工序标签数字的数据源，首拉与刷新均保持全量结构。瘦身留待服务端预聚合后再做。
   - **orders 增量刷新**：`GET /orders?updatedAfter=<ts>` 只返回自该时间起有变化的工单；因报工/审批只 update `milestone` 不触碰工单 `updatedAt`，增量条件覆盖「工单自身 / milestones / childOrders 任一有更新」。前端 `refreshOrders` 带 2 分钟重叠窗口 + `mergeById` 幂等合并。注意增量拿不到「被删除的工单」（本地删除路径已同步 setOrders，跨标签页依赖下次全量）。
   - **权限缓存**：`buildTenantPayload` TTL 5s→30s + 进程内 singleflight；`invalidateAuthTenantCache / invalidateAuthCacheForTenant` 同步清 in-flight。权限写路径仍主动失效，30s 只是漏调 invalidate 时的兜底窗口。
@@ -234,6 +236,11 @@
   - **结果缓存**（`backend/src/services/productEconomicsCache.ts`，TTL 60s）：key 含 `materialCostMode + period/customRange + 权限位(canProduction/canPsi/canFinance)`，两个物料成本口径独立缓存、不同权限用户不串数据。读序：进程内内存 → Redis → 计算；无 `REDIS_URL` 时内存兜底仍生效（单实例语义等效）。失效走租户级版本号（内存 + Redis `pe:ver:<tenantId>` INCR），价格写路径（全局物料价规则 / 成品 BOM 物料价 / 报工·外协工序单价的默认规则与覆盖）均触发失效。同 key `singleflight` 合并 widget 预热与弹窗并发首算。报工/销售等业务写入不主动失效，数字最多延迟 60s（前端另有 60s staleTime）。
   - **document_linked 列表跳过报工物料成本**：该口径下列表行 `materialCost` 恒为 0，`loadProductionAggregates({ skipMaterialCost: true })` 不 select `materialBreakdown`/`variantId`，并跳过逐条 BOM 物料计算；明细接口仍算物料（工序明细卡片需要）。
   - `processEconomicsPrice` 四个 update 函数与 `updateParentMaterialPriceDefaultRule` 签名加 `tenantId` 参数（用于失效缓存）。
+- **Phase 3.H（已完成）产品主图缩略图**：
+  - `Product.imageThumb`（migration `20260714170000_product_image_thumb`）：create/update/import 时用 `sharp` 从 `imageUrl` 生成约 512px JPEG 缩略图；http(s) 外链则 thumb 复用原链接。
+  - `products?lite=true` 再裁 `imageUrl`（保留 `imageThumb`）；Web/小程序列表与打印统一走 `productThumbSrc` / `imageThumb || imageUrl`；编辑页 `GET /products/:id` 补原图，保存时 absent `imageUrl` 不代表清空。
+  - 前端上传三入口 canvas 压缩（最长边 1600px / JPEG 0.85）：`ProductEditForm`、`ProductCategoryInfoFields`、`ProductImportModal`。
+  - 存量回填：`backend` 下 `npm run db:backfill-product-thumbs`（可选 `--force`）；部署需 `prisma migrate deploy` + 跑一次回填。
 - **资金账户余额与转账（已完成）**：
   - `FinanceAccountType` 加 `initialBalance/openingDate/accountKind/sortOrder/active`；`FinanceRecord` 加 `accountTypeId` 外键（migration `20260625120000_finance_account_balance` 按 `(tenant_id, name)` 回填，保留 `payment_account` 作展示/回退）。
   - 余额实时聚合（不落库存量）：`GET /api/finance/account-balances`（`finance:account:view`）→ `getAccountBalances` → 纯函数 `accumulateAccountBalances`（含单测 `backend/tests/financeAccountBalances.test.ts`）。

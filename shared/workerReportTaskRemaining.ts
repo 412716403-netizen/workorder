@@ -6,10 +6,14 @@ import { ReportApprovalStatus } from './types.js';
 import { findGatingPredecessorIndex, isProcessSequential } from './processSequence.js';
 import {
   buildDefectiveReworkByOrderMilestone,
+  productGroupMaxReportableSum,
+  pmpCompletedAtTemplate,
   reworkMergeBucketOrderId,
+  sumBlockOrderQty,
   type ReportableMilestone,
   type ReportableMilestoneReport,
   type ReportableOrder,
+  type ReportablePmp,
   type ReportableProdRecord,
 } from './orderReportableAggregates.js';
 
@@ -298,4 +302,94 @@ export function computeWorkerReportTaskDisplayRemaining(opts: {
     );
   }, 0);
   return Math.max(0, Math.min(variantSum, hintRemaining));
+}
+
+/** 产品模式：产品级外协（无 orderId）在该工序的未收回净额 */
+function sumProductLevelOutsourceRemainingAtNode(
+  prodRecords: ReportableProdRecord[],
+  productId: string,
+  templateId: string,
+): number {
+  let dispatched = 0;
+  let received = 0;
+  prodRecords.forEach((r) => {
+    if (r.type !== 'OUTSOURCE' || r.sourceReworkId) return;
+    if (r.orderId || r.productId !== productId || r.nodeId !== templateId) return;
+    if (r.status === '加工中') dispatched += Number(r.quantity) || 0;
+    else if (r.status === '已收回') received += Number(r.quantity) || 0;
+  });
+  return Math.max(0, dispatched - received);
+}
+
+/**
+ * 产品模式可报任务「可报 N」：与 Web 报工弹窗 hintRemaining 完全同口径——
+ * maxReportable = productGroupMaxReportableSum（工单中心产品组卡「可报最多」）；
+ * remaining = max − 已报(PMP + 里程碑 completedQuantity) − 待审(两路 PENDING) − 产品级外协净额。
+ */
+export function computeProductModeWorkerTaskRemaining(opts: {
+  blockOrders: ReportableOrder[];
+  productId: string;
+  milestoneTemplateId: string;
+  pmp: ReportablePmp[];
+  processSequenceMode: ProcessSequenceMode;
+  outOfSequenceTemplateIds: ReadonlySet<string>;
+  prodRecords: ReportableProdRecord[];
+}): {
+  remaining: number;
+  maxReportable: number;
+  reported: number;
+  totalQty: number;
+} {
+  const {
+    blockOrders,
+    productId,
+    milestoneTemplateId,
+    pmp,
+    processSequenceMode,
+    outOfSequenceTemplateIds,
+    prodRecords,
+  } = opts;
+  const totalQty = Math.round(sumBlockOrderQty(blockOrders));
+  const tid = milestoneTemplateId;
+  const drMap = buildDefectiveReworkByOrderMilestone(blockOrders, prodRecords);
+  const getDefectiveRework = (oid: string, nodeTemplateId: string) =>
+    drMap.get(`${oid}|${nodeTemplateId}`) ?? { defective: 0, rework: 0, reworkByVariant: {} };
+  const orderForest = blockOrders.map((o) => ({
+    id: o.id,
+    parentOrderId: o.parentOrderId ?? null,
+  }));
+  const maxReportable = productGroupMaxReportableSum(
+    blockOrders,
+    tid,
+    productId,
+    pmp,
+    processSequenceMode,
+    getDefectiveRework,
+    undefined,
+    orderForest,
+    outOfSequenceTemplateIds,
+  );
+  const pmpRows = pmp.filter((p) => p.productId === productId && p.milestoneTemplateId === tid);
+  const pmpCompleted = pmpCompletedAtTemplate(pmp, productId, tid);
+  const milestoneCompleted = blockOrders.reduce((s, o) => {
+    const ms = o.milestones.find((m) => m.templateId === tid);
+    return s + (Number(ms?.completedQuantity) || 0);
+  }, 0);
+  const reported = Math.round(pmpCompleted + milestoneCompleted);
+  const pendingOccupied =
+    blockOrders.reduce((s, o) => {
+      const ms = o.milestones.find((m) => m.templateId === tid);
+      return s + sumPendingReportQty(ms?.reports);
+    }, 0) + pmpRows.reduce((s, p) => s + sumPendingReportQty(p.reports), 0);
+  const outsourced = sumProductLevelOutsourceRemainingAtNode(prodRecords, productId, tid);
+  const remaining = Math.max(
+    0,
+    Math.round(maxReportable) - reported - pendingOccupied - outsourced,
+  );
+  return {
+    remaining,
+    maxReportable: Math.max(0, Math.round(maxReportable)),
+    reported,
+    totalQty,
+  };
 }

@@ -10,10 +10,12 @@
 
   <scroll-view
     scroll-y
+    enhanced
     class="defect-action-scroll"
     style="height: {{scrollHeight}}px;"
     scroll-top="{{matrixScrollTop}}"
-    scroll-with-animation
+    scroll-into-view="{{matrixScrollIntoView}}"
+    scroll-with-animation="{{false}}"
     show-scrollbar="{{false}}"
   >
     <view wx:if="{{loading}}" class="defect-action-loading">加载中…</view>
@@ -102,7 +104,7 @@
         <view wx:if="{{!reworkProductNodes.length && !reworkOtherNodes.length}}" class="defect-action-node-empty">暂无可用工序</view>
       </view>
 
-      <view class="plan-form-card defect-action-qty-card">
+      <view id="defect-action-qty-anchor" class="plan-form-card defect-action-qty-card">
         <view class="defect-action-section-head">
           <text class="defect-action-section-head__title">处理数量</text>
           <text wx:if="{{useVariantQtyGrid}}" class="defect-action-section-head__total">合计 {{variantTotal}} 件</text>
@@ -123,6 +125,7 @@
                 <view wx:for="{{row.cells}}" wx:for-item="cell" wx:key="index" class="plan-create-matrix__cell report-matrix__cell">
                   <view wx:if="{{cell.variantId && !cell.disabled}}" class="report-matrix__cell-inner">
                     <view
+                      id="mqk-cell-{{cell.variantId}}"
                       class="plan-create-matrix__input {{activeMatrixVariantId === cell.variantId ? 'plan-create-matrix__input--active' : ''}} {{activeMatrixVariantId === cell.variantId && matrixInputReplaceAll && cell.quantity ? 'plan-create-matrix__input--replace' : ''}} {{cell.quantity ? 'plan-create-matrix__input--filled' : 'plan-create-matrix__input--empty'}}"
                       data-variant-id="{{cell.variantId}}"
                       bindtap="onMatrixCellTap"

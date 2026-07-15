@@ -396,7 +396,7 @@ function mapReworkCardForUi(block, ctx) {
   if (block.type === 'productAggregate') {
     const product = idx.productsById.get(block.productId);
     const stats = statsByProductId.get(block.productId) || [];
-    const productImageUrl = String(product && product.imageUrl || '').trim();
+    const productImageUrl = String(product && (product.imageThumb || product.imageUrl) || '').trim();
     const nameSku = listProductNameSkuFields(product);
     return {
       cardKey: block.productId,
@@ -424,7 +424,7 @@ function mapReworkCardForUi(block, ctx) {
   const mapOrderCard = (order, isChild) => {
     const product = idx.productsById.get(order.productId);
     const stats = statsByOrderId.get(order.id) || [];
-    const productImageUrl = String(product && product.imageUrl || '').trim();
+    const productImageUrl = String(product && (product.imageThumb || product.imageUrl) || '').trim();
     const nameSku = listProductNameSkuFields(product, { name: order.productName, sku: order.sku });
     const dueDate = order.dueDate ? String(order.dueDate).trim().slice(0, 10) : '';
     const orderTotalQty = (order.items || []).reduce((s, i) => s + (Number(i.quantity) || 0), 0);

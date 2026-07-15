@@ -167,6 +167,7 @@
 
 - 在 **`backend` 目录**执行 `npx prisma migrate deploy`，且 `.env` 中 `DATABASE_URL` 必须指向**本环境**要升级的 PostgreSQL。
 - 开发机本地可用 `npx prisma migrate dev` 生成/调试迁移；**测试/正式环境推荐只用 `migrate deploy`**。
+- **Phase 3.H 产品缩略图**：首次上线含 `image_thumb` 的 migration 后，在 `backend` 再执行一次 `npm run db:backfill-product-thumbs`（幂等；可加 `--force`），否则 lite 列表可能短期内无产品图。
 
 ### 后端 API 发布（命令块，与上文顺序一致）
 

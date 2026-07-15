@@ -13,6 +13,7 @@ import type {
 } from '../types';
 import { formatCustomFieldDatetimeForPrint } from './localDateTime';
 import { formatProductProcessNodesText } from './productProcessNodesPrint';
+import { productThumbSrc } from './productImageSrc';
 
 const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   PLANNING: '计划中',
@@ -117,7 +118,7 @@ function productField(product: Product, key: string, ctx: PrintRenderContext): u
     case 'processNodes':
       return formatProductProcessNodesText(product, ctx.globalNodes);
     case 'description': return product.description ?? '';
-    case 'imageUrl': return product.imageUrl ?? '';
+    case 'imageUrl': return productThumbSrc(product);
     default:
       if (key.startsWith('custom.')) {
         const id = key.slice('custom.'.length);

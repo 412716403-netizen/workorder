@@ -1,4 +1,4 @@
 /* 矩阵键盘弹出时，滚动内容区底部留白（所有表单页统一） */
 .matrix-keyboard-page--open {
-  padding-bottom: calc(540rpx + env(safe-area-inset-bottom)) !important;
+  padding-bottom: calc(580rpx + env(safe-area-inset-bottom)) !important;
 }

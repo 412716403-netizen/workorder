@@ -2,7 +2,7 @@ const { readTenantCtx, readOperatorDisplayName, readCurrentUserId } = require('.
 const { hasPermission, hasPrefixPermission } = require('../../utils/permissions.js');
 const { readNavBarMetrics, readWindowMetrics, computePlanCreateHeaderHeight } = require('../../utils/windowMetrics.js');
 const { readWorkerReportScanPrefill, deserializeReportScanMeta } = require('../utils/workerReportScanPrefill.js');
-const { createOrderReport, fetchTenantConfig, fetchProductsAll, fetchCategoriesAll, fetchNodesAll, getOrder, fetchProductionRecords } = require('../utils/orderApi.js');
+const { createOrderReport, createProductReport, fetchTenantConfig, fetchProductsAll, fetchCategoriesAll, fetchNodesAll, getOrder, fetchProductionRecords } = require('../utils/orderApi.js');
 const { fetchDictionaries } = require('../utils/planApi.js');
 const { normalizeMasterList, normalizeAppDictionaries } = require('../utils/productionPlans.js');
 const {
@@ -145,6 +145,8 @@ Page({
       const productMap = new Map(products.map((p) => [p.id, p]));
       const categoryMap = new Map(categories.map((c) => [c.id, c]));
       const globalNodes = normalizeMasterList(nodesRaw);
+      this._productionLinkMode =
+        config && config.productionLinkMode === 'product' ? 'product' : 'order';
       const templateId = this._prefill.templateId || '';
       const milestoneStub = { templateId, name: this._prefill.templateName || '' };
       const reportTemplate = getEffectiveReportTemplate(milestoneStub, globalNodes);
@@ -212,22 +214,45 @@ Page({
 
     this.setData({ submitting: true });
     try {
-      for (let i = 0; i < this._lines.length; i += 1) {
-        const line = this._lines[i];
-        const meta = deserializeReportScanMeta(line.scanMeta);
-        const entries = entriesFromQuantities(line.quantities, line.defectiveQuantities);
-        if (!entries.length) continue;
-        for (let j = 0; j < entries.length; j += 1) {
-          const entry = entries[j];
+      // 产品模式：按 productId×template×规格 合并后写 PMP，避免同一产品多工单重复写入
+      if (this._productionLinkMode === 'product' || this._lines.some((l) => l.mode === 'product')) {
+        const agg = new Map();
+        for (let i = 0; i < this._lines.length; i += 1) {
+          const line = this._lines[i];
+          const productId = line.productId;
+          const milestoneTemplateId =
+            line.milestoneTemplateId || this._prefill.templateId || '';
+          if (!productId || !milestoneTemplateId) continue;
+          const meta = deserializeReportScanMeta(line.scanMeta);
+          const entries = entriesFromQuantities(line.quantities, line.defectiveQuantities);
+          entries.forEach((entry) => {
+            const key = `${productId}|${milestoneTemplateId}|${entry.variantId || ''}`;
+            const cur = agg.get(key) || {
+              productId,
+              milestoneTemplateId,
+              variantId: entry.variantId || undefined,
+              quantity: 0,
+              defectiveQuantity: 0,
+              meta,
+            };
+            cur.quantity += entry.quantity;
+            cur.defectiveQuantity += entry.defectiveQuantity || 0;
+            agg.set(key, cur);
+          });
+        }
+        for (const item of agg.values()) {
+          if (!(item.quantity > 0)) continue;
           const scanFields = buildReportScanPayloadFields(
-            meta,
-            entry.variantId || null,
+            item.meta,
+            item.variantId || null,
             customData || {},
           );
-          await createOrderReport(line.orderId, line.milestoneId, {
-            quantity: entry.quantity,
-            defectiveQuantity: entry.defectiveQuantity > 0 ? entry.defectiveQuantity : undefined,
-            variantId: entry.variantId || undefined,
+          await createProductReport({
+            productId: item.productId,
+            milestoneTemplateId: item.milestoneTemplateId,
+            quantity: item.quantity,
+            defectiveQuantity: item.defectiveQuantity > 0 ? item.defectiveQuantity : undefined,
+            variantId: item.variantId,
             workerId: this.data.workerId,
             customData: scanFields.customData,
             reportBatchId: batchId,
@@ -237,6 +262,34 @@ Page({
             virtualBatchId: scanFields.virtualBatchId,
             requireApproval: true,
           });
+        }
+      } else {
+        for (let i = 0; i < this._lines.length; i += 1) {
+          const line = this._lines[i];
+          const meta = deserializeReportScanMeta(line.scanMeta);
+          const entries = entriesFromQuantities(line.quantities, line.defectiveQuantities);
+          if (!entries.length) continue;
+          for (let j = 0; j < entries.length; j += 1) {
+            const entry = entries[j];
+            const scanFields = buildReportScanPayloadFields(
+              meta,
+              entry.variantId || null,
+              customData || {},
+            );
+            await createOrderReport(line.orderId, line.milestoneId, {
+              quantity: entry.quantity,
+              defectiveQuantity: entry.defectiveQuantity > 0 ? entry.defectiveQuantity : undefined,
+              variantId: entry.variantId || undefined,
+              workerId: this.data.workerId,
+              customData: scanFields.customData,
+              reportBatchId: batchId,
+              operator,
+              timestamp,
+              itemCodeId: scanFields.itemCodeId,
+              virtualBatchId: scanFields.virtualBatchId,
+              requireApproval: true,
+            });
+          }
         }
       }
       wx.showToast({ title: '已提交，待审核', icon: 'success' });

@@ -9,6 +9,10 @@
   font-weight: 600;
 }
 
+.order-detail-process-wrap {
+  padding: 0 4rpx 8rpx;
+}
+
 .order-detail-hero {
   align-items: flex-start;
 }
@@ -284,6 +288,10 @@
   flex: 0 0 96rpx;
   width: 96rpx;
   text-align: right;
+}
+
+.order-detail-material-table__td--surplus-neg {
+  color: #e11d48;
 }
 
 .order-detail-material-table__name {

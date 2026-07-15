@@ -55,6 +55,7 @@ import {
   DEFAULT_PRODUCT_ECONOMICS_SETTINGS,
 } from '../types';
 import { normalizePartnersFromApi } from '../utils/partnerNormalize';
+import { stripProductOriginalForListCache } from '../utils/productImageSrc';
 import {
   normalizeFinanceCategoriesFromApi,
   normalizeGlobalNodesFromApi,
@@ -804,11 +805,12 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     try {
       const exists = products.some(px => px.id === p.id);
       const saved = (exists ? await api.products.update(p.id, p) : await api.products.create(p)) as Product;
-      const normalized = norm1(saved);
-      setProducts(prev => exists ? prev.map(px => px.id === p.id ? normalized : px) : [...prev, normalized]);
+      const full = norm1(saved);
+      const forList = stripProductOriginalForListCache(full);
+      setProducts(prev => exists ? prev.map(px => px.id === p.id ? forList : px) : [...prev, forList]);
       // 工序变更会触发后端回填工单 milestones / 状态；后台刷新，不阻塞调用方
       void Promise.allSettled([refreshOrders(), refreshPMP()]);
-      return normalized;
+      return full;
     } catch (err: any) {
       toast.error(err.message || '操作失败');
       return null;

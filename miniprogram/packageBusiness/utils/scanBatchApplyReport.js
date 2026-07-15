@@ -24,11 +24,20 @@ function createReportScanBatchHandlers(page) {
     const category = page._category;
     if (!order || !milestone) return null;
 
+    const productReportMode = Boolean(page._productReportMode);
+    const productId = page._productId || (product && product.id) || order.productId;
+    const milestoneTemplateId =
+      page._milestoneTemplateId || milestone.templateId || milestone.id;
     const anchorPlanOrderId = order.planOrderId || null;
-    if (!anchorPlanOrderId) {
+    if (!productReportMode && !anchorPlanOrderId) {
       scanFail(page, '当前工单未关联计划，无法校验扫码');
       return null;
     }
+
+    const validatePurpose = productReportMode ? 'PRODUCT_REPORT' : 'MILESTONE_REPORT';
+    const validateScope = productReportMode
+      ? { productId, milestoneTemplateId }
+      : { milestoneId: milestone.id };
 
     try {
       if (payload.kind === 'ITEM') {
@@ -37,12 +46,12 @@ function createReportScanBatchHandlers(page) {
           scanFail(page, res.message || '单品码已作废');
           return null;
         }
-        if (res.productId !== order.productId) {
-          scanFail(page, '此码产品与当前工单不一致');
+        if (res.productId !== order.productId && res.productId !== productId) {
+          scanFail(page, productReportMode ? '此码产品与当前产品不一致' : '此码产品与当前工单不一致');
           return null;
         }
         const codePlanId = (res.callerContext && res.callerContext.callerPlanOrderId) || res.planOrderId;
-        if (codePlanId && codePlanId !== anchorPlanOrderId) {
+        if (!productReportMode && codePlanId && codePlanId !== anchorPlanOrderId) {
           scanFail(page, '此码不属于当前工单所在计划');
           return null;
         }
@@ -52,8 +61,10 @@ function createReportScanBatchHandlers(page) {
           return null;
         }
         const validation = await validateScanUsage({
-          purpose: 'MILESTONE_REPORT',
-          scope: { milestoneId: milestone.id },
+          purpose: validatePurpose,
+          scope: productReportMode
+            ? { ...validateScope, variantId: vid || null }
+            : validateScope,
           itemCodeId: res.itemCodeId || null,
           virtualBatchId: res.batchId || null,
           addQty: 1,
@@ -82,12 +93,12 @@ function createReportScanBatchHandlers(page) {
           scanFail(page, res.message || '批次码已作废');
           return null;
         }
-        if (res.productId !== order.productId) {
-          scanFail(page, '此码产品与当前工单不一致');
+        if (res.productId !== order.productId && res.productId !== productId) {
+          scanFail(page, productReportMode ? '此码产品与当前产品不一致' : '此码产品与当前工单不一致');
           return null;
         }
         const codePlanId = (res.callerContext && res.callerContext.callerPlanOrderId) || res.planOrderId;
-        if (codePlanId && codePlanId !== anchorPlanOrderId) {
+        if (!productReportMode && codePlanId && codePlanId !== anchorPlanOrderId) {
           scanFail(page, '此码不属于当前工单所在计划');
           return null;
         }
@@ -102,8 +113,10 @@ function createReportScanBatchHandlers(page) {
           return null;
         }
         const validation = await validateScanUsage({
-          purpose: 'MILESTONE_REPORT',
-          scope: { milestoneId: milestone.id },
+          purpose: validatePurpose,
+          scope: productReportMode
+            ? { ...validateScope, variantId: vid || null }
+            : validateScope,
           itemCodeId: null,
           virtualBatchId: res.batchId || null,
           addQty: qty,

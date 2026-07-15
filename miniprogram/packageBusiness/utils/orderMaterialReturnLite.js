@@ -123,6 +123,8 @@ function computeOutsourceReturnMaterials(params) {
     outsourceRecords,
   } = params;
 
+  if (!String(partnerKey || '').trim()) return [];
+
   const isProductMode = productionLinkMode === 'product';
   const targetProductId = isProductMode
     ? productId

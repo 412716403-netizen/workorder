@@ -31,6 +31,7 @@ import {
 import { AMOUNT_PERMISSION_KEYS, useCanViewAmount } from '../../../utils/canViewAmount';
 import { formatWeightKgDisplay } from '../../../utils/reportBatchWeightHelpers';
 import type { ProductionOpRecord } from '../../../types';
+import { productThumbSrc } from '../../../utils/productImageSrc';
 
 type OrderReportRow = {
   order: ProductionOrder;
@@ -259,9 +260,9 @@ const MatrixView: React.FC<MatrixViewProps> = ({
     }).rate;
   })();
 
-  const productThumbView = viewMatrixProduct.imageUrl ? (
+  const productThumbView = productThumbSrc(viewMatrixProduct) ? (
     <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-100 bg-white">
-      <img src={viewMatrixProduct.imageUrl} alt={viewMatrixProduct.name} className="h-full w-full object-cover" loading="lazy" decoding="async" />
+      <img src={productThumbSrc(viewMatrixProduct)} alt={viewMatrixProduct.name} className="h-full w-full object-cover" loading="lazy" decoding="async" />
     </div>
   ) : (
     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-slate-300">

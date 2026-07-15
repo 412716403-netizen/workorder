@@ -20,20 +20,20 @@
 }
 
 .report-history-row {
-  padding: 24rpx;
-  margin-bottom: 16rpx;
+  padding: 16rpx 20rpx;
+  margin-bottom: 10rpx;
   background: var(--color-bg-card);
-  border-radius: 16rpx;
+  border-radius: 12rpx;
 }
 
 .report-history-row__body {
   display: flex;
-  gap: 20rpx;
-  align-items: flex-start;
+  gap: 16rpx;
+  align-items: center;
 }
 
 .report-history-row__left {
-  width: 112rpx;
+  width: 80rpx;
   flex-shrink: 0;
 }
 
@@ -42,9 +42,9 @@
 }
 
 .report-history-row__img {
-  width: 112rpx;
-  height: 112rpx;
-  border-radius: 16rpx;
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 12rpx;
   border: 1rpx solid var(--color-border);
   background: var(--color-bg-page);
   display: block;
@@ -59,29 +59,43 @@
 }
 
 .report-history-row__placeholder-icon {
-  width: 48rpx;
-  height: 48rpx;
+  width: 36rpx;
+  height: 36rpx;
 }
 
 .report-history-row__content {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
 }
 
-.report-history-row__head {
+.report-history-row__main {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  align-items: baseline;
   gap: 12rpx;
-  margin-bottom: 10rpx;
+  min-width: 0;
 }
 
-.report-history-row__head-main {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-  min-width: 0;
+.report-history-row__title {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8rpx;
+  overflow: hidden;
+}
+
+.report-history-row__milestone {
+  flex-shrink: 1;
+  min-width: 0;
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .report-history-row__order-no {
@@ -97,33 +111,6 @@
   flex-shrink: 0;
 }
 
-.report-history-row__time {
-  font-size: 22rpx;
-  color: var(--color-text-tertiary);
-  min-width: 0;
-}
-
-.report-history-row__report-no {
-  font-size: 20rpx;
-  color: var(--color-text-tertiary);
-  flex-shrink: 0;
-}
-
-.report-history-row__main {
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
-  margin-bottom: 8rpx;
-}
-
-.report-history-row__milestone {
-  flex: 1;
-  min-width: 0;
-  font-size: 30rpx;
-  font-weight: 700;
-  color: var(--color-text-primary);
-}
-
 .report-history-row__qty {
   flex-shrink: 0;
   font-size: 28rpx;
@@ -131,67 +118,72 @@
   color: var(--color-primary-dark);
 }
 
-.report-history-row__aside {
-  margin-left: auto;
-  flex-shrink: 0;
+.report-history-row__sub {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4rpx;
-}
-
-.report-history-row__product {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  align-items: flex-start;
   gap: 12rpx;
-  margin-bottom: 8rpx;
+  min-width: 0;
 }
 
-.report-history-row__product-left {
+.report-history-row__sub-left {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 8rpx;
   align-items: baseline;
+  gap: 6rpx 8rpx;
+}
+
+.report-history-row__sub-right {
+  flex-shrink: 0;
+  max-width: 46%;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: baseline;
+  gap: 4rpx 10rpx;
+}
+
+.report-history-row__time {
+  font-size: 22rpx;
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
 }
 
 .report-history-row__product-name {
   font-size: 26rpx;
   color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex-shrink: 1;
 }
 
 .report-history-row__sku {
   font-size: 22rpx;
   color: var(--color-text-tertiary);
+  flex-shrink: 0;
 }
 
-.report-history-row__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8rpx;
-  align-items: baseline;
-  font-size: 22rpx;
+.report-history-row__defective {
+  font-size: 20rpx;
+  color: #d97706;
+  font-weight: 600;
 }
 
 .report-history-row__operator {
-  flex-shrink: 0;
   font-size: 20rpx;
   color: var(--color-text-tertiary);
-  text-align: right;
-  max-width: 200rpx;
+  max-width: 180rpx;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.report-history-row__defective {
-  flex-shrink: 0;
+.report-history-row__report-no {
   font-size: 20rpx;
-  color: #d97706;
-  font-weight: 600;
-  text-align: right;
+  color: var(--color-text-tertiary);
 }
 
 .report-history-footer {
@@ -199,7 +191,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  padding: 20rpx var(--spacing-page) calc(20rpx + env(safe-area-inset-bottom));
+  padding: 16rpx var(--spacing-page) calc(16rpx + env(safe-area-inset-bottom));
   background: var(--color-bg-card);
   border-top: 1rpx solid var(--color-border);
   box-shadow: 0 -8rpx 24rpx rgba(15, 23, 42, 0.06);

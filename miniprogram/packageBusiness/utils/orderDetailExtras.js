@@ -44,7 +44,8 @@ function matRowToDisplayRow(row, productsById) {
     returnText: String(returnQty),
     netText: String(net),
     reportCostText: String(reportCost),
-    surplusText: String(surplus)
+    surplusText: String(surplus),
+    surplusNeg: surplus < 0
   };
 }
 
@@ -64,9 +65,19 @@ function buildOrderDetailMaterialRows(params) {
 
 
 
-    params.order,_params$orders = params.orders,orders = _params$orders === void 0 ? [] : _params$orders,_params$products = params.products,products = _params$products === void 0 ? [] : _params$products,_params$boms = params.boms,boms = _params$boms === void 0 ? [] : _params$boms,_params$nodes = params.nodes,nodes = _params$nodes === void 0 ? [] : _params$nodes,_params$stockRecords = params.stockRecords,stockRecords = _params$stockRecords === void 0 ? [] : _params$stockRecords,_params$productMilest = params.productMilestoneProgresses,productMilestoneProgresses = _params$productMilest === void 0 ? [] : _params$productMilest,_params$productionLin = params.productionLinkMode,productionLinkMode = _params$productionLin === void 0 ? 'order' : _params$productionLin;
+    params.order,_params$orders = params.orders,orders = _params$orders === void 0 ? [] : _params$orders,_params$products = params.products,products = _params$products === void 0 ? [] : _params$products,_params$boms = params.boms,boms = _params$boms === void 0 ? [] : _params$boms,_params$nodes = params.nodes,nodes = _params$nodes === void 0 ? [] : _params$nodes,_params$stockRecords = params.stockRecords,stockRecords = _params$stockRecords === void 0 ? [] : _params$stockRecords,_params$productMilest = params.productMilestoneProgresses,productMilestoneProgresses = _params$productMilest === void 0 ? [] : _params$productMilest,_params$productionLin = params.productionLinkMode,productionLinkMode = _params$productionLin === void 0 ? 'order' : _params$productionLin,_params$scopeProdu = params.scopeProductId,scopeProductId = _params$scopeProdu === void 0 ? '' : _params$scopeProdu;
 
-  if (!order || !order.id) {
+  // 产品模式可与网页 OrderMaterialInfoSection.scopeProductId 一样，不强制要有工单
+  const productIdForStats =
+    productionLinkMode === 'product'
+      ? (scopeProductId || (order && order.productId) || '')
+      : '';
+
+  if (productionLinkMode === 'product') {
+    if (!productIdForStats) {
+      return { rows: [], emptyText: '该产品暂无 BOM 物料，请先在产品中配置 BOM' };
+    }
+  } else if (!order || !order.id) {
     return { rows: [], emptyText: '该工单暂无 BOM 物料，请先在产品中配置 BOM' };
   }
 
@@ -74,9 +85,9 @@ function buildOrderDetailMaterialRows(params) {
   const nodeWeightEnabledMap = buildNodeWeightEnabledMap(nodes);
   let materials = [];
 
-  if (productionLinkMode === 'product' && order.productId) {
+  if (productionLinkMode === 'product' && productIdForStats) {
     materials = computeProductMaterialStats({
-      productId: order.productId,
+      productId: productIdForStats,
       orders,
       idx,
       stockRecords,

@@ -113,6 +113,7 @@ import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldCo
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { toLocalDateYmd } from '../../utils/localDateTime';
 import PlanProductDetail from '../plan-order-list/PlanProductDetail';
+import { productThumbSrc } from '../../utils/productImageSrc';
 
 const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planFormSettings?: PlanFormSettings }> = ({
   productionLinkMode,
@@ -1393,9 +1394,9 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
                   className="bg-white px-5 py-2 rounded-[32px] border border-slate-200 hover:shadow-xl hover:border-indigo-200 transition-all grid grid-cols-1 lg:grid-cols-[360px_1fr_auto] gap-3 lg:gap-4 items-center"
                 >
                   <div className="flex items-center gap-4 min-w-0">
-                    {product?.imageUrl ? (
+                    {productThumbSrc(product) ? (
                       <div className="w-14 h-14 rounded-2xl overflow-hidden border border-slate-100 flex-shrink-0">
-                        <img loading="lazy" decoding="async" src={product.imageUrl} alt={productName} className="w-full h-full object-cover block" />
+                        <img loading="lazy" decoding="async" src={productThumbSrc(product)} alt={productName} className="w-full h-full object-cover block" />
                       </div>
                     ) : (
                       <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 bg-indigo-50 text-indigo-600">
@@ -1489,7 +1490,8 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
                           e.stopPropagation();
                           const uniquePartners = [...new Set(ptnrs.map(p => p.partner))];
                           setMatDispatchPartnerOptions(uniquePartners);
-                          setMatDispatchPartner(uniquePartners[0] ?? '');
+                          // 多个外协工厂时默认不预选，由用户在弹窗内选择
+                          setMatDispatchPartner(uniquePartners.length === 1 ? (uniquePartners[0] ?? '') : '');
                           setMatDispatchWarehouseId(
                             resolvePreferredSingleWarehouse(
                               warehouses,
@@ -1526,7 +1528,8 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
                             return;
                           }
                           setMatReturnPartnerOptions(outsourceDispatchPartners);
-                          setMatReturnPartner(outsourceDispatchPartners[0] ?? '');
+                          // 多个外协工厂时默认不预选，由用户在弹窗内选择
+                          setMatReturnPartner(outsourceDispatchPartners.length === 1 ? (outsourceDispatchPartners[0] ?? '') : '');
                           setMatReturnWarehouseId(
                             resolvePreferredSingleWarehouse(
                               warehouses,

@@ -1,3 +1,4 @@
+@import '../../styles/matrix-keyboard-page.wxss';
 @import '../production-plan-create/production-plan-create.wxss';
 @import '../production-plans/production-plans.wxss';
 @import '../../styles/outsource-shared.wxss';
@@ -22,6 +23,11 @@
 
 .defect-action-form {
   padding: 16rpx var(--spacing-page) calc(160rpx + env(safe-area-inset-bottom));
+}
+
+/* 盖过 shorthand padding，保证键盘弹出时有足够滚白 */
+.defect-action-form.matrix-keyboard-page--open {
+  padding-bottom: calc(580rpx + env(safe-area-inset-bottom)) !important;
 }
 
 .defect-action-mode-bar {

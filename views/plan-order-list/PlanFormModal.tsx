@@ -52,6 +52,7 @@ import {
   salesOrderLinesForPlan,
   shouldImportCustomerFromSalesOrder,
 } from '../../utils/planFromSalesOrder';
+import { productThumbSrc } from '../../utils/productImageSrc';
 
 export interface PlanFormModalProps {
   open: boolean;
@@ -523,14 +524,14 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
                       <div className="flex items-stretch gap-4">
                         {selectedProduct && (
                           <div className="shrink-0">
-                            {selectedProduct.imageUrl ? (
+                            {productThumbSrc(selectedProduct) ? (
                               <button
                                 type="button"
-                                onClick={() => onImagePreview?.(selectedProduct.imageUrl!)}
+                                onClick={() => onImagePreview?.(productThumbSrc(selectedProduct))}
                                 className="rounded-xl overflow-hidden border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none block"
                               >
                                 <img
-                                  src={selectedProduct.imageUrl}
+                                  src={productThumbSrc(selectedProduct)}
                                   alt={selectedProduct.name}
                                   className="w-16 h-16 object-cover block"
                                 />

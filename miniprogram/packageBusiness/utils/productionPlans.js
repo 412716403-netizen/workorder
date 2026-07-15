@@ -450,7 +450,7 @@ plan,
 
   const sections = [];
   const productParts = productNameSkuParts(product);
-  const productImageUrl = product && product.imageUrl ? String(product.imageUrl) : '';
+  const productImageUrl = product && (product.imageThumb || product.imageUrl) ? String(product.imageUrl) : '';
   const unitName = getProductUnitName(product, dictionaries);
   const productCustomTags = mapProductCustomTags(product, category, { includeFile: false });
   const useMatrix = productHasColorSizeMatrix(product, category) &&

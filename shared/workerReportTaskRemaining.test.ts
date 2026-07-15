@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeWorkerReportTaskDisplayRemaining } from './workerReportTaskRemaining.js';
+import { computeWorkerReportTaskDisplayRemaining, computeProductModeWorkerTaskRemaining } from './workerReportTaskRemaining.js';
 import type { ReportableOrder, ReportableProdRecord } from './orderReportableAggregates.js';
 
 function makeOrder(overrides?: Partial<ReportableOrder>): ReportableOrder {
@@ -132,5 +132,129 @@ describe('computeWorkerReportTaskDisplayRemaining', () => {
       prodRecords,
     });
     expect(remaining).toBe(7);
+  });
+});
+
+describe('computeProductModeWorkerTaskRemaining', () => {
+  it('aggregates remaining across product orders with PMP completed', () => {
+    const blockOrders: ReportableOrder[] = [
+      {
+        id: 'o1',
+        productId: 'p1',
+        parentOrderId: null,
+        items: [{ variantId: null, quantity: 100 }],
+        milestones: [
+          { id: 'm1', templateId: 'tpl-a', completedQuantity: 0, reports: [] },
+        ],
+      },
+      {
+        id: 'o2',
+        productId: 'p1',
+        parentOrderId: null,
+        items: [{ variantId: null, quantity: 50 }],
+        milestones: [
+          { id: 'm2', templateId: 'tpl-a', completedQuantity: 0, reports: [] },
+        ],
+      },
+    ];
+    const stats = computeProductModeWorkerTaskRemaining({
+      blockOrders,
+      productId: 'p1',
+      milestoneTemplateId: 'tpl-a',
+      pmp: [
+        {
+          productId: 'p1',
+          milestoneTemplateId: 'tpl-a',
+          completedQuantity: 40,
+          reports: [{ quantity: 40, approvalStatus: 'APPROVED' }],
+        },
+      ],
+      processSequenceMode: 'free',
+      outOfSequenceTemplateIds: new Set(),
+      prodRecords: [],
+    });
+    expect(stats.totalQty).toBe(150);
+    expect(stats.reported).toBe(40);
+    expect(stats.remaining).toBe(110);
+  });
+
+  it('returns 0 remaining when completed + pending covers max reportable', () => {
+    const blockOrders: ReportableOrder[] = [
+      {
+        id: 'o1',
+        productId: 'p1',
+        parentOrderId: null,
+        items: [{ variantId: null, quantity: 10 }],
+        milestones: [
+          {
+            id: 'm1',
+            templateId: 'tpl-a',
+            completedQuantity: 5,
+            reports: [
+              { quantity: 5, approvalStatus: 'APPROVED' },
+              { quantity: 5, approvalStatus: 'PENDING' },
+            ],
+          },
+        ],
+      },
+    ];
+    const stats = computeProductModeWorkerTaskRemaining({
+      blockOrders,
+      productId: 'p1',
+      milestoneTemplateId: 'tpl-a',
+      pmp: [],
+      processSequenceMode: 'free',
+      outOfSequenceTemplateIds: new Set(),
+      prodRecords: [],
+    });
+    // max 10 − 已报 5 − 待审 5 = 0
+    expect(stats.remaining).toBe(0);
+  });
+
+  it('subtracts pending PMP reports and product-level outsource from remaining', () => {
+    const blockOrders: ReportableOrder[] = [
+      {
+        id: 'o1',
+        productId: 'p1',
+        parentOrderId: null,
+        items: [{ variantId: null, quantity: 100 }],
+        milestones: [
+          { id: 'm1', templateId: 'tpl-a', completedQuantity: 0, reports: [] },
+        ],
+      },
+    ];
+    const prodRecords: ReportableProdRecord[] = [
+      {
+        id: 'os1',
+        type: 'OUTSOURCE',
+        orderId: null,
+        productId: 'p1',
+        nodeId: 'tpl-a',
+        quantity: 20,
+        status: '加工中',
+      },
+    ];
+    const stats = computeProductModeWorkerTaskRemaining({
+      blockOrders,
+      productId: 'p1',
+      milestoneTemplateId: 'tpl-a',
+      pmp: [
+        {
+          productId: 'p1',
+          milestoneTemplateId: 'tpl-a',
+          completedQuantity: 30,
+          reports: [
+            { quantity: 30, approvalStatus: 'APPROVED' },
+            { quantity: 10, approvalStatus: 'PENDING' },
+          ],
+        },
+      ],
+      processSequenceMode: 'free',
+      outOfSequenceTemplateIds: new Set(),
+      prodRecords,
+    });
+    // max 100 − 已报 30 − 待审 10 − 产品级外协 20 = 40
+    expect(stats.reported).toBe(30);
+    expect(stats.remaining).toBe(40);
   });
 });

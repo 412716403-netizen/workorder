@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Package, X, ArrowUpFromLine } from 'lucide-react';
+import { Package, X, ArrowUpFromLine, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import type {
   ProductionOpRecord,
@@ -136,6 +136,7 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
   const [matDispatchCustomValues, setMatDispatchCustomValues] = useState<Record<string, unknown>>({});
   const [lineBatchByProduct, setLineBatchByProduct] = useState<Record<string, string>>({});
   const [entryTimestamp, setEntryTimestamp] = useState(() => defaultEntryDatetimeLocal());
+  const [removedMaterialIds, setRemovedMaterialIds] = useState<Set<string>>(() => new Set());
   const categoryById = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
   const { listAvailableBatches } = useStockSnapshot({ enabled: !!(matDispatchOrderId || matDispatchProductId) });
   const productById = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
@@ -161,11 +162,32 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
   useEffect(() => {
     setMatDispatchCustomValues({});
     setLineBatchByProduct({});
+    setRemovedMaterialIds(new Set());
   }, [matDispatchOrderId, matDispatchProductId]);
 
   useEffect(() => {
     setLineBatchByProduct({});
   }, [matDispatchPartner, matDispatchWarehouseId]);
+
+  const removeMaterialRow = (productId: string) => {
+    setRemovedMaterialIds(prev => {
+      const next = new Set(prev);
+      next.add(productId);
+      return next;
+    });
+    setMatDispatchQty(prev => {
+      if (!(productId in prev)) return prev;
+      const next = { ...prev };
+      delete next[productId];
+      return next;
+    });
+    setLineBatchByProduct(prev => {
+      if (!(productId in prev)) return prev;
+      const next = { ...prev };
+      delete next[productId];
+      return next;
+    });
+  };
 
   /**
    * 自动切换出库仓库：
@@ -183,7 +205,7 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
   const targetProductId = isProductMode ? matDispatchProductId : targetOrder?.productId;
   const targetProduct = targetProductId ? products.find(p => p.id === targetProductId) : undefined;
   const orderQty = targetOrder?.items?.reduce((s, i) => s + i.quantity, 0) ?? 0;
-  const bomMaterials: { productId: string; name: string; sku: string; unitNeeded: number; nodeNames: string[] }[] = [];
+  let bomMaterials: { productId: string; name: string; sku: string; unitNeeded: number; nodeNames: string[] }[] = [];
   const matMap = new Map<string, { name: string; sku: string; unitNeeded: number; nodeNames: Set<string> }>();
   const addBomItems = (bom: BOM, qty: number, nodeName: string) => {
     bom.items.forEach(bi => {
@@ -285,6 +307,8 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
   matMap.forEach((v, pid) => {
     bomMaterials.push({ productId: pid, ...v, nodeNames: Array.from(v.nodeNames) });
   });
+  const bomMaterialTotal = bomMaterials.length;
+  bomMaterials = bomMaterials.filter(m => !removedMaterialIds.has(m.productId));
   const showDispatchBatchCol = bomMaterials.some(m => {
     const p = products.find(x => x.id === m.productId);
     return categoryUsesBatchManagement(categoryById.get(p?.categoryId ?? ''));
@@ -552,6 +576,7 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
                   }}
                   className={`${psiOrderBillCompactLineInputClass} cursor-pointer bg-white`}
                 >
+                  <option value="">请选择外协工厂</option>
                   {matDispatchPartnerOptions.map(p => (
                     <option key={p} value={p}>{p}</option>
                   ))}
@@ -595,8 +620,10 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
               </div>
             </div>
           ) : null}
-          {bomMaterials.length === 0 ? (
+          {bomMaterialTotal === 0 ? (
             <p className="py-8 text-center text-slate-400 text-sm">该{isProductMode ? '产品' : '工单'}未配置 BOM 物料，无法进行物料外发</p>
+          ) : bomMaterials.length === 0 ? (
+            <p className="py-8 text-center text-slate-400 text-sm">已移除全部物料行，关闭后重新打开可恢复</p>
           ) : (
             <div className="overflow-x-auto rounded-2xl border border-slate-100">
             <table className="w-full min-w-[760px] text-left border-collapse text-sm">
@@ -609,6 +636,7 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
                     <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest whitespace-nowrap w-52">批次</th>
                   ) : null}
                   <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest text-center whitespace-nowrap w-44">本次外发数量</th>
+                  <th className="px-2 py-3 text-[10px] font-black text-slate-400 tracking-widest text-center whitespace-nowrap w-14">操作</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
@@ -687,6 +715,17 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
                           className={`${psiOrderBillCompactLineInputClass} text-right tabular-nums bg-white`}
                           placeholder="0"
                         />
+                      </td>
+                      <td className="px-2 py-4 text-center align-middle">
+                        <button
+                          type="button"
+                          onClick={() => removeMaterialRow(m.productId)}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+                          title="删除此行"
+                          aria-label={`删除物料 ${m.name}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </td>
                     </tr>
                   );

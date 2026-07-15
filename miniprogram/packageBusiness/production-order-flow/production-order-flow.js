@@ -1,4 +1,4 @@
-const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../../utils/planFilterPanel.js');
+const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../utils/planFilterPanel.js');
 const { ORDER_DISPATCH_STATUS_LABEL, OrderDispatchStatus } = require('../config/productionOrders.js');
 const { fetchTenantConfig, fetchProductsAll } = require('../utils/orderApi.js');
 const { normalizeMasterList, productNameSkuParts } = require('../utils/productionPlans.js');
@@ -151,7 +151,7 @@ Page({
       name: display.name,
       sku: display.sku,
       showSku: display.showSku,
-      imageUrl: product.imageUrl || '',
+      imageUrl: (product.imageThumb || product.imageUrl) || '',
     };
   },
 

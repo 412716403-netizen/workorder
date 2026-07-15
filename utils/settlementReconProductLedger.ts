@@ -5,6 +5,7 @@ import {
   type SettlementReconRow,
   type SettlementWorkReportItem,
 } from './settlementReconLedger';
+import { productThumbSrc } from './productImageSrc';
 
 export type { ReconProductCellMeta };
 
@@ -40,7 +41,7 @@ function resolveProductMeta(
   return {
     name: p?.name ?? fallbackName?.trim() ?? '—',
     sku: (p?.sku ?? '').trim() || null,
-    imageUrl: (p?.imageUrl ?? '').trim() || null,
+    imageUrl: productThumbSrc(p) || null,
   };
 }
 

@@ -13,7 +13,7 @@ const _require4 =
 
   require('../utils/reportBatchDetail.js'),buildReportBatches = _require4.buildReportBatches,mapBatchToListRow = _require4.mapBatchToListRow,computeReportHistoryStatsFromBatches = _require4.computeReportHistoryStatsFromBatches;
 const _require5 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require5.readNavBarMetrics,readWindowMetrics = _require5.readWindowMetrics;
-const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../../utils/planFilterPanel.js');
+const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../utils/planFilterPanel.js');
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();

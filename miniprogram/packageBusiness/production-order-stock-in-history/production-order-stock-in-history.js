@@ -19,7 +19,7 @@ const _require7 =
 
   require('../utils/stockInFlow.js'),buildStockInFlowListRows = _require7.buildStockInFlowListRows,filterStockInFlowRows = _require7.filterStockInFlowRows,sumStockInFlowQty = _require7.sumStockInFlowQty;
 const _require8 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require8.readNavBarMetrics,readWindowMetrics = _require8.readWindowMetrics;
-const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../../utils/planFilterPanel.js');
+const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../utils/planFilterPanel.js');
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();

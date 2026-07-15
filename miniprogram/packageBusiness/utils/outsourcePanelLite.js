@@ -94,7 +94,7 @@ function buildOutsourceStatsByOrder(params) {
       return {
         productId,
         productName: nameSku.productName,
-        productImageUrl: product && product.imageUrl || '',
+        productImageUrl: product && (product.imageThumb || product.imageUrl) || '',
         productSku: nameSku.productSku,
         showProductSku: nameSku.showProductSku,
         partners: sortedPartners
@@ -165,7 +165,7 @@ function buildOutsourceStatsByOrder(params) {
       orderNumber: order && order.orderNumber || orderId,
       productId: order && order.productId,
       productName: nameSku.productName,
-      productImageUrl: product && product.imageUrl || '',
+      productImageUrl: product && (product.imageThumb || product.imageUrl) || '',
       productSku: nameSku.productSku,
       showProductSku: nameSku.showProductSku,
       customer: order && order.customer || '',

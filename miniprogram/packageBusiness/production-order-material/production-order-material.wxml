@@ -12,9 +12,20 @@
   <view class="material-issue-page">
     <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
 
-    <block wx:elif="{{hasRows}}">
+    <block wx:elif="{{pageReady}}">
       <view class="material-issue-hero">
-        <view wx:if="{{showPartner}}" class="material-issue-hero__partner">加工厂：{{partnerLabel}}</view>
+        <view wx:if="{{showPartnerPicker}}" class="material-issue-hero__partner-picker">
+          <view class="material-issue-wh__label">加工厂</view>
+          <picker
+            mode="selector"
+            range="{{partnerPickerRange}}"
+            value="{{partnerIndex}}"
+            bindchange="onPartnerChange"
+          >
+            <view class="material-issue-wh__picker">{{partnerPickerRange[partnerIndex] || '请选择外协工厂'}}</view>
+          </picker>
+        </view>
+        <view wx:elif="{{showPartner}}" class="material-issue-hero__partner">加工厂：{{partnerLabel}}</view>
         <view class="material-issue-hero__line material-issue-hero__line--tap" catchtap="onProductHeroTap">
           <text wx:if="{{showOrderNumber}}" class="material-issue-hero__order">{{orderNumber}}</text>
           <text wx:if="{{showOrderNumber}}" class="material-issue-hero__sep"> — </text>
@@ -47,7 +58,7 @@
         </picker>
       </view>
 
-      <scroll-view scroll-x show-scrollbar="{{false}}" class="material-issue-table-scroll">
+      <scroll-view wx:if="{{hasRows}}" scroll-x show-scrollbar="{{false}}" class="material-issue-table-scroll">
         <!-- 外协退料：已外发 / 已消耗 / 已退回 / 可退 -->
         <view
           wx:if="{{isReturnMode && returnLayout === 'outsource'}}"
@@ -61,6 +72,7 @@
             <view class="material-issue-table__th material-issue-table__th--stat material-issue-table__th--highlight">可退</view>
             <view wx:if="{{showBatchCol}}" class="material-issue-table__th material-issue-table__th--batch">批次</view>
             <view class="material-issue-table__th material-issue-table__th--input">{{inputColLabel}}</view>
+            <view class="material-issue-table__th material-issue-table__th--action">操作</view>
           </view>
 
           <view wx:for="{{rows}}" wx:key="materialProductId" class="material-issue-table__tr">
@@ -105,6 +117,14 @@
               />
               <text wx:else class="material-issue-input material-issue-input--readonly">—</text>
             </view>
+            <view class="material-issue-table__td material-issue-table__td--action">
+              <view
+                wx:if="{{canMaterial}}"
+                class="material-issue-row-delete"
+                catchtap="onRemoveMaterialRow"
+                data-id="{{item.materialProductId}}"
+              >删除</view>
+            </view>
           </view>
         </view>
 
@@ -122,6 +142,7 @@
             <view class="material-issue-table__th material-issue-table__th--stat material-issue-table__th--highlight">结余</view>
             <view wx:if="{{showBatchCol}}" class="material-issue-table__th material-issue-table__th--batch">批次</view>
             <view class="material-issue-table__th material-issue-table__th--input">{{inputColLabel}}</view>
+            <view class="material-issue-table__th material-issue-table__th--action">操作</view>
           </view>
 
           <view wx:for="{{rows}}" wx:key="materialProductId" class="material-issue-table__tr">
@@ -167,6 +188,14 @@
               />
               <text wx:else class="material-issue-input material-issue-input--readonly">—</text>
             </view>
+            <view class="material-issue-table__td material-issue-table__td--action">
+              <view
+                wx:if="{{canMaterial}}"
+                class="material-issue-row-delete"
+                catchtap="onRemoveMaterialRow"
+                data-id="{{item.materialProductId}}"
+              >删除</view>
+            </view>
           </view>
         </view>
 
@@ -178,6 +207,7 @@
             <view class="material-issue-table__th material-issue-table__th--progress">{{progressColLabel}}</view>
             <view wx:if="{{showBatchCol}}" class="material-issue-table__th material-issue-table__th--batch">批次</view>
             <view class="material-issue-table__th material-issue-table__th--input">{{inputColLabel}}</view>
+            <view class="material-issue-table__th material-issue-table__th--action">操作</view>
           </view>
 
           <view wx:for="{{rows}}" wx:key="materialProductId" class="material-issue-table__tr">
@@ -249,9 +279,19 @@
               />
               <text wx:else class="material-issue-input material-issue-input--readonly">—</text>
             </view>
+            <view class="material-issue-table__td material-issue-table__td--action">
+              <view
+                wx:if="{{canMaterial}}"
+                class="material-issue-row-delete"
+                catchtap="onRemoveMaterialRow"
+                data-id="{{item.materialProductId}}"
+              >删除</view>
+            </view>
           </view>
         </view>
       </scroll-view>
+
+      <view wx:else class="plan-list-empty">{{emptyText}}</view>
     </block>
 
     <view wx:else class="plan-list-empty">{{emptyText}}</view>

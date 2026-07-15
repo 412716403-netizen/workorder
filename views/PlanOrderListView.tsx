@@ -84,6 +84,7 @@ import OrderDetailModal from './OrderDetailModal';
 import { production as productionApi } from '../services/api';
 import { useQuery } from '@tanstack/react-query';
 import { normalizeDecimals } from '../contexts/formSettingsDefaults';
+import { productThumbSrc } from '../utils/productImageSrc';
 
 interface PlanOrderListViewProps {
   productionLinkMode?: 'order' | 'product';
@@ -324,7 +325,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
       const acc: ProductionOpRecord[] = [];
       let page = 1;
       const pageSize = 200;
-      const types = 'REWORK,OUTSOURCE,REWORK_REPORT,STOCK_IN';
+      const types = 'REWORK,OUTSOURCE,REWORK_REPORT,STOCK_IN,SCRAP';
       for (;;) {
         const res = await productionApi.listPage({
           page,
@@ -768,9 +769,9 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
               return (
                 <div key={plan.id} className="bg-white px-5 py-2 rounded-[32px] border border-slate-200 hover:shadow-xl hover:border-indigo-200 transition-all group flex items-center justify-between">
                   <div className="flex items-center gap-4">
-                      {product?.imageUrl ? (
-                        <button type="button" onClick={() => setImagePreviewUrl(product.imageUrl)} className="w-14 h-14 rounded-2xl overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none">
-                          <img loading="lazy" decoding="async" src={product.imageUrl} alt={product.name} className="w-full h-full object-cover block" />
+                      {productThumbSrc(product) ? (
+                        <button type="button" onClick={() => setImagePreviewUrl(productThumbSrc(product))} className="w-14 h-14 rounded-2xl overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none">
+                          <img loading="lazy" decoding="async" src={productThumbSrc(product)} alt={product.name} className="w-full h-full object-cover block" />
                         </button>
                       ) : (
                         <div className={`w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 bg-indigo-50 text-indigo-600`}>
@@ -875,8 +876,8 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                         return (
                           <div key={plan.id} className={`bg-white px-5 py-2 rounded-2xl border transition-all flex items-center justify-between ${isChild ? 'border-l-4 border-l-slate-300 border-slate-200' : 'border-slate-200'} hover:shadow-lg hover:border-slate-300`} style={indentPx > 0 ? { marginLeft: `${indentPx}px` } : undefined}>
                             <div className="flex items-center gap-4">
-                              {product?.imageUrl ? (
-                                <button type="button" onClick={() => setImagePreviewUrl(product.imageUrl)} className="w-12 h-12 rounded-xl overflow-hidden border border-slate-100 flex-shrink-0"><img loading="lazy" decoding="async" src={product.imageUrl} alt={product.name} className="w-full h-full object-cover block" /></button>
+                              {productThumbSrc(product) ? (
+                                <button type="button" onClick={() => setImagePreviewUrl(productThumbSrc(product))} className="w-12 h-12 rounded-xl overflow-hidden border border-slate-100 flex-shrink-0"><img loading="lazy" decoding="async" src={productThumbSrc(product)} alt={product.name} className="w-full h-full object-cover block" /></button>
                               ) : (
                                 <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-indigo-50 text-indigo-600`}>
                                   {plan.status === PlanStatus.CONVERTED ? <CheckCircle2 className="w-6 h-6" /> : <Clock className="w-6 h-6" />}
@@ -981,9 +982,9 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                         return (
                           <div key={plan.id} className={`bg-white px-5 py-2 rounded-2xl border transition-all flex items-center justify-between ${isChild ? 'border-l-4 border-l-slate-300 border-slate-200' : 'border-slate-200'} hover:shadow-lg hover:border-slate-300`} style={indentPx > 0 ? { marginLeft: `${indentPx}px` } : undefined}>
                           <div className="flex items-center gap-4">
-                            {product?.imageUrl ? (
-                              <button type="button" onClick={() => setImagePreviewUrl(product.imageUrl)} className="w-12 h-12 rounded-xl overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none">
-                                <img loading="lazy" decoding="async" src={product.imageUrl} alt={product.name} className="w-full h-full object-cover block" />
+                            {productThumbSrc(product) ? (
+                              <button type="button" onClick={() => setImagePreviewUrl(productThumbSrc(product))} className="w-12 h-12 rounded-xl overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none">
+                                <img loading="lazy" decoding="async" src={productThumbSrc(product)} alt={product.name} className="w-full h-full object-cover block" />
                               </button>
                             ) : (
                               <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-indigo-50 text-indigo-600`}>

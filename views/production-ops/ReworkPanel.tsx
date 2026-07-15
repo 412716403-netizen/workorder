@@ -54,6 +54,7 @@ import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { orderBelongsToProductInList } from '../../utils/reworkMergeBucketOrderId';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 import PlanProductDetail from '../plan-order-list/PlanProductDetail';
+import { productThumbSrc } from '../../utils/productImageSrc';
 
 /** sourceReworkId → partner 的预建索引 */
 function buildReworkPartnerMap(allRecords: ProductionOpRecord[]): Map<string, string> {
@@ -113,19 +114,31 @@ const ReworkPanel: React.FC<PanelProps> = ({
   /**
    * Phase 3.E：ReworkPanel 自取数据，types=REWORK,REWORK_REPORT,SCRAP,OUTSOURCE + activeOrderIds 窄拉，
    * 不再依赖 ProductionMgmtOpsView 的 12000 上限全量。OUTSOURCE 仅用于反查 sourceReworkId 的外协工厂。
+   * 产品模式必须额外带 productIds：后端对无 orderId 的 REWORK/OUTSOURCE 走 productIds OR 分支，
+   * 否则产品级返工会漏拉，待处理不良少扣、行数偏多。
    */
   const activeOrderIdsCsv = useMemo(
     () => orders.map(o => o.id).filter(Boolean).join(','),
     [orders],
   );
+  const activeProductIdsCsv = useMemo(
+    () => [...new Set(products.map(p => p.id).filter(Boolean))].join(','),
+    [products],
+  );
   const reworkPanelQuery = useQuery({
-    queryKey: ['reworkPanel.records', activeOrderIdsCsv],
+    queryKey: ['reworkPanel.records', productionLinkMode, activeOrderIdsCsv, activeProductIdsCsv],
     queryFn: () =>
       fetchProductionByFilter({
         types: 'REWORK,REWORK_REPORT,SCRAP,OUTSOURCE',
         orderIds: activeOrderIdsCsv || undefined,
+        ...(productionLinkMode === 'product' && activeProductIdsCsv
+          ? { productIds: activeProductIdsCsv }
+          : {}),
       }),
-    enabled: activeOrderIdsCsv.length > 0,
+    enabled:
+      productionLinkMode === 'product'
+        ? activeOrderIdsCsv.length > 0 || activeProductIdsCsv.length > 0
+        : activeOrderIdsCsv.length > 0,
     staleTime: 15_000,
   });
   const records = useMemo<ProductionOpRecord[]>(() => {
@@ -704,9 +717,9 @@ const ReworkPanel: React.FC<PanelProps> = ({
                 return (
                   <div key={order.id} className={cardClass} style={indentPx != null && indentPx > 0 ? { marginLeft: `${indentPx}px` } : undefined}>
                     <div className="flex items-center gap-4 min-w-0">
-                      {product?.imageUrl ? (
+                      {productThumbSrc(product) ? (
                         <button type="button" onClick={() => setReworkDetailOrderId(order.parentOrderId ?? order.id)} className={`${isChild ? 'w-12 h-12 rounded-xl' : 'w-14 h-14 rounded-2xl'} overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none block`}>
-                          <img loading="lazy" decoding="async" src={product.imageUrl} alt={order.productName} className="w-full h-full object-cover block" />
+                          <img loading="lazy" decoding="async" src={productThumbSrc(product)} alt={order.productName} className="w-full h-full object-cover block" />
                         </button>
                       ) : (
                         <button type="button" onClick={() => setReworkDetailOrderId(order.parentOrderId ?? order.id)} className={`${isChild ? 'w-12 h-12 rounded-xl' : 'w-14 h-14 rounded-2xl'} flex items-center justify-center flex-shrink-0 bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100 transition-colors`}>
@@ -838,9 +851,9 @@ const ReworkPanel: React.FC<PanelProps> = ({
                     className="bg-white px-5 py-2 rounded-[32px] border border-slate-200 hover:shadow-xl hover:border-indigo-200 transition-all group grid grid-cols-1 lg:grid-cols-[360px_1fr_auto] gap-3 lg:gap-4 items-center"
                   >
                     <div className="flex items-center gap-4 min-w-0">
-                      {fp?.imageUrl ? (
+                      {productThumbSrc(fp) ? (
                         <div className="w-14 h-14 rounded-2xl overflow-hidden border border-slate-100 flex-shrink-0">
-                          <img loading="lazy" decoding="async" src={fp.imageUrl} alt={fp.name} className="w-full h-full object-cover block" />
+                          <img loading="lazy" decoding="async" src={productThumbSrc(fp)} alt={fp.name} className="w-full h-full object-cover block" />
                         </div>
                       ) : (
                         <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 bg-indigo-50 text-indigo-600">

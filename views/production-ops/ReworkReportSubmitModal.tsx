@@ -64,6 +64,7 @@ import { useTraceabilityPlugin } from '../../hooks/useTraceabilityPlugin';
 import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
 import DocEntryTimeField from '../../components/DocEntryTimeField';
 import { defaultEntryDatetimeLocal, entryDatetimeLocalToTimestamp } from '../../utils/docEntryTime';
+import { productThumbSrc } from '../../utils/productImageSrc';
 
 function reworkReportCollabFromValues(values: Record<string, unknown>): { collabData?: Record<string, unknown> } {
   const clean = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== '' && v != null && v !== undefined));
@@ -1023,9 +1024,9 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
                           <div className="min-w-0 flex-1 space-y-1">
                             <label className={psiOrderBillCompactLineLabelClass}>报工明细</label>
                             <div className="flex min-w-0 items-start gap-2">
-                              {product?.imageUrl ? (
+                              {productThumbSrc(product) ? (
                                 <img
-                                  src={product.imageUrl}
+                                  src={productThumbSrc(product)}
                                   alt=""
                                   className="h-9 w-9 shrink-0 rounded-lg border border-slate-100 object-cover"
                                   loading="lazy"

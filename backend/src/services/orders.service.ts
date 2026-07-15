@@ -935,20 +935,27 @@ async function enforceReportQuantity(
 
 export async function listProductProgress(
   db: TenantPrismaClient,
-  opts: { all?: boolean; page?: number; pageSize?: number },
+  opts: { all?: boolean; page?: number; pageSize?: number; productId?: string },
 ) {
   const include = { reports: { orderBy: { timestamp: 'desc' as const } } };
   const orderBy = { updatedAt: 'desc' as const };
+  const where = opts.productId ? { productId: opts.productId } : {};
 
   if (opts.all) {
-    return db.productMilestoneProgress.findMany({ include, orderBy });
+    return db.productMilestoneProgress.findMany({ where, include, orderBy });
   }
 
   const page = Math.max(1, opts.page ?? 1);
   const pageSize = Math.min(Math.max(1, opts.pageSize ?? 50), 200);
   const [data, total] = await Promise.all([
-    db.productMilestoneProgress.findMany({ include, orderBy, skip: (page - 1) * pageSize, take: pageSize }),
-    db.productMilestoneProgress.count({}),
+    db.productMilestoneProgress.findMany({
+      where,
+      include,
+      orderBy,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    db.productMilestoneProgress.count({ where }),
   ]);
   return { data, total, page, pageSize };
 }

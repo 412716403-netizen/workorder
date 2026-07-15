@@ -60,6 +60,7 @@ import {
   entryDatetimeLocalToTimestamp,
   hydrateEntryDatetimeLocal,
 } from '../../utils/docEntryTime';
+import { productThumbSrc } from '../../utils/productImageSrc';
 
 export interface OutsourceFlowDocumentDetailModalProps {
   productionLinkMode: 'order' | 'product';
@@ -824,18 +825,18 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
               const matrixEnabled = productHasColorSizeMatrix(product, category);
               const productThumb = (
                 <>
-                  {product?.imageUrl ? (
+                  {productThumbSrc(product) ? (
                     <button
                       type="button"
                       onClick={e => {
                         e.stopPropagation();
-                        setDetailImagePreviewUrl(product.imageUrl!);
+                        setDetailImagePreviewUrl(productThumbSrc(product));
                       }}
                       className="h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-white transition-opacity hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       aria-label="查看产品图片"
                     >
                       <img
-                        src={product.imageUrl}
+                        src={productThumbSrc(product)}
                         alt={productName}
                         className="h-full w-full object-cover"
                         loading="lazy"

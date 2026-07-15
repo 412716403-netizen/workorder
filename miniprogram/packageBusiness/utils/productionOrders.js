@@ -243,6 +243,7 @@ function flattenBlockOrders(block) {
         return rows;
       }
     case 'productGroup':
+      // 产品模式由 mapProductGroupRow 直接产出单卡，不再逐工单展开
       return block.orders.map((order, i) => ({
         order,
         depth: 0,
@@ -253,6 +254,74 @@ function flattenBlockOrders(block) {
     default:
       return [];
   }
+}
+
+/**
+ * 产品模式产品组卡行（对齐 Web OrderListView productGroup：一产品一卡）
+ */
+function mapProductGroupRow(block, ctx = {}) {
+  const product = ctx.product || null;
+  const parts = productNameSkuParts(product);
+  const productName =
+    parts.name !== '—'
+      ? parts.name
+      : block.productName || (block.orders && block.orders[0] && block.orders[0].productName) || '—';
+  const productSku =
+    parts.sku ||
+    (product && product.sku) ||
+    (block.orders && block.orders[0] && block.orders[0].sku) ||
+    '';
+  const processChips = ctx.processChips || [];
+  const totalQty = (block.orders || []).reduce((s, o) => s + sumOrderQty(o), 0);
+  const showConfigureProcessHint = !!ctx.showConfigureProcessHint;
+  const imageUrl = (product && (product.imageThumb || product.imageUrl)) || '';
+  const customTags = ctx.productCustomTags || [];
+
+  return {
+    id: block.productId,
+    rowType: 'productGroup',
+    orderNumber: '',
+    productName,
+    productSku,
+    showProductSku: Boolean(productSku && productName),
+    productImageUrl: imageUrl,
+    showProductImage: Boolean(String(imageUrl).trim()),
+    productCustomTags: customTags,
+    showProductCustomTags: customTags.length > 0,
+    placeholderIconSrc: DEFAULT_PRODUCT_PLACEHOLDER_ICON,
+    customer: '',
+    showCustomer: false,
+    dueDateLabel: '',
+    showDueDate: false,
+    showSubRow: false,
+    quantityText: totalQty > 0 ? `合计 ${totalQty} 件` : '',
+    showQuantity: totalQty > 0,
+    dispatchLabel: '',
+    dispatchPillClass: '',
+    showDispatchPill: false,
+    processChips,
+    showProcessChips: processChips.length > 0,
+    showConfigureProcessHint,
+    configureProcessHintText: showConfigureProcessHint
+      ? processChips.length > 0
+        ? '工单上的工序来自历史复制，请先在产品管理中为本产品绑定工序。'
+        : '本产品尚未配置工序，无法报工。'
+      : '',
+    depth: 0,
+    blockType: 'productGroup',
+    productGroupLabel: '',
+    showProductGroupLabel: false,
+    expanded: true,
+    hasChildren: false,
+    canReport: !!ctx.canReport,
+    navigateId: '',
+    productId: block.productId,
+    reworkOrderId: '',
+    showDetailAction: ctx.canViewDetail !== false,
+    showReworkAction: false,
+    showMaterialAction: ctx.canMaterial !== false,
+    orderCount: (block.orders || []).length,
+  };
 }
 
 function mapOrderListRow(order, ctx = {}) {
@@ -302,6 +371,7 @@ function mapOrderListRow(order, ctx = {}) {
     showQuantity: qty > 0,
     dispatchLabel: dispatchStatusLabel(dispatchStatus),
     dispatchPillClass: dispatchStatusPillClass(dispatchStatus),
+    showDispatchPill: productionLinkMode !== 'product',
     processChips,
     showProcessChips: processChips.length > 0,
     depth,
@@ -450,8 +520,8 @@ function mapOrderDetailView(order, ctx = {}) {
     productName: parts.name || order.productName || '—',
     productSku: parts.sku || order.sku || '',
     showProductSku: parts.showSku,
-    productImageUrl: product && product.imageUrl || '',
-    showProductImage: Boolean(product && product.imageUrl),
+    productImageUrl: product && (product.imageThumb || product.imageUrl) || '',
+    showProductImage: Boolean(product && (product.imageThumb || product.imageUrl)),
     productCustomTags: customTags,
     showProductCustomTags: customTags.length > 0,
     placeholderIconSrc: DEFAULT_PRODUCT_PLACEHOLDER_ICON,
@@ -542,6 +612,7 @@ module.exports = {
   buildOrderListBlocks,
   flattenBlockOrders,
   mapOrderListRow,
+  mapProductGroupRow,
   mapOrderDetailView,
   buildOrderDispatchConfirmMessage,
   buildOrderReportSummaryRows,

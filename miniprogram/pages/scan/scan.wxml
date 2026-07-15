@@ -77,8 +77,11 @@
             wx:for-item="task"
             wx:key="key"
             class="worker-report-card"
+            data-mode="{{task.mode}}"
             data-order-id="{{task.orderId}}"
             data-milestone-id="{{task.milestoneId}}"
+            data-product-id="{{task.productId}}"
+            data-milestone-template-id="{{task.milestoneTemplateId}}"
             bindtap="onTaskTap"
           >
             <view class="worker-report-card__thumb">

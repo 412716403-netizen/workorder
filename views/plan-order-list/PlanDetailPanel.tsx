@@ -91,6 +91,7 @@ import {
   normalizePlanMilestoneNodeIdsForSave,
 } from '../../utils/planMilestoneRoute';
 import { milestoneNodeIdsEqual } from '../../shared/productProcessLock';
+import { productThumbSrc } from '../../utils/productImageSrc';
 
 // formatPlanCreatedDateList / effectiveSupplierIdFromProduct / purchaseOrderRecordMatchesPlanPanel
 // 已抽离至 utils/planDetailHelpers.ts
@@ -1362,9 +1363,9 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
 
           <div className="px-10 py-6 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-50">
              <div className="flex items-center gap-5">
-                {viewProduct.imageUrl ? (
-                  <button type="button" onClick={() => onImagePreview(viewProduct.imageUrl)} className="w-14 h-14 rounded-2xl overflow-hidden border border-slate-200 shadow-sm flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none">
-                    <img loading="lazy" decoding="async" src={viewProduct.imageUrl} alt={viewProduct.name} className="w-full h-full object-cover block" />
+                {productThumbSrc(viewProduct) ? (
+                  <button type="button" onClick={() => onImagePreview(productThumbSrc(viewProduct))} className="w-14 h-14 rounded-2xl overflow-hidden border border-slate-200 shadow-sm flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none">
+                    <img loading="lazy" decoding="async" src={productThumbSrc(viewProduct)} alt={viewProduct.name} className="w-full h-full object-cover block" />
                   </button>
                 ) : (
                   <div className="w-14 h-14 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-100 flex-shrink-0"><Info className="w-7 h-7" /></div>

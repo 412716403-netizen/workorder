@@ -1,4 +1,6 @@
 {
   "navigationStyle": "custom",
-  "usingComponents": {}
+  "usingComponents": {
+    "order-process-scroll": "/packageBusiness/components/order-process-scroll/order-process-scroll"
+  }
 }

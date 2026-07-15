@@ -108,6 +108,9 @@ Page({
       if (d.accessToken) wx.setStorageSync('accessToken', d.accessToken);
       if (d.refreshToken) wx.setStorageSync('refreshToken', d.refreshToken);
       clearFeaturePluginsCache();
+      try {
+        require('../../utils/masterDataCache.js').invalidateMasterDataCache();
+      } catch (_e) { /* ignore */ }
       wx.setStorageSync(
         'tenantCtx',
         JSON.stringify({

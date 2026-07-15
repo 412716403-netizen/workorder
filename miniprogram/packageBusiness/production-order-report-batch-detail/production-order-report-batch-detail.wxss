@@ -37,6 +37,10 @@
   box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
 }
 
+.plan-detail-matrix__qty--defective {
+  color: #d97706;
+}
+
 .report-batch-hero {
   display: flex;
   gap: 20rpx;

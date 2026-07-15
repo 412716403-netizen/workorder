@@ -74,6 +74,7 @@
         "production-orders/production-orders",
         "production-order-flow/production-order-flow",
         "production-order-detail/production-order-detail",
+        "production-product-detail/production-product-detail",
         "production-order-report/production-order-report",
         "worker-report-scan/worker-report-scan",
         "worker-report-confirm/worker-report-confirm",
@@ -160,12 +161,6 @@
     }
   ],
   "preloadRule": {
-    "pages/scan/scan": {
-      "network": "all",
-      "packages": [
-        "business"
-      ]
-    },
     "pages/apps/apps": {
       "network": "all",
       "packages": [

@@ -175,7 +175,14 @@ export const listProductProgress = asyncHandler(async (req, res) => {
   const db = getTenantPrisma(req.tenantId!);
   const { all, page, pageSize } = listQueryFromRequest(req);
   if (all) warnListAllFromRequest('orders.listProductProgress', req);
-  res.json(await ordersService.listProductProgress(db, { all, page, pageSize }));
+  res.json(
+    await ordersService.listProductProgress(db, {
+      all,
+      page,
+      pageSize,
+      productId: optStr(req.query.productId),
+    }),
+  );
 });
 
 export const createProductReport = asyncHandler(async (req, res) => {

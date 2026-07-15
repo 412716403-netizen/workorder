@@ -9,6 +9,11 @@ const _require4 =
 
 
   require('../utils/productionOrders.js'),mapOrderDetailView = _require4.mapOrderDetailView,buildOrderDispatchConfirmMessage = _require4.buildOrderDispatchConfirmMessage,buildOrderReportSummaryRows = _require4.buildOrderReportSummaryRows,getProductUnitName = _require4.getProductUnitName,normalizeMasterList = _require4.normalizeMasterList,formatOrderDate = _require4.formatOrderDate;
+const {
+  buildOrderProcessChips,
+  buildOutOfSequenceTemplateIds,
+} = require('../utils/orderProcessChips.js');
+const { buildDefectiveReworkByOrderMilestone } = require('../utils/outsourceDispatchMatrix.js');
 const _require5 = require('../utils/orderReportHistory.js'),buildReportHistoryDateRangeForOrder = _require5.buildReportHistoryDateRangeForOrder;
 const _require6 = require('../utils/pendingStockComputeLite.js'),stockInAggregatesForOrder = _require6.stockInAggregatesForOrder;
 const _require7 =
@@ -33,23 +38,10 @@ const _require8 =
 const _require9 = require('../utils/materialStockPanel.js'),buildMaterialIndexes = _require9.buildMaterialIndexes;
 const _require0 = require('../utils/planApi.js'),fetchDictionaries = _require0.fetchDictionaries;
 const _require1 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require1.readNavBarMetrics,readWindowMetrics = _require1.readWindowMetrics;
-
-async function fetchOrdersByProductId(productId) {
-  const pageSize = 200;
-  let page = 1;
-  let total = Infinity;
-  const all = [];
-  while (all.length < total) {
-    const result = await listOrdersPaginated({ page, pageSize, productId });
-    const batch = result.data || [];
-    all.push(...batch);
-    total = typeof result.total === 'number' ? result.total : all.length;
-    if (!batch.length || batch.length < pageSize) break;
-    page += 1;
-    if (page > 40) break;
-  }
-  return all;
-}
+const {
+  fetchAllOrdersByProductId,
+  fetchOrdersForProductMaterialFamily,
+} = require('../utils/productReportHints.js');
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
@@ -100,6 +92,9 @@ Page({
     productHero: null,
     summaryStats: null,
     sections: [],
+    processChips: [],
+    showProcessChips: false,
+    canReport: false,
     reportSummaryRows: [],
     showReportSummary: false,
     showMaterialSection: false,
@@ -332,6 +327,7 @@ Page({
 
     const perms = ctx.permissions || [];
     const canEdit = hasPermission(perms, 'production:orders_detail:edit');
+    const canReport = hasPermission(perms, 'production:orders_report_records:create');
     const canViewReportHistory = hasPermission(perms, 'production:orders_report_records:view');
     const canViewPendingStock = hasPrefixPermission(perms, 'production:orders_pending_stock_in');
     const canViewOutsourceFlow = hasPermission(perms, 'production:outsource_records:view');
@@ -339,6 +335,7 @@ Page({
 
     this.setData({
       canEdit,
+      canReport,
       canViewReportHistory,
       canViewPendingStock,
       canViewOutsourceFlow,
@@ -357,6 +354,7 @@ Page({
 
       this._order = order;
       this._productionLinkMode = config && config.productionLinkMode || 'order';
+      this._processSequenceMode = config && config.processSequenceMode || 'sequential';
       const planFormSettings = config && config.planFormSettings || {};
       const showDeliveryDate = (planFormSettings.listDisplay || {}).showDeliveryDate !== false;
       const dictionaries = dictionariesRaw || { colors: [], sizes: [], units: [] };
@@ -368,10 +366,15 @@ Page({
         fetchCategoriesAll(),
         order.planOrderId ? getPlan(order.planOrderId) : Promise.resolve(null),
         fetchProductionRecords({
-          types: 'STOCK_IN',
-          orderIds: this._orderId
+          types: 'STOCK_IN,SCRAP,REWORK,REWORK_REPORT',
+          orderIds: this._orderId,
+          all: 'true',
         }),
-        order.productId ? fetchOrdersByProductId(order.productId) : Promise.resolve([order]),
+        order.productId
+          ? (this._productionLinkMode === 'product'
+            ? fetchOrdersForProductMaterialFamily(listOrdersPaginated, order.productId)
+            : fetchAllOrdersByProductId(listOrdersPaginated, order.productId))
+          : Promise.resolve([order]),
         fetchBomsAll(),
         fetchNodesAll(),
         this._productionLinkMode === 'product' ? listProductProgressAll() : Promise.resolve([])]
@@ -382,6 +385,7 @@ Page({
       const familyOrderIds = buildOrderFamilyIds(order, orders, buildMaterialIndexes(productsRaw, bomsRaw, orders));
       const stockRecordsRaw = await fetchProductionRecords({
         types: 'STOCK_OUT,STOCK_RETURN',
+        all: 'true',
         orderIds: familyOrderIds.join(','),
         ...(this._productionLinkMode === 'product' && order.productId ?
         { sourceProductIds: order.productId } :
@@ -389,6 +393,7 @@ Page({
       });
       const outsourceRecordsRaw = await fetchProductionRecords({
         types: 'OUTSOURCE',
+        all: 'true',
         orderIds: this._orderId
       });
       if (seq !== this._loadSeq) return;
@@ -446,7 +451,26 @@ Page({
         processRows: []
       });
 
-      const sections = view.sections.filter((s) => s.kind !== 'hint' && s.id !== 'process' && s.id !== 'basic');
+      // 基础信息与工单明细保留；工序进度改用 chips 区展示（对齐列表 / Web strip）
+      const sections = view.sections.filter((s) => s.kind !== 'hint' && s.id !== 'process');
+
+      const outOfSequenceIds = buildOutOfSequenceTemplateIds(nodes);
+      const drMap = buildDefectiveReworkByOrderMilestone([order], prodRecords);
+      const getDefectiveRework = (orderId, templateId) =>
+        drMap.get(`${orderId}|${templateId}`) || {
+          defective: 0,
+          rework: 0,
+          reworkByVariant: {},
+        };
+      const processChips =
+        this._productionLinkMode === 'order'
+          ? buildOrderProcessChips(order, {
+              processSequenceMode: this._processSequenceMode || 'sequential',
+              outOfSequenceTemplateIds: outOfSequenceIds,
+              canReport,
+              getDefectiveRework,
+            })
+          : [];
 
       this.setData({
         loading: false,
@@ -455,6 +479,8 @@ Page({
         productHero: view.productHero,
         summaryStats,
         sections,
+        processChips,
+        showProcessChips: processChips.length > 0,
         reportSummaryRows,
         showReportSummary: reportSummaryRows.length > 0,
         showMaterialSection: true,
@@ -473,6 +499,8 @@ Page({
         sections: [],
         productHero: null,
         summaryStats: null,
+        processChips: [],
+        showProcessChips: false,
         reportSummaryRows: [],
         showReportSummary: false,
         showMaterialSection: false,
@@ -483,5 +511,19 @@ Page({
       wx.showToast({ title: err && err.message || '加载失败', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 1000);
     }
-  }
+  },
+
+  onProcessChipTap(e) {
+    if (!this.data.canReport) {
+      wx.showToast({ title: '暂无报工权限', icon: 'none' });
+      return;
+    }
+    const detail = e.detail || {};
+    const orderId = detail.orderId || this._orderId;
+    const milestoneId = detail.milestoneId;
+    if (!orderId || !milestoneId) return;
+    wx.navigateTo({
+      url: `/packageBusiness/production-order-report/production-order-report?orderId=${encodeURIComponent(orderId)}&milestoneId=${encodeURIComponent(milestoneId)}`
+    });
+  },
 });

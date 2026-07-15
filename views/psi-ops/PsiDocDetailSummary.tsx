@@ -8,6 +8,7 @@ import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDo
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 import { PlanFormCustomFieldReadonly } from '../../components/PlanFormCustomFieldControls';
+import { productThumbSrc } from '../../utils/productImageSrc';
 
 type PsiDocType = 'PURCHASE_ORDER' | 'SALES_ORDER' | 'PURCHASE_BILL' | 'SALES_BILL';
 
@@ -422,7 +423,7 @@ const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
                       sku={rowProductSku}
                       variantLabel={variantLabel}
                       customTags={customTags}
-                      imageUrl={product?.imageUrl}
+                      imageUrl={productThumbSrc(product) || undefined}
                       onImagePreview={onProductImagePreview}
                     />
 

@@ -15,14 +15,16 @@ import {
   ReportApprovalStatus,
 } from '../types/index.js';
 import {
+  reworkMergeBucketOrderId,
   type ReportableOrder,
   type ReportableProdRecord,
+  type ReportablePmp,
 } from '../../../shared/orderReportableAggregates.js';
-import { computeWorkerReportTaskDisplayRemaining } from '../../../shared/workerReportTaskRemaining.js';
-import { productHasColorSizeMatrix } from '../../../shared/productColorSize.js';
 import {
-  reworkMergeBucketOrderId,
-} from '../../../shared/orderReportableAggregates.js';
+  computeWorkerReportTaskDisplayRemaining,
+  computeProductModeWorkerTaskRemaining,
+} from '../../../shared/workerReportTaskRemaining.js';
+import { productHasColorSizeMatrix } from '../../../shared/productColorSize.js';
 import {
   recalcMilestoneCompleted,
   recalcProgressCompleted,
@@ -256,7 +258,8 @@ export type MyReportableTask = {
 };
 
 /**
- * 可报任务 = 成员 assignedMilestoneIds ∩ remaining > 0 的工单工序（及产品模式入口）。
+ * 可报任务 = 成员 assignedMilestoneIds ∩ remaining > 0。
+ * product 模式按「产品 × 工序模板」聚合；order 模式按「工单 × 工序实例」。
  */
 export async function listMyReportableTasks(
   db: TenantPrismaClient,
@@ -279,7 +282,12 @@ export async function listMyReportableTasks(
   const config = await settingsService.getConfig(tenantId);
   const processSequenceMode: ProcessSequenceMode =
     config.processSequenceMode === 'free' ? 'free' : 'sequential';
-  void opts?.productionLinkMode;
+  const productionLinkMode: 'order' | 'product' =
+    opts?.productionLinkMode === 'product' || opts?.productionLinkMode === 'order'
+      ? opts.productionLinkMode
+      : config.productionLinkMode === 'product'
+        ? 'product'
+        : 'order';
 
   const outOfSequenceNodes = await db.globalNodeTemplate.findMany({
     where: { allowOutOfSequence: true },
@@ -329,12 +337,20 @@ export async function listMyReportableTasks(
     parentOrderId: o.parentOrderId ?? null,
   }));
   const prodRecordOrderIds = resolveProdRecordOrderIds(orderForest);
+  const productIdsForRecords = [...new Set(orders.map((o) => o.productId))];
   const prodRecordsRaw =
-    prodRecordOrderIds.length === 0
+    prodRecordOrderIds.length === 0 && productIdsForRecords.length === 0
       ? []
       : await db.productionOpRecord.findMany({
           where: {
-            orderId: { in: prodRecordOrderIds },
+            OR: [
+              ...(prodRecordOrderIds.length > 0
+                ? [{ orderId: { in: prodRecordOrderIds } }]
+                : []),
+              ...(productIdsForRecords.length > 0
+                ? [{ productId: { in: productIdsForRecords }, orderId: null }]
+                : []),
+            ],
             type: { in: ['OUTSOURCE', 'REWORK', 'REWORK_REPORT'] },
           },
           select: {
@@ -368,9 +384,12 @@ export async function listMyReportableTasks(
           where: { id: { in: productIds } },
           select: {
             id: true,
+            name: true,
+            sku: true,
             categoryId: true,
             colorIds: true,
             sizeIds: true,
+            milestoneNodeIds: true,
             variants: { select: { id: true } },
           },
         });
@@ -391,14 +410,146 @@ export async function listMyReportableTasks(
       p.id,
       {
         id: p.id,
+        name: p.name,
+        sku: p.sku,
         categoryId: p.categoryId,
         colorIds: jsonStringArray(p.colorIds),
         sizeIds: jsonStringArray(p.sizeIds),
+        milestoneNodeIds: jsonStringArray(p.milestoneNodeIds),
         variants: p.variants,
       },
     ]),
   );
   const categoryById = new Map(categoriesRaw.map((c) => [c.id, c]));
+
+  if (productionLinkMode === 'product') {
+    const nodeNameById = new Map<string, string>();
+    const nodeRows = await db.globalNodeTemplate.findMany({
+      where: { id: { in: assignedMilestoneIds } },
+      select: { id: true, name: true },
+    });
+    nodeRows.forEach((n) => nodeNameById.set(n.id, n.name));
+
+    const pmpRaw =
+      productIds.length === 0
+        ? []
+        : await db.productMilestoneProgress.findMany({
+            where: { productId: { in: productIds } },
+            select: {
+              productId: true,
+              milestoneTemplateId: true,
+              variantId: true,
+              completedQuantity: true,
+              reports: {
+                select: {
+                  quantity: true,
+                  defectiveQuantity: true,
+                  variantId: true,
+                  approvalStatus: true,
+                },
+              },
+            },
+          });
+    const pmpList: ReportablePmp[] = pmpRaw.map((p) => ({
+      productId: p.productId,
+      milestoneTemplateId: p.milestoneTemplateId,
+      variantId: p.variantId,
+      completedQuantity: Number(p.completedQuantity ?? 0),
+      reports: (p.reports ?? []).map((r) => ({
+        quantity: Number(r.quantity ?? 0),
+        defectiveQuantity: Number(r.defectiveQuantity ?? 0),
+        variantId: r.variantId,
+        approvalStatus: r.approvalStatus,
+      })),
+    }));
+
+    const ordersByProduct = new Map<string, typeof orders>();
+    orders.forEach((o) => {
+      const list = ordersByProduct.get(o.productId) ?? [];
+      list.push(o);
+      ordersByProduct.set(o.productId, list);
+    });
+
+    for (const productId of productIds) {
+      const blockOrdersRaw = ordersByProduct.get(productId) ?? [];
+      if (blockOrdersRaw.length === 0) continue;
+      const product = productById.get(productId);
+      let routeIds = product?.milestoneNodeIds ?? [];
+      if (routeIds.length === 0) {
+        const seen = new Set<string>();
+        blockOrdersRaw.forEach((o) => {
+          o.milestones.forEach((m) => {
+            if (!seen.has(m.templateId)) {
+              seen.add(m.templateId);
+              routeIds.push(m.templateId);
+            }
+          });
+        });
+      }
+      const relevantTemplates = routeIds.filter((tid) => assignedSet.has(tid));
+      if (relevantTemplates.length === 0) continue;
+
+      const reportableOrders = blockOrdersRaw.map(mapOrderForReportableRemaining);
+      const productProdRecords: ReportableProdRecord[] = [];
+      const seenRec = new Set<string>();
+      blockOrdersRaw.forEach((o) => {
+        resolveOrderProdRecords(o, prodRecordsByOrder, orderForest).forEach((r) => {
+          if (seenRec.has(r.id)) return;
+          seenRec.add(r.id);
+          productProdRecords.push(r);
+        });
+      });
+      prodRecords.forEach((r) => {
+        if (r.orderId == null && r.productId === productId && !seenRec.has(r.id)) {
+          seenRec.add(r.id);
+          productProdRecords.push(r);
+        }
+      });
+
+      const productName =
+        product?.name ?? blockOrdersRaw[0]?.productName ?? null;
+      const productSku = product?.sku ?? blockOrdersRaw[0]?.sku ?? null;
+
+      for (const tid of relevantTemplates) {
+        let milestoneName = nodeNameById.get(tid) || tid;
+        for (const o of blockOrdersRaw) {
+          const hit = o.milestones.find((m) => m.templateId === tid);
+          if (hit?.name) {
+            milestoneName = hit.name;
+            break;
+          }
+        }
+        const stats = computeProductModeWorkerTaskRemaining({
+          blockOrders: reportableOrders,
+          productId,
+          milestoneTemplateId: tid,
+          pmp: pmpList,
+          processSequenceMode,
+          outOfSequenceTemplateIds,
+          prodRecords: productProdRecords,
+        });
+        if (!(stats.remaining > 0)) continue;
+        tasks.push({
+          mode: 'product',
+          productId,
+          productName,
+          productSku,
+          milestoneTemplateId: tid,
+          milestoneName,
+          remaining: stats.remaining,
+          maxReportable: stats.maxReportable,
+          totalQty: stats.totalQty,
+          reported: stats.reported,
+        });
+      }
+    }
+
+    return {
+      tasks,
+      assignedMilestoneIds,
+      emptyReason: tasks.length === 0 ? 'none' : undefined,
+    };
+  }
 
   for (const order of orders) {
     const msList = order.milestones;
