@@ -154,7 +154,7 @@ export interface PlanDetailPanelProps {
   canViewOrderDetail?: boolean;
 
   // Shared UI actions
-  onImagePreview: (url: string) => void;
+  onImagePreview: (product: Product) => void;
   onFilePreview: (url: string, type: 'image' | 'pdf') => void;
   onPrintRun: (run: { template: PrintTemplate; plan: PlanOrder } | null) => void;
   itemCodeLabelPrintPickerTemplates: PrintTemplate[];
@@ -1364,7 +1364,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
           <div className="px-10 py-6 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-50">
              <div className="flex items-center gap-5">
                 {productThumbSrc(viewProduct) ? (
-                  <button type="button" onClick={() => onImagePreview(productThumbSrc(viewProduct))} className="w-14 h-14 rounded-2xl overflow-hidden border border-slate-200 shadow-sm flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none">
+                  <button type="button" onClick={() => onImagePreview(viewProduct)} className="w-14 h-14 rounded-2xl overflow-hidden border border-slate-200 shadow-sm flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none">
                     <img loading="lazy" decoding="async" src={productThumbSrc(viewProduct)} alt={viewProduct.name} className="w-full h-full object-cover block" />
                   </button>
                 ) : (

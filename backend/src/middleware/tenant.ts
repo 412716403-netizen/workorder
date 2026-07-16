@@ -275,6 +275,60 @@ export function requireProductionRead(): RequestHandler {
 }
 
 /**
+ * 报工链路只读依赖端点（产品变体/色码字典/工序节点/单品码与虚拟批次扫码解析等）。
+ *
+ * 背景（修复小程序仅持顶级「工序报工」`process_report` 的工人报工体验）：
+ * - 报工页色码矩阵需要产品变体（`basic:products:view`）、颜色尺码字典（`basic:dictionaries:view`）、
+ *   产品分类（`settings:categories:view`）；
+ * - 工序名称 / 报工模板 / 设备与称重开关来自工序节点库（`settings:nodes:view`）；
+ * - 扫码报工需解析单品码 / 虚拟批次码（历史上挂 `production:plans:view`）。
+ * 仅持有 `process_report` 满足不了上述任何键，导致报工页缺颜色尺码矩阵、
+ * 工序名显示为节点 id、扫码录入直接 403「无权执行该操作」。
+ * 放宽为：持有原细粒度键，或生产域任一权限（裸 `production`、任意 `production:*`、`process_report`）。
+ */
+export function canReadWithProductionReport(perms: string[], required: string): boolean {
+  return (
+    hasSubPermission(perms, required) ||
+    hasAnyPermUnder(perms, ['production', 'process_report'])
+  );
+}
+
+export function requireSubPermissionOrProductionRead(required: string): RequestHandler {
+  return guardAny(perms => canReadWithProductionReport(perms, required));
+}
+
+/**
+ * 财务表单只读依赖（收付款类型、产品、合作单位、工人、收支账户类型等）。
+ *
+ * 背景：小程序收/付款登记依赖 `settings:finance_categories:view`、`basic:products:view` 等字典接口，
+ * 但财务细粒度角色通常只有 `finance:receipt:*` / `finance:payment:*`，读分类会 403 → 前端
+ * `.catch(() => [])` 得到空列表 → `linkProduct` 开关无法生效，「关联产品」不显示、产品选择器为空。
+ * 放宽为：持有原细粒度键，或财务域任一权限。
+ */
+export function canReadWithFinance(perms: string[], required: string): boolean {
+  return (
+    hasSubPermission(perms, required) ||
+    hasAnyPermUnder(perms, ['finance'])
+  );
+}
+
+export function requireSubPermissionOrFinanceRead(required: string): RequestHandler {
+  return guardAny(perms => canReadWithFinance(perms, required));
+}
+
+/** 生产报工 / 财务表单共用的主数据只读（产品、产品分类等） */
+export function canReadWithProductionOrFinance(perms: string[], required: string): boolean {
+  return (
+    canReadWithProductionReport(perms, required) ||
+    hasAnyPermUnder(perms, ['finance'])
+  );
+}
+
+export function requireSubPermissionOrProductionOrFinanceRead(required: string): RequestHandler {
+  return guardAny(perms => canReadWithProductionOrFinance(perms, required));
+}
+
+/**
  * 生产 API 模块入口（`app.ts` 挂载 `/api/orders`、`/api/production`）。
  * 仅持有 `process_report`（工序报工）的工人须能访问工人自报工相关 orders 端点；
  * 若入口仍用 `requirePermission('production')` 会在路由层 403，到不了 `requireProductionRead`。

@@ -52,6 +52,8 @@ const nodes = {
 };
 const warehouses = crud('/settings/warehouses');
 const financeCategories = crud('/settings/finance-categories');
+/** 收支账户类型（资金账户档案）：权限 settings:finance_account_types:* */
+const financeAccountTypes = crud('/settings/finance-account-types');
 
 function fetchSettingsConfig() {
   return request({ path: '/settings/config', method: 'GET' });
@@ -72,6 +74,7 @@ module.exports = {
   nodes,
   warehouses,
   financeCategories,
+  financeAccountTypes,
   fetchSettingsConfig,
   updateSettingsConfig,
   fetchCategoriesAll: categories.fetchAll,

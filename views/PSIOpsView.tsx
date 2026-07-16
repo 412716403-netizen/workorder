@@ -134,6 +134,11 @@ import {
 import { resolvePrimaryOrderIdForPlan } from '../utils/resolvePrimaryOrderIdForPlan';
 import { hasOpsPerm } from './production-ops/types';
 import { productThumbSrc } from '../utils/productImageSrc';
+import ProductImageLightbox, {
+  productPreviewFromProduct,
+  productPreviewFromSrc,
+  type ProductImagePreviewTarget,
+} from '../components/ProductImageLightbox';
 
 /** 避免 `records ?? []` 每次渲染新引用导致 react-query / useMemo 无意义抖动 */
 const EMPTY_PSI_CTX: unknown[] = [];
@@ -304,7 +309,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
   // 配货弹窗选择的出库仓库
   const [allocationWarehouseId, setAllocationWarehouseId] = useState<string>('');
   /** 进销存列表/单据详情内产品图点击放大 */
-  const [psiProductImagePreviewUrl, setPsiProductImagePreviewUrl] = useState<string | null>(null);
+  const [psiProductImagePreview, setPsiProductImagePreview] = useState<ProductImagePreviewTarget | null>(null);
 
   // 切换标签时清除新增/编辑状态，避免出现不匹配的弹窗
   useEffect(() => {
@@ -319,7 +324,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
     setPurchaseBillModalPhase(null);
     setSalesOrderModalPhase(null);
     setSalesBillModalPhase(null);
-    setPsiProductImagePreviewUrl(null);
+    setPsiProductImagePreview(null);
     setPendingShipDetailGroup(null);
     setSalesBillRevealFromPending(null);
   }, [type]);
@@ -861,7 +866,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
               getUnitName={getUnitName}
               formatQtyDisplay={formatQtyDisplay}
               receivedByOrderLine={receivedByOrderLine}
-              onProductImagePreview={setPsiProductImagePreviewUrl}
+              onProductImagePreview={setPsiProductImagePreview}
               headerCustomFieldDefs={safePurchaseOrderFormSettings.customFields}
               showAmount={showPsiDocAmount('PURCHASE_ORDER')}
             />
@@ -952,7 +957,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
               dictionaries={dictionaries}
               getUnitName={getUnitName}
               formatQtyDisplay={formatQtyDisplay}
-              onProductImagePreview={setPsiProductImagePreviewUrl}
+              onProductImagePreview={setPsiProductImagePreview}
               headerCustomFieldDefs={safePurchaseBillFormSettings.customFields}
               showAmount={showPsiDocAmount('PURCHASE_BILL')}
             />
@@ -1041,7 +1046,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
               dictionaries={dictionaries}
               getUnitName={getUnitName}
               formatQtyDisplay={formatQtyDisplay}
-              onProductImagePreview={setPsiProductImagePreviewUrl}
+              onProductImagePreview={setPsiProductImagePreview}
               headerCustomFieldDefs={safeSalesOrderFormSettings.customFields}
               showAmount={showPsiDocAmount('SALES_ORDER')}
             />
@@ -1137,7 +1142,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
               dictionaries={dictionaries}
               getUnitName={getUnitName}
               formatQtyDisplay={formatQtyDisplay}
-              onProductImagePreview={setPsiProductImagePreviewUrl}
+              onProductImagePreview={setPsiProductImagePreview}
               headerCustomFieldDefs={safeSalesBillFormSettings.customFields}
               showAmount={showPsiDocAmount('SALES_BILL')}
             />
@@ -1721,7 +1726,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                                         type="button"
                                         onClick={e => {
                                           e.stopPropagation();
-                                          setPsiProductImagePreviewUrl(productThumbSrc(product));
+                                          setPsiProductImagePreview(productPreviewFromProduct(product));
                                         }}
                                         className="h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-slate-50 transition-opacity hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                         aria-label="查看产品图片"
@@ -2273,28 +2278,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
         />
       )}
 
-      {psiProductImagePreviewUrl && (
-        <div
-          className="fixed inset-0 z-[100] flex animate-in fade-in items-center justify-center bg-black/80 p-4"
-          onClick={() => setPsiProductImagePreviewUrl(null)}
-          role="presentation"
-        >
-          <img
-            src={psiProductImagePreviewUrl}
-            alt="产品图片"
-            className="max-h-[90vh] max-w-full rounded-lg object-contain shadow-2xl"
-            onClick={e => e.stopPropagation()}
-          />
-          <button
-            type="button"
-            onClick={() => setPsiProductImagePreviewUrl(null)}
-            className="absolute right-4 top-4 rounded-full bg-white/20 p-2 text-white transition-all hover:bg-white/30"
-            aria-label="关闭"
-          >
-            <X className="h-6 w-6" />
-          </button>
-        </div>
-      )}
+      <ProductImageLightbox target={psiProductImagePreview} onClose={() => setPsiProductImagePreview(null)} />
 
     </div>
   );

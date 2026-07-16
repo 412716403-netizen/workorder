@@ -31,6 +31,7 @@ const _require11 =
 
 
   require('../utils/psiFormMatrixKeyboard.js'),emptyMatrixKeyboardState = _require11.emptyMatrixKeyboardState,handleMatrixCellTap = _require11.handleMatrixCellTap,handleMatrixKeyboardAction = _require11.handleMatrixKeyboardAction;
+const { handleMatrixOutsideTap } = require('../../utils/matrixKeyboardLayout.js');
 const _require12 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require12.readNavBarMetrics,readWindowMetrics = _require12.readWindowMetrics,computePlanCreateHeaderHeight = _require12.computePlanCreateHeaderHeight;
 const _require13 = require('../../utils/saveNavigation.js'),LIST_ROUTES = _require13.LIST_ROUTES,afterSaveReturnToList = _require13.afterSaveReturnToList;
 
@@ -55,6 +56,7 @@ Page({
     headerBlockHeight: 88,
     scrollHeight: 500,
     matrixScrollTop: 0,
+    pickerSheetOpen: false,
     ...emptyMatrixKeyboardState()
   },
 
@@ -254,6 +256,10 @@ Page({
 
   onMatrixCellTap(e) {
     handleMatrixCellTap(this, e);
+  },
+
+  onMatrixOutsideTap() {
+    handleMatrixOutsideTap(this);
   },
 
   onMatrixKeyboardAction(e) {

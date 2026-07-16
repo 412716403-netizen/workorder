@@ -80,6 +80,10 @@ import {
 } from '../utils/orderCenterSort';
 import { buildOutOfSequenceTemplateIds, findGatingPredecessorIndex, isProcessSequential } from '../shared/processSequence';
 import { productThumbSrc } from '../utils/productImageSrc';
+import ProductImageLightbox, {
+  productPreviewFromProduct,
+  type ProductImagePreviewTarget,
+} from '../components/ProductImageLightbox';
 import { useAppActions } from '../contexts/AppDataContext';
 import { useRefreshReportScopeWhileActive } from '../hooks/useRefreshReportScopeWhileActive';
 
@@ -206,6 +210,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   userPermissions,
   tenantRole
 }) => {
+  const [imagePreview, setImagePreview] = useState<ProductImagePreviewTarget | null>(null);
   const { refreshOrders, refreshPMP } = useAppActions();
   // 停留在工单中心时：切回浏览器窗口补刷完成量，使「待入库清单」角标能跟上小程序报工（不轮询，避免额外压力）
   useRefreshReportScopeWhileActive(true, {
@@ -809,6 +814,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   };
 
   return (
+    <>
     <div className="space-y-4 animate-in fade-in duration-500">
       <div className={moduleHeaderRowClass}>
         <div>
@@ -921,7 +927,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                   <div key={order.id} className={cardClass} style={indentPx != null && indentPx > 0 ? { marginLeft: `${indentPx}px` } : undefined}>
                     <div className="flex items-center gap-4 min-w-0">
                       {productThumbSrc(product) ? (
-                        <button type="button" onClick={() => hasOrderPerm('production:orders_detail:view') && openOrderDetail(order.id)} className={`${isChild ? 'w-12 h-12 rounded-xl' : 'w-14 h-14 rounded-2xl'} overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none block`}>
+                        <button type="button" onClick={() => setImagePreview(productPreviewFromProduct(product))} className={`${isChild ? 'w-12 h-12 rounded-xl' : 'w-14 h-14 rounded-2xl'} overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none block`} aria-label="查看产品图片">
                           <img loading="lazy" decoding="async" src={productThumbSrc(product)} alt={order.productName} className="w-full h-full object-cover block" />
                         </button>
                       ) : (
@@ -1270,9 +1276,9 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                         <div className="bg-white rounded-2xl border border-slate-200 px-5 py-2 hover:shadow-lg hover:border-indigo-200 transition-all grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-3 lg:gap-4 items-center">
                           <div className="flex items-center gap-4 min-w-0">
                             {productThumbSrc(product) ? (
-                              <div className="w-14 h-14 rounded-2xl overflow-hidden border border-slate-100 flex-shrink-0">
+                              <button type="button" onClick={() => setImagePreview(productPreviewFromProduct(product))} className="w-14 h-14 rounded-2xl overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none" aria-label="查看产品图片">
                                 <img loading="lazy" decoding="async" src={productThumbSrc(product)} alt={block.productName} className="w-full h-full object-cover block" />
-                              </div>
+                              </button>
                             ) : (
                               <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 bg-indigo-50 text-indigo-600">
                                 <Layers className="w-7 h-7" />
@@ -1941,6 +1947,8 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
         />
       )}
     </div>
+      <ProductImageLightbox target={imagePreview} onClose={() => setImagePreview(null)} />
+    </>
   );
 };
 

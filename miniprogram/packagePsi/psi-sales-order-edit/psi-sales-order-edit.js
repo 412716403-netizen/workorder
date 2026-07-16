@@ -37,7 +37,7 @@ const _require0 =
 
   require('../../utils/matrixQtyKeyboard.js'),activateMatrixKeyboardCell = _require0.activateMatrixKeyboardCell,applyMatrixKeyboardKey = _require0.applyMatrixKeyboardKey,buildMatrixKeyboardPreview = _require0.buildMatrixKeyboardPreview,createMatrixKeyboardInputSession = _require0.createMatrixKeyboardInputSession,getNextMatrixVariantIdInColumn = _require0.getNextMatrixVariantIdInColumn,getNextMatrixVariantIdInRow = _require0.getNextMatrixVariantIdInRow;
 const _require1 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require1.readNavBarMetrics,readWindowMetrics = _require1.readWindowMetrics,computePlanCreateHeaderHeight = _require1.computePlanCreateHeaderHeight,computePoEditFooterInsetPx = _require1.computePoEditFooterInsetPx;
-const _require10 = require('../../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require10.afterMatrixKeyboardOpen;
+const _require10 = require('../../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require10.afterMatrixKeyboardOpen,handleMatrixOutsideTap = _require10.handleMatrixOutsideTap;
 const _require11 = require('../../utils/saveNavigation.js'),LIST_ROUTES = _require11.LIST_ROUTES,afterSaveReturnToList = _require11.afterSaveReturnToList;
 const _require12 = require('../utils/psiPartnerProductLastPrice.js'),resolveDefaultSalesPrice = _require12.resolveDefaultSalesPrice;
 const { applyPartnerCreatedOnPage } = require('../../utils/mergePartnerList.js');
@@ -86,6 +86,7 @@ Page({
     headerBlockHeight: 88,
     scrollHeight: 500,
     matrixScrollTop: 0,
+    pickerSheetOpen: false,
     ...emptyMatrixKeyboardState()
   },
 
@@ -193,14 +194,23 @@ Page({
     });
   },
 
-  onCreatedAtChange(e) {
-    const createdAt = (e.detail && e.detail.value) || '';
-    this.setData({ form: { ...this.data.form, createdAt } });
+  onCreatedAtDateTimeChange(e) {
+    const detail = e.detail || {};
+    this.setData({
+      form: {
+        ...this.data.form,
+        createdAt: detail.date || '',
+        createdAtTime: detail.time || '',
+      },
+    });
   },
 
-  onCreatedAtTimeChange(e) {
-    const createdAtTime = (e.detail && e.detail.value) || '';
-    this.setData({ form: { ...this.data.form, createdAtTime } });
+  onPickerSheetOpen() {
+    this.setData({ pickerSheetOpen: true });
+  },
+
+  onPickerSheetClose() {
+    this.setData({ pickerSheetOpen: false });
   },
 
   onPartnerChange(e) {
@@ -324,6 +334,11 @@ Page({
       afterMatrixKeyboardOpen(this, '.plan-create-scroll');
     });
   },
+
+  onMatrixOutsideTap() {
+    handleMatrixOutsideTap(this);
+  },
+
 
   onMatrixKeyboardAction(e) {
     const _ref = e.detail || {},action = _ref.action,digit = _ref.digit;

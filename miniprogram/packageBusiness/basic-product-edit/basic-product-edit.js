@@ -69,7 +69,8 @@ Page({
     statusBarHeight: 20,
     navBarHeight: 44,
     headerBlockHeight: 88,
-    scrollHeight: 500
+    scrollHeight: 500,
+    pickerSheetOpen: false
   },
 
   onLoad(options) {

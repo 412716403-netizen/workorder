@@ -1,0 +1,55 @@
+<view class="plan-shell">
+  <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-header__title">{{accountName || '账户'}} · 流水</text>
+      <view class="plan-header__back plan-header__back--placeholder"></view>
+    </view>
+
+    <view class="plan-header__tools">
+      <view class="plan-search">
+        <input
+          class="plan-search__input"
+          value="{{searchKeyword}}"
+          bindinput="onSearchInput"
+          placeholder="单号 / 单位 / 备注"
+          confirm-type="search"
+          placeholder-class="plan-search__ph"
+        />
+        <view wx:if="{{searchKeyword}}" class="plan-search__clear" bindtap="onSearchClear">×</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <view class="fin-acct-flow-page">
+    <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
+
+    <block wx:elif="{{cards.length}}">
+      <view
+        wx:for="{{cards}}"
+        wx:key="id"
+        class="fin-acct-flow-card"
+        bindtap="onCardTap"
+        data-id="{{item.id}}"
+      >
+        <view class="fin-acct-flow-card__title-row">
+          <text class="fin-acct-flow-card__counterparty">{{item.counterparty}}</text>
+          <text class="fin-acct-flow-card__amount {{item.isReceipt ? 'fin-acct-flow-card__amount--in' : 'fin-acct-flow-card__amount--out'}}">{{item.amountText}}</text>
+        </view>
+        <text class="fin-acct-flow-card__doc">{{item.docNo}}</text>
+        <view class="fin-acct-flow-card__meta">
+          <text class="fin-acct-flow-card__meta-item">{{item.typeLabel}}</text>
+          <text class="fin-acct-flow-card__meta-item">{{item.timestampText}}</text>
+        </view>
+        <text wx:if="{{item.showNote}}" class="fin-acct-flow-card__note">{{item.note}}</text>
+      </view>
+
+      <view wx:if="{{loadingMore}}" class="plan-list-footer">加载中…</view>
+      <view wx:elif="{{!hasMore}}" class="plan-list-footer">已加载全部 {{total}} 笔</view>
+    </block>
+
+    <empty-state wx:else text="{{emptyText}}" />
+  </view>
+</view>

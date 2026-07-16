@@ -32,6 +32,7 @@ const LUCIDE_ICON_FILES = {
   FlaskConical: 'flask-conical',
   BookOpen: 'book-open',
   Settings: 'settings',
+  Wallet: 'wallet',
 };
 
 /** 与 shared/workbenchShortcuts.ts WORKBENCH_SHORTCUT_CATALOG 一致 */
@@ -51,6 +52,8 @@ const WORKBENCH_SHORTCUT_CATALOG = [
   { id: 'finance-receipt', label: '收款单', group: '财务结算', icon: 'ArrowDownCircle', module: 'finance', perm: 'finance:receipt:view', path: '/packageFinance/finance-receipts/finance-receipts' },
   { id: 'finance-payment', label: '付款单', group: '财务结算', icon: 'ArrowUpCircle', module: 'finance', perm: 'finance:payment:view', path: '/packageFinance/finance-payments/finance-payments' },
   { id: 'finance-reconciliation', label: '财务对账', group: '财务结算', icon: 'Scale', module: 'finance', perm: 'finance:reconciliation:allow', path: '/packageFinance/finance-reconciliation/finance-reconciliation' },
+  // 小程序专属入口（Web 端为财务模块内「资金账户」Tab，不在工作台快捷目录）；插件 funds_account 关闭时隐藏
+  { id: 'finance-account', label: '资金账户', group: '财务结算', icon: 'Wallet', module: 'finance', perm: 'finance:account:view', pluginId: 'funds_account', path: '/packageFinance/finance-accounts/finance-accounts' },
 
   { id: 'basic-products', label: '产品档案', group: '基础信息', icon: 'Boxes', module: 'basic', perm: 'basic:products:view', path: '/packageBusiness/basic-products/basic-products' },
   { id: 'basic-partners', label: '合作单位', group: '基础信息', icon: 'Building2', module: 'basic', perm: 'basic:partners:view', path: '/packageBusiness/basic-partners/basic-partners' },

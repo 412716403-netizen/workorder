@@ -1,5 +1,6 @@
 {
   "usingComponents": {
+    "datetime-calendar-select": "/components/datetime-calendar-select/datetime-calendar-select",
     "empty-state": "/components/empty-state/empty-state"
   }
 }

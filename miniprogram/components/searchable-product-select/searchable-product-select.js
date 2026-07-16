@@ -4,6 +4,7 @@ const {
   openBottomSheet,
   closeBottomSheet,
   clearBottomSheetTimers,
+  SHEET_ANIM_MS,
 } = require('../../utils/bottomSheetAnim.js');
 const { DEFAULT_PRODUCT_PLACEHOLDER_ICON } = require('../../utils/listProductThumb.js');
 
@@ -39,8 +40,13 @@ Component({
     displaySku: '',
     displayText: '',
     hasDisplayValue: false,
+    sheetTitle: '产品',
   },
   observers: {
+    'label': function (label) {
+      const title = String(label || '').trim() || '产品';
+      this.setData({ sheetTitle: title });
+    },
     'products, categories, search, activeTab, blockedProductIds, unavailableProductIds, valueId': function () {
       this.refreshFiltered();
     },
@@ -50,9 +56,15 @@ Component({
   },
   lifetimes: {
     attached() {
+      const title = String(this.properties.label || '').trim() || '产品';
+      this.setData({ sheetTitle: title });
       this.refreshDisplayValue();
     },
     detached() {
+      if (this._sheetCloseNotifyTimer) {
+        clearTimeout(this._sheetCloseNotifyTimer);
+        this._sheetCloseNotifyTimer = null;
+      }
       clearBottomSheetTimers(this);
     },
   },
@@ -144,12 +156,22 @@ Component({
 
     onOpen() {
       if (this.data.disabled) return;
-      openBottomSheet(this, { search: '', activeTab: 'all' }, { picker: this.properties.cell });
+      this.triggerEvent('sheetopen');
+      // 弹层统一对齐生产计划新建：取消顶栏 + picker 高度（约 75%）
+      openBottomSheet(this, { search: '', activeTab: 'all' }, { picker: true });
       this.refreshFiltered();
     },
 
     onClose() {
+      if (!this.data.open) return;
       closeBottomSheet(this, { search: '', activeTab: 'all' });
+      if (this._sheetCloseNotifyTimer) {
+        clearTimeout(this._sheetCloseNotifyTimer);
+      }
+      this._sheetCloseNotifyTimer = setTimeout(() => {
+        this.triggerEvent('sheetclose');
+        this._sheetCloseNotifyTimer = null;
+      }, SHEET_ANIM_MS);
     },
 
     noop() {},

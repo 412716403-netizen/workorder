@@ -36,7 +36,7 @@ const _require8 =
   require('../../utils/planApi.js'),createPlan = _require8.createPlan,fetchTenantConfig = _require8.fetchTenantConfig,fetchProductsAll = _require8.fetchProductsAll,fetchCategoriesAll = _require8.fetchCategoriesAll,fetchPartnersAll = _require8.fetchPartnersAll,fetchPartnerCategoriesAll = _require8.fetchPartnerCategoriesAll,fetchDictionaries = _require8.fetchDictionaries;
 const _require9 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require9.readNavBarMetrics,readWindowMetrics = _require9.readWindowMetrics,computePlanCreateHeaderHeight = _require9.computePlanCreateHeaderHeight;
 const _require0 = require('../../utils/saveNavigation.js'),LIST_ROUTES = _require0.LIST_ROUTES,afterSaveReturnToList = _require0.afterSaveReturnToList;
-const _require1 = require('../../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require1.afterMatrixKeyboardOpen;
+const _require1 = require('../../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require1.afterMatrixKeyboardOpen,handleMatrixOutsideTap = _require1.handleMatrixOutsideTap;
 const { applyPartnerCreatedOnPage } = require('../../utils/mergePartnerList.js');
 const {
   defaultPlanEntryDatetime,
@@ -71,6 +71,7 @@ Page({
     customer: '',
     entryDate: '',
     entryTime: '',
+    pickerSheetOpen: false,
     dueDate: '',
     showCustomer: false,
     showDeliveryDate: true,
@@ -234,12 +235,20 @@ Page({
     applyPartnerCreatedOnPage(this, e);
   },
 
-  onEntryDateChange(e) {
-    this.setData({ entryDate: e.detail.value || '' });
+  onEntryDateTimeChange(e) {
+    const detail = e.detail || {};
+    this.setData({
+      entryDate: detail.date || '',
+      entryTime: detail.time || '',
+    });
   },
 
-  onEntryTimeChange(e) {
-    this.setData({ entryTime: e.detail.value || '' });
+  onPickerSheetOpen() {
+    this.setData({ pickerSheetOpen: true });
+  },
+
+  onPickerSheetClose() {
+    this.setData({ pickerSheetOpen: false });
   },
 
   onDueDateChange(e) {
@@ -291,6 +300,11 @@ Page({
       afterMatrixKeyboardOpen(this, '.plan-create-scroll');
     });
   },
+
+  onMatrixOutsideTap() {
+    handleMatrixOutsideTap(this);
+  },
+
 
   onMatrixKeyboardAction(e) {
     const _ref2 = e.detail || {},action = _ref2.action,digit = _ref2.digit;

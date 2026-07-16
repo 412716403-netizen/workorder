@@ -36,7 +36,7 @@ const _require11 =
 
 
   require('../../utils/matrixQtyKeyboard.js'),activateMatrixKeyboardCell = _require11.activateMatrixKeyboardCell,applyMatrixKeyboardKey = _require11.applyMatrixKeyboardKey,buildMatrixKeyboardPreview = _require11.buildMatrixKeyboardPreview,createMatrixKeyboardInputSession = _require11.createMatrixKeyboardInputSession,getNextMatrixVariantIdInColumn = _require11.getNextMatrixVariantIdInColumn,getNextMatrixVariantIdInRow = _require11.getNextMatrixVariantIdInRow;
-const _require12 = require('../../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require12.afterMatrixKeyboardOpen;
+const _require12 = require('../../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require12.afterMatrixKeyboardOpen,handleMatrixOutsideTap = _require12.handleMatrixOutsideTap;
 const _require13 = require('../../utils/saveNavigation.js'),LIST_ROUTES = _require13.LIST_ROUTES,afterSaveReturnToList = _require13.afterSaveReturnToList;
 const { applyPartnerCreatedOnPage } = require('../../utils/mergePartnerList.js');
 const { defaultEntryDate, defaultEntryTimeHm, entryDateAndTimeToIso } = require('../../utils/docEntryTime.js');
@@ -164,9 +164,9 @@ Page({
     headerBlockHeight: 88,
     scrollHeight: 400,
     matrixScrollTop: 0,
-    matrixScrollIntoView: '',
     entryDate: '',
-    entryTime: ''
+    entryTime: '',
+    pickerSheetOpen: false,
   },
 
   onLoad(options) {
@@ -213,12 +213,20 @@ Page({
     wx.navigateBack();
   },
 
-  onEntryDateChange(e) {
-    this.setData({ entryDate: (e.detail && e.detail.value) || '' });
+  onEntryDateTimeChange(e) {
+    const detail = e.detail || {};
+    this.setData({
+      entryDate: detail.date || '',
+      entryTime: detail.time || '',
+    });
   },
 
-  onEntryTimeChange(e) {
-    this.setData({ entryTime: (e.detail && e.detail.value) || '' });
+  onPickerSheetOpen() {
+    this.setData({ pickerSheetOpen: true });
+  },
+
+  onPickerSheetClose() {
+    this.setData({ pickerSheetOpen: false });
   },
 
   onModeTap(e) {
@@ -429,7 +437,7 @@ Page({
       matrixKeyboardValue: preview.value,
       scrollHeight: fullScroll
     }, () => {
-      afterMatrixKeyboardOpen(this, '.defect-action-scroll', '#defect-action-qty-anchor');
+      afterMatrixKeyboardOpen(this, '.defect-action-scroll');
     });
   },
 
@@ -441,7 +449,6 @@ Page({
       activeMatrixVariantId: '',
       matrixKeyboardLabel: '',
       matrixKeyboardValue: '',
-      matrixScrollIntoView: '',
       scrollHeight: computeScrollHeight(nav)
     });
   },
@@ -480,9 +487,14 @@ Page({
       matrixKeyboardLabel: preview.label,
       matrixKeyboardValue: preview.value
     }, () => {
-      afterMatrixKeyboardOpen(this, '.defect-action-scroll', '#defect-action-qty-anchor');
+      afterMatrixKeyboardOpen(this, '.defect-action-scroll');
     });
   },
+
+  onMatrixOutsideTap() {
+    handleMatrixOutsideTap(this);
+  },
+
 
   onMatrixKeyboardAction(e) {
     const _ref = e.detail || {},action = _ref.action,digit = _ref.digit;

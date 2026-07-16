@@ -42,6 +42,7 @@ Page({
     scrollHeight: 500,
     entryDate: '',
     entryTime: '',
+    pickerSheetOpen: false,
   },
 
   _prefill: null,
@@ -108,12 +109,20 @@ Page({
     });
   },
 
-  onEntryDateChange(e) {
-    this.setData({ entryDate: (e.detail && e.detail.value) || '' });
+  onEntryDateTimeChange(e) {
+    const detail = e.detail || {};
+    this.setData({
+      entryDate: detail.date || '',
+      entryTime: detail.time || '',
+    });
   },
 
-  onEntryTimeChange(e) {
-    this.setData({ entryTime: (e.detail && e.detail.value) || '' });
+  onPickerSheetOpen() {
+    this.setData({ pickerSheetOpen: true });
+  },
+
+  onPickerSheetClose() {
+    this.setData({ pickerSheetOpen: false });
   },
 
   computeCanSubmit(customData) {

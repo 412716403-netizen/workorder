@@ -12,8 +12,9 @@
   <scroll-view
     class="plan-detail-scroll"
     scroll-y
+    enhanced
     scroll-top="{{matrixScrollTop}}"
-    scroll-with-animation
+    scroll-with-animation="{{false}}"
     show-scrollbar="{{false}}"
     style="height: {{scrollHeight}}px;"
   >
@@ -21,7 +22,7 @@
 
     <view wx:elif="{{!detail}}" class="plan-detail-muted">未找到报工记录</view>
 
-    <view wx:else class="plan-detail-page {{matrixKeyboardVisible ? 'matrix-keyboard-page--open' : ''}}">
+    <view wx:else class="plan-detail-page {{matrixKeyboardVisible ? 'matrix-keyboard-page--open' : ''}}" bindtap="onMatrixOutsideTap">
       <view class="report-batch-hero">
         <view class="report-batch-hero__left">
           <image
@@ -155,17 +156,14 @@
           <text class="plan-detail-section__title">编辑报工</text>
         </view>
         <view class="plan-form-card">
-          <view class="plan-form-cell">
-            <text class="plan-form-cell__label">报工时间</text>
-            <view class="report-batch-edit__datetime">
-              <picker mode="date" value="{{detail.editDate}}" bindchange="onEditDateChange">
-                <view class="report-batch-edit__picker">{{detail.editDate}}</view>
-              </picker>
-              <picker mode="time" value="{{detail.editTime}}" bindchange="onEditTimeChange">
-                <view class="report-batch-edit__picker">{{detail.editTime}}</view>
-              </picker>
-            </view>
-          </view>
+          <datetime-calendar-select
+            label="报工时间"
+            date="{{detail.editDate}}"
+            time="{{detail.editTime}}"
+            bind:change="onEditDateTimeChange"
+            bind:sheetopen="onPickerSheetOpen"
+            bind:sheetclose="onPickerSheetClose"
+          />
           <view class="plan-form-cell {{detail.showUnitPrice ? '' : 'plan-form-cell--last'}}">
             <text class="plan-form-cell__label">经办人</text>
             <input class="report-batch-edit__input" value="{{detail.editOperator}}" bindinput="onEditOperatorInput" placeholder="经办人" />
@@ -208,7 +206,7 @@
                     wx:if="{{cell.variantId}}"
                     class="plan-create-matrix__input {{activeMatrixVariantId === cell.variantId ? 'plan-create-matrix__input--active' : ''}} {{activeMatrixVariantId === cell.variantId && matrixInputReplaceAll && (qtyInputMode === 'good' ? cell.quantity : cell.defectiveQty) ? 'plan-create-matrix__input--replace' : ''}} {{(qtyInputMode === 'good' ? cell.quantity : cell.defectiveQty) ? 'plan-create-matrix__input--filled' : 'plan-create-matrix__input--empty'}}"
                     data-variant-id="{{cell.variantId}}"
-                    bindtap="onMatrixCellTap"
+                    catchtap="onMatrixCellTap"
                   >{{qtyInputMode === 'good' ? cell.quantity : cell.defectiveQty}}</view>
                   <text wx:else class="plan-create-matrix__dash">—</text>
                 </view>
@@ -236,7 +234,7 @@
     </view>
   </scroll-view>
 
-  <view wx:if="{{showFooter && !loading && detail && !detail.isOutsourceReceive && !matrixKeyboardVisible}}" class="report-batch-footer">
+  <view wx:if="{{showFooter && !loading && detail && !detail.isOutsourceReceive && !matrixKeyboardVisible && !pickerSheetOpen}}" class="report-batch-footer">
     <view wx:if="{{reviewMode && !editing}}" class="report-batch-footer__inner">
       <view
         class="report-batch-footer__btn report-batch-footer__btn--danger {{reviewActing ? 'report-batch-footer__btn--disabled' : ''}}"

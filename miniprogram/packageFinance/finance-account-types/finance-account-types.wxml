@@ -1,0 +1,94 @@
+<view class="plan-detail-shell">
+  <view class="plan-detail-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-detail-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-detail-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-detail-header__title">收支账户类型</text>
+      <view class="plan-detail-header__back plan-detail-header__back--placeholder"></view>
+    </view>
+  </view>
+
+  <view class="plan-detail-header-spacer" style="height: {{statusBarHeight + navBarHeight}}px;"></view>
+
+  <view class="fin-acct-types-page">
+    <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
+
+    <block wx:else>
+      <view wx:if="{{canCreate && !showForm}}" class="fin-acct-types-add">
+        <view class="fin-acct-types-add__btn" bindtap="onAddTap">+ 新增账户类型</view>
+      </view>
+
+      <view wx:if="{{showForm}}" class="plan-form-card fin-acct-types-form">
+        <view class="fin-acct-types-form__title">{{formTitle}}</view>
+
+        <view class="plan-form-cell plan-form-cell--input">
+          <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>账户名称</text>
+          <input
+            class="plan-form-cell__input"
+            value="{{form.name}}"
+            placeholder="如：现金、银行存款"
+            placeholder-class="plan-form-cell__ph"
+            bindinput="onNameInput"
+          />
+        </view>
+
+        <view class="plan-form-cell plan-form-cell--input">
+          <text class="plan-form-cell__label">期初余额</text>
+          <input
+            class="plan-form-cell__input"
+            type="digit"
+            value="{{form.initialBalance}}"
+            placeholder="0.00"
+            placeholder-class="plan-form-cell__ph"
+            bindinput="onInitialBalanceInput"
+          />
+        </view>
+
+        <picker mode="date" value="{{form.openingDate}}" bindchange="onOpeningDateChange">
+          <view class="plan-form-cell plan-form-cell--input">
+            <text class="plan-form-cell__label">期初日期</text>
+            <text class="plan-form-cell__value {{form.openingDate ? '' : 'plan-form-cell__value--ph'}}">{{form.openingDate || '请选择'}}</text>
+            <text class="plan-form-cell__chevron">›</text>
+          </view>
+        </picker>
+
+        <view class="plan-form-cell plan-form-cell--input plan-form-cell--last">
+          <text class="plan-form-cell__label">账户分类</text>
+          <input
+            class="plan-form-cell__input"
+            value="{{form.accountKind}}"
+            placeholder="可选，如现金/银行"
+            placeholder-class="plan-form-cell__ph"
+            bindinput="onAccountKindInput"
+          />
+        </view>
+
+        <view class="fin-acct-types-form__actions">
+          <view
+            class="fin-acct-types-form__btn fin-acct-types-form__btn--ghost {{submitting ? 'fin-acct-types-form__btn--disabled' : ''}}"
+            bindtap="onFormCancel"
+          >取消</view>
+          <view
+            class="fin-acct-types-form__btn fin-acct-types-form__btn--primary {{submitting || !form.name ? 'fin-acct-types-form__btn--disabled' : ''}}"
+            bindtap="onFormSubmit"
+          >{{submitting ? '提交中…' : '保存'}}</view>
+        </view>
+      </view>
+
+      <block wx:if="{{rows.length}}">
+        <view wx:for="{{rows}}" wx:key="id" class="fin-acct-type-card">
+          <view class="fin-acct-type-card__main">
+            <view class="fin-acct-type-card__title-row">
+              <text class="fin-acct-type-card__name">{{item.name}}</text>
+              <text wx:if="{{item.showKind}}" class="fin-acct-card__kind">{{item.accountKind}}</text>
+            </view>
+            <text class="fin-acct-type-card__meta">{{item.metaText}}</text>
+          </view>
+          <view wx:if="{{canEdit}}" class="fin-acct-type-card__action" data-id="{{item.id}}" bindtap="onEditTap">编辑</view>
+          <view wx:if="{{canDelete}}" class="fin-acct-type-card__action fin-acct-type-card__action--danger" data-id="{{item.id}}" bindtap="onDeleteTap">删除</view>
+        </view>
+      </block>
+
+      <empty-state wx:elif="{{!showForm}}" text="暂无收支账户类型，请在上方新增" />
+    </block>
+  </view>
+</view>

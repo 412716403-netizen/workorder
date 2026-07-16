@@ -39,21 +39,36 @@ function effectiveCustomDocFieldType(field) {
 }
 
 function normalizeReportFieldDefinition(field) {
-  const raw = field && field.type;
+  if (!field || typeof field !== 'object') {
+    return { id: '', label: '', type: 'text' };
+  }
+  const raw = field.type;
   if (raw === 'boolean') {
     const opts = field.options && field.options.length ? field.options.slice() : DEFAULT_BOOLEAN_OPTIONS.slice();
-    return { id: field.id, label: field.label, type: 'select', options: opts, showInForm: field.showInForm };
+    return Object.assign({}, field, { type: 'select', options: opts });
   }
   if (raw === 'number') {
-    return { id: field.id, label: field.label, type: 'text', showInForm: field.showInForm };
+    return Object.assign({}, field, { type: 'text', options: undefined });
   }
   if (raw === 'date' || raw === 'file' || raw === 'knowledge') {
-    return { id: field.id, label: field.label, type: raw, showInForm: field.showInForm };
+    return Object.assign({}, field, { type: raw, options: undefined });
   }
   if (raw === 'select') {
-    return { id: field.id, label: field.label, type: 'select', options: field.options || [], showInForm: field.showInForm };
+    return Object.assign({}, field, { type: 'select', options: field.options || [] });
   }
-  return { id: field.id, label: field.label, type: 'text', showInForm: field.showInForm };
+  return Object.assign({}, field, { type: 'text', options: undefined });
+}
+
+function normalizeReportFieldDefinitions(defs) {
+  if (!defs || !defs.length) return [];
+  return defs.map(normalizeReportFieldDefinition);
+}
+
+function normalizeFinanceCategoriesFromApi(list) {
+  return (list || []).map((c) => ({
+    ...c,
+    customFields: normalizeReportFieldDefinitions(c && c.customFields),
+  }));
 }
 
 function normalizeReportCustomDataValue(field, raw) {
@@ -121,6 +136,9 @@ function mapProductCustomTags(product, category, options) {
 
 module.exports = {
   effectiveCustomDocFieldType,
+  normalizeReportFieldDefinition,
+  normalizeReportFieldDefinitions,
+  normalizeFinanceCategoriesFromApi,
   formatReportCustomDataForList,
   getShowInFormCategoryFields,
   getProductCategoryCustomFieldEntries,

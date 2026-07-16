@@ -11,7 +11,7 @@ const _require3 =
 
 
 
-  require('../utils/financePayments.js'),emptyPaymentForm = _require3.emptyPaymentForm,formFromRecord = _require3.formFromRecord,formVisibility = _require3.formVisibility,validatePaymentForm = _require3.validatePaymentForm,buildPaymentSavePayload = _require3.buildPaymentSavePayload,buildCategoryPickerOptions = _require3.buildCategoryPickerOptions,buildAccountPickerOptions = _require3.buildAccountPickerOptions,buildWorkerPickerOptions = _require3.buildWorkerPickerOptions,initialCustomDataForCategory = _require3.initialCustomDataForCategory,categoriesForPayment = _require3.categoriesForPayment;
+  require('../utils/financePayments.js'),emptyPaymentForm = _require3.emptyPaymentForm,formFromRecord = _require3.formFromRecord,formVisibility = _require3.formVisibility,validatePaymentForm = _require3.validatePaymentForm,buildPaymentSavePayload = _require3.buildPaymentSavePayload,buildWorkerPickerOptions = _require3.buildWorkerPickerOptions,initialCustomDataForCategory = _require3.initialCustomDataForCategory,categoriesForPayment = _require3.categoriesForPayment,normalizeFinanceCategories = _require3.normalizeFinanceCategories;
 const _require4 =
 
 
@@ -21,7 +21,7 @@ const _require4 =
 
 
 
-  require('../../utils/financeApi.js'),getFinanceRecord = _require4.getFinanceRecord,createFinanceRecord = _require4.createFinanceRecord,updateFinanceRecord = _require4.updateFinanceRecord,fetchFinanceCategoriesAll = _require4.fetchFinanceCategoriesAll,fetchFinanceAccountTypesAll = _require4.fetchFinanceAccountTypesAll,fetchFeaturePlugins = _require4.fetchFeaturePlugins,isFundsAccountEnabled = _require4.isFundsAccountEnabled,normalizeMasterList = _require4.normalizeMasterList;
+  require('../../utils/financeApi.js'),getFinanceRecord = _require4.getFinanceRecord,createFinanceRecord = _require4.createFinanceRecord,updateFinanceRecord = _require4.updateFinanceRecord,fetchFinanceCategoriesAll = _require4.fetchFinanceCategoriesAll,fetchFinanceAccountTypesAll = _require4.fetchFinanceAccountTypesAll,getAccountBalances = _require4.getAccountBalances,fetchFeaturePlugins = _require4.fetchFeaturePlugins,isFundsAccountEnabled = _require4.isFundsAccountEnabled,normalizeMasterList = _require4.normalizeMasterList;
 const _require5 =
 
 
@@ -34,6 +34,7 @@ const _require8 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _r
 const _require9 = require('../../utils/saveNavigation.js'),LIST_ROUTES = _require9.LIST_ROUTES,afterSaveReturnToList = _require9.afterSaveReturnToList;
 const { applyPartnerCreatedOnPage } = require('../../utils/mergePartnerList.js');
 const { defaultEntryDate, defaultEntryTimeHm } = require('../../utils/docEntryTime.js');
+const { buildAccountSelectRows } = require('../utils/financeAccounts.js');
 
 function findIndexById(ids, id) {
   if (!id) return 0;
@@ -53,8 +54,7 @@ Page({
     products: [],
     productCategories: [],
     hasCategories: false,
-    categoryNames: [],
-    categoryIndex: 0,
+    categories: [],
     showPartner: true,
     needPartner: true,
     showWorker: false,
@@ -62,8 +62,7 @@ Page({
     workerIndex: 0,
     showProduct: false,
     showPaymentAccount: false,
-    accountNames: [],
-    accountIndex: 0,
+    accounts: [],
     customFields: [],
     canSubmit: false,
     statusBarHeight: 20,
@@ -71,7 +70,8 @@ Page({
     headerBlockHeight: 88,
     scrollHeight: 500,
     entryDate: '',
-    entryTime: ''
+    entryTime: '',
+    pickerSheetOpen: false
   },
 
   onLoad(options) {
@@ -133,13 +133,15 @@ Page({
         fetchProductsAll(),
         fetchCategoriesAll(),
         fetchWorkersAll().catch(() => []),
-        this._editingId ? getFinanceRecord(this._editingId) : Promise.resolve(null)]
-        ),categoriesRaw = _await$Promise$all[0],accountTypesRaw = _await$Promise$all[1],plugins = _await$Promise$all[2],partners = _await$Promise$all[3],partnerCategories = _await$Promise$all[4],products = _await$Promise$all[5],productCategories = _await$Promise$all[6],workersRaw = _await$Promise$all[7],existing = _await$Promise$all[8];
+        this._editingId ? getFinanceRecord(this._editingId) : Promise.resolve(null),
+        getAccountBalances({}).catch(() => null)]
+        ),categoriesRaw = _await$Promise$all[0],accountTypesRaw = _await$Promise$all[1],plugins = _await$Promise$all[2],partners = _await$Promise$all[3],partnerCategories = _await$Promise$all[4],products = _await$Promise$all[5],productCategories = _await$Promise$all[6],workersRaw = _await$Promise$all[7],existing = _await$Promise$all[8],balancesData = _await$Promise$all[9];
 
-      const categories = categoriesForPayment(normalizeMasterList(categoriesRaw));
+      const categories = categoriesForPayment(normalizeFinanceCategories(normalizeMasterList(categoriesRaw)));
       const accountTypes = normalizeMasterList(accountTypesRaw);
       const workers = normalizeMasterList(workersRaw);
       const fundsAccountEnabled = isFundsAccountEnabled(plugins);
+      const accounts = buildAccountSelectRows(accountTypes, balancesData);
 
       this._categories = categories;
       this._accountTypes = accountTypes;
@@ -147,12 +149,7 @@ Page({
       this._fundsAccountEnabled = fundsAccountEnabled;
       this._existing = existing && existing.type === 'PAYMENT' ? existing : null;
 
-      const catOpts = buildCategoryPickerOptions(categories);
-      const accOpts = buildAccountPickerOptions(accountTypes);
       const workerOpts = buildWorkerPickerOptions(workers);
-      this._categoryIds = catOpts.ids;
-      this._accountIds = accOpts.ids;
-      this._accountNames = accOpts.names;
       this._workerIds = workerOpts.ids;
 
       let form = emptyPaymentForm();
@@ -164,6 +161,9 @@ Page({
         form.categoryId = categories[0].id;
         form.customData = initialCustomDataForCategory(categories[0]);
       }
+      if (!form.paymentAccount && accounts.length === 1) {
+        form.paymentAccount = accounts[0].name;
+      }
 
       this.setData({
         loading: false,
@@ -172,14 +172,9 @@ Page({
         partnerCategories: normalizeList(partnerCategories),
         products: normalizeList(products),
         productCategories: normalizeList(productCategories),
-        categoryNames: catOpts.names,
-        accountNames: accOpts.names,
+        categories,
+        accounts,
         workerNames: workerOpts.names,
-        categoryIndex: findIndexById(catOpts.ids, form.categoryId),
-        accountIndex: findIndexById(
-          accOpts.ids,
-          (accountTypes.find((a) => a.name === form.paymentAccount) || {}).id
-        ),
         workerIndex: findIndexById(workerOpts.ids, form.workerId)
       });
       this.applyVisibility(form);
@@ -212,10 +207,10 @@ Page({
   },
 
   onCategoryChange(e) {
-    const idx = Number(e.detail.value);
-    const categoryId = (this._categoryIds || [])[idx] || '';
+    const detail = e.detail || {};
+    const categoryId = detail.id || detail.value || '';
     const cat = (this._categories || []).find((c) => c.id === categoryId);
-    this.setData({ categoryIndex: idx >= 0 ? idx : 0, workerIndex: 0 });
+    this.setData({ workerIndex: 0 });
     this.patchForm({
       categoryId,
       customData: initialCustomDataForCategory(cat),
@@ -246,11 +241,8 @@ Page({
   },
 
   onAccountChange(e) {
-    const idx = Number(e.detail.value);
-    const accountId = (this._accountIds || [])[idx] || '';
-    const account = (this._accountTypes || []).find((a) => a.id === accountId);
-    this.setData({ accountIndex: idx >= 0 ? idx : 0 });
-    this.patchForm({ paymentAccount: account ? account.name : '' });
+    const detail = e.detail || {};
+    this.patchForm({ paymentAccount: detail.name || detail.value || '' });
   },
 
   onCustomDataChange(e) {
@@ -266,12 +258,20 @@ Page({
     this.patchForm({ note: e.detail.value || '' });
   },
 
-  onEntryDateChange(e) {
-    this.setData({ entryDate: (e.detail && e.detail.value) || '' });
+  onEntryDateTimeChange(e) {
+    const detail = e.detail || {};
+    this.setData({
+      entryDate: detail.date || '',
+      entryTime: detail.time || '',
+    });
   },
 
-  onEntryTimeChange(e) {
-    this.setData({ entryTime: (e.detail && e.detail.value) || '' });
+  onPickerSheetOpen() {
+    this.setData({ pickerSheetOpen: true });
+  },
+
+  onPickerSheetClose() {
+    this.setData({ pickerSheetOpen: false });
   },
 
   onSubmit() {

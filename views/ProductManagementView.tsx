@@ -25,6 +25,10 @@ import { useClientPagination } from '../hooks/useClientPagination';
 import ListPageControls from '../components/ListPageControls';
 import * as api from '../services/api';
 import { productThumbSrc } from '../utils/productImageSrc';
+import ProductImageLightbox, {
+  productPreviewFromProduct,
+  type ProductImagePreviewTarget,
+} from '../components/ProductImageLightbox';
 
 const PRODUCT_ARCHIVE_PAGE_SIZE = 20;
 
@@ -75,6 +79,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
 }) => {
   const { productionLinkMode } = useConfigData();
   const { masterDataReady } = useMasterData();
+  const [imagePreview, setImagePreview] = useState<ProductImagePreviewTarget | null>(null);
   const { orders } = useOrdersData();
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>(PRODUCT_ARCHIVE_ALL);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -352,7 +357,9 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                         <td className="py-3 pl-4 pr-2">
                           <div className="w-9 h-9 bg-slate-50 rounded-xl flex items-center justify-center overflow-hidden text-slate-400 shrink-0">
                             {productThumbSrc(product) ? (
+                              <button type="button" onClick={(e) => { e.stopPropagation(); setImagePreview(productPreviewFromProduct(product)); }} className="w-full h-full focus:outline-none focus:ring-2 focus:ring-indigo-500" aria-label="查看产品图片">
                               <img loading="lazy" decoding="async" src={productThumbSrc(product)} alt={product.name} className="w-full h-full object-cover" />
+                              </button>
                             ) : (
                               <Package className="w-4 h-4" />
                             )}
@@ -455,6 +462,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
         onRefreshDictionaries={onRefreshDictionaries}
         onImportComplete={async () => { setImportModalOpen(false); if (onRefreshProducts) await onRefreshProducts(); }}
       />
+      <ProductImageLightbox target={imagePreview} onClose={() => setImagePreview(null)} />
     </div>
   );
 };

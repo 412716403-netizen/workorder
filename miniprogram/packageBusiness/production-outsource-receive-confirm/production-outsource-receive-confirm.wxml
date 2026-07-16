@@ -12,26 +12,25 @@
   <scroll-view
     class="plan-detail-scroll"
     scroll-y
+    enhanced
     scroll-top="{{matrixScrollTop}}"
-    scroll-with-animation
+    scroll-with-animation="{{false}}"
     show-scrollbar="{{false}}"
     style="height: {{scrollHeight}}px;"
   >
     <view wx:if="{{loading}}" class="plan-detail-muted">加载中…</view>
 
-    <view wx:else class="plan-detail-page outsource-receive-confirm-page {{matrixKeyboardVisible ? 'matrix-keyboard-page--open' : ''}}">
+    <view wx:else class="plan-detail-page outsource-receive-confirm-page {{matrixKeyboardVisible ? 'matrix-keyboard-page--open' : ''}}" bindtap="onMatrixOutsideTap">
       <view class="plan-form-card">
-        <view class="plan-form-cell plan-form-cell--last">
-          <text class="plan-form-cell__label">创建时间</text>
-          <view class="report-batch-edit__datetime">
-            <picker mode="date" value="{{entryDate}}" bindchange="onEntryDateChange">
-              <view class="report-batch-edit__picker">{{entryDate}}</view>
-            </picker>
-            <picker mode="time" value="{{entryTime}}" bindchange="onEntryTimeChange">
-              <view class="report-batch-edit__picker">{{entryTime}}</view>
-            </picker>
-          </view>
-        </view>
+        <datetime-calendar-select
+          last="{{true}}"
+          label="创建时间"
+          date="{{entryDate}}"
+          time="{{entryTime}}"
+          bind:change="onEntryDateTimeChange"
+          bind:sheetopen="onPickerSheetOpen"
+          bind:sheetclose="onPickerSheetClose"
+        />
       </view>
       <view wx:for="{{lines}}" wx:key="rowKey" class="outsource-receive-confirm-line">
         <view class="report-batch-hero">
@@ -108,7 +107,7 @@
                         class="plan-create-matrix__input {{activeMatrixRowKey === item.rowKey && activeMatrixVariantId === cell.variantId ? 'plan-create-matrix__input--active' : ''}} {{activeMatrixRowKey === item.rowKey && activeMatrixVariantId === cell.variantId && matrixInputReplaceAll && cell.quantity ? 'plan-create-matrix__input--replace' : ''}} {{cell.quantity ? 'plan-create-matrix__input--filled' : 'plan-create-matrix__input--empty'}}"
                         data-row-key="{{item.rowKey}}"
                         data-variant-id="{{cell.variantId}}"
-                        bindtap="onMatrixCellTap"
+                        catchtap="onMatrixCellTap"
                       >{{cell.quantity}}</view>
                       <text class="report-matrix__max">{{cell.maxQtyLabel}}</text>
                     </view>
@@ -182,7 +181,7 @@
     </view>
   </scroll-view>
 
-  <view class="plan-create-footer" wx:if="{{!matrixKeyboardVisible}}">
+  <view class="plan-create-footer" wx:if="{{!matrixKeyboardVisible && !pickerSheetOpen}}">
     <button
       class="plan-create-submit"
       loading="{{submitting}}"

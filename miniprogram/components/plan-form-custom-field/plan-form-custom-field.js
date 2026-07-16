@@ -1,3 +1,9 @@
+const {
+  chooseCustomFieldFileAsDataUrl,
+  formatCustomFileLabel,
+  isImageDataUrl,
+} = require('../../utils/fileBase64.js');
+
 Component({
   options: {
     addGlobalClass: true,
@@ -30,16 +36,25 @@ Component({
           const idx = options.indexOf(current);
           if (idx >= 0) pickerIndex = idx;
         }
+        const fileVal = typeof current === 'string' ? current : '';
+        const hasFile = !!(fileVal && fileVal.indexOf('data:') === 0);
         return {
           id: f.id,
           label: f.label,
           type: f.type,
           options,
           pickerMode: f.pickerMode,
+          required: !!f.required,
           isText: f.isText,
           isSelect: f.isSelect,
           isDate: f.isDate,
+          isFile: !!f.isFile || f.type === 'file',
+          desktopOnly: !!f.desktopOnly && !(f.isFile || f.type === 'file'),
           pickerIndex,
+          hasFile,
+          isImageFile: hasFile && isImageDataUrl(fileVal),
+          fileLabel: hasFile ? formatCustomFileLabel(fileVal) : '',
+          filePreview: hasFile && isImageDataUrl(fileVal) ? fileVal : '',
         };
       });
       this.setData({ enrichedFields });
@@ -70,6 +85,43 @@ Component({
       const { id } = e.currentTarget.dataset;
       if (!id) return;
       this.emitChange(id, e.detail.value || '');
+    },
+
+    async onPickFile(e) {
+      const { id } = e.currentTarget.dataset;
+      if (!id) return;
+      try {
+        const dataUrl = await chooseCustomFieldFileAsDataUrl();
+        if (!dataUrl) return;
+        this.emitChange(id, dataUrl);
+      } catch (err) {
+        if (err && err.code === 'FILE_TOO_LARGE') {
+          wx.showToast({ title: '文件不能超过 4MB', icon: 'none' });
+          return;
+        }
+        wx.showToast({ title: '读取失败', icon: 'none' });
+      }
+    },
+
+    onClearFile(e) {
+      const { id } = e.currentTarget.dataset;
+      if (!id) return;
+      this.emitChange(id, '');
+    },
+
+    onPreviewFile(e) {
+      const { id } = e.currentTarget.dataset;
+      if (!id) return;
+      const values = this.properties.values || {};
+      const dataUrl = values[id];
+      if (typeof dataUrl !== 'string' || dataUrl.indexOf('data:image/') !== 0) {
+        wx.showToast({ title: '请在电脑端查看该附件', icon: 'none' });
+        return;
+      }
+      wx.previewImage({
+        urls: [dataUrl],
+        current: dataUrl,
+      });
     },
   },
 });

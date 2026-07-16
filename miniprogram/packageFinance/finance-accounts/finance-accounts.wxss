@@ -1,0 +1,143 @@
+@import '/styles/psi-purchase-orders-page.wxss';
+
+.fin-acct-page {
+  padding: 0 var(--spacing-page) calc(120rpx + env(safe-area-inset-bottom));
+}
+
+.fin-acct-tools {
+  align-items: center;
+}
+
+.fin-acct-periods {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.fin-acct-period {
+  padding: 10rpx 24rpx;
+  border-radius: var(--radius-pill);
+  font-size: var(--font-caption);
+  color: rgba(255, 255, 255, 0.78);
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.fin-acct-period--active {
+  color: var(--color-primary);
+  background: #ffffff;
+  font-weight: 600;
+}
+
+.fin-acct-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  margin-bottom: 20rpx;
+}
+
+.fin-acct-total {
+  flex: 1 1 40%;
+  min-width: 0;
+  padding: 20rpx 24rpx;
+  border-radius: 16rpx;
+  background: var(--color-bg-card);
+  box-shadow: 0 4rpx 24rpx rgba(15, 23, 42, 0.04);
+}
+
+.fin-acct-total__label {
+  display: block;
+  font-size: 22rpx;
+  color: var(--color-text-secondary);
+}
+
+.fin-acct-total__value {
+  display: block;
+  margin-top: 6rpx;
+  font-size: 30rpx;
+  font-weight: 800;
+  color: var(--color-text-primary);
+}
+
+.fin-acct-total--in .fin-acct-total__value {
+  color: var(--color-success);
+}
+
+.fin-acct-total--out .fin-acct-total__value {
+  color: var(--color-danger);
+}
+
+.fin-acct-total--primary .fin-acct-total__value {
+  color: var(--color-primary);
+}
+
+.fin-acct-card {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin-bottom: 20rpx;
+  padding: 24rpx;
+  background: var(--color-bg-card);
+  border-radius: 16rpx;
+  box-shadow: 0 4rpx 24rpx rgba(15, 23, 42, 0.04);
+}
+
+.fin-acct-card__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.fin-acct-card__title-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.fin-acct-card__name {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fin-acct-card__kind {
+  flex-shrink: 0;
+  padding: 4rpx 14rpx;
+  border-radius: var(--radius-pill);
+  font-size: 20rpx;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-page);
+}
+
+.fin-acct-card__meta {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 22rpx;
+  color: var(--color-text-secondary);
+}
+
+.fin-acct-card__balance {
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.fin-acct-card__balance-label {
+  display: block;
+  font-size: 20rpx;
+  color: var(--color-text-tertiary);
+}
+
+.fin-acct-card__balance-value {
+  display: block;
+  margin-top: 4rpx;
+  font-size: 32rpx;
+  font-weight: 800;
+  color: var(--color-text-primary);
+}
+
+.fin-acct-card__balance-value--neg {
+  color: var(--color-danger);
+}

@@ -45,7 +45,8 @@ function enrichFields(fields, options) {
       showShowInFormCol,
       showChecks: showRequiredCol || showShowInFormCol,
       isSelect: type === 'select',
-      desktopOnly: type === 'file' || type === 'knowledge',
+      isKnowledge: type === 'knowledge',
+      desktopOnly: type === 'knowledge',
     };
   });
 }

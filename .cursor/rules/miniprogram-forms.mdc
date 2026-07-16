@@ -13,7 +13,14 @@ alwaysApply: false
 | 场景 | 组件 | API / 工具 |
 |------|------|------------|
 | 合作单位（客户/加工厂） | `searchable-partner-select`（`cell` + `plan-form-card`） | `fetchPartnersAll()`、`fetchPartnerCategoriesAll()` |
-| 产品 | `searchable-product-select`（`cell` + `plan-form-card`） | `fetchProductsAll()`、`fetchCategoriesAll()` |
+| 产品 | `searchable-product-select`（`cell` + `plan-form-card`；明细行可用 `embedded`） | `fetchProductsAll()`、`fetchCategoriesAll()`；**弹层统一**为计划新建样式（「取消」顶栏 + picker 高度），勿再分两套 sheet 头 |
+| 收/付款单据分类 | `finance-category-tag-select`（标签宫格底栏） | `fetchFinanceCategoriesAll()` |
+| 收/付款收支账户、账户转账 | `finance-account-select`（列表底栏；转账用 `valueMode="id"`） | `fetchFinanceAccountTypesAll()` + `getAccountBalances()` |
+| 创建时间（日期+时刻） | `datetime-calendar-select`（日历底栏；无时间启用开关） | `docEntryTime.js` 默认值 |
+
+**创建时间（必做）**：单据新建/编辑与流水详情改时间戳，一律用 `datetime-calendar-select`（参考 [`finance-receipt-edit`](../miniprogram/packageFinance/finance-receipt-edit/)），禁止 `picker mode="date"` + `picker mode="time"`。列表筛选纯日期（`dateFrom`/`dateTo`）除外。
+
+**底栏选择器与提交按钮（必做）**：合作单位 / 产品 / 报工人员 / 创建时间 / 分类 / 账户等走 `openBottomSheet` 的弹层，会自动维护页面 `pickerSheetOpen`。页面须 `data.pickerSheetOpen: false`，底栏提交区 `wx:if="{{!pickerSheetOpen}}"`（与矩阵键盘并存时 `!matrixKeyboardVisible && !pickerSheetOpen`），避免「保存单据 / 确认报工」透出弹层。
 | 色码矩阵 | `plan-create-matrix` 类名 + 横向 `scroll-view` | `buildVariantMatrixUiModel()` 或业务 layout builder（如 `outsourceDispatchMatrix.js`） |
 | 矩阵数量键盘 | `matrix-qty-keyboard` | [`matrixQtyKeyboard.js`](../miniprogram/packageBusiness/utils/matrixQtyKeyboard.js) |
 | 采购入库批次 | `batch-return-input` | 点击选择；弹窗内可选已有批次或输入新批号；未填保存时默认「无批号」 |
@@ -37,7 +44,12 @@ alwaysApply: false
 - 表单：`plan-form-card`、`plan-form-cell`（见 [`production-plan-create.wxss`](../miniprogram/packageBusiness/production-plan-create/production-plan-create.wxss)）
 - **数量 / 单价 / 金额**：`order-detail-summary`（见 [`qty-price-amount-summary.wxss`](../miniprogram/styles/qty-price-amount-summary.wxss)）；列表/详情只读加 `--compact`；录入可编辑字段用 `order-detail-summary__input`
 - 矩阵：复用 `plan-create-matrix*`；报工/外协等带「最多 N」提示时可加 `report-matrix` 修饰
-- 键盘弹出：滚动区加 `matrix-keyboard-page--open`；`setData` 后调用 `afterMatrixKeyboardOpen(page, scrollViewSelector)` 将当前格滚到键盘上方；底栏提交按钮在键盘弹出时 `wx:if="{{!matrixKeyboardVisible}}"` 隐藏
+- 键盘弹出：
+  - 内容区加 `matrix-keyboard-page--open`
+  - 纵向 `scroll-view` 须 `enhanced` + `scroll-top="{{matrixScrollTop}}"` + `scroll-with-animation="{{false}}"`（`data.matrixScrollTop: 0`）
+  - `setData` 后调用 `afterMatrixKeyboardOpen(page, scrollViewSelector)`：仅微调当前格到键盘上方，**禁止** `scroll-into-view` 钉顶
+  - 底栏提交在键盘弹出时 `wx:if="{{!matrixKeyboardVisible}}"` 隐藏
+  - 键盘无全屏 mask，表单可继续滚动；点「完成」或点输入格以外区域收起（内容区 `bindtap="onMatrixOutsideTap"`，矩阵格 `catchtap="onMatrixCellTap"`）
 
 ## 矩阵键盘 JS 模式
 
@@ -56,7 +68,8 @@ WXML 选中态：`plan-create-matrix__input--replace`（有值且待替换时浅
 
 ## 禁止
 
-- `picker mode="selector"` 选择合作单位或产品（枚举筛选 Tab 除外）
+- `picker mode="date|time"` 拆分选择创建时间（须用 `datetime-calendar-select`；筛选区间等纯日期除外）
+- `picker mode="selector"` 选择合作单位、产品、收/付款单据分类或收支账户（枚举筛选 Tab 除外）
 - 页面内复制粘贴自建数字键盘 UI
 - 矩阵格内用 `<input type="digit">` 直接输入（单行非矩阵数量字段除外）
 
@@ -151,6 +164,7 @@ onHide() {
 | 收款单详情（删除） | `FINANCE_RECEIPTS` |
 | 登记/编辑付款单 | `FINANCE_PAYMENTS` |
 | 付款单详情（删除） | `FINANCE_PAYMENTS` |
+| 账户转账（新建/编辑/删除） | `FINANCE_ACCOUNTS` |
 | 新建/编辑产品 | `BASIC_PRODUCTS` |
 | 新建/编辑合作单位 | `BASIC_PARTNERS` |
 | 新建/编辑字典项 | `BASIC_DICTIONARIES` |

@@ -2,10 +2,12 @@
   <view
     wx:for="{{enrichedFields}}"
     wx:key="id"
-    class="plan-form-cell {{index === enrichedFields.length - 1 ? 'plan-form-cell--last' : ''}}"
+    class="plan-form-cell {{index === enrichedFields.length - 1 ? 'plan-form-cell--last' : ''}} {{item.isFile && item.hasFile ? 'plan-form-cell--file' : ''}}"
   >
     <block wx:if="{{item.isText}}">
-      <text class="plan-form-cell__label">{{item.label}}</text>
+      <text class="plan-form-cell__label">
+        <text wx:if="{{item.required}}" class="plan-form-cell__req">*</text>{{item.label}}
+      </text>
       <input
         class="plan-form-cell__input"
         value="{{values[item.id]}}"
@@ -17,7 +19,9 @@
     </block>
 
     <block wx:elif="{{item.isSelect}}">
-      <text class="plan-form-cell__label">{{item.label}}</text>
+      <text class="plan-form-cell__label">
+        <text wx:if="{{item.required}}" class="plan-form-cell__req">*</text>{{item.label}}
+      </text>
       <picker
         mode="selector"
         range="{{item.options}}"
@@ -34,7 +38,9 @@
     </block>
 
     <block wx:elif="{{item.isDate}}">
-      <text class="plan-form-cell__label">{{item.label}}</text>
+      <text class="plan-form-cell__label">
+        <text wx:if="{{item.required}}" class="plan-form-cell__req">*</text>{{item.label}}
+      </text>
       <picker
         mode="{{item.pickerMode}}"
         value="{{values[item.id]}}"
@@ -48,8 +54,39 @@
       </picker>
     </block>
 
+    <block wx:elif="{{item.isFile}}">
+      <text class="plan-form-cell__label">
+        <text wx:if="{{item.required}}" class="plan-form-cell__req">*</text>{{item.label}}
+      </text>
+      <view class="pfcf__file-right">
+        <view class="pfcf__file-actions">
+          <text class="pfcf__file-btn" data-id="{{item.id}}" catchtap="onPickFile">{{item.hasFile ? '重新上传' : '上传'}}</text>
+          <text wx:if="{{item.hasFile}}" class="pfcf__file-btn pfcf__file-btn--muted" data-id="{{item.id}}" catchtap="onClearFile">清除</text>
+        </view>
+        <view
+          wx:if="{{item.hasFile}}"
+          class="pfcf__file-square"
+          data-id="{{item.id}}"
+          bindtap="onPreviewFile"
+        >
+          <image
+            wx:if="{{item.isImageFile}}"
+            class="pfcf__file-thumb"
+            src="{{item.filePreview}}"
+            mode="aspectFill"
+          />
+          <view wx:else class="pfcf__file-doc">
+            <text class="pfcf__file-doc-label">{{item.fileLabel}}</text>
+          </view>
+        </view>
+        <text wx:else class="plan-form-cell__value plan-form-cell__value--ph pfcf__file-hint">支持图片 / PDF / Office</text>
+      </view>
+    </block>
+
     <block wx:else>
-      <text class="plan-form-cell__label">{{item.label}}</text>
+      <text class="plan-form-cell__label">
+        <text wx:if="{{item.required}}" class="plan-form-cell__req">*</text>{{item.label}}
+      </text>
       <text class="plan-form-cell__value plan-form-cell__value--ph">请在电脑端填写</text>
     </block>
   </view>

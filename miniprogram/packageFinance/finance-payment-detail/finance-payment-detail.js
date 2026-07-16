@@ -5,7 +5,7 @@ const _require3 =
 
 
 
-  require('../utils/financePayments.js'),mapPaymentDetailView = _require3.mapPaymentDetailView,buildCategoryMap = _require3.buildCategoryMap,buildWorkerMap = _require3.buildWorkerMap,categoriesForPayment = _require3.categoriesForPayment;
+  require('../utils/financePayments.js'),mapPaymentDetailView = _require3.mapPaymentDetailView,buildCategoryMap = _require3.buildCategoryMap,buildWorkerMap = _require3.buildWorkerMap,categoriesForPayment = _require3.categoriesForPayment,normalizeFinanceCategories = _require3.normalizeFinanceCategories;
 const _require4 =
 
 
@@ -84,6 +84,21 @@ Page({
     wx.navigateBack();
   },
 
+  onPreviewCustomImage(e) {
+    const url = e.currentTarget.dataset.url;
+    if (!url || String(url).indexOf('data:image/') !== 0) return;
+    const urls = [];
+    (this.data.sections || []).forEach((sec) => {
+      (sec.rows || []).forEach((row) => {
+        if (row && row.isImage && row.imageUrl) urls.push(row.imageUrl);
+      });
+    });
+    wx.previewImage({
+      current: url,
+      urls: urls.length ? urls : [url],
+    });
+  },
+
   onEditTap() {
     if (!this.data.canEdit) return;
     wx.navigateTo({
@@ -131,7 +146,7 @@ Page({
         this.setData({ loading: false, found: false, docNo: '', sections: [] });
         return;
       }
-      const cats = categoriesForPayment(normalizeMasterList(categories));
+      const cats = categoriesForPayment(normalizeFinanceCategories(normalizeMasterList(categories)));
       const view = mapPaymentDetailView(rec, {
         categories: cats,
         categoryMap: buildCategoryMap(cats),

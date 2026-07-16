@@ -1,6 +1,5 @@
 <view wx:if="{{visible}}" class="mqk-root">
-  <!-- 点击表单空白区收起（不含键盘本身） -->
-  <view class="mqk__mask" catchtouchmove="onMaskTouchMove" bindtap="onConfirm"></view>
+  <!-- 不铺全屏可点 mask：避免挡掉表单滚动；收起用「完成」 -->
   <view class="mqk" catchtap="onKeyboardCatch">
     <view class="mqk__toolbar">
       <view class="mqk__toolbar-spacer"></view>

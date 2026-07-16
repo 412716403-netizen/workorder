@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import * as ctrl from '../controllers/masterData.controller.js';
-import { requireSubPermission } from '../middleware/tenant.js';
+import { requireSubPermission, requireSubPermissionOrProductionRead, requireSubPermissionOrFinanceRead } from '../middleware/tenant.js';
 import { validate } from '../middleware/validate.js';
 
 const router = Router();
@@ -13,27 +13,27 @@ const importPartnersSchema = z.object({
   }).passthrough()).min(1, '至少导入一条合作单位'),
 });
 
-// 合作单位
-router.get('/partners',        requireSubPermission('basic:partners:view'),   ctrl.listPartners);
+// 合作单位（列表读放宽给财务域：收付款「关联合作单位」）
+router.get('/partners',        requireSubPermissionOrFinanceRead('basic:partners:view'),   ctrl.listPartners);
 router.post('/partners/import', requireSubPermission('basic:partners:create'), validate(importPartnersSchema), ctrl.importPartners);
 router.post('/partners',       requireSubPermission('basic:partners:create'), ctrl.createPartner);
 router.put('/partners/:id',    requireSubPermission('basic:partners:edit'),   ctrl.updatePartner);
 router.delete('/partners/:id', requireSubPermission('basic:partners:delete'), ctrl.deletePartner);
 
-// 工人（与 Web api.workers / masterData.controller 对齐）
-router.get('/workers',        requireSubPermission('basic:members:view'),   ctrl.listWorkers);
+// 工人（列表读放宽给财务域：收付款分类开启「关联工人」时）
+router.get('/workers',        requireSubPermissionOrFinanceRead('basic:members:view'),   ctrl.listWorkers);
 router.post('/workers',       requireSubPermission('basic:members:create'), ctrl.createWorker);
 router.put('/workers/:id',    requireSubPermission('basic:members:edit'),   ctrl.updateWorker);
 router.delete('/workers/:id', requireSubPermission('basic:members:delete'), ctrl.deleteWorker);
 
-// 设备
-router.get('/equipment',        requireSubPermission('basic:equipment:view'),   ctrl.listEquipment);
+// 设备（列表读放宽给生产域用户：工序开启「报工记录设备」时报工页需要设备列表）
+router.get('/equipment',        requireSubPermissionOrProductionRead('basic:equipment:view'),   ctrl.listEquipment);
 router.post('/equipment',       requireSubPermission('basic:equipment:create'), ctrl.createEquipment);
 router.put('/equipment/:id',    requireSubPermission('basic:equipment:edit'),   ctrl.updateEquipment);
 router.delete('/equipment/:id', requireSubPermission('basic:equipment:delete'), ctrl.deleteEquipment);
 
-// 字典
-router.get('/dictionaries',        requireSubPermission('basic:dictionaries:view'),   ctrl.listDictionaries);
+// 字典（列表读放宽给生产域用户：报工色码矩阵的颜色/尺码/单位名称依赖字典）
+router.get('/dictionaries',        requireSubPermissionOrProductionRead('basic:dictionaries:view'),   ctrl.listDictionaries);
 router.post('/dictionaries',       requireSubPermission('basic:dictionaries:create'), ctrl.createDictionaryItem);
 router.put('/dictionaries/:id',    requireSubPermission('basic:dictionaries:edit'),   ctrl.updateDictionaryItem);
 router.delete('/dictionaries/:id', requireSubPermission('basic:dictionaries:delete'), ctrl.deleteDictionaryItem);

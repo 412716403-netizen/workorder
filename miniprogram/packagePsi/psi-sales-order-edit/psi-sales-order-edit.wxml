@@ -12,26 +12,24 @@
   <scroll-view
     class="plan-create-scroll"
     scroll-y
+    enhanced
     scroll-top="{{matrixScrollTop}}"
-    scroll-with-animation
+    scroll-with-animation="{{false}}"
     show-scrollbar="{{false}}"
     style="height: {{scrollHeight}}px;"
   >
     <view wx:if="{{loading}}" class="plan-create-muted">加载中…</view>
 
-    <view wx:else class="plan-create-page {{matrixKeyboardVisible ? 'matrix-keyboard-page--open' : ''}}">
+    <view wx:else class="plan-create-page {{matrixKeyboardVisible ? 'matrix-keyboard-page--open' : ''}}" bindtap="onMatrixOutsideTap">
       <view class="plan-form-card">
-        <view class="plan-form-cell">
-          <text class="plan-form-cell__label">创建时间</text>
-          <view class="report-batch-edit__datetime">
-            <picker mode="date" value="{{form.createdAt}}" bindchange="onCreatedAtChange">
-              <view class="report-batch-edit__picker">{{form.createdAt || '选择日期'}}</view>
-            </picker>
-            <picker mode="time" value="{{form.createdAtTime}}" bindchange="onCreatedAtTimeChange">
-              <view class="report-batch-edit__picker">{{form.createdAtTime || '选择时间'}}</view>
-            </picker>
-          </view>
-        </view>
+        <datetime-calendar-select
+          label="创建时间"
+          date="{{form.createdAt}}"
+          time="{{form.createdAtTime}}"
+          bind:change="onCreatedAtDateTimeChange"
+          bind:sheetopen="onPickerSheetOpen"
+          bind:sheetclose="onPickerSheetClose"
+        />
 
         <searchable-partner-select
           cell="{{true}}"
@@ -133,7 +131,7 @@
                         class="plan-create-matrix__input {{activeLineId === item.id && activeMatrixVariantId === cell.variantId ? 'plan-create-matrix__input--active' : ''}} {{activeLineId === item.id && activeMatrixVariantId === cell.variantId && matrixInputReplaceAll && cell.quantity ? 'plan-create-matrix__input--replace' : ''}} {{cell.quantity ? 'plan-create-matrix__input--filled' : 'plan-create-matrix__input--empty'}}"
                         data-line-id="{{item.id}}"
                         data-variant-id="{{cell.variantId}}"
-                        bindtap="onMatrixCellTap"
+                        catchtap="onMatrixCellTap"
                       >{{cell.quantity}}</view>
                       <text wx:else class="plan-create-matrix__dash">—</text>
                     </view>
@@ -151,7 +149,7 @@
     </view>
   </scroll-view>
 
-  <view wx:if="{{!matrixKeyboardVisible}}" class="plan-create-footer po-edit-footer">
+  <view wx:if="{{!matrixKeyboardVisible && !pickerSheetOpen}}" class="plan-create-footer po-edit-footer">
     <view class="po-edit-footer__summary">
       <view class="po-edit-footer__stat">
         <text class="po-edit-footer__summary-label">合计数量</text>

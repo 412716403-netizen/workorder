@@ -35,7 +35,7 @@
     </view>
 
     <view wx:if="{{item.desktopOnly}}" class="settings-cf-field__hint">
-      文件/资料库类型上传请在电脑端完成
+      资料库类型请在电脑端选择
     </view>
 
     <view wx:if="{{item.isSelect}}" class="settings-cf-field__select">

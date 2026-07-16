@@ -12,12 +12,15 @@
   <scroll-view
     class="plan-create-scroll"
     scroll-y
+    enhanced
+    scroll-top="{{matrixScrollTop}}"
+    scroll-with-animation="{{false}}"
     show-scrollbar="{{false}}"
     style="height: {{scrollHeight}}px;"
   >
     <view wx:if="{{loading}}" class="plan-create-muted">加载中…</view>
 
-    <view wx:else class="plan-create-page {{matrixKeyboardVisible ? 'matrix-keyboard-page--open' : ''}}">
+    <view wx:else class="plan-create-page {{matrixKeyboardVisible ? 'matrix-keyboard-page--open' : ''}}" bindtap="onMatrixOutsideTap">
       <view class="plan-form-card">
         <view class="plan-form-cell">
           <text class="plan-form-cell__label">产品</text>
@@ -82,7 +85,7 @@
                       wx:if="{{cell.variantId}}"
                       class="plan-create-matrix__input {{activeMatrixVariantId === cell.variantId ? 'plan-create-matrix__input--active' : ''}} {{activeMatrixVariantId === cell.variantId && matrixInputReplaceAll && cell.quantity ? 'plan-create-matrix__input--replace' : ''}} {{cell.quantity ? 'plan-create-matrix__input--filled' : 'plan-create-matrix__input--empty'}}"
                       data-variant-id="{{cell.variantId}}"
-                      bindtap="onMatrixCellTap"
+                      catchtap="onMatrixCellTap"
                     >{{cell.quantity}}</view>
                     <text wx:else class="plan-create-matrix__dash">—</text>
                   </view>
@@ -95,7 +98,7 @@
     </view>
   </scroll-view>
 
-  <view wx:if="{{!matrixKeyboardVisible}}" class="plan-create-footer po-edit-footer">
+  <view wx:if="{{!matrixKeyboardVisible && !pickerSheetOpen}}" class="plan-create-footer po-edit-footer">
     <view class="po-edit-footer__actions po-edit-footer__actions--single">
       <button
         class="po-edit-footer__btn po-edit-footer__btn--primary"

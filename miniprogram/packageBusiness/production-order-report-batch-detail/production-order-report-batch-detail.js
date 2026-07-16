@@ -39,7 +39,7 @@ const _require0 =
 
   require('../../utils/matrixQtyKeyboard.js'),activateMatrixKeyboardCell = _require0.activateMatrixKeyboardCell,applyMatrixKeyboardKey = _require0.applyMatrixKeyboardKey,buildMatrixKeyboardPreview = _require0.buildMatrixKeyboardPreview,createMatrixKeyboardInputSession = _require0.createMatrixKeyboardInputSession,getNextMatrixVariantIdInColumn = _require0.getNextMatrixVariantIdInColumn,getNextMatrixVariantIdInRow = _require0.getNextMatrixVariantIdInRow;
 const _require1 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require1.readNavBarMetrics,readWindowMetrics = _require1.readWindowMetrics,computePlanCreateHeaderHeight = _require1.computePlanCreateHeaderHeight;
-const _require10 = require('../../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require10.afterMatrixKeyboardOpen;
+const _require10 = require('../../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require10.afterMatrixKeyboardOpen,handleMatrixOutsideTap = _require10.handleMatrixOutsideTap;
 const _require11 = require('../../utils/saveNavigation.js'),LIST_ROUTES = _require11.LIST_ROUTES,buildReportHistoryListUrl = _require11.buildReportHistoryListUrl,afterSaveReturnToList = _require11.afterSaveReturnToList;
 const { reportAllowsEditDelete } = require('../utils/reportApprovalMutability.js');
 
@@ -92,6 +92,7 @@ Page({
     matrixKeyboardLabel: '',
     matrixKeyboardValue: '',
     matrixScrollTop: 0,
+    pickerSheetOpen: false,
     reviewMode: false,
     reviewActing: false,
   },
@@ -405,12 +406,20 @@ Page({
     });
   },
 
-  onEditDateChange(e) {
-    this.setData({ 'detail.editDate': e.detail.value || '' });
+  onEditDateTimeChange(e) {
+    const detail = e.detail || {};
+    this.setData({
+      'detail.editDate': detail.date || '',
+      'detail.editTime': detail.time || '',
+    });
   },
 
-  onEditTimeChange(e) {
-    this.setData({ 'detail.editTime': e.detail.value || '' });
+  onPickerSheetOpen() {
+    this.setData({ pickerSheetOpen: true });
+  },
+
+  onPickerSheetClose() {
+    this.setData({ pickerSheetOpen: false });
   },
 
   onEditOperatorInput(e) {
@@ -460,6 +469,11 @@ Page({
       afterMatrixKeyboardOpen(this, '.plan-detail-scroll');
     });
   },
+
+  onMatrixOutsideTap() {
+    handleMatrixOutsideTap(this);
+  },
+
 
   onMatrixKeyboardAction(e) {
     const _ref = e.detail || {},action = _ref.action,digit = _ref.digit;

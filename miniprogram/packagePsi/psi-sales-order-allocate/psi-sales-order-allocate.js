@@ -27,7 +27,7 @@ const _require11 =
 
   require('../../utils/matrixQtyKeyboard.js'),activateMatrixKeyboardCell = _require11.activateMatrixKeyboardCell,applyMatrixKeyboardKey = _require11.applyMatrixKeyboardKey,buildMatrixKeyboardPreview = _require11.buildMatrixKeyboardPreview,createMatrixKeyboardInputSession = _require11.createMatrixKeyboardInputSession,getNextMatrixVariantIdInColumn = _require11.getNextMatrixVariantIdInColumn,getNextMatrixVariantIdInRow = _require11.getNextMatrixVariantIdInRow;
 const _require12 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require12.readNavBarMetrics,readWindowMetrics = _require12.readWindowMetrics,computePlanCreateHeaderHeight = _require12.computePlanCreateHeaderHeight;
-const _require13 = require('../../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require13.afterMatrixKeyboardOpen;
+const _require13 = require('../../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require13.afterMatrixKeyboardOpen,handleMatrixOutsideTap = _require13.handleMatrixOutsideTap;
 const _require14 = require('../../utils/saveNavigation.js'),LIST_ROUTES = _require14.LIST_ROUTES,afterSaveReturnToList = _require14.afterSaveReturnToList;
 
 const WAREHOUSE_PREF_KEY = 'psi_sales_order_allocation_warehouse';
@@ -52,6 +52,7 @@ function emptyMatrixKeyboardState() {
 
 Page({
   data: {
+    matrixScrollTop: 0,
     loading: true,
     submitting: false,
     title: '配货',
@@ -71,6 +72,7 @@ Page({
     navBarHeight: 44,
     headerBlockHeight: 88,
     scrollHeight: 500,
+    pickerSheetOpen: false,
     ...emptyMatrixKeyboardState()
   },
 
@@ -219,6 +221,11 @@ Page({
       matrixKeyboardValue: preview.value
     }, () => afterMatrixKeyboardOpen(this, '.plan-create-scroll'));
   },
+
+  onMatrixOutsideTap() {
+    handleMatrixOutsideTap(this);
+  },
+
 
   onMatrixKeyboardAction(e) {
     const _ref = e.detail || {},action = _ref.action,digit = _ref.digit;

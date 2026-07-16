@@ -108,7 +108,6 @@ function prepareFinanceCategoryForSave(form, allItems, isNew) {
       kind: form.kind === 'PAYMENT' ? 'PAYMENT' : 'RECEIPT',
       name,
       linkPartner: !!form.linkPartner,
-      selectPaymentAccount: !!form.selectPaymentAccount,
       linkWorker: !!form.linkWorker,
       linkProduct: !!form.linkProduct,
       customFields: normalizeCustomFieldsForSave(form.customFields),
@@ -184,7 +183,6 @@ const CATEGORY_TOGGLES = [
 
 const FINANCE_TOGGLES = [
   { key: 'linkPartner', label: '关联合作单位', desc: '开启后登记收付款时可选择合作单位。' },
-  { key: 'selectPaymentAccount', label: '选择资金账户', desc: '开启后登记时可选择收支账户。' },
   { key: 'linkWorker', label: '关联工人', desc: '开启后登记时可选择工人。' },
   { key: 'linkProduct', label: '关联产品', desc: '开启后登记时可选择产品。' },
 ];

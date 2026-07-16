@@ -85,6 +85,11 @@ import { production as productionApi } from '../services/api';
 import { useQuery } from '@tanstack/react-query';
 import { normalizeDecimals } from '../contexts/formSettingsDefaults';
 import { productThumbSrc } from '../utils/productImageSrc';
+import ProductImageLightbox, {
+  productPreviewFromProduct,
+  productPreviewFromSrc,
+  type ProductImagePreviewTarget,
+} from '../components/ProductImageLightbox';
 
 interface PlanOrderListViewProps {
   productionLinkMode?: 'order' | 'product';
@@ -217,7 +222,7 @@ function renderPlanSourceSalesOrderMeta(plan: PlanOrder): React.ReactNode {
 function renderPlanListCustomFieldValue(
   cf: PlanFormFieldConfig,
   plan: PlanOrder,
-  setImagePreviewUrl: (u: string | null) => void,
+  setImagePreview: (t: ProductImagePreviewTarget | null) => void,
   setFilePreviewUrl: (u: string | null) => void,
   setFilePreviewType: (t: 'image' | 'pdf') => void,
 ): React.ReactNode {
@@ -231,7 +236,7 @@ function renderPlanListCustomFieldValue(
         <span className="text-slate-500">{cf.label}:</span>
         <button
           type="button"
-          onClick={() => setImagePreviewUrl(s)}
+          onClick={() => setImagePreview(productPreviewFromSrc(s))}
           className="h-7 w-7 shrink-0 overflow-hidden rounded border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         >
           <img src={s} alt="" className="h-full w-full object-cover" />
@@ -372,8 +377,8 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
   const [planPrintPickerPlan, setPlanPrintPickerPlan] = useState<PlanOrder | null>(null);
   const [planPrintTemplateManageScope, setPlanPrintTemplateManageScope] = useState<PlanPrintTemplateManageScope | null>(null);
   const [planListPrintRun, setPlanListPrintRun] = useState<{ template: PrintTemplate; plan: PlanOrder } | null>(null);
-  /** 点击图片查看大图：url 为要放大的图片地址 */
-  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  /** 点击产品图：先缩略图，再按需拉原图；自定义字段附件走 src 模式 */
+  const [imagePreview, setImagePreview] = useState<ProductImagePreviewTarget | null>(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
   const [filePreviewType, setFilePreviewType] = useState<'image' | 'pdf'>('image');
 
@@ -770,7 +775,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                 <div key={plan.id} className="bg-white px-5 py-2 rounded-[32px] border border-slate-200 hover:shadow-xl hover:border-indigo-200 transition-all group flex items-center justify-between">
                   <div className="flex items-center gap-4">
                       {productThumbSrc(product) ? (
-                        <button type="button" onClick={() => setImagePreviewUrl(productThumbSrc(product))} className="w-14 h-14 rounded-2xl overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none">
+                        <button type="button" onClick={() => setImagePreview(productPreviewFromProduct(product))} className="w-14 h-14 rounded-2xl overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none">
                           <img loading="lazy" decoding="async" src={productThumbSrc(product)} alt={product.name} className="w-full h-full object-cover block" />
                         </button>
                       ) : (
@@ -816,7 +821,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                           )}
                           {renderPlanListPurchaseProgress(purchaseProgressByPlan.get(plan.id))}
                           {customListFields.map(cf =>
-                            renderPlanListCustomFieldValue(cf, plan, setImagePreviewUrl, setFilePreviewUrl, setFilePreviewType),
+                            renderPlanListCustomFieldValue(cf, plan, setImagePreview, setFilePreviewUrl, setFilePreviewType),
                           )}
                       </div>
                     </div>
@@ -877,7 +882,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                           <div key={plan.id} className={`bg-white px-5 py-2 rounded-2xl border transition-all flex items-center justify-between ${isChild ? 'border-l-4 border-l-slate-300 border-slate-200' : 'border-slate-200'} hover:shadow-lg hover:border-slate-300`} style={indentPx > 0 ? { marginLeft: `${indentPx}px` } : undefined}>
                             <div className="flex items-center gap-4">
                               {productThumbSrc(product) ? (
-                                <button type="button" onClick={() => setImagePreviewUrl(productThumbSrc(product))} className="w-12 h-12 rounded-xl overflow-hidden border border-slate-100 flex-shrink-0"><img loading="lazy" decoding="async" src={productThumbSrc(product)} alt={product.name} className="w-full h-full object-cover block" /></button>
+                                <button type="button" onClick={() => setImagePreview(productPreviewFromProduct(product))} className="w-12 h-12 rounded-xl overflow-hidden border border-slate-100 flex-shrink-0"><img loading="lazy" decoding="async" src={productThumbSrc(product)} alt={product.name} className="w-full h-full object-cover block" /></button>
                               ) : (
                                 <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-indigo-50 text-indigo-600`}>
                                   {plan.status === PlanStatus.CONVERTED ? <CheckCircle2 className="w-6 h-6" /> : <Clock className="w-6 h-6" />}
@@ -920,7 +925,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                                   )}
                                   {renderPlanListPurchaseProgress(purchaseProgressByPlan.get(plan.id))}
                                   {customListFields.map(cf =>
-                            renderPlanListCustomFieldValue(cf, plan, setImagePreviewUrl, setFilePreviewUrl, setFilePreviewType),
+                            renderPlanListCustomFieldValue(cf, plan, setImagePreview, setFilePreviewUrl, setFilePreviewType),
                           )}
                                 </div>
                               </div>
@@ -983,7 +988,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                           <div key={plan.id} className={`bg-white px-5 py-2 rounded-2xl border transition-all flex items-center justify-between ${isChild ? 'border-l-4 border-l-slate-300 border-slate-200' : 'border-slate-200'} hover:shadow-lg hover:border-slate-300`} style={indentPx > 0 ? { marginLeft: `${indentPx}px` } : undefined}>
                           <div className="flex items-center gap-4">
                             {productThumbSrc(product) ? (
-                              <button type="button" onClick={() => setImagePreviewUrl(productThumbSrc(product))} className="w-12 h-12 rounded-xl overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none">
+                              <button type="button" onClick={() => setImagePreview(productPreviewFromProduct(product))} className="w-12 h-12 rounded-xl overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none">
                                 <img loading="lazy" decoding="async" src={productThumbSrc(product)} alt={product.name} className="w-full h-full object-cover block" />
                               </button>
                             ) : (
@@ -1030,7 +1035,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                                 )}
                                 {renderPlanListPurchaseProgress(purchaseProgressByPlan.get(plan.id))}
                                 {customListFields.map(cf =>
-                            renderPlanListCustomFieldValue(cf, plan, setImagePreviewUrl, setFilePreviewUrl, setFilePreviewType),
+                            renderPlanListCustomFieldValue(cf, plan, setImagePreview, setFilePreviewUrl, setFilePreviewType),
                           )}
                               </div>
                             </div>
@@ -1098,7 +1103,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
         onSave={async (plan) => {
           await Promise.resolve(onCreatePlan(plan));
         }}
-        onImagePreview={(url) => setImagePreviewUrl(url)}
+        onImagePreview={(product) => setImagePreview(productPreviewFromProduct(product))}
         onFilePreview={(url, type) => { setFilePreviewUrl(url); setFilePreviewType(type); }}
       />
 
@@ -1131,7 +1136,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
           onSplitPlan={onSplitPlan}
           onOpenOrderDetail={openOrderDetail}
           canViewOrderDetail={canViewOrderDetail}
-          onImagePreview={(url) => setImagePreviewUrl(url)}
+          onImagePreview={(product) => setImagePreview(productPreviewFromProduct(product))}
           onFilePreview={(url, type) => { setFilePreviewUrl(url); setFilePreviewType(type); }}
           onPrintRun={setPlanListPrintRun}
           itemCodeLabelPrintPickerTemplates={itemCodeLabelPrintPicker.templates}
@@ -1273,13 +1278,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
         products={products}
       />
 
-      {/* 点击产品图查看大图 */}
-      {imagePreviewUrl && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 animate-in fade-in" onClick={() => setImagePreviewUrl(null)}>
-          <img src={imagePreviewUrl} alt="大图" className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" onClick={e => e.stopPropagation()} />
-          <button type="button" onClick={() => setImagePreviewUrl(null)} className="absolute top-4 right-4 p-2 rounded-full bg-white/20 text-white hover:bg-white/30 transition-all"><X className="w-6 h-6" /></button>
-        </div>
-      )}
+      <ProductImageLightbox target={imagePreview} onClose={() => setImagePreview(null)} />
 
       {/* 文件预览弹窗 (图片/PDF) */}
       {filePreviewUrl && (

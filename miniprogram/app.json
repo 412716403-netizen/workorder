@@ -159,6 +159,10 @@
       "root": "packageFinance",
       "name": "finance",
       "pages": [
+        "finance-accounts/finance-accounts",
+        "finance-account-flow/finance-account-flow",
+        "finance-account-transfer/finance-account-transfer",
+        "finance-account-types/finance-account-types",
         "finance-payment-detail/finance-payment-detail",
         "finance-payment-edit/finance-payment-edit",
         "finance-payment-flow/finance-payment-flow",

@@ -44,7 +44,7 @@ const _require14 =
   require('../../utils/windowMetrics.js'),readNavBarMetrics = _require14.readNavBarMetrics,readWindowMetrics = _require14.readWindowMetrics,computePlanCreateHeaderHeight = _require14.computePlanCreateHeaderHeight;
 const _require15 = require('../../utils/saveNavigation.js'),LIST_ROUTES = _require15.LIST_ROUTES,afterSaveReturnToList = _require15.afterSaveReturnToList;
 const { defaultEntryDate, defaultEntryTimeHm, entryDateAndTimeToIso } = require('../../utils/docEntryTime.js');
-const _require16 = require('../../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require16.afterMatrixKeyboardOpen;
+const _require16 = require('../../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require16.afterMatrixKeyboardOpen,handleMatrixOutsideTap = _require16.handleMatrixOutsideTap;
 const _require17 =
 
 
@@ -242,6 +242,7 @@ Page({
     scanEnabled: false,
     entryDate: '',
     entryTime: '',
+    pickerSheetOpen: false,
   },
 
   _quantities: {},
@@ -648,6 +649,11 @@ Page({
     });
   },
 
+  onMatrixOutsideTap() {
+    handleMatrixOutsideTap(this);
+  },
+
+
   onMatrixKeyboardAction(e) {
     const _ref2 = e.detail || {},action = _ref2.action,digit = _ref2.digit;
     if (action === 'confirm') {
@@ -790,12 +796,20 @@ Page({
     this.setData({ lines });
   },
 
-  onEntryDateChange(e) {
-    this.setData({ entryDate: (e.detail && e.detail.value) || '' });
+  onEntryDateTimeChange(e) {
+    const detail = e.detail || {};
+    this.setData({
+      entryDate: detail.date || '',
+      entryTime: detail.time || '',
+    });
   },
 
-  onEntryTimeChange(e) {
-    this.setData({ entryTime: (e.detail && e.detail.value) || '' });
+  onPickerSheetOpen() {
+    this.setData({ pickerSheetOpen: true });
+  },
+
+  onPickerSheetClose() {
+    this.setData({ pickerSheetOpen: false });
   },
 
   async onSubmit() {

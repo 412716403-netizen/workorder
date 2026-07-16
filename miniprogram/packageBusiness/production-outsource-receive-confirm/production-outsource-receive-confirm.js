@@ -31,7 +31,7 @@ const _require11 =
 
 
   require('../../utils/windowMetrics.js'),readNavBarMetrics = _require11.readNavBarMetrics,readWindowMetrics = _require11.readWindowMetrics,computePlanCreateHeaderHeight = _require11.computePlanCreateHeaderHeight,computeFixedFooterInsetPx = _require11.computeFixedFooterInsetPx;
-const _require12 = require('../../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require12.afterMatrixKeyboardOpen;
+const _require12 = require('../../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require12.afterMatrixKeyboardOpen,handleMatrixOutsideTap = _require12.handleMatrixOutsideTap;
 const _require13 = require('../../utils/saveNavigation.js'),LIST_ROUTES = _require13.LIST_ROUTES,afterSaveReturnToList = _require13.afterSaveReturnToList;
 const _require14 =
 
@@ -93,7 +93,8 @@ Page({
     scrollHeight: 400,
     matrixScrollTop: 0,
     entryDate: '',
-    entryTime: ''
+    entryTime: '',
+    pickerSheetOpen: false,
   },
 
   onLoad() {
@@ -134,12 +135,20 @@ Page({
     wx.navigateBack();
   },
 
-  onEntryDateChange(e) {
-    this.setData({ entryDate: (e.detail && e.detail.value) || '' });
+  onEntryDateTimeChange(e) {
+    const detail = e.detail || {};
+    this.setData({
+      entryDate: detail.date || '',
+      entryTime: detail.time || '',
+    });
   },
 
-  onEntryTimeChange(e) {
-    this.setData({ entryTime: (e.detail && e.detail.value) || '' });
+  onPickerSheetOpen() {
+    this.setData({ pickerSheetOpen: true });
+  },
+
+  onPickerSheetClose() {
+    this.setData({ pickerSheetOpen: false });
   },
 
   buildMatrixCtx() {
@@ -484,6 +493,11 @@ Page({
       afterMatrixKeyboardOpen(this, '.plan-detail-scroll');
     });
   },
+
+  onMatrixOutsideTap() {
+    handleMatrixOutsideTap(this);
+  },
+
 
   onMatrixKeyboardAction(e) {
     const _ref = e.detail || {},action = _ref.action,digit = _ref.digit;

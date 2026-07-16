@@ -9,6 +9,8 @@ import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 import { PlanFormCustomFieldReadonly } from '../../components/PlanFormCustomFieldControls';
 import { productThumbSrc } from '../../utils/productImageSrc';
+import type { ProductImagePreviewTarget } from '../../components/ProductImageLightbox';
+import { productPreviewFromProduct, productPreviewFromSrc } from '../../components/ProductImageLightbox';
 
 type PsiDocType = 'PURCHASE_ORDER' | 'SALES_ORDER' | 'PURCHASE_BILL' | 'SALES_BILL';
 
@@ -27,8 +29,8 @@ export interface PsiDocDetailSummaryProps {
   getUnitName: (productId: string) => string;
   formatQtyDisplay: (q: number | string | undefined | null) => number;
   receivedByOrderLine?: Record<string, number>;
-  /** 产品主图点击后交给父级打开大图（如进销存页全屏预览） */
-  onProductImagePreview?: (url: string) => void;
+  /** 产品主图 / 附件图点击后交给父级打开预览（产品模式会再拉原图） */
+  onProductImagePreview?: (target: ProductImagePreviewTarget) => void;
   /** 当前 `docType` 对应表单配置的 `customFields`；详情顶栏（经办同行）展示 `showInCreate` 或 `showInDetail` 的项（只读） */
   headerCustomFieldDefs?: PlanFormFieldConfig[];
   /** 是否展示单价/金额列与合计 */
@@ -85,14 +87,16 @@ const ProductCell: React.FC<{
   sku?: string;
   variantLabel: string;
   customTags?: Array<{ label: string; display: string }>;
+  product?: Product | null;
   imageUrl?: string | null;
-  onImagePreview?: (url: string) => void;
-}> = ({ name, sku, variantLabel, customTags, imageUrl, onImagePreview }) => {
+  onImagePreview?: (target: ProductImagePreviewTarget) => void;
+}> = ({ name, sku, variantLabel, customTags, product, imageUrl, onImagePreview }) => {
   const thumb = (() => {
-    if (imageUrl) {
+    const src = imageUrl || productThumbSrc(product);
+    if (src) {
       const imgEl = (
         <img
-          src={imageUrl}
+          src={src}
           alt={name || '产品'}
           className="h-full w-full object-cover"
           loading="lazy"
@@ -103,7 +107,12 @@ const ProductCell: React.FC<{
         return (
           <button
             type="button"
-            onClick={() => onImagePreview(imageUrl)}
+            onClick={() => {
+              const t = product
+                ? productPreviewFromProduct(product)
+                : productPreviewFromSrc(src);
+              if (t) onImagePreview(t);
+            }}
             className="h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-slate-50 transition-opacity hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             aria-label="查看产品图片"
           >
@@ -316,8 +325,10 @@ const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
                         onFilePreview={
                           onProductImagePreview
                             ? (url, type) => {
-                                if (type === 'image') onProductImagePreview(url);
-                                else window.open(url, '_blank', 'noopener,noreferrer');
+                                if (type === 'image') {
+                                  const t = productPreviewFromSrc(url);
+                                  if (t) onProductImagePreview(t);
+                                } else window.open(url, '_blank', 'noopener,noreferrer');
                               }
                             : undefined
                         }
@@ -423,6 +434,7 @@ const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
                       sku={rowProductSku}
                       variantLabel={variantLabel}
                       customTags={customTags}
+                      product={product}
                       imageUrl={productThumbSrc(product) || undefined}
                       onImagePreview={onProductImagePreview}
                     />

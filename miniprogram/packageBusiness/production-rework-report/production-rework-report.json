@@ -1,6 +1,7 @@
 {
   "navigationStyle": "custom",
   "usingComponents": {
+    "datetime-calendar-select": "/components/datetime-calendar-select/datetime-calendar-select",
     "searchable-worker-select": "/components/searchable-worker-select/searchable-worker-select",
     "matrix-qty-keyboard": "/components/matrix-qty-keyboard/matrix-qty-keyboard",
     "scan-batch-modal": "/packageBusiness/components/scan-batch-modal/scan-batch-modal"

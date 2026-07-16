@@ -27,7 +27,7 @@ const _require9 = require('../../utils/orderApi.js'),fetchTenantConfig = _requir
 const _require0 = require('../../utils/productionPlans.js'),normalizeMasterList = _require0.normalizeMasterList;
 const _require1 = require('../utils/pendingStockBadge.js'),fetchAllOrdersPaginated = _require1.fetchAllOrdersPaginated;
 const _require10 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require10.readNavBarMetrics,readWindowMetrics = _require10.readWindowMetrics,computeSimplePlanHeaderHeight = _require10.computeSimplePlanHeaderHeight,computeFixedFooterInsetPx = _require10.computeFixedFooterInsetPx;
-const _require11 = require('../../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require11.afterMatrixKeyboardOpen;
+const _require11 = require('../../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require11.afterMatrixKeyboardOpen,handleMatrixOutsideTap = _require11.handleMatrixOutsideTap;
 const _require12 = require('../../utils/saveNavigation.js'),LIST_ROUTES = _require12.LIST_ROUTES,afterSaveReturnToList = _require12.afterSaveReturnToList;
 const { applyPartnerCreatedOnPage } = require('../../utils/mergePartnerList.js');
 const { defaultEntryDate, defaultEntryTimeHm, entryDateAndTimeToIso } = require('../../utils/docEntryTime.js');
@@ -60,7 +60,8 @@ Page({
     scrollHeight: 400,
     matrixScrollTop: 0,
     entryDate: '',
-    entryTime: ''
+    entryTime: '',
+    pickerSheetOpen: false,
   },
 
   onLoad() {
@@ -205,12 +206,20 @@ Page({
     applyPartnerCreatedOnPage(this, e, { cacheKey: '_partners' });
   },
 
-  onEntryDateChange(e) {
-    this.setData({ entryDate: (e.detail && e.detail.value) || '' });
+  onEntryDateTimeChange(e) {
+    const detail = e.detail || {};
+    this.setData({
+      entryDate: detail.date || '',
+      entryTime: detail.time || '',
+    });
   },
 
-  onEntryTimeChange(e) {
-    this.setData({ entryTime: (e.detail && e.detail.value) || '' });
+  onPickerSheetOpen() {
+    this.setData({ pickerSheetOpen: true });
+  },
+
+  onPickerSheetClose() {
+    this.setData({ pickerSheetOpen: false });
   },
 
   onDeliveryDateChange(e) {
@@ -318,6 +327,11 @@ Page({
       afterMatrixKeyboardOpen(this, '.outsource-confirm-scroll');
     });
   },
+
+  onMatrixOutsideTap() {
+    handleMatrixOutsideTap(this);
+  },
+
 
   onMatrixKeyboardAction(e) {
     const _ref = e.detail || {},action = _ref.action,digit = _ref.digit;

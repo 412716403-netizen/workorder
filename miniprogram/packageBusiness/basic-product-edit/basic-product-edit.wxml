@@ -107,7 +107,7 @@
     </view>
   </scroll-view>
 
-  <view wx:if="{{!loading}}" class="report-batch-footer">
+  <view wx:if="{{!loading && !pickerSheetOpen}}" class="report-batch-footer">
     <view
       wx:if="{{canDelete && isPersisted}}"
       class="report-batch-footer__btn report-batch-footer__btn--ghost {{submitting ? 'report-batch-footer__btn--disabled' : ''}}"

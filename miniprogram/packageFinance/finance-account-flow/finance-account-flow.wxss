@@ -1,0 +1,72 @@
+@import '/styles/psi-purchase-orders-page.wxss';
+
+.fin-acct-flow-page {
+  padding: 0 var(--spacing-page) calc(120rpx + env(safe-area-inset-bottom));
+}
+
+.fin-acct-flow-card {
+  margin-bottom: 20rpx;
+  padding: 24rpx;
+  background: var(--color-bg-card);
+  border-radius: 16rpx;
+  box-shadow: 0 4rpx 24rpx rgba(15, 23, 42, 0.04);
+}
+
+.fin-acct-flow-card__title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 8rpx;
+}
+
+.fin-acct-flow-card__counterparty {
+  flex: 1;
+  min-width: 0;
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fin-acct-flow-card__amount {
+  flex-shrink: 0;
+  font-size: 30rpx;
+  font-weight: 800;
+}
+
+.fin-acct-flow-card__amount--in {
+  color: var(--color-success);
+}
+
+.fin-acct-flow-card__amount--out {
+  color: var(--color-danger);
+}
+
+.fin-acct-flow-card__doc {
+  display: block;
+  font-size: 24rpx;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin-bottom: 10rpx;
+}
+
+.fin-acct-flow-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8rpx 20rpx;
+}
+
+.fin-acct-flow-card__meta-item {
+  font-size: 24rpx;
+  color: var(--color-text-secondary);
+}
+
+.fin-acct-flow-card__note {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 22rpx;
+  color: var(--color-text-tertiary);
+}

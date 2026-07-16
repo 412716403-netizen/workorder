@@ -1,6 +1,7 @@
 {
   "navigationStyle": "custom",
   "usingComponents": {
+    "datetime-calendar-select": "/components/datetime-calendar-select/datetime-calendar-select",
     "matrix-qty-keyboard": "/components/matrix-qty-keyboard/matrix-qty-keyboard"
   }
 }

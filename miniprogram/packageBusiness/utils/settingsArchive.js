@@ -65,7 +65,6 @@ const ARCHIVE_TAB_META = {
       kind: 'RECEIPT',
       name: '',
       linkPartner: false,
-      selectPaymentAccount: false,
       linkWorker: false,
       linkProduct: false,
       customFields: [],

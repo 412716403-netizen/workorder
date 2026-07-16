@@ -4,8 +4,15 @@
 
 const { formatLocalDateTimeZh } = require('../../utils/flowDocSortLite.js');
 const { listProductNameSkuFields, listProductThumbFromProduct } = require('../../utils/listProductThumb.js');
-const { buildReportCustomFields, buildInitialReportCustomData } = require('../../utils/orderReportForm.js');
-const { buildCustomDataPayload, customFieldDisplayValue } = require('../../utils/planFormCustomField.js');
+const {
+  buildReportCustomFields,
+  buildCustomDataPayload,
+  validateReportCustomFields,
+} = require('../../utils/orderReportForm.js');
+const { customFieldDisplayValue } = require('../../utils/planFormCustomField.js');
+const { localTodayYmd, localNowForDatetimePicker } = require('../../utils/dateYmd.js');
+const { normalizeFinanceCategoriesFromApi } = require('../../utils/reportCustomDocField.js');
+const { isImageDataUrl, formatCustomFileLabel } = require('../../utils/fileBase64.js');
 
 const DOC_META = {
   RECEIPT: {
@@ -140,21 +147,42 @@ function mapFinanceDetailView(rec, ctx = {}, type = 'RECEIPT') {
     if (cat.linkWorker) {
       rows.push({ label: '关联工人', value: (worker && worker.name) || '—' });
     }
-    if (cat.linkProduct) {
+    if ((cat && cat.linkProduct) || rec.productId) {
       const skuPart = productFields.showProductSku ? ` ${productFields.productSku}` : '';
       rows.push({
         label: '关联产品',
         value: rec.productId
-          ? `${productFields.productName}${skuPart}`.trim()
+          ? `${productFields.productName}${skuPart}`.trim() || '—'
           : '—',
       });
     }
     const customFields = buildReportCustomFields(cat.customFields || []);
     customFields.forEach((field) => {
-      if (field.desktopOnly) return;
-      const val = customFieldDisplayValue(field, rec.customData || {});
-      if (!val) return;
-      rows.push({ label: field.label, value: val });
+      const stored = rec.customData && rec.customData[field.id];
+      const display = customFieldDisplayValue(field, rec.customData || {});
+      if (field.desktopOnly) {
+        rows.push({
+          label: field.label,
+          value: display || '请在电脑端查看',
+          rowKey: field.id || field.label,
+        });
+        return;
+      }
+      if ((field.isFile || field.type === 'file') && isImageDataUrl(stored)) {
+        rows.push({
+          label: field.label,
+          value: display || formatCustomFileLabel(stored) || '图片',
+          isImage: true,
+          imageUrl: String(stored),
+          rowKey: field.id || field.label,
+        });
+        return;
+      }
+      rows.push({
+        label: field.label,
+        value: display || '—',
+        rowKey: field.id || field.label,
+      });
     });
   } else {
     rows.push({ label: meta.partnerLabel, value: partner });
@@ -174,6 +202,10 @@ function mapFinanceDetailView(rec, ctx = {}, type = 'RECEIPT') {
   if ((rec.note || '').trim()) {
     rows.push({ label: '备注', value: rec.note.trim() });
   }
+
+  rows.forEach((row, i) => {
+    if (!row.rowKey) row.rowKey = row.label || `row-${i}`;
+  });
 
   return {
     title: meta.docLabel,
@@ -215,8 +247,9 @@ function formVisibility(form, categories, fundsAccountEnabled, type = 'RECEIPT')
   const selected = form.categoryId
     ? list.find((c) => c.id === form.categoryId) || null
     : null;
+  // 与 Web FinanceRecordFormModal 一致：展示全部分类自定义项（含 file/knowledge，小程序端提示电脑端填写）
   const customFields = selected
-    ? buildReportCustomFields(selected.customFields || []).filter((f) => !f.desktopOnly)
+    ? buildReportCustomFields(selected.customFields || [])
     : [];
 
   return {
@@ -240,6 +273,8 @@ function validateFinanceForm(form, visibility, type = 'RECEIPT') {
   if (visibility.hasCategories && !form.categoryId) return '请选择单据分类';
   if (visibility.needPartner && !(form.partner || '').trim()) return `请选择${meta.partnerLabel}`;
   if (visibility.needPaymentAccount && !(form.paymentAccount || '').trim()) return '请选择收支账户';
+  const customErr = validateReportCustomFields(visibility.customFields || [], form.customData || {});
+  if (customErr) return customErr;
   return '';
 }
 
@@ -305,11 +340,19 @@ function buildWorkerPickerOptions(workers) {
 function initialCustomDataForCategory(category, existingCustomData) {
   if (!category) return {};
   const fields = buildReportCustomFields(category.customFields || []);
-  const initial = buildInitialReportCustomData(fields);
+  const initial = {};
+  fields.forEach((f) => {
+    if (f.desktopOnly || !f.isDate || !f.dateAutoFill) return;
+    initial[f.id] = f.dateWithTime ? localNowForDatetimePicker() : localTodayYmd();
+  });
   if (existingCustomData && typeof existingCustomData === 'object') {
     return { ...initial, ...existingCustomData };
   }
   return initial;
+}
+
+function normalizeFinanceCategories(list) {
+  return normalizeFinanceCategoriesFromApi(list || []);
 }
 
 module.exports = {
@@ -331,4 +374,5 @@ module.exports = {
   buildAccountPickerOptions,
   buildWorkerPickerOptions,
   initialCustomDataForCategory,
+  normalizeFinanceCategories,
 };

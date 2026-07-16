@@ -1,13 +1,14 @@
 /**
  * Phase 3.H：产品主图缩略图生成。
- * - data:image/...;base64,... → sharp 缩到最长边 512px 的 JPEG data URL
+ * - data:image/...;base64,... → sharp 缩到最长边 256px 的 JPEG data URL
  * - http(s) 外链 → 直接复用链接（不做下载重编码）
  * - 空/解码失败 → null
  */
 import sharp from 'sharp';
 
-const THUMB_MAX_EDGE = 512;
-const THUMB_JPEG_QUALITY = 80;
+/** 列表缩略图最长边；256 兼顾清晰度与体积（相对 512 约 1/4） */
+const THUMB_MAX_EDGE = 256;
+const THUMB_JPEG_QUALITY = 75;
 
 const DATA_URL_RE = /^data:([^;,]+)?(;base64)?,([\s\S]*)$/i;
 

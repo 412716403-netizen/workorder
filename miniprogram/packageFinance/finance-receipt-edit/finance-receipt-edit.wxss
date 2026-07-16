@@ -1,45 +1,77 @@
 @import '/styles/plan-create-form.wxss';
 @import '/styles/psi-warehouse-transfer-edit-page.wxss';
 
+/* 卡片内最后一个 picker 行去掉底部分割线 */
+.plan-form-card > picker:last-child .plan-form-cell {
+  border-bottom: none;
+}
+
+/* 金额 / 备注：纵向字段，压缩过高空白 */
 .plan-form-cell--column {
   flex-direction: column;
   align-items: stretch;
-  gap: 12rpx;
+  gap: 8rpx;
   padding-top: 20rpx;
   padding-bottom: 20rpx;
 }
 
 .plan-form-cell--column .plan-form-cell__label {
   min-width: 0;
+  font-size: var(--font-caption);
+  color: var(--color-text-secondary);
 }
 
 .fin-edit-amount {
   display: flex;
   align-items: center;
   gap: 8rpx;
+  min-height: 64rpx;
 }
-
 
 .fin-edit-amount__symbol {
   font-size: 36rpx;
   font-weight: 800;
   color: var(--color-text-tertiary);
+  line-height: 1;
 }
 
 .fin-edit-amount__input {
   flex: 1;
   min-width: 0;
-  height: 72rpx;
+  height: 64rpx;
+  line-height: 64rpx;
   font-size: 40rpx;
   font-weight: 800;
   color: var(--color-text-primary);
 }
 
 .fin-edit-note {
-  min-height: 120rpx;
+  min-height: 88rpx;
+  max-height: 240rpx;
   padding: 0;
   font-size: 28rpx;
+  line-height: 1.5;
   color: var(--color-text-primary);
   width: 100%;
   box-sizing: border-box;
+}
+
+.fin-transfer-delete {
+  margin-top: 32rpx;
+}
+
+.fin-transfer-delete__btn {
+  height: 88rpx;
+  line-height: 88rpx;
+  text-align: center;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+  border-radius: 16rpx;
+}
+
+.fin-transfer-delete__btn--disabled {
+  opacity: 0.45;
+  pointer-events: none;
 }

@@ -12,8 +12,9 @@
   <scroll-view
     class="plan-detail-scroll"
     scroll-y
+    enhanced
     scroll-top="{{matrixScrollTop}}"
-    scroll-with-animation
+    scroll-with-animation="{{false}}"
     show-scrollbar="{{false}}"
     style="height: {{scrollHeight}}px;"
   >
@@ -21,7 +22,7 @@
 
     <view wx:elif="{{!detail}}" class="plan-detail-muted">未找到入库记录</view>
 
-    <view wx:else class="plan-detail-page stock-in-detail-page {{matrixKeyboardVisible ? 'matrix-keyboard-page--open' : ''}}">
+    <view wx:else class="plan-detail-page stock-in-detail-page {{matrixKeyboardVisible ? 'matrix-keyboard-page--open' : ''}}" bindtap="onMatrixOutsideTap">
       <view class="report-batch-hero">
         <view class="report-batch-hero__left">
           <image
@@ -130,7 +131,7 @@
                     wx:if="{{cell.variantId}}"
                     class="plan-create-matrix__input {{activeMatrixVariantId === cell.variantId ? 'plan-create-matrix__input--active' : ''}} {{activeMatrixVariantId === cell.variantId && matrixInputReplaceAll && cell.quantity ? 'plan-create-matrix__input--replace' : ''}} {{cell.quantity ? 'plan-create-matrix__input--filled' : 'plan-create-matrix__input--empty'}}"
                     data-variant-id="{{cell.variantId}}"
-                    bindtap="onMatrixCellTap"
+                    catchtap="onMatrixCellTap"
                   >{{cell.quantity}}</view>
                   <text wx:else class="plan-create-matrix__dash">—</text>
                 </view>

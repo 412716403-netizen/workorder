@@ -42,6 +42,9 @@ SmartTrack Pro 微信小程序采用 **企业蓝 + 卡片化 + 底部 Tab** 的 
 | `tab-shell` | Tab 页统一壳：蓝色渐变顶栏 + 白色圆角内容区（应用 / 扫码 / 消息 / 我的） |
 | `searchable-partner-select` | 合作单位 / 客户 / 加工厂（搜索 + 分类，底栏弹层） |
 | `searchable-product-select` | 产品选择（搜索 + 分类 + SKU） |
+| `finance-category-tag-select` | 收/付款单据分类（标签宫格底栏，与日期弹层同高） |
+| `finance-account-select` | 收/付款收支账户（列表底栏，与日期弹层同高；无最近使用/添加账户） |
+| `datetime-calendar-select` | 创建时间（日历 + 时刻滚轮底栏；无时间启用开关） |
 | `matrix-qty-keyboard` | 色码矩阵数量自定义键盘 |
 | `batch-return-input` | 采购入库批次（点击选择；弹窗内可选已有批次或输入新批号） |
 
@@ -166,6 +169,25 @@ RBAC 字段单一事实源：[`shared/workbenchShortcuts.ts`](../shared/workbenc
 | 登记/编辑采购订单 | — | ✓ | ✓ | ✓ |
 | 登记/编辑采购入库 | ✓ | ✓ | ✓ | ✓ |
 
+### 底栏选择器与「保存单据」穿透
+
+页面 fixed 底栏（`plan-create-footer` 等，`z-index:100`）与组件内 fixed 弹层不在同一层叠上下文，弹层打开时底栏会透出。统一约定：
+
+- [`openBottomSheet` / `closeBottomSheet`](../miniprogram/utils/bottomSheetAnim.js) **自动**维护当前页 `pickerSheetOpen`（深度计数，支持嵌套弹层）
+- 页面 `data` 须有 `pickerSheetOpen: false`
+- 底栏提交区：`wx:if="{{!pickerSheetOpen}}"`（与矩阵键盘并存：`!matrixKeyboardVisible && !pickerSheetOpen`）
+- 可选：组件仍可 `bind:sheetopen` / `bind:sheetclose`；与中央计数并存时勿再单独用关闭事件把 `pickerSheetOpen` 设为 false 覆盖深度（当前页面 handler 仅 `setData` 布尔值，与深度结果一致即可）
+
+适用于：合作单位 / 产品 / 报工人员 / 创建时间 / 单据分类 / 收支账户 等走 `openBottomSheet` 的选择器。
+
+### 创建时间（日期+时刻）
+
+单据**新建/编辑**与流水**详情改时间戳**，须用 [`datetime-calendar-select`](../miniprogram/components/datetime-calendar-select/)，禁止 `picker mode="date"` + `picker mode="time"` 拆分。参考 [`finance-receipt-edit`](../miniprogram/packageFinance/finance-receipt-edit/)：
+
+- 组件：`bind:change` 一次写入 date/time
+- 底栏提交：见上节 `pickerSheetOpen` 约定
+- **例外**：列表/流水筛选的纯日期区间（`dateFrom`/`dateTo`）仍可用 `picker mode="date"`
+
 ### 数量 / 单价 / 金额（三列一行）
 
 同时展示**数量、单价、金额**时，统一使用 [`styles/qty-price-amount-summary.wxss`](../miniprogram/styles/qty-price-amount-summary.wxss)（参考外协收回确认页）：
@@ -181,7 +203,10 @@ RBAC 字段单一事实源：[`shared/workbenchShortcuts.ts`](../shared/workbenc
 | 组件 | 路径 | 用途 |
 |------|------|------|
 | `searchable-partner-select` | [`components/searchable-partner-select/`](../miniprogram/components/searchable-partner-select/) | 合作单位 / 客户 / 加工厂（搜索 + 分类 Tab 底栏弹层） |
-| `searchable-product-select` | [`components/searchable-product-select/`](../miniprogram/components/searchable-product-select/) | 产品（搜索 + 分类 Tab，展示 SKU） |
+| `searchable-product-select` | [`components/searchable-product-select/`](../miniprogram/components/searchable-product-select/) | 产品（搜索 + 分类 Tab + 缩略图/SKU）；**弹层统一**对齐生产计划新建：顶栏「取消 / 标题」、约 75% 屏高；`cell` / `embedded` 只影响触发行样式，不影响弹层 |
+| `finance-category-tag-select` | [`components/finance-category-tag-select/`](../miniprogram/components/finance-category-tag-select/) | 收/付款单据分类：5 列图标标签宫格，底栏与创建时间同高（约 55%）；统一细线简约 `finance-category` 图标；仅一项时不显示已选高亮；无「最近使用」/分组标题 |
+| `finance-account-select` | [`components/finance-account-select/`](../miniprogram/components/finance-account-select/) | 收/付款收支账户与转账转出/转入：列表行（蓝线 `wallet` 图标 + 名称 + 余额副标题 + 勾选）；`valueMode=name|id`；底栏与创建时间同高（约 55%）；仅一项时不显示勾选；无「最近使用」/「添加账户」 |
+| `datetime-calendar-select` | [`components/datetime-calendar-select/`](../miniprogram/components/datetime-calendar-select/) | 创建时间：日历选日 + 点「时刻」进时分滚轮；点月标题进年月滚轮；无时间启用开关；右上角「完成」提交；底栏约 55% 屏高 |
 | `matrix-qty-keyboard` | [`components/matrix-qty-keyboard/`](../miniprogram/components/matrix-qty-keyboard/) | 矩阵格数量自定义键盘（↵ 同行下一格、→ 同列下一行、完成关闭） |
 
 ### 数据加载（planApi）
@@ -214,7 +239,7 @@ const {
 | 主包 | `miniprogram/` | Tab/登录等；**多分包共用**的 `utils/`、`components/`（选择器、矩阵键盘等）、`styles/` |
 | 生产分包 | `packageBusiness` | 计划/工单/外协/返工/物料/基础档案等 |
 | 进销存分包 | `packagePsi` | 采购/销售/仓库 |
-| 财务分包 | `packageFinance` | 收款/付款/对账 |
+| 财务分包 | `packageFinance` | 收款/付款/对账/资金账户 |
 
 约定：
 
@@ -229,9 +254,11 @@ const {
 - 页面底部挂载 `<matrix-qty-keyboard visible="{{matrixKeyboardVisible}}" bind:action="onMatrixKeyboardAction" />`。
 - 逻辑统一走 [`utils/matrixQtyKeyboard.js`](../miniprogram/utils/matrixQtyKeyboard.js)：`createMatrixKeyboardInputSession`、`activateMatrixKeyboardCell`、`applyMatrixKeyboardKey`（选中格后**首键整格替换**）、`buildMatrixKeyboardPreview`、`getNextMatrixVariantIdInRow`、`getNextMatrixVariantIdInColumn`。
 - 选中待替换时格子上加 `plan-create-matrix__input--replace`（浅蓝底提示）。
-- 键盘弹出时滚动容器加 `matrix-keyboard-page--open`（底部留白）；[`utils/matrixKeyboardLayout.js`](../miniprogram/utils/matrixKeyboardLayout.js) `afterMatrixKeyboardOpen` 将当前格滚到键盘上方。
-- **点空白收起**：键盘组件带全屏透明 mask，点键盘以外区域触发 `confirm`（各页已有收起逻辑）。
-- 处理不良页额外将「处理数量」卡片滚到可视区上部，避免长工序列表占满高度导致格子贴键盘。
+- **滚动容器约定**（所有矩阵键盘页统一）：
+  - 纵向 `scroll-view`：`scroll-y` + `enhanced` + `scroll-top="{{matrixScrollTop}}"` + `scroll-with-animation="{{false}}"`
+  - `data.matrixScrollTop: 0`
+  - 内容区加 `matrix-keyboard-page--open`（底部留白）；[`utils/matrixKeyboardLayout.js`](../miniprogram/utils/matrixKeyboardLayout.js) `afterMatrixKeyboardOpen(page, '.xxx-scroll')` **仅微调**当前激活格到键盘上方，**禁止** `scroll-into-view` 钉顶
+- **收起**：点键盘「完成」，或点矩阵输入格以外的表单空白区（`onMatrixOutsideTap` → `confirm`）；矩阵格用 `catchtap` 切格不误关。不铺全屏 mask，键盘弹出后表单仍可滚动。
 
 ### 分包体积
 
@@ -239,7 +266,8 @@ const {
 
 ### 禁止项
 
-- 用 `picker mode="selector"` 选合作单位或产品（历史筛选 Tab、仓库等枚举除外）。
+- 用 `picker mode="date"` + `picker mode="time"` 拆分录入单据创建时间（须用 `datetime-calendar-select`；列表筛选纯日期除外）。
+- 用 `picker mode="selector"` 选合作单位、产品、收/付款单据分类或收支账户（历史筛选 Tab、仓库等枚举除外）。
 - 在页面 WXML 内复制粘贴自建数字键盘（须用 `matrix-qty-keyboard`）。
 - 各页自行定义矩阵表格样式（须复用 `plan-create-matrix*`）。
 
@@ -296,6 +324,7 @@ const {
 | 收款单详情（删除） | `FINANCE_RECEIPTS` |
 | 登记/编辑付款单 | `FINANCE_PAYMENTS` |
 | 付款单详情（删除） | `FINANCE_PAYMENTS` |
+| 账户转账（新建/编辑/删除） | `FINANCE_ACCOUNTS` |
 | 新建/编辑产品 | `BASIC_PRODUCTS` |
 | 新建/编辑合作单位 | `BASIC_PARTNERS` |
 
@@ -518,26 +547,29 @@ npm run miniprogram:icons
 
 | 页面 | 路径 | 职责 |
 |------|------|------|
-| 收款单 Hub | [`packageBusiness/finance-receipts/`](../miniprogram/packageBusiness/finance-receipts/) | 分页列表、搜索、流水快捷入口、新建 |
-| 收款单详情 | [`packageBusiness/finance-receipt-detail/`](../miniprogram/packageBusiness/finance-receipt-detail/) | 分类/客户/账户/工人/产品/金额；编辑/删除 |
-| 登记/编辑 | [`packageBusiness/finance-receipt-edit/`](../miniprogram/packageBusiness/finance-receipt-edit/) | 分类联动字段、缴款客户、收支账户、金额、备注 |
-| 收款流水 | [`packageBusiness/finance-receipt-flow/`](../miniprogram/packageBusiness/finance-receipt-flow/) | 日期/搜索筛选流水 |
+| 收款单 Hub | [`packageFinance/finance-receipts/`](../miniprogram/packageFinance/finance-receipts/) | 分页列表、搜索、流水快捷入口、新建 |
+| 收款单详情 | [`packageFinance/finance-receipt-detail/`](../miniprogram/packageFinance/finance-receipt-detail/) | 分类/客户/账户/工人/产品/自定义内容（**图片可预览**）/金额；编辑/删除 |
+| 登记/编辑 | [`packageFinance/finance-receipt-edit/`](../miniprogram/packageFinance/finance-receipt-edit/) | **日历式**创建时间（`datetime-calendar-select`）、**标签式**单据分类（`finance-category-tag-select`）、**列表式**收支账户（`finance-account-select`）、分类联动（合作单位/工人/产品）、**类型自定义内容**、金额、备注 |
+| 收款流水 | [`packageFinance/finance-receipt-flow/`](../miniprogram/packageFinance/finance-receipt-flow/) | 日期/搜索筛选流水 |
 
 | 工具 / 配置 | 作用 |
 |-------------|------|
-| [`config/financeReceipts.js`](../miniprogram/config/financeReceipts.js) | `RECEIPT` 类型常量 |
+| [`config/financeReceipts.js`](../miniprogram/packageFinance/config/financeReceipts.js) | `RECEIPT` 类型常量 |
 | [`utils/financeApi.js`](../miniprogram/utils/financeApi.js) | `/finance/records` CRUD、分类/账户/插件读取 |
-| [`utils/financeReceipts.js`](../miniprogram/utils/financeReceipts.js) | 列表/详情/表单 view-model、校验、payload |
+| [`utils/financeRecords.js`](../miniprogram/packageFinance/utils/financeRecords.js) | 收/付款共用 view-model（含分类 `customFields`） |
+| [`utils/financeReceipts.js`](../miniprogram/packageFinance/utils/financeReceipts.js) | 收款单适配层 |
 
-**API**：`GET/POST /finance/records` · `GET/PUT/DELETE /finance/records/:id` · `GET /settings/finance-categories` · `GET /settings/finance-account-types` · `GET /dashboard/feature-plugins`（资金账户插件）
+**自定义内容**：与网页端一致，字段定义来自收付款类型（`FinanceCategory.customFields`），非 `receiptFormSettings`。支持 text / date / select / **file（图片或 PDF/Office，data URL 落库，限 4MB；表单/详情预览为右侧 144rpx 正方形缩略图）**；knowledge 仍提示「请在电脑端填写」。日期支持 `dateAutoFill`；必填项带 `*` 并在保存时校验。**详情页**：file 类图片展示右侧方图，点击 `wx.previewImage` 查看大图。
 
-**权限**：`finance:receipt:view` · `finance:receipt:create` · `finance:receipt:edit` · `finance:receipt:delete`
+**API**：`GET/POST /finance/records` · `GET/PUT/DELETE /finance/records/:id` · `GET /settings/finance-categories` · `GET /settings/finance-account-types` · `GET /dashboard/feature-plugins`（资金账户插件）· `GET /products`（分类开启「关联产品」时）
 
-**深链**：`/packageBusiness/finance-receipts/finance-receipts?id=<id>` 重定向至详情。
+**权限**：`finance:receipt:view` · `finance:receipt:create` · `finance:receipt:edit` · `finance:receipt:delete`。登记页只读依赖（收付款类型 / 产品 / 合作单位 / 工人 / 收支账户类型）对持有任意 `finance:*` 的角色放行，无需再勾 `settings:finance_categories:view` 或 `basic:products:view`；否则分类上的「关联产品」开关不生效。
 
-**留 Web**：表单配置、列表/详情打印。
+**深链**：`/packageFinance/finance-receipts/finance-receipts?id=<id>` 重定向至详情。
 
-入口：[`menus.js`](../miniprogram/config/menus.js) `finance-receipt` → `/packageBusiness/finance-receipts/finance-receipts`（首页快捷 / 应用中心）。
+**留 Web**：列表/详情打印；资料库（knowledge）类自定义字段。
+
+入口：[`menus.js`](../miniprogram/config/menus.js) `finance-receipt` → `/packageFinance/finance-receipts/finance-receipts`（首页快捷 / 应用中心）。
 
 ## 付款单
 
@@ -545,25 +577,25 @@ npm run miniprogram:icons
 
 | 页面 | 路径 | 职责 |
 |------|------|------|
-| 付款单 Hub | [`packageBusiness/finance-payments/`](../miniprogram/packageBusiness/finance-payments/) | 分页列表、搜索、流水快捷入口、新建 |
-| 付款单详情 | [`packageBusiness/finance-payment-detail/`](../miniprogram/packageBusiness/finance-payment-detail/) | 分类/收款单位/账户/工人/产品/金额；编辑/删除 |
-| 登记/编辑 | [`packageBusiness/finance-payment-edit/`](../miniprogram/packageBusiness/finance-payment-edit/) | 分类联动字段、收款单位/个人、收支账户、金额、备注 |
-| 付款流水 | [`packageBusiness/finance-payment-flow/`](../miniprogram/packageBusiness/finance-payment-flow/) | 日期/搜索筛选流水，底部合计栏 |
+| 付款单 Hub | [`packageFinance/finance-payments/`](../miniprogram/packageFinance/finance-payments/) | 分页列表、搜索、流水快捷入口、新建 |
+| 付款单详情 | [`packageFinance/finance-payment-detail/`](../miniprogram/packageFinance/finance-payment-detail/) | 分类/收款单位/账户/工人/产品/自定义内容（**图片可预览**）/金额；编辑/删除 |
+| 登记/编辑 | [`packageFinance/finance-payment-edit/`](../miniprogram/packageFinance/finance-payment-edit/) | **日历式**创建时间、**标签式**单据分类、**列表式**收支账户、分类联动、**类型自定义内容**、收款单位/个人、金额、备注 |
+| 付款流水 | [`packageFinance/finance-payment-flow/`](../miniprogram/packageFinance/finance-payment-flow/) | 日期/搜索筛选流水，底部合计栏 |
 
 | 工具 / 配置 | 作用 |
 |-------------|------|
-| [`config/financePayments.js`](../miniprogram/config/financePayments.js) | `PAYMENT` 类型常量 |
-| [`utils/financeRecords.js`](../miniprogram/utils/financeRecords.js) | 收/付款共用 view-model |
-| [`utils/financePayments.js`](../miniprogram/utils/financePayments.js) | 付款单适配层 |
+| [`config/financePayments.js`](../miniprogram/packageFinance/config/financePayments.js) | `PAYMENT` 类型常量 |
+| [`utils/financeRecords.js`](../miniprogram/packageFinance/utils/financeRecords.js) | 收/付款共用 view-model |
+| [`utils/financePayments.js`](../miniprogram/packageFinance/utils/financePayments.js) | 付款单适配层 |
 | [`utils/financeApi.js`](../miniprogram/utils/financeApi.js) | `/finance/records` CRUD |
 
 **API / 权限**：与收款单相同接口，`type=PAYMENT`；`finance:payment:view|create|edit|delete`
 
-**深链**：`/packageBusiness/finance-payments/finance-payments?id=<id>` 重定向至详情。
+**深链**：`/packageFinance/finance-payments/finance-payments?id=<id>` 重定向至详情。
 
-**留 Web**：表单配置、列表/详情打印。
+**留 Web**：列表/详情打印；资料库（knowledge）类自定义字段。
 
-入口：[`menus.js`](../miniprogram/config/menus.js) `finance-payment` → `/packageBusiness/finance-payments/finance-payments`（应用中心）。
+入口：[`menus.js`](../miniprogram/config/menus.js) `finance-payment` → `/packageFinance/finance-payments/finance-payments`（应用中心）。
 
 ## 财务对账
 
@@ -591,6 +623,31 @@ npm run miniprogram:icons
 **留 Web**：导出 Excel、打印。
 
 入口：[`menus.js`](../miniprogram/config/menus.js) `finance-reconciliation` → `/packageBusiness/finance-reconciliation/finance-reconciliation`。
+
+## 资金账户
+
+对齐 Web [`AccountBalancesTab`](../views/finance/AccountBalancesTab.tsx) / [`AccountTransferModal`](../views/finance/AccountTransferModal.tsx) / [`AccountTypesModal`](../views/settings/AccountTypesModal.tsx)（P2+ 移动端口径），由功能插件 `funds_account` 门控：
+
+| 页面 | 路径 | 职责 |
+|------|------|------|
+| 资金账户 Hub | [`packageFinance/finance-accounts/`](../miniprogram/packageFinance/finance-accounts/) | 各账户期初/流入/流出/当前余额实时聚合；今日/本周/本月/全部期间筛选；合计卡；未归账行；转账与账户管理入口 |
+| 账户流水 | [`packageFinance/finance-account-flow/`](../miniprogram/packageFinance/finance-account-flow/) | 单账户（含「未归账」哨兵）收付流水下钻；搜索、分页；普通行跳收/付款详情，转账行跳转账编辑 |
+| 账户转账 | [`packageFinance/finance-account-transfer/`](../miniprogram/packageFinance/finance-account-transfer/) | 转出/转入账户（`finance-account-select` 列表底栏）+ 金额 + 备注；编辑/删除按 `transferGroupId` 成对处理 |
+| 账户类型 | [`packageFinance/finance-account-types/`](../miniprogram/packageFinance/finance-account-types/) | 账户档案维护：名称、期初余额、期初日期、账户分类；新增/编辑/删除 |
+
+| 工具 | 作用 |
+|------|------|
+| [`packageFinance/utils/financeAccounts.js`](../miniprogram/packageFinance/utils/financeAccounts.js) | 期间换算、余额/流水/账户类型 view-model、转账校验与编辑入参还原、资金账户可见性（对齐 Web `FinanceView` `canViewAccountTab`） |
+| [`utils/financeApi.js`](../miniprogram/utils/financeApi.js) | `getAccountBalances`、`createAccountTransfer` / `updateAccountTransfer` / `deleteAccountTransfer` |
+| [`utils/settingsApi.js`](../miniprogram/utils/settingsApi.js) | `financeAccountTypes` CRUD（`/settings/finance-account-types`） |
+
+**API**：`GET /finance/account-balances` · `POST/PUT/DELETE /finance/transfers[/:groupId]` · `GET /finance/records?accountTypeId=...`（`__unassigned__` 哨兵与 Web 一致）· `GET/POST/PUT/DELETE /settings/finance-account-types` · `GET /dashboard/feature-plugins`
+
+**权限**：余额/流水 `finance:account:view`（模块级 `finance` 仅在无任何 `finance:*` 细粒度时放行，口径同 Web）· 转账 `finance:transfer:create|edit|delete` · 账户类型 `settings:finance_account_types:view|create|edit|delete`（owner 全开）
+
+**留 Web**：账户流水详情弹窗内联编辑、列表打印。
+
+入口：[`menus.js`](../miniprogram/config/menus.js) `finance-account` → `/packageFinance/finance-accounts/finance-accounts`（应用中心「财务结算」，小程序专属入口；插件关闭时隐藏）。
 
 ## 采购入库
 

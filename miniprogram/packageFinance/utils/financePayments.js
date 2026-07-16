@@ -57,6 +57,7 @@ module.exports = {
   buildAccountPickerOptions: records.buildAccountPickerOptions,
   buildWorkerPickerOptions: records.buildWorkerPickerOptions,
   initialCustomDataForCategory: records.initialCustomDataForCategory,
+  normalizeFinanceCategories: records.normalizeFinanceCategories,
   PARTNER_LABEL,
   PAYMENT_PLACEHOLDER_ICON,
 };

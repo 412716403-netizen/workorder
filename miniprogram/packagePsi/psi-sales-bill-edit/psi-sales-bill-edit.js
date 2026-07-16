@@ -42,7 +42,7 @@ const _require11 =
 
   require('../../utils/matrixQtyKeyboard.js'),activateMatrixKeyboardCell = _require11.activateMatrixKeyboardCell,applyMatrixKeyboardKey = _require11.applyMatrixKeyboardKey,buildMatrixKeyboardPreview = _require11.buildMatrixKeyboardPreview,createMatrixKeyboardInputSession = _require11.createMatrixKeyboardInputSession,getNextMatrixVariantIdInColumn = _require11.getNextMatrixVariantIdInColumn,getNextMatrixVariantIdInRow = _require11.getNextMatrixVariantIdInRow;
 const _require12 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require12.readNavBarMetrics,readWindowMetrics = _require12.readWindowMetrics,computePlanCreateHeaderHeight = _require12.computePlanCreateHeaderHeight;
-const _require13 = require('../../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require13.afterMatrixKeyboardOpen;
+const _require13 = require('../../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require13.afterMatrixKeyboardOpen,handleMatrixOutsideTap = _require13.handleMatrixOutsideTap;
 const _require14 = require('../../utils/saveNavigation.js'),LIST_ROUTES = _require14.LIST_ROUTES,afterSaveReturnToList = _require14.afterSaveReturnToList;
 
 function computeHeaderBlockHeight(nav) {
@@ -92,6 +92,7 @@ Page({
     headerBlockHeight: 88,
     scrollHeight: 500,
     matrixScrollTop: 0,
+    pickerSheetOpen: false,
     ...emptyMatrixKeyboardState()
   },
 
@@ -232,16 +233,22 @@ Page({
     });
   },
 
-  onCreatedAtChange(e) {
-    const createdAt = (e.detail && e.detail.value) || '';
-    this._form = { ...this._form, createdAt };
+  onCreatedAtDateTimeChange(e) {
+    const detail = e.detail || {};
+    this._form = {
+      ...this._form,
+      createdAt: detail.date || '',
+      createdAtTime: detail.time || '',
+    };
     this.setData({ form: this._form });
   },
 
-  onCreatedAtTimeChange(e) {
-    const createdAtTime = (e.detail && e.detail.value) || '';
-    this._form = { ...this._form, createdAtTime };
-    this.setData({ form: this._form });
+  onPickerSheetOpen() {
+    this.setData({ pickerSheetOpen: true });
+  },
+
+  onPickerSheetClose() {
+    this.setData({ pickerSheetOpen: false });
   },
 
   onWarehouseChange(e) {
@@ -376,6 +383,11 @@ Page({
       afterMatrixKeyboardOpen(this, '.plan-create-scroll');
     });
   },
+
+  onMatrixOutsideTap() {
+    handleMatrixOutsideTap(this);
+  },
+
 
   onMatrixKeyboardAction(e) {
     const _ref3 = e.detail || {},action = _ref3.action,digit = _ref3.digit;

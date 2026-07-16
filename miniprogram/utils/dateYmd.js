@@ -7,6 +7,12 @@ function localTodayYmd() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+/** 当前本地日期时间，供小程序 picker mode=datetime，格式 `YYYY-MM-DD HH:mm` */
+function localNowForDatetimePicker() {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 function addDaysYmd(ymd, days) {
   const d = new Date(`${ymd}T12:00:00`);
   d.setDate(d.getDate() + days);
@@ -22,6 +28,7 @@ function localCalendarYmdStartToIso(ymd) {
 
 module.exports = {
   localTodayYmd,
+  localNowForDatetimePicker,
   addDaysYmd,
   localCalendarYmdStartToIso,
 };

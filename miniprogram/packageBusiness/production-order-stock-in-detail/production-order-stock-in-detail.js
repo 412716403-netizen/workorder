@@ -28,7 +28,7 @@ const _require8 =
 
   require('../../utils/matrixQtyKeyboard.js'),activateMatrixKeyboardCell = _require8.activateMatrixKeyboardCell,applyMatrixKeyboardKey = _require8.applyMatrixKeyboardKey,buildMatrixKeyboardPreview = _require8.buildMatrixKeyboardPreview,createMatrixKeyboardInputSession = _require8.createMatrixKeyboardInputSession,getNextMatrixVariantIdInColumn = _require8.getNextMatrixVariantIdInColumn,getNextMatrixVariantIdInRow = _require8.getNextMatrixVariantIdInRow;
 const _require9 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require9.readNavBarMetrics,readWindowMetrics = _require9.readWindowMetrics,computePlanCreateHeaderHeight = _require9.computePlanCreateHeaderHeight;
-const _require0 = require('../../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require0.afterMatrixKeyboardOpen;
+const _require0 = require('../../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require0.afterMatrixKeyboardOpen,handleMatrixOutsideTap = _require0.handleMatrixOutsideTap;
 const _require1 = require('../../utils/saveNavigation.js'),LIST_ROUTES = _require1.LIST_ROUTES,afterSaveReturnToList = _require1.afterSaveReturnToList;
 
 function computeHeaderBlockHeight(nav) {
@@ -300,6 +300,11 @@ Page({
       afterMatrixKeyboardOpen(this, '.plan-detail-scroll');
     });
   },
+
+  onMatrixOutsideTap() {
+    handleMatrixOutsideTap(this);
+  },
+
 
   onMatrixKeyboardAction(e) {
     const _ref = e.detail || {},action = _ref.action,digit = _ref.digit;

@@ -34,7 +34,7 @@
     </block>
   </view>
 
-  <view wx:if="{{scanEnabled}}" class="outsource-scan-footer">
+  <view wx:if="{{scanEnabled && !pickerSheetOpen}}" class="outsource-scan-footer">
     <view
       class="outsource-scan-footer__btn {{scanPartnerName && !loading ? '' : 'outsource-scan-footer__btn--disabled'}}"
       bindtap="onOpenScanTap"

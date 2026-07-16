@@ -1,0 +1,6 @@
+{
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "finance-account-select": "/components/finance-account-select/finance-account-select"
+  }
+}

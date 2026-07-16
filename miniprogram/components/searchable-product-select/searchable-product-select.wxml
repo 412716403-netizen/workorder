@@ -32,18 +32,14 @@
       catchtouchmove="noop"
     />
     <view
-      class="sps__sheet {{cell ? 'sps__sheet--picker' : ''}} {{sheetMotion ? 'sps__sheet--motion' : ''}} {{sheetShow ? 'sps__sheet--show' : ''}}"
+      class="sps__sheet sps__sheet--picker {{sheetMotion ? 'sps__sheet--motion' : ''}} {{sheetShow ? 'sps__sheet--show' : ''}}"
       style="height: {{sheetHeightPx}}px; max-height: {{sheetHeightPx}}px;"
       catchtouchmove="noop"
     >
-    <view wx:if="{{cell}}" class="sps__picker-bar">
+    <view class="sps__picker-bar">
       <text class="sps__picker-cancel" bindtap="onClose">取消</text>
-      <text class="sps__picker-title">{{label}}</text>
+      <text class="sps__picker-title">{{sheetTitle}}</text>
       <text class="sps__picker-action"></text>
-    </view>
-    <view wx:else class="sps__sheet-head">
-      <text class="sps__sheet-title">选择{{label}}</text>
-      <text class="sps__sheet-close" bindtap="onClose">关闭</text>
     </view>
 
     <view class="sps__search-wrap">

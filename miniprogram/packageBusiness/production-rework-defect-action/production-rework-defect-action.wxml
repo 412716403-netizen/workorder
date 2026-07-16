@@ -14,24 +14,21 @@
     class="defect-action-scroll"
     style="height: {{scrollHeight}}px;"
     scroll-top="{{matrixScrollTop}}"
-    scroll-into-view="{{matrixScrollIntoView}}"
     scroll-with-animation="{{false}}"
     show-scrollbar="{{false}}"
   >
     <view wx:if="{{loading}}" class="defect-action-loading">加载中…</view>
-    <view wx:else class="defect-action-form {{matrixKeyboardVisible ? 'matrix-keyboard-page--open' : ''}}">
+    <view wx:else class="defect-action-form {{matrixKeyboardVisible ? 'matrix-keyboard-page--open' : ''}}" bindtap="onMatrixOutsideTap">
       <view class="plan-form-card">
-        <view class="plan-form-cell plan-form-cell--last">
-          <text class="plan-form-cell__label">创建时间</text>
-          <view class="report-batch-edit__datetime">
-            <picker mode="date" value="{{entryDate}}" bindchange="onEntryDateChange">
-              <view class="report-batch-edit__picker">{{entryDate}}</view>
-            </picker>
-            <picker mode="time" value="{{entryTime}}" bindchange="onEntryTimeChange">
-              <view class="report-batch-edit__picker">{{entryTime}}</view>
-            </picker>
-          </view>
-        </view>
+        <datetime-calendar-select
+          last="{{true}}"
+          label="创建时间"
+          date="{{entryDate}}"
+          time="{{entryTime}}"
+          bind:change="onEntryDateTimeChange"
+          bind:sheetopen="onPickerSheetOpen"
+          bind:sheetclose="onPickerSheetClose"
+        />
       </view>
       <view class="defect-action-mode-bar">
         <view
@@ -104,7 +101,7 @@
         <view wx:if="{{!reworkProductNodes.length && !reworkOtherNodes.length}}" class="defect-action-node-empty">暂无可用工序</view>
       </view>
 
-      <view id="defect-action-qty-anchor" class="plan-form-card defect-action-qty-card">
+      <view class="plan-form-card defect-action-qty-card">
         <view class="defect-action-section-head">
           <text class="defect-action-section-head__title">处理数量</text>
           <text wx:if="{{useVariantQtyGrid}}" class="defect-action-section-head__total">合计 {{variantTotal}} 件</text>
@@ -128,7 +125,7 @@
                       id="mqk-cell-{{cell.variantId}}"
                       class="plan-create-matrix__input {{activeMatrixVariantId === cell.variantId ? 'plan-create-matrix__input--active' : ''}} {{activeMatrixVariantId === cell.variantId && matrixInputReplaceAll && cell.quantity ? 'plan-create-matrix__input--replace' : ''}} {{cell.quantity ? 'plan-create-matrix__input--filled' : 'plan-create-matrix__input--empty'}}"
                       data-variant-id="{{cell.variantId}}"
-                      bindtap="onMatrixCellTap"
+                      catchtap="onMatrixCellTap"
                     >{{cell.quantity}}</view>
                     <text class="report-matrix__max">{{cell.maxQtyLabel}}</text>
                   </view>
@@ -156,7 +153,7 @@
     </view>
   </scroll-view>
 
-  <view wx:if="{{!matrixKeyboardVisible && !loading}}" class="outsource-pick-footer">
+  <view wx:if="{{!matrixKeyboardVisible && !loading && !pickerSheetOpen}}" class="outsource-pick-footer">
     <view
       class="outsource-pick-footer__btn {{submitting ? 'outsource-pick-footer__btn--disabled' : ''}}"
       bindtap="onSubmit"

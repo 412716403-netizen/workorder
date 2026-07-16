@@ -4,6 +4,7 @@
 
 const { effectiveCustomDocFieldType } = require('./reportCustomDocField.js');
 const { localTodayYmd } = require('./dateYmd.js');
+const { formatCustomFileLabel } = require('./fileBase64.js');
 
 function effectivePlanFormFieldType(field) {
   return effectiveCustomDocFieldType(field);
@@ -66,7 +67,7 @@ function buildPlanDetailCustomFields(planFormSettings) {
         id: f.id,
         label: f.label,
         type,
-        desktopOnly: type === 'file' || type === 'knowledge',
+        desktopOnly: type === 'knowledge',
       };
     });
 }
@@ -92,7 +93,7 @@ function buildPlanCreateCustomFields(planFormSettings) {
         isText: type === 'text',
         isFile: type === 'file',
         isKnowledge: type === 'knowledge',
-        desktopOnly: type === 'file' || type === 'knowledge',
+        desktopOnly: type === 'knowledge',
       };
     });
 }
@@ -130,7 +131,11 @@ function buildCustomDataPayload(createCustomFields, customData) {
 function customFieldDisplayValue(field, customData) {
   const val = customData && customData[field.id];
   if (val === undefined || val === null || val === '') return '';
-  return String(val);
+  const s = String(val);
+  if ((field.isFile || field.type === 'file') && s.indexOf('data:') === 0) {
+    return formatCustomFileLabel(s);
+  }
+  return s;
 }
 
 module.exports = {

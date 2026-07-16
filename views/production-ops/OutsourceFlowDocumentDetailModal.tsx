@@ -61,6 +61,11 @@ import {
   hydrateEntryDatetimeLocal,
 } from '../../utils/docEntryTime';
 import { productThumbSrc } from '../../utils/productImageSrc';
+import ProductImageLightbox, {
+  productPreviewFromProduct,
+  productPreviewFromSrc,
+  type ProductImagePreviewTarget,
+} from '../../components/ProductImageLightbox';
 
 export interface OutsourceFlowDocumentDetailModalProps {
   productionLinkMode: 'order' | 'product';
@@ -163,7 +168,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
   const [flowDetailEditCustom, setFlowDetailEditCustom] = useState<Record<string, unknown>>({});
   const [flowDetailDeliveryDate, setFlowDetailDeliveryDate] = useState('');
   const [flowDetailEditTimestamp, setFlowDetailEditTimestamp] = useState(() => defaultEntryDatetimeLocal());
-  const [detailImagePreviewUrl, setDetailImagePreviewUrl] = useState<string | null>(null);
+  const [detailImagePreview, setDetailImagePreview] = useState<ProductImagePreviewTarget | null>(null);
 
   const docRecords = useMemo(
     () => records.filter(r => r.type === 'OUTSOURCE' && r.docNo === flowDetailKey),
@@ -733,7 +738,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                               cf={cf}
                               value={outsourceCustomSnapshot[cf.id]}
                               onFilePreview={(url, type) => {
-                                if (type === 'image') setDetailImagePreviewUrl(url);
+                                if (type === 'image') setDetailImagePreview(productPreviewFromSrc(url));
                                 else window.open(url, '_blank', 'noopener,noreferrer');
                               }}
                             />
@@ -765,7 +770,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                           onChange={v => setFlowDetailEditCustom(prev => ({ ...prev, [cf.id]: v }))}
                           controlClassName="h-9 w-full max-w-md rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500"
                           onFilePreview={(url, type) => {
-                            if (type === 'image') setDetailImagePreviewUrl(url);
+                            if (type === 'image') setDetailImagePreview(productPreviewFromSrc(url));
                             else window.open(url, '_blank', 'noopener,noreferrer');
                           }}
                         />
@@ -830,7 +835,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                       type="button"
                       onClick={e => {
                         e.stopPropagation();
-                        setDetailImagePreviewUrl(productThumbSrc(product));
+                        setDetailImagePreview(productPreviewFromProduct(product));
                       }}
                       className="h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-white transition-opacity hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       aria-label="查看产品图片"
@@ -1134,28 +1139,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
       </div>
     </div>
 
-      {detailImagePreviewUrl && (
-        <div
-          className="fixed inset-0 z-[100] flex animate-in fade-in items-center justify-center bg-black/80 p-4"
-          onClick={() => setDetailImagePreviewUrl(null)}
-          role="presentation"
-        >
-          <img
-            src={detailImagePreviewUrl}
-            alt="产品图片"
-            className="max-h-[90vh] max-w-full rounded-lg object-contain shadow-2xl"
-            onClick={e => e.stopPropagation()}
-          />
-          <button
-            type="button"
-            onClick={() => setDetailImagePreviewUrl(null)}
-            className="absolute right-4 top-4 rounded-full bg-white/20 p-2 text-white transition-all hover:bg-white/30"
-            aria-label="关闭"
-          >
-            <X className="h-6 w-6" />
-          </button>
-        </div>
-      )}
+      <ProductImageLightbox target={detailImagePreview} onClose={() => setDetailImagePreview(null)} />
   </>
   );
 };

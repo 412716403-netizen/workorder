@@ -240,9 +240,10 @@ ExecStart=/var/www/smarttrack-pro/backend/node_modules/.bin/pm2-runtime start ec
 
 **后端**
 
-- `products.image_thumb` 字段；create/update/import 用 `sharp` 生成约 512px JPEG data URL（http 外链复用）。
+- `products.image_thumb` 字段；create/update/import 用 `sharp` 生成约 256px JPEG data URL（http 外链复用）。
 - `lite` 再 omit `imageUrl`；`GET /products/:id` 仍返回原图。
-- 回填：`npm run db:backfill-product-thumbs`（`backend/`，可加 `--force`）。
+- 列表点击产品图：`ProductImageLightbox` 先显示缩略图，再按需 `GET /products/:id` 换原图。
+- 回填：`npm run db:backfill-product-thumbs`（`backend/`，可加 `--force` 按新尺寸重算）。
 
 **前端 / 小程序**
 

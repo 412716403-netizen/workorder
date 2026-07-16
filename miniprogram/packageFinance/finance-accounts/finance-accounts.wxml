@@ -1,0 +1,93 @@
+<view class="plan-shell">
+  <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-header__title">资金账户</text>
+      <view class="plan-header__back plan-header__back--placeholder"></view>
+    </view>
+
+    <view class="plan-header__tools fin-acct-tools">
+      <view class="fin-acct-periods">
+        <view
+          wx:for="{{periods}}"
+          wx:key="key"
+          class="fin-acct-period {{activePeriod === item.key ? 'fin-acct-period--active' : ''}}"
+          data-key="{{item.key}}"
+          bindtap="onPeriodTap"
+        >{{item.label}}</view>
+      </view>
+      <view wx:if="{{canManageTypes}}" class="po-flow-btn" bindtap="onAccountTypesTap">
+        <image class="po-flow-btn__icon" src="/assets/icons/credit-card.png" mode="aspectFit" />
+        <text class="po-flow-btn__label">账户</text>
+      </view>
+      <view wx:if="{{canTransfer}}" class="po-flow-btn" bindtap="onTransferTap">
+        <image class="po-flow-btn__icon" src="/assets/icons/arrow-left-right.png" mode="aspectFit" />
+        <text class="po-flow-btn__label">转账</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <view class="fin-acct-page">
+    <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
+
+    <block wx:else>
+      <view wx:if="{{totalsView.length}}" class="fin-acct-totals">
+        <view
+          wx:for="{{totalsView}}"
+          wx:key="key"
+          class="fin-acct-total fin-acct-total--{{item.tone}}"
+        >
+          <text class="fin-acct-total__label">{{item.label}}</text>
+          <text class="fin-acct-total__value">{{item.value}}</text>
+        </view>
+      </view>
+
+      <block wx:if="{{rows.length || unassignedRow}}">
+        <view
+          wx:for="{{rows}}"
+          wx:key="accountTypeId"
+          class="fin-acct-card"
+          bindtap="onAccountTap"
+          data-id="{{item.accountTypeId}}"
+          data-name="{{item.name}}"
+        >
+          <view class="fin-acct-card__main">
+            <view class="fin-acct-card__title-row">
+              <text class="fin-acct-card__name">{{item.name}}</text>
+              <text wx:if="{{item.showKind}}" class="fin-acct-card__kind">{{item.accountKind}}</text>
+            </view>
+            <text class="fin-acct-card__meta">{{item.metaText}}</text>
+          </view>
+          <view class="fin-acct-card__balance">
+            <text class="fin-acct-card__balance-label">当前余额</text>
+            <text class="fin-acct-card__balance-value {{item.balanceNegative ? 'fin-acct-card__balance-value--neg' : ''}}">{{item.balanceText}}</text>
+          </view>
+        </view>
+
+        <view
+          wx:if="{{unassignedRow}}"
+          class="fin-acct-card"
+          bindtap="onAccountTap"
+          data-id="{{unassignedRow.accountTypeId}}"
+          data-name="{{unassignedRow.name}}"
+        >
+          <view class="fin-acct-card__main">
+            <view class="fin-acct-card__title-row">
+              <text class="fin-acct-card__name">{{unassignedRow.name}}</text>
+              <text class="fin-acct-card__kind">{{unassignedRow.accountKind}}</text>
+            </view>
+            <text class="fin-acct-card__meta">{{unassignedRow.metaText}}</text>
+          </view>
+          <view class="fin-acct-card__balance">
+            <text class="fin-acct-card__balance-label">{{unassignedRow.balanceLabel}}</text>
+            <text class="fin-acct-card__balance-value {{unassignedRow.balanceNegative ? 'fin-acct-card__balance-value--neg' : ''}}">{{unassignedRow.balanceText}}</text>
+          </view>
+        </view>
+      </block>
+
+      <empty-state wx:else text="{{emptyText}}" />
+    </block>
+  </view>
+</view>

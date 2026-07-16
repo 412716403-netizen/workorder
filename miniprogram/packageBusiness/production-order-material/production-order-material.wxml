@@ -34,16 +34,16 @@
         </view>
       </view>
 
-      <view class="material-issue-entry-time">
-        <view class="material-issue-entry-time__label">创建时间</view>
-        <view class="report-batch-edit__datetime">
-          <picker mode="date" value="{{entryDate}}" bindchange="onEntryDateChange">
-            <view class="report-batch-edit__picker">{{entryDate}}</view>
-          </picker>
-          <picker mode="time" value="{{entryTime}}" bindchange="onEntryTimeChange">
-            <view class="report-batch-edit__picker">{{entryTime}}</view>
-          </picker>
-        </view>
+      <view class="plan-form-card">
+        <datetime-calendar-select
+          last="{{true}}"
+          label="创建时间"
+          date="{{entryDate}}"
+          time="{{entryTime}}"
+          bind:change="onEntryDateTimeChange"
+          bind:sheetopen="onPickerSheetOpen"
+          bind:sheetclose="onPickerSheetClose"
+        />
       </view>
 
       <view wx:if="{{warehouseNames.length}}" class="material-issue-wh">
@@ -297,7 +297,7 @@
     <view wx:else class="plan-list-empty">{{emptyText}}</view>
   </view>
 
-  <view wx:if="{{hasRows && canMaterial}}" class="material-issue-footer">
+  <view wx:if="{{hasRows && canMaterial && !pickerSheetOpen}}" class="material-issue-footer">
     <view
       class="material-issue-submit {{isReturnMode ? 'material-issue-submit--return' : ''}} {{canSubmit && !submitting ? '' : 'material-issue-submit--disabled'}}"
       bindtap="onSubmitTap"

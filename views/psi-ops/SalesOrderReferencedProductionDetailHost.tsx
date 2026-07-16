@@ -16,6 +16,10 @@ import { buildPlanLabelPrintPicker, mergePlanLabelPrintWhitelistInSettings } fro
 import PlanDetailPanel from '../plan-order-list/PlanDetailPanel';
 import OrderDetailModal from '../OrderDetailModal';
 import { getOrderFamilyIds, hasOpsPerm } from '../production-ops/types';
+import ProductImageLightbox, {
+  productPreviewFromProduct,
+  type ProductImagePreviewTarget,
+} from '../../components/ProductImageLightbox';
 
 export interface SalesOrderReferencedProductionDetailHostProps {
   planId: string | null;
@@ -40,7 +44,7 @@ const SalesOrderReferencedProductionDetailHost: React.FC<
   const canEditOrderDetail = hasOpsPerm(tenantRole, userPermissions, 'production:orders_detail:edit');
   const canDeleteOrderDetail = hasOpsPerm(tenantRole, userPermissions, 'production:orders_detail:delete');
 
-  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const [imagePreview, setImagePreview] = useState<ProductImagePreviewTarget | null>(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
   const [filePreviewType, setFilePreviewType] = useState<'image' | 'pdf'>('image');
   const [planListPrintRun, setPlanListPrintRun] = useState<{
@@ -117,7 +121,7 @@ const SalesOrderReferencedProductionDetailHost: React.FC<
     toast.info('请在「生产管理 → 计划单」中配置标签打印模版');
   }, [a]);
 
-  if (!planId && !orderId && !imagePreviewUrl && !filePreviewUrl) return null;
+  if (!planId && !orderId && !imagePreview && !filePreviewUrl) return null;
 
   return (
     <>
@@ -150,7 +154,7 @@ const SalesOrderReferencedProductionDetailHost: React.FC<
           onSplitPlan={a.onSplitPlan}
           onOpenOrderDetail={openOrderDetail}
           canViewOrderDetail={canViewOrderDetail}
-          onImagePreview={url => setImagePreviewUrl(url)}
+          onImagePreview={product => setImagePreview(productPreviewFromProduct(product))}
           onFilePreview={(url, type) => {
             setFilePreviewUrl(url);
             setFilePreviewType(type);
@@ -210,20 +214,11 @@ const SalesOrderReferencedProductionDetailHost: React.FC<
         }
       />
 
-      {imagePreviewUrl && (
-        <div
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/70 p-4"
-          onClick={() => setImagePreviewUrl(null)}
-          role="presentation"
-        >
-          <img
-            src={imagePreviewUrl}
-            alt="预览"
-            className="max-h-[90vh] max-w-full rounded-xl object-contain"
-            onClick={e => e.stopPropagation()}
-          />
-        </div>
-      )}
+      <ProductImageLightbox
+        target={imagePreview}
+        onClose={() => setImagePreview(null)}
+        zIndexClass="z-[200]"
+      />
 
       {filePreviewUrl && (
         <div

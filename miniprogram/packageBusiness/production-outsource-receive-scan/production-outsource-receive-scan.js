@@ -41,6 +41,7 @@ Page({
     partnerCategories: [],
     pendingCount: 0,
     scanEnabled: false,
+    pickerSheetOpen: false,
   },
 
   onLoad() {

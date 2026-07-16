@@ -237,10 +237,11 @@
   - **document_linked 列表跳过报工物料成本**：该口径下列表行 `materialCost` 恒为 0，`loadProductionAggregates({ skipMaterialCost: true })` 不 select `materialBreakdown`/`variantId`，并跳过逐条 BOM 物料计算；明细接口仍算物料（工序明细卡片需要）。
   - `processEconomicsPrice` 四个 update 函数与 `updateParentMaterialPriceDefaultRule` 签名加 `tenantId` 参数（用于失效缓存）。
 - **Phase 3.H（已完成）产品主图缩略图**：
-  - `Product.imageThumb`（migration `20260714170000_product_image_thumb`）：create/update/import 时用 `sharp` 从 `imageUrl` 生成约 512px JPEG 缩略图；http(s) 外链则 thumb 复用原链接。
+  - `Product.imageThumb`（migration `20260714170000_product_image_thumb`）：create/update/import 时用 `sharp` 从 `imageUrl` 生成约 256px JPEG 缩略图；http(s) 外链则 thumb 复用原链接。
   - `products?lite=true` 再裁 `imageUrl`（保留 `imageThumb`）；Web/小程序列表与打印统一走 `productThumbSrc` / `imageThumb || imageUrl`；编辑页 `GET /products/:id` 补原图，保存时 absent `imageUrl` 不代表清空。
+  - 列表点击产品图：`components/ProductImageLightbox` 先展示缩略图，再按需拉详情原图。
   - 前端上传三入口 canvas 压缩（最长边 1600px / JPEG 0.85）：`ProductEditForm`、`ProductCategoryInfoFields`、`ProductImportModal`。
-  - 存量回填：`backend` 下 `npm run db:backfill-product-thumbs`（可选 `--force`）；部署需 `prisma migrate deploy` + 跑一次回填。
+  - 存量回填：`backend` 下 `npm run db:backfill-product-thumbs`（可选 `--force` 按当前尺寸重算）；部署需 `prisma migrate deploy` + 跑一次回填。
 - **资金账户余额与转账（已完成）**：
   - `FinanceAccountType` 加 `initialBalance/openingDate/accountKind/sortOrder/active`；`FinanceRecord` 加 `accountTypeId` 外键（migration `20260625120000_finance_account_balance` 按 `(tenant_id, name)` 回填，保留 `payment_account` 作展示/回退）。
   - 余额实时聚合（不落库存量）：`GET /api/finance/account-balances`（`finance:account:view`）→ `getAccountBalances` → 纯函数 `accumulateAccountBalances`（含单测 `backend/tests/financeAccountBalances.test.ts`）。

@@ -24,9 +24,26 @@
             <text class="plan-detail-section__title">{{item.title}}</text>
           </view>
           <view class="plan-form-card">
-            <view wx:for="{{item.rows}}" wx:for-item="row" wx:key="label" class="plan-form-cell">
+            <view
+              wx:for="{{item.rows}}"
+              wx:for-item="row"
+              wx:key="rowKey"
+              class="plan-form-cell {{row.isImage ? 'plan-form-cell--file-thumb' : ''}}"
+            >
               <text class="plan-form-cell__label">{{row.label}}</text>
-              <text class="plan-form-cell__value {{row.amount && row.amountTone !== 'payment' ? 'plan-form-cell__value--amount' : ''}}">{{row.value}}</text>
+              <block wx:if="{{row.isImage}}">
+                <image
+                  class="fin-detail-file-thumb"
+                  src="{{row.imageUrl}}"
+                  mode="aspectFill"
+                  data-url="{{row.imageUrl}}"
+                  bindtap="onPreviewCustomImage"
+                />
+              </block>
+              <text
+                wx:else
+                class="plan-form-cell__value {{row.amount && row.amountTone !== 'payment' ? 'plan-form-cell__value--amount' : ''}}"
+              >{{row.value}}</text>
             </view>
           </view>
         </view>

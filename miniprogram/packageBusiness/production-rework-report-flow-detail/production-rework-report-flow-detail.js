@@ -29,7 +29,7 @@ const _require1 =
 
   require('../../utils/matrixQtyKeyboard.js'),activateMatrixKeyboardCell = _require1.activateMatrixKeyboardCell,applyMatrixKeyboardKey = _require1.applyMatrixKeyboardKey,buildMatrixKeyboardPreview = _require1.buildMatrixKeyboardPreview,createMatrixKeyboardInputSession = _require1.createMatrixKeyboardInputSession,getNextMatrixVariantIdInColumn = _require1.getNextMatrixVariantIdInColumn,getNextMatrixVariantIdInRow = _require1.getNextMatrixVariantIdInRow;
 const _require10 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require10.readNavBarMetrics,readWindowMetrics = _require10.readWindowMetrics,computePlanCreateHeaderHeight = _require10.computePlanCreateHeaderHeight;
-const _require11 = require('../../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require11.afterMatrixKeyboardOpen;
+const _require11 = require('../../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require11.afterMatrixKeyboardOpen,handleMatrixOutsideTap = _require11.handleMatrixOutsideTap;
 const _require12 = require('../../utils/saveNavigation.js'),LIST_ROUTES = _require12.LIST_ROUTES,afterSaveReturnToList = _require12.afterSaveReturnToList;
 
 function computeHeaderBlockHeight(nav) {
@@ -91,6 +91,7 @@ Page({
     matrixKeyboardLabel: '',
     matrixKeyboardValue: '',
     matrixScrollTop: 0,
+    pickerSheetOpen: false,
     statusBarHeight: 20,
     navBarHeight: 44,
     headerBlockHeight: 88,
@@ -345,12 +346,20 @@ Page({
     });
   },
 
-  onEditDateChange(e) {
-    this.setData({ 'detail.editDate': e.detail.value || '' });
+  onEditDateTimeChange(e) {
+    const detail = e.detail || {};
+    this.setData({
+      'detail.editDate': detail.date || '',
+      'detail.editTime': detail.time || '',
+    });
   },
 
-  onEditTimeChange(e) {
-    this.setData({ 'detail.editTime': e.detail.value || '' });
+  onPickerSheetOpen() {
+    this.setData({ pickerSheetOpen: true });
+  },
+
+  onPickerSheetClose() {
+    this.setData({ pickerSheetOpen: false });
   },
 
   onEditOperatorInput(e) {
@@ -406,6 +415,11 @@ Page({
       afterMatrixKeyboardOpen(this, '.plan-detail-scroll');
     });
   },
+
+  onMatrixOutsideTap() {
+    handleMatrixOutsideTap(this);
+  },
+
 
   onMatrixKeyboardAction(e) {
     const _ref = e.detail || {},action = _ref.action,digit = _ref.digit;

@@ -68,7 +68,7 @@ export interface PlanFormModalProps {
   /** 有进销存销售订单查看权限时才展示「引用销售订单」入口 */
   canReferenceSalesOrder?: boolean;
   onSave: (plan: PlanOrder) => void | Promise<void>;
-  onImagePreview?: (url: string) => void;
+  onImagePreview?: (product: Product) => void;
   onFilePreview?: (url: string, type: 'image' | 'pdf') => void;
 }
 
@@ -527,7 +527,7 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
                             {productThumbSrc(selectedProduct) ? (
                               <button
                                 type="button"
-                                onClick={() => onImagePreview?.(productThumbSrc(selectedProduct))}
+                                onClick={() => onImagePreview?.(selectedProduct)}
                                 className="rounded-xl overflow-hidden border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none block"
                               >
                                 <img

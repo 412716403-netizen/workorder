@@ -98,6 +98,41 @@ function deleteFinanceRecord(id) {
   });
 }
 
+/** 资金账户余额（finance:account:view）：期初 + 收 − 付实时聚合；startDate/endDate 仅约束流入流出口径 */
+function getAccountBalances(params) {
+  return request({
+    path: `/finance/account-balances${buildQs(params)}`,
+    method: 'GET',
+    timeout: 60000,
+  });
+}
+
+/** 账户间转账（finance:transfer:create）：后端事务内落 PAYMENT + RECEIPT 两条流水 */
+function createAccountTransfer(body) {
+  return request({
+    path: '/finance/transfers',
+    method: 'POST',
+    data: body,
+  });
+}
+
+/** 编辑账户转账（finance:transfer:edit）：成对更新转出/转入两条流水 */
+function updateAccountTransfer(groupId, body) {
+  return request({
+    path: `/finance/transfers/${encodeURIComponent(groupId)}`,
+    method: 'PUT',
+    data: body,
+  });
+}
+
+/** 删除账户转账（finance:transfer:delete）：按 transferGroupId 成对删除 */
+function deleteAccountTransfer(groupId) {
+  return request({
+    path: `/finance/transfers/${encodeURIComponent(groupId)}`,
+    method: 'DELETE',
+  });
+}
+
 function fetchFinanceCategoriesAll() {
   return request({
     path: '/settings/finance-categories?all=true',
@@ -133,6 +168,10 @@ module.exports = {
   listFinanceRecordsPaginated,
   fetchAllFinanceRecords,
   partnerOpeningBalance,
+  getAccountBalances,
+  createAccountTransfer,
+  updateAccountTransfer,
+  deleteAccountTransfer,
   getFinanceRecord,
   createFinanceRecord,
   updateFinanceRecord,

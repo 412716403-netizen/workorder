@@ -21,16 +21,16 @@
         </view>
       </view>
 
-      <view class="material-confirm-entry-time">
-        <view class="material-confirm-entry-time__label">创建时间</view>
-        <view class="report-batch-edit__datetime">
-          <picker mode="date" value="{{entryDate}}" bindchange="onEntryDateChange">
-            <view class="report-batch-edit__picker">{{entryDate}}</view>
-          </picker>
-          <picker mode="time" value="{{entryTime}}" bindchange="onEntryTimeChange">
-            <view class="report-batch-edit__picker">{{entryTime}}</view>
-          </picker>
-        </view>
+      <view class="plan-form-card">
+        <datetime-calendar-select
+          last="{{true}}"
+          label="创建时间"
+          date="{{entryDate}}"
+          time="{{entryTime}}"
+          bind:change="onEntryDateTimeChange"
+          bind:sheetopen="onPickerSheetOpen"
+          bind:sheetclose="onPickerSheetClose"
+        />
       </view>
 
       <view class="material-confirm-wh">
@@ -80,7 +80,7 @@
     </block>
   </view>
 
-  <view wx:if="{{!loading && rows.length}}" class="material-confirm-footer">
+  <view wx:if="{{!loading && rows.length && !pickerSheetOpen}}" class="material-confirm-footer">
     <view
       class="material-confirm-submit {{mode === 'stock_return' ? 'material-confirm-submit--return' : ''}} {{submitting ? 'material-confirm-submit--disabled' : ''}}"
       bindtap="onSubmitTap"

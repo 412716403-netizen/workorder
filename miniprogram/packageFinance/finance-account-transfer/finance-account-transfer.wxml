@@ -1,0 +1,93 @@
+<view class="plan-create-shell">
+  <view class="plan-create-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-create-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-create-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-create-header__title">{{title}}</text>
+      <view class="plan-create-header__back plan-create-header__back--placeholder"></view>
+    </view>
+  </view>
+
+  <view class="plan-create-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view
+    class="plan-create-scroll"
+    scroll-y
+    show-scrollbar="{{false}}"
+    style="height: {{scrollHeight}}px;"
+  >
+    <view wx:if="{{loading}}" class="plan-create-muted">加载中…</view>
+
+    <view wx:else class="plan-create-page">
+      <view class="plan-form-card">
+        <finance-account-select
+          required="{{true}}"
+          label="转出账户"
+          accounts="{{accounts}}"
+          value="{{form.fromAccountId}}"
+          valueMode="id"
+          placeholder="请选择"
+          bind:change="onFromChange"
+          bind:sheetopen="onPickerSheetOpen"
+          bind:sheetclose="onPickerSheetClose"
+        />
+        <finance-account-select
+          required="{{true}}"
+          last="{{true}}"
+          label="转入账户"
+          accounts="{{accounts}}"
+          value="{{form.toAccountId}}"
+          valueMode="id"
+          placeholder="请选择"
+          bind:change="onToChange"
+          bind:sheetopen="onPickerSheetOpen"
+          bind:sheetclose="onPickerSheetClose"
+        />
+      </view>
+
+      <view class="plan-form-card">
+        <view class="plan-form-cell plan-form-cell--column">
+          <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>转账金额 (CNY)</text>
+          <view class="fin-edit-amount">
+            <text class="fin-edit-amount__symbol">¥</text>
+            <input
+              class="fin-edit-amount__input"
+              type="digit"
+              value="{{form.amount}}"
+              placeholder="0.00"
+              placeholder-class="plan-form-cell__ph"
+              bindinput="onAmountInput"
+            />
+          </view>
+        </view>
+        <view class="plan-form-cell plan-form-cell--column plan-form-cell--last">
+          <text class="plan-form-cell__label">备注（可选）</text>
+          <textarea
+            class="fin-edit-note"
+            value="{{form.note}}"
+            placeholder="如：现金存入银行"
+            placeholder-class="plan-form-cell__ph"
+            maxlength="500"
+            auto-height
+            bindinput="onNoteInput"
+          />
+        </view>
+      </view>
+
+      <view wx:if="{{canDelete}}" class="fin-transfer-delete">
+        <view
+          class="fin-transfer-delete__btn {{submitting ? 'fin-transfer-delete__btn--disabled' : ''}}"
+          bindtap="onDeleteTap"
+        >删除转账</view>
+      </view>
+    </view>
+  </scroll-view>
+
+  <view wx:if="{{!pickerSheetOpen}}" class="plan-create-footer">
+    <button
+      class="plan-create-submit"
+      loading="{{submitting}}"
+      disabled="{{submitting || !canSubmit}}"
+      bindtap="onSubmit"
+    >{{submitting ? '提交中…' : (editing ? '保存修改' : '确认转账')}}</button>
+  </view>
+</view>

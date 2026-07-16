@@ -1,0 +1,119 @@
+@import '/styles/plan-detail-page.wxss';
+@import '../finance-accounts/finance-accounts.wxss';
+
+.fin-acct-types-page {
+  padding: 24rpx var(--spacing-page) calc(120rpx + env(safe-area-inset-bottom));
+}
+
+.fin-acct-types-add {
+  margin-bottom: 24rpx;
+}
+
+.fin-acct-types-add__btn {
+  height: 88rpx;
+  line-height: 88rpx;
+  text-align: center;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--color-primary);
+  background: var(--color-bg-card);
+  border-radius: 16rpx;
+  box-shadow: 0 4rpx 24rpx rgba(15, 23, 42, 0.04);
+}
+
+.fin-acct-types-form {
+  margin-bottom: 24rpx;
+  padding: 8rpx 0 24rpx;
+  overflow: hidden;
+}
+
+.fin-acct-types-form__title {
+  padding: 24rpx var(--spacing-card) 8rpx;
+  font-size: 28rpx;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.fin-acct-types-form__actions {
+  display: flex;
+  gap: 20rpx;
+  margin-top: 24rpx;
+  padding: 0 var(--spacing-card);
+}
+
+.fin-acct-types-form__btn {
+  flex: 1;
+  height: 80rpx;
+  line-height: 80rpx;
+  text-align: center;
+  font-size: 28rpx;
+  font-weight: 600;
+  border-radius: 16rpx;
+}
+
+.fin-acct-types-form__btn--ghost {
+  color: var(--color-primary);
+  background: var(--color-bg-page);
+  border: 2rpx solid var(--color-border);
+}
+
+.fin-acct-types-form__btn--primary {
+  color: #fff;
+  background: var(--color-primary);
+  border: 2rpx solid var(--color-primary);
+}
+
+.fin-acct-types-form__btn--disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.fin-acct-type-card {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  margin-bottom: 20rpx;
+  padding: 24rpx;
+  background: var(--color-bg-card);
+  border-radius: 16rpx;
+  box-shadow: 0 4rpx 24rpx rgba(15, 23, 42, 0.04);
+}
+
+.fin-acct-type-card__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.fin-acct-type-card__title-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.fin-acct-type-card__name {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fin-acct-type-card__meta {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  color: var(--color-text-secondary);
+}
+
+.fin-acct-type-card__action {
+  flex-shrink: 0;
+  font-size: 26rpx;
+  font-weight: 600;
+  color: var(--color-primary);
+  padding: 8rpx 4rpx;
+}
+
+.fin-acct-type-card__action--danger {
+  color: var(--color-danger);
+}

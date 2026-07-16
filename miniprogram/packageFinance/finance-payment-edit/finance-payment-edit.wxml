@@ -19,32 +19,29 @@
 
     <view wx:else class="plan-create-page">
       <view wx:if="{{!editing}}" class="plan-form-card">
-        <view class="plan-form-cell plan-form-cell--last">
-          <text class="plan-form-cell__label">创建时间</text>
-          <view class="report-batch-edit__datetime">
-            <picker mode="date" value="{{entryDate}}" bindchange="onEntryDateChange">
-              <view class="report-batch-edit__picker">{{entryDate}}</view>
-            </picker>
-            <picker mode="time" value="{{entryTime}}" bindchange="onEntryTimeChange">
-              <view class="report-batch-edit__picker">{{entryTime}}</view>
-            </picker>
-          </view>
-        </view>
+        <datetime-calendar-select
+          last="{{true}}"
+          label="创建时间"
+          date="{{entryDate}}"
+          time="{{entryTime}}"
+          bind:change="onEntryDateTimeChange"
+          bind:sheetopen="onPickerSheetOpen"
+          bind:sheetclose="onPickerSheetClose"
+        />
       </view>
+
       <view class="plan-form-card">
-        <picker
+        <finance-category-tag-select
           wx:if="{{hasCategories}}"
-          mode="selector"
-          range="{{categoryNames}}"
-          value="{{categoryIndex}}"
-          bindchange="onCategoryChange"
-        >
-          <view class="wh-edit-picker">
-            <text class="wh-edit-picker__label wh-edit-picker__label--req">单据分类</text>
-            <text class="wh-edit-picker__value">{{categoryNames[categoryIndex] || '请选择'}}</text>
-            <text class="wh-edit-picker__chevron">›</text>
-          </view>
-        </picker>
+          required="{{true}}"
+          label="单据分类"
+          categories="{{categories}}"
+          value="{{form.categoryId}}"
+          placeholder="请选择"
+          bind:change="onCategoryChange"
+          bind:sheetopen="onPickerSheetOpen"
+          bind:sheetclose="onPickerSheetClose"
+        />
 
         <searchable-partner-select
           wx:if="{{showPartner}}"
@@ -57,6 +54,8 @@
           placeholder="请选择"
           bind:change="onPartnerChange"
           bind:created="onPartnerCreated"
+          bind:sheetopen="onPickerSheetOpen"
+          bind:sheetclose="onPickerSheetClose"
         />
 
         <picker
@@ -66,10 +65,10 @@
           value="{{workerIndex}}"
           bindchange="onWorkerChange"
         >
-          <view class="wh-edit-picker">
-            <text class="wh-edit-picker__label">关联工人</text>
-            <text class="wh-edit-picker__value">{{workerNames[workerIndex] || '请选择'}}</text>
-            <text class="wh-edit-picker__chevron">›</text>
+          <view class="plan-form-cell plan-form-cell--input">
+            <text class="plan-form-cell__label">关联工人</text>
+            <text class="plan-form-cell__value {{workerIndex > 0 ? '' : 'plan-form-cell__value--ph'}}">{{workerIndex > 0 ? workerNames[workerIndex] : '请选择'}}</text>
+            <text class="plan-form-cell__chevron">›</text>
           </view>
         </picker>
 
@@ -79,37 +78,36 @@
           label="关联产品"
           products="{{products}}"
           categories="{{productCategories}}"
-          value="{{form.productId}}"
+          value-id="{{form.productId}}"
           placeholder="请选择"
           bind:change="onProductChange"
+          bind:sheetopen="onPickerSheetOpen"
+          bind:sheetclose="onPickerSheetClose"
         />
 
-        <picker
-          wx:if="{{showPaymentAccount}}"
-          mode="selector"
-          range="{{accountNames}}"
-          value="{{accountIndex}}"
-          bindchange="onAccountChange"
-        >
-          <view class="wh-edit-picker">
-            <text class="wh-edit-picker__label wh-edit-picker__label--req">收支账户</text>
-            <text class="wh-edit-picker__value">{{accountNames[accountIndex] || '请选择'}}</text>
-            <text class="wh-edit-picker__chevron">›</text>
-          </view>
-        </picker>
-      </view>
-
-      <view wx:if="{{customFields.length}}" class="plan-form-card">
         <plan-form-custom-field
+          wx:if="{{customFields.length}}"
           fields="{{customFields}}"
           values="{{form.customData}}"
           bind:change="onCustomDataChange"
+        />
+
+        <finance-account-select
+          wx:if="{{showPaymentAccount}}"
+          required="{{true}}"
+          label="收支账户"
+          accounts="{{accounts}}"
+          value="{{form.paymentAccount}}"
+          placeholder="请选择"
+          bind:change="onAccountChange"
+          bind:sheetopen="onPickerSheetOpen"
+          bind:sheetclose="onPickerSheetClose"
         />
       </view>
 
       <view class="plan-form-card">
         <view class="plan-form-cell plan-form-cell--column">
-          <text class="plan-form-cell__label">结算金额 (CNY) *</text>
+          <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>结算金额 (CNY)</text>
           <view class="fin-edit-amount">
             <text class="fin-edit-amount__symbol">¥</text>
             <input
@@ -117,16 +115,18 @@
               type="digit"
               value="{{form.amount}}"
               placeholder="0.00"
+              placeholder-class="plan-form-cell__ph"
               bindinput="onAmountInput"
             />
           </view>
         </view>
-        <view class="plan-form-cell plan-form-cell--column">
+        <view class="plan-form-cell plan-form-cell--column plan-form-cell--last">
           <text class="plan-form-cell__label">备注说明</text>
           <textarea
             class="fin-edit-note"
             value="{{form.note}}"
             placeholder="输入备注…"
+            placeholder-class="plan-form-cell__ph"
             maxlength="500"
             auto-height
             bindinput="onNoteInput"
@@ -136,7 +136,7 @@
     </view>
   </scroll-view>
 
-  <view class="plan-create-footer">
+  <view wx:if="{{!pickerSheetOpen}}" class="plan-create-footer">
     <button
       class="plan-create-submit"
       loading="{{submitting}}"

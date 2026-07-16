@@ -1,15 +1,16 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import * as ctrl from '../controllers/item-codes.controller.js';
-import { requireSubPermission } from '../middleware/tenant.js';
+import { requireSubPermission, requireSubPermissionOrProductionRead } from '../middleware/tenant.js';
 import { validate } from '../middleware/validate.js';
 
 const router = Router();
 
 router.post('/generate', requireSubPermission('production:plans:edit'), ctrl.generate);
 router.get('/', requireSubPermission('production:plans:view'), ctrl.list);
-router.get('/scan/:token', requireSubPermission('production:plans:view'), ctrl.scan);
-router.get('/trace/:token', requireSubPermission('production:plans:view'), ctrl.trace);
+// 扫码解析/追溯为报工、入库、返工、外协收货共用的只读端点，放宽给生产域用户（含仅「工序报工」的工人）
+router.get('/scan/:token', requireSubPermissionOrProductionRead('production:plans:view'), ctrl.scan);
+router.get('/trace/:token', requireSubPermissionOrProductionRead('production:plans:view'), ctrl.trace);
 
 /**
  * 扫码二次校验（持久化去重 + 单据上限）。
@@ -40,7 +41,7 @@ const validateScanUsageSchema = z.object({
 
 router.post(
   '/scan/validate-usage',
-  requireSubPermission('production:plans:view'),
+  requireSubPermissionOrProductionRead('production:plans:view'),
   validate(validateScanUsageSchema),
   ctrl.validateScanUsage,
 );

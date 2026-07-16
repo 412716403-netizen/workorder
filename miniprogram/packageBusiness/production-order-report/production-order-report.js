@@ -53,7 +53,7 @@ const {
 const _require8 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require8.readNavBarMetrics,readWindowMetrics = _require8.readWindowMetrics,computePlanCreateHeaderHeight = _require8.computePlanCreateHeaderHeight;
 const _require9 = require('../../utils/saveNavigation.js'),LIST_ROUTES = _require9.LIST_ROUTES,afterSaveReturnToList = _require9.afterSaveReturnToList;
 const { defaultEntryDate, defaultEntryTimeHm, entryDateAndTimeToIso } = require('../../utils/docEntryTime.js');
-const _require0 = require('../../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require0.afterMatrixKeyboardOpen;
+const _require0 = require('../../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require0.afterMatrixKeyboardOpen,handleMatrixOutsideTap = _require0.handleMatrixOutsideTap;
 const _require1 = require('../utils/scanBatchController.js'),createScanBatchController = _require1.createScanBatchController;
 const _require10 = require('../utils/scanBatchApplyReport.js'),createReportScanBatchHandlers = _require10.createReportScanBatchHandlers;
 const _require13 = require('../utils/reportScanMeta.js'),resetReportScanMeta = _require13.resetReportScanMeta,buildReportScanPayloadFields = _require13.buildReportScanPayloadFields;
@@ -226,6 +226,7 @@ Page({
     milestoneTemplateId: '',
     entryDate: '',
     entryTime: '',
+    pickerSheetOpen: false,
     /** 工序开启「报工时记录重量」时展示重量输入 + 预估物料消耗（对齐 Web ReportWeightBomSection） */
     weightReportEnabled: false,
     weightInput: '',
@@ -932,6 +933,11 @@ Page({
     });
   },
 
+  onMatrixOutsideTap() {
+    handleMatrixOutsideTap(this);
+  },
+
+
   onMatrixKeyboardAction(e) {
     const _ref2 = e.detail || {},action = _ref2.action,digit = _ref2.digit;
     if (action === 'confirm') {
@@ -1073,12 +1079,20 @@ Page({
     if (this._scanBatch) this._scanBatch.setScanIntent(e.detail.intent);
   },
 
-  onEntryDateChange(e) {
-    this.setData({ entryDate: (e.detail && e.detail.value) || '' });
+  onEntryDateTimeChange(e) {
+    const detail = e.detail || {};
+    this.setData({
+      entryDate: detail.date || '',
+      entryTime: detail.time || '',
+    });
   },
 
-  onEntryTimeChange(e) {
-    this.setData({ entryTime: (e.detail && e.detail.value) || '' });
+  onPickerSheetOpen() {
+    this.setData({ pickerSheetOpen: true });
+  },
+
+  onPickerSheetClose() {
+    this.setData({ pickerSheetOpen: false });
   },
 
   async onSubmit() {

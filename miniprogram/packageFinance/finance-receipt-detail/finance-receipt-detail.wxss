@@ -4,3 +4,24 @@
   color: #059669;
   font-weight: 800;
 }
+
+.plan-form-cell--file-thumb {
+  align-items: flex-start;
+  padding-top: 24rpx;
+  padding-bottom: 24rpx;
+}
+
+.plan-form-cell--file-thumb .plan-form-cell__label {
+  padding-top: 8rpx;
+}
+
+.fin-detail-file-thumb {
+  display: block;
+  width: 144rpx;
+  height: 144rpx;
+  margin-left: auto;
+  border-radius: 16rpx;
+  background: var(--color-bg-input, #f2f3f5);
+  border: 1rpx solid var(--color-border, #eef0f3);
+  box-sizing: border-box;
+}

@@ -35,11 +35,20 @@ function normalizeReportFormField(field) {
       dateAutoFill: !!field.dateAutoFill,
     };
   }
-  if (raw === 'file' || raw === 'knowledge') {
+  if (raw === 'file') {
     return {
       id: field.id,
       label: field.label,
-      type: raw,
+      type: 'file',
+      required: !!field.required,
+      showInForm: field.showInForm,
+    };
+  }
+  if (raw === 'knowledge') {
+    return {
+      id: field.id,
+      label: field.label,
+      type: 'knowledge',
       required: !!field.required,
       showInForm: field.showInForm,
       desktopOnly: true,
@@ -68,7 +77,8 @@ function buildReportCustomFields(template) {
         isText: type === 'text',
         isFile: type === 'file',
         isKnowledge: type === 'knowledge',
-        desktopOnly: type === 'file' || type === 'knowledge',
+        // 资料库选择仍仅网页端；file 小程序可上传
+        desktopOnly: type === 'knowledge',
       };
     });
 }

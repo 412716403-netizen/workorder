@@ -67,6 +67,7 @@ const APP_ICON_NAMES = [
   'scroll-text',
   'history',
   'arrow-down-to-line',
+  'arrow-left-right',
 ];
 
 /** @type {Record<string, { icon: string; active?: boolean }[]>} */
@@ -185,6 +186,15 @@ async function main() {
   for (const [outName, iconName] of Object.entries(MINE_SPECS)) {
     await exportIcon(iconName, outName, 40, MINE_DIR, BLUE);
   }
+
+  // 收/付款分类标签：细线简约文档（非 Lucide receipt 锯齿边）
+  const financeCategorySvg =
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${VIEWBOX} ${VIEWBOX}" width="${VIEWBOX}" height="${VIEWBOX}" fill="none" stroke="${BLUE}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">` +
+    '<rect x="6" y="3.5" width="12" height="17" rx="2"/>' +
+    '<line x1="9" y1="9" x2="15" y2="9"/>' +
+    '<line x1="9" y1="13" x2="15" y2="13"/>' +
+    '</svg>';
+  await writePng(financeCategorySvg, 96, path.join(ICONS_DIR, 'finance-category.png'));
 }
 
 main().catch((err) => {

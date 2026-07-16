@@ -1,6 +1,7 @@
 {
   "navigationStyle": "custom",
   "usingComponents": {
+    "datetime-calendar-select": "/components/datetime-calendar-select/datetime-calendar-select",
     "searchable-product-select": "/components/searchable-product-select/searchable-product-select",
     "searchable-partner-select": "/components/searchable-partner-select/searchable-partner-select",
     "plan-form-custom-field": "/components/plan-form-custom-field/plan-form-custom-field",

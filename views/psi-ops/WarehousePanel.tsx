@@ -43,6 +43,11 @@ import ProductFlowDetailModal from './ProductFlowDetailModal';
 import WarehouseFlowDocumentDetailModal from './WarehouseFlowDocumentDetailModal';
 import { hasModulePerm } from '../../utils/hasModulePerm';
 import { productThumbSrc } from '../../utils/productImageSrc';
+import ProductImageLightbox, {
+  productPreviewFromProduct,
+  productPreviewFromSrc,
+  type ProductImagePreviewTarget,
+} from '../../components/ProductImageLightbox';
 
 type TransferLineDraft = {
   id: string;
@@ -166,7 +171,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string | null>(null);
   const [expandedWarehouseProductKeys, setExpandedWarehouseProductKeys] = useState<Set<string>>(new Set());
   const [expandedProductIdByMaterial, setExpandedProductIdByMaterial] = useState<string | null>(null);
-  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const [imagePreview, setImagePreview] = useState<ProductImagePreviewTarget | null>(null);
   const [warehouseFlowModalOpen, setWarehouseFlowModalOpen] = useState(false);
   const [warehouseFlowDetailKey, setWarehouseFlowDetailKey] = useState<string | null>(null);
   /**
@@ -1019,7 +1024,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
                                            </td>
                                            <td className="px-4 py-3">
                                              {line.imageUrl ? (
-                                               <button type="button" onClick={() => setImagePreviewUrl(line.imageUrl!)} className="w-10 h-10 rounded-xl overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer hover:opacity-90 transition-opacity">
+                                               <button type="button" onClick={() => setImagePreview(line.productId ? { mode: 'product', productId: line.productId, fallbackSrc: line.imageUrl || undefined } : productPreviewFromSrc(line.imageUrl))} className="w-10 h-10 rounded-xl overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer hover:opacity-90 transition-opacity">
                                                  <img loading="lazy" decoding="async" src={line.imageUrl} alt={line.name} className="w-full h-full object-cover block" />
                                                </button>
                                              ) : (
@@ -1198,7 +1203,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
                                   </td>
                                   <td className="px-4 py-3">
                                     {productThumbSrc(ps) ? (
-                                      <button type="button" onClick={() => setImagePreviewUrl(productThumbSrc(ps))} className="w-10 h-10 rounded-xl overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer hover:opacity-90 transition-opacity">
+                                      <button type="button" onClick={() => setImagePreview(productPreviewFromProduct(ps))} className="w-10 h-10 rounded-xl overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer hover:opacity-90 transition-opacity">
                                         <img loading="lazy" decoding="async" src={productThumbSrc(ps)} alt={ps.name} className="w-full h-full object-cover block" />
                                       </button>
                                     ) : (
@@ -1330,14 +1335,8 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
                </div>
                )}
 
-               {imagePreviewUrl && (
-                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 animate-in fade-in" onClick={() => setImagePreviewUrl(null)} aria-hidden>
-                   <img src={imagePreviewUrl} alt="产品图片" className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl" onClick={e => e.stopPropagation()} />
-                   <button type="button" onClick={() => setImagePreviewUrl(null)} className="absolute top-4 right-4 p-2 rounded-full bg-white/20 text-white hover:bg-white/30 transition-all" aria-label="关闭">
-                     <X className="w-6 h-6" />
-                   </button>
-                 </div>
-               )}
+               {/* product image lightbox */}
+              <ProductImageLightbox target={imagePreview} onClose={() => setImagePreview(null)} />
 
                <StocktakeListModal
                  open={stocktakeListModalOpen}

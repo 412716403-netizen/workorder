@@ -19,17 +19,15 @@
 
     <view wx:else class="plan-create-page">
       <view class="plan-form-card">
-        <view class="plan-form-cell plan-form-cell--last">
-          <text class="plan-form-cell__label">创建时间</text>
-          <view class="report-batch-edit__datetime">
-            <picker mode="date" value="{{entryDate}}" bindchange="onEntryDateChange">
-              <view class="report-batch-edit__picker">{{entryDate}}</view>
-            </picker>
-            <picker mode="time" value="{{entryTime}}" bindchange="onEntryTimeChange">
-              <view class="report-batch-edit__picker">{{entryTime}}</view>
-            </picker>
-          </view>
-        </view>
+        <datetime-calendar-select
+          last="{{true}}"
+          label="创建时间"
+          date="{{entryDate}}"
+          time="{{entryTime}}"
+          bind:change="onEntryDateTimeChange"
+          bind:sheetopen="onPickerSheetOpen"
+          bind:sheetclose="onPickerSheetClose"
+        />
       </view>
 
       <block wx:for="{{lineCards}}" wx:for-item="line" wx:for-index="lineIndex" wx:key="key">
@@ -190,7 +188,7 @@
     </view>
   </scroll-view>
 
-  <view class="plan-create-footer">
+  <view wx:if="{{!pickerSheetOpen}}" class="plan-create-footer">
     <button
       class="plan-create-submit"
       loading="{{submitting}}"
