@@ -4,6 +4,7 @@ import { generateDocNo, generateDocNoWithLock } from '../utils/docNumber.js';
 import { genId } from '../utils/genId.js';
 import { FINANCE_DOC_NO_PREFIX, FINANCE_TRANSFER_DOC_NO_PREFIX, FINANCE_UNASSIGNED_ACCOUNT_KEY, type FinanceOpType } from '../types/index.js';
 import { sanitizeUpdate, sanitizeCreate, normalizeDates } from '../utils/request.js';
+import { ownDocScopeCondition, type OwnDocScope } from '../utils/docScope.js';
 import { AppError } from '../middleware/errorHandler.js';
 
 export interface FinanceListFilter {
@@ -73,9 +74,14 @@ export async function listRecords(
     all?: boolean;
     page?: number;
     pageSize?: number;
+    /** 「仅本人可见」范围（controller 按当前用户权限解析；null 表示不加过滤） */
+    viewerScope?: OwnDocScope | null;
   },
 ) {
   const where = buildFinanceWhere(opts);
+  // 「仅本人可见」用 AND 叠加，避免与 search 的 OR 冲突
+  const scopeCond = ownDocScopeCondition(opts.viewerScope);
+  if (scopeCond) where.AND = [scopeCond];
   const include = { category: true };
   const orderBy: any = [{ timestamp: 'desc' }, { id: 'asc' }];
 
@@ -120,9 +126,12 @@ export async function createRecord(
   db: TenantPrismaClient,
   body: Record<string, unknown>,
   tenantId?: string,
+  creatorUserId?: string,
 ) {
   const data = sanitizeCreate(body);
   if (!data.id) data.id = genId('fin');
+  // 制单人由服务端写入（权限「仅本人可见」依据），客户端传值一律忽略
+  data.createdByUserId = creatorUserId ?? null;
   normalizeDates(data);
   if (!data.timestamp) data.timestamp = new Date();
 
@@ -149,6 +158,8 @@ export async function updateRecord(
   body: Record<string, unknown>,
 ) {
   const data = sanitizeUpdate(body);
+  // 制单人创建后不可改（防客户端篡改归属）
+  delete data.createdByUserId;
   normalizeDates(data);
   // paymentAccount 变更时同步刷新账户外键（含改成空 → 归为未归账）。
   if ('paymentAccount' in data && data.accountTypeId == null) {
@@ -358,6 +369,7 @@ export async function createTransfer(
   db: TenantPrismaClient,
   tenantId: string,
   input: CreateTransferInput,
+  creatorUserId?: string,
 ) {
   const amount = Number(input.amount);
   if (!input.fromAccountId || !input.toAccountId) throw new AppError(400, '转出/转入账户不能为空');
@@ -396,6 +408,7 @@ export async function createTransfer(
         timestamp,
         note,
         operator,
+        createdByUserId: creatorUserId ?? null,
         relatedId: transferGroupId,
         status: 'COMPLETED',
         accountTypeId: fromAcc.id,
@@ -420,6 +433,7 @@ export async function createTransfer(
         timestamp,
         note,
         operator,
+        createdByUserId: creatorUserId ?? null,
         relatedId: transferGroupId,
         status: 'COMPLETED',
         accountTypeId: toAcc.id,

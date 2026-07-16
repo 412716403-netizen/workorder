@@ -16,7 +16,6 @@ import {
   ProductCategory,
   GlobalNodeTemplate,
   AppDictionaries,
-  FINANCE_DOC_NO_PREFIX,
   ProductMilestoneProgress,
   PlanOrder,
   PrintTemplate,
@@ -55,7 +54,7 @@ import WorkerSelectWithTabs from './finance/WorkerSelectWithTabs';
 import { type DetailTarget } from './finance/financeDetailTypes';
 import { DEFAULT_RECEIPT_FORM_SETTINGS, DEFAULT_PAYMENT_FORM_SETTINGS } from '../contexts/AppDataContext';
 import { useConfirm } from '../contexts/ConfirmContext';
-import { toLocalCompactYmd, toLocalDateYmd } from '../utils/localDateTime';
+import { toLocalDateYmd } from '../utils/localDateTime';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { useFinanceReconciliation } from '../hooks/useFinanceReconciliation';
 import { downloadPartnerReconciliationXlsx } from '../utils/downloadPartnerReconciliationXlsx';
@@ -147,8 +146,14 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
   const docOperator = currentOperatorDisplayName(currentUser);
   const _isOwner = tenantRole === 'owner';
   const hasFinancePerm = (permKey: string) => hasModulePerm(tenantRole, userPermissions, 'finance', permKey);
+  /** 收/付款查看入口：`view`（全部）或 `view_own`（仅本人，数据由后端过滤）皆可；对账仍用 allow */
+  const hasFinanceDocView = (viewPerm: string) =>
+    hasFinancePerm(viewPerm) || (viewPerm.endsWith(':view') && hasFinancePerm(`${viewPerm}_own`));
   const financePermModule = type === 'RECEIPT' ? 'receipt' : type === 'PAYMENT' ? 'payment' : 'reconciliation';
-  const canView = hasFinancePerm(`finance:${financePermModule}:${financePermModule === 'reconciliation' ? 'allow' : 'view'}`);
+  const canView =
+    financePermModule === 'reconciliation'
+      ? hasFinancePerm('finance:reconciliation:allow')
+      : hasFinanceDocView(`finance:${financePermModule}:view`);
   const canCreate = financePermModule !== 'reconciliation' && hasFinancePerm(`finance:${financePermModule}:create`);
   const canEdit = financePermModule !== 'reconciliation' && hasFinancePerm(`finance:${financePermModule}:edit`);
   const canDelete = financePermModule !== 'reconciliation' && hasFinancePerm(`finance:${financePermModule}:delete`);
@@ -201,34 +206,9 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
   const finTotalPages = Math.max(1, Math.ceil(finTotal / FIN_PAGE_SIZE));
   const invalidateFinanceList = useCallback(() => {
     qc.invalidateQueries({ queryKey: ['finance', 'list'] });
-    qc.invalidateQueries({ queryKey: ['finance', 'today-count'] });
   }, [qc]);
 
-  /** 今日同 type 笔数：用于"新增"时预生成单号；用 startDate/endDate 收窄 + pageSize=1 仅取 total */
-  const todayBounds = useMemo(() => {
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, '0');
-    const d = String(now.getDate()).padStart(2, '0');
-    const start = `${y}-${m}-${d}T00:00:00.000`;
-    const end = `${y}-${m}-${d}T23:59:59.999`;
-    return { ymd: `${y}${m}${d}`, start, end };
-  }, []);
-  const todayCountQuery = useQuery({
-    queryKey: ['finance', 'today-count', type, todayBounds.ymd],
-    queryFn: () =>
-      api.finance.listPage({
-        type,
-        startDate: todayBounds.start,
-        endDate: todayBounds.end,
-        page: 1,
-        pageSize: 1,
-      }),
-    enabled: listEnabled,
-    staleTime: 30_000,
-  });
-
-  /** Phase 3.A：mutation 完成后失效列表 + today-count；保持原有 onAddRecord/onUpdate/onDelete 写入 context 行为 */
+  /** Phase 3.A：mutation 完成后失效列表；保持原有 onAddRecord/onUpdate/onDelete 写入 context 行为 */
   const handleDeleteRecord = useCallback(
     (id: string) => {
       if (!onDeleteRecord) return;
@@ -237,19 +217,6 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
     },
     [onDeleteRecord, invalidateFinanceList],
   );
-
-  /**
-   * 参照报工单：前缀 + yyyyMMdd + '-' + 4位序号，按同类型当日已有记录数+1。
-   *
-   * Phase 3.A：序号来源由"前端 allRecords 全量遍历"切换为后端 today-count 接口（pageSize=1 仅取 total）；
-   * 仅用于前端预览，后端 createRecord 仍会自己调 `generateDocNo` 落库，避免竞态。
-   */
-  const getNextDocNo = useCallback(() => {
-    const todayStr = toLocalCompactYmd(new Date());
-    const seq = (todayCountQuery.data?.total ?? 0) + 1;
-    const seqStr = String(seq).padStart(4, '0');
-    return `${FINANCE_DOC_NO_PREFIX[type]}${todayStr}-${seqStr}`;
-  }, [todayCountQuery.data?.total, type]);
 
   const bizConfig: Record<FinanceOpType, any> = {
     'RECEIPT': { label: '收款单', sub: '登记从客户处收到的款项', partnerLabel: '缴款客户' },
@@ -484,7 +451,8 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
     const newRec: FinanceRecord = {
       id: `fin-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       type: type,
-      docNo: getNextDocNo(),
+      // 单号不再由前端预生成：view_own 成员的 today-count 只统计本人单会重号；后端 createRecord 带 advisory lock 全表取号
+      docNo: '',
       timestamp: entryDatetimeLocalToTimestamp(form.entryTimestamp),
       amount: form.amount,
       relatedId: form.relatedId || undefined,
@@ -908,6 +876,9 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
                 ) : (
                   <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">业务金额</th>
                 )}
+                {type !== 'RECONCILIATION' && (
+                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">经办人</th>
+                )}
                 <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center min-w-[9rem]">
                   操作
                 </th>
@@ -918,7 +889,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
                 const isPartnerRecon = type === 'RECONCILIATION' && reconciliationSubTab === 'partner';
                 const isSettlementRecon = type === 'RECONCILIATION' && reconciliationSubTab === 'settlement';
                 const listLength = isPartnerRecon ? partnerReconWithBalance.length : isSettlementRecon ? settlementReconWithBalance.length : pagedDisplayRecords.length;
-                const colSpan = (isPartnerRecon || isSettlementRecon) ? 8 : 6;
+                const colSpan = (isPartnerRecon || isSettlementRecon) ? 8 : 7;
                 const qFin = debouncedFinanceListSearch.trim();
                 let emptyMsg =
                   type === 'RECONCILIATION'
@@ -1074,6 +1045,12 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
                     <td className="px-8 py-4">
                       <span className={`text-sm font-black ${rec.type === 'RECEIPT' ? 'text-emerald-600' : 'text-slate-900'}`}>
                         ¥ {rec.amount.toLocaleString()}
+                      </span>
+                    </td>
+                    <td className="px-8 py-4">
+                      <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-600">
+                        <User className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                        {rec.operator?.trim() || '—'}
                       </span>
                     </td>
                     <td className="px-8 py-4 text-center">

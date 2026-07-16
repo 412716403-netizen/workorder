@@ -173,6 +173,7 @@ DTO 见 `shared/types.ts`（`KnowledgeFolderDto`、`KnowledgeDocumentSummaryDto`
 
 **lineGroupId**：同一次添加的明细共用，用于列表/详情按组展示。  
 **sourceOrderNumber / sourceLineId**：采购入库引用采购订单时记录来源，用于计算已入库数量。`sourceLineId` 等于订单行 `PsiRecord.id`；编辑订单整单替换时须保留该 id（见 `docs/01` §1.2）。  
+**createdByUserId**：制单人账号 ID（`created_by_user_id`，UUID，可空）。创建时由后端写入当前登录用户，客户端传值忽略、编辑不可改；销售订单/销售单上是「仅本人可见」（`view_own`）的过滤依据（见 `docs/01` §5.6.1），其余 PSI 类型仅绑定账号（§5.6.2）；`operator` 仅作展示名。  
 **PURCHASE_ORDER.customData**：生产计划详情生成采购订单时写入 `sourcePlanId`、`sourcePlanNumber`（键名见 `shared/types.ts` 中 `PSI_PO_CUSTOM_DATA_SOURCE_*`），并自动写入 `relatedProductId` 为**该计划单的产品** `productId`（与表单「关联产品」一致，便于进销存列表/详情展示）；手工新建单可另选或留空。
 
 ---
@@ -187,6 +188,7 @@ interface FinanceRecord {
   relatedId?: string;       // 账户间转账时为 transferGroupId（串联同组进/出两条流水）
   partner: string;
   operator: string;
+  createdByUserId?: string; // 制单人账号 ID：后端创建时写入，view_own「仅本人可见」过滤依据（operator 仅作展示名）
   timestamp: string;
   note?: string;
   status: 'PENDING' | 'COMPLETED' | 'CANCELLED';
@@ -235,6 +237,7 @@ interface PlanOrder {
   priority: 'High' | 'Medium' | 'Low';
   assignments?: Record<string, NodeAssignment>;
   customData?: Record<string, any>;  // 引用销售订单建计划时含 sourceSalesOrderDocNumber（见 shared/types PLAN_CUSTOM_DATA_SOURCE_SALES_ORDER_DOC_NUMBER）
+  createdByUserId?: string; // 制单人账号 ID：后端创建时写入；本阶段仅关联，不做 view_own（见 docs/01 §5.6.2）
   createdAt?: string;
   nodePricingModes?: Record<string, ProcessPricingMode>;  // 已弃用，仅保留计件（元/件）
   /**
@@ -290,7 +293,7 @@ interface BOM {
 
 `DevStyleVariant.nodeBoms` 与 `ProductVariant.nodeBoms` 同形。发布大货时拷贝为 `Bom`，并重新生成 `bom-*` id 写入产品变体 `nodeBoms`。
 
-`DevStyle.defaultStageNames`（Json 字符串数组）：款式创建时配置的默认开发流程节点名。创建款式不再自动建头样；新增首个样品（头样）时带出这套默认节点。
+`DevStyle.defaultStageNames`（Json 字符串数组）：款式创建时配置的默认开发流程节点名。创建款式不再自动建头样；新增首个样品（头样）时带出这套默认节点。开发域 `DevStyle` / `DevSample` / `DevBom` / `DevStageTemplate` / `DevLog` 均有 `createdByUserId`（创建时后端写入，本阶段仅关联，见 `docs/01` §5.6.2）。
 
 `DevSample` 增加可选 `colorId` / `sizeId`：开发样品（头样与新增样品轮次）绑定**单一**「颜色×尺码」组合，取自款式 `DevStyleVariant`。款式配置了颜色尺码（存在 variants）时为必填，且组合须命中某条 variant；款式无颜色尺码时为空。
 
@@ -363,6 +366,7 @@ interface ProductionOrder {
    */
   dispatchStatus?: OrderDispatchStatus;        // 'IN_PROGRESS' | 'COMPLETED'，默认 IN_PROGRESS
   dispatchStatusManual?: boolean;              // true 时自动入库逻辑跳过该工单
+  createdByUserId?: string; // 制单人账号 ID：后端创建时写入；本阶段仅关联（见 docs/01 §5.6.2）
 }
 ```
 
@@ -383,6 +387,8 @@ interface ProductionOpRecord {
   reason?: string;
   partner?: string;
   operator: string;
+  /** 制单人账号 ID：后端创建时写入；与 operator 展示名分离（见 docs/01 §5.6.2） */
+  createdByUserId?: string;
   timestamp: string;
   status?: string;
   nodeId?: string;       // 外协/返工：工序；返工时为返工目标工序；SCRAP 为报损所在工序
@@ -438,6 +444,7 @@ interface ProductMilestoneProgress {
 | `approvalStatus` | `APPROVED`（默认/工单中心即时）· `PENDING`（小程序 Tab 自报工）· `REJECTED` |
 | `approvedAt` / `approvedBy` | 审核通过或驳回的时间与操作人 |
 | `rejectedReason` | 驳回原因（可选） |
+| `createdByUserId` | 提交报工的登录账号 ID（与工人 `workerId`/`operator` 分离；见 `docs/01` §5.6.2） |
 
 `completedQuantity` 仅汇总 `APPROVED`；可报占用合计 `APPROVED + PENDING`。
 

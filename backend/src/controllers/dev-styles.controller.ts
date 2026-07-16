@@ -18,7 +18,12 @@ export const getStyle = asyncHandler(async (req, res) => {
 
 export const createStyle = asyncHandler(async (req, res) => {
   res.status(201).json(
-    await devStylesService.createDevStyle(getTenantPrisma(req.tenantId!), req.tenantId!, req.body),
+    await devStylesService.createDevStyle(
+      getTenantPrisma(req.tenantId!),
+      req.tenantId!,
+      req.body,
+      req.user?.userId,
+    ),
   );
 });
 
@@ -38,7 +43,12 @@ export const publishStyle = asyncHandler(async (req, res) => {
 
 export const addSample = asyncHandler(async (req, res) => {
   res.status(201).json(
-    await devStylesService.addDevSample(getTenantPrisma(req.tenantId!), str(req.params.id), req.body),
+    await devStylesService.addDevSample(
+      getTenantPrisma(req.tenantId!),
+      str(req.params.id),
+      req.body,
+      req.user?.userId,
+    ),
   );
 });
 
@@ -47,7 +57,14 @@ export const deleteSample = asyncHandler(async (req, res) => {
 });
 
 export const updateStage = asyncHandler(async (req, res) => {
-  res.json(await devStylesService.updateDevStage(getTenantPrisma(req.tenantId!), str(req.params.stageId), req.body));
+  res.json(
+    await devStylesService.updateDevStage(
+      getTenantPrisma(req.tenantId!),
+      str(req.params.stageId),
+      req.body,
+      req.user?.userId,
+    ),
+  );
 });
 
 export const listBoms = asyncHandler(async (req, res) => {
@@ -64,7 +81,12 @@ export const getBom = asyncHandler(async (req, res) => {
 
 export const createBom = asyncHandler(async (req, res) => {
   res.status(201).json(
-    await devStylesService.createDevBom(getTenantPrisma(req.tenantId!), req.tenantId!, req.body),
+    await devStylesService.createDevBom(
+      getTenantPrisma(req.tenantId!),
+      req.tenantId!,
+      req.body,
+      req.user?.userId,
+    ),
   );
 });
 

@@ -201,6 +201,9 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
   const { tenantCtx, userId } = useAuth();
   const _isOwner = tenantRole === 'owner';
   const hasPsiPerm = (perm: string) => hasModulePerm(tenantRole, userPermissions, 'psi', perm);
+  /** 单据查看入口：`view`（全部）或 `view_own`（仅本人，数据由后端过滤）皆可 */
+  const hasPsiDocView = (viewPerm: string) =>
+    hasPsiPerm(viewPerm) || (viewPerm.endsWith(':view') && hasPsiPerm(`${viewPerm}_own`));
   const showPsiDocAmount = (docType: string) => {
     const key = PSI_DOC_TYPE_AMOUNT_KEY[docType];
     return key ? canViewAmount(tenantRole, userPermissions, key) : true;
@@ -741,7 +744,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
           )}
           {['PURCHASE_ORDER', 'PURCHASE_BILL', 'SALES_ORDER', 'SALES_BILL'].includes(type) &&
             !(showModal && showModal === type) &&
-            hasPsiPerm(psiTabViewPerm) && (
+            hasPsiDocView(psiTabViewPerm) && (
             <button
               type="button"
               onClick={() => setPsiOrderBillFlowOpen(true)}
@@ -1534,7 +1537,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                           </button>
                         </>
                       )}
-                      {type === 'SALES_ORDER' && hasPsiPerm('psi:sales_order:view') && (
+                      {type === 'SALES_ORDER' && hasPsiDocView('psi:sales_order:view') && (
                         <>
                           {showSoListPrintButton && (
                             <button
@@ -1557,7 +1560,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                           </button>
                         </>
                       )}
-                      {type === 'SALES_BILL' && hasPsiPerm('psi:sales_bill:view') && (
+                      {type === 'SALES_BILL' && hasPsiDocView('psi:sales_bill:view') && (
                         <>
                           {showSbListPrintButton && (
                             <button

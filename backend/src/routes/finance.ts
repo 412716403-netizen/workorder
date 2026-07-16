@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import * as ctrl from '../controllers/finance.controller.js';
 import { validate } from '../middleware/validate.js';
-import { requireSubPermission, requireFinanceRead, requireFinanceRecordWrite } from '../middleware/tenant.js';
+import { requireSubPermission, requireFinanceRead, requireFinanceRecordWrite, requireDocViewAnyScope } from '../middleware/tenant.js';
 
 const router = Router();
 
@@ -57,10 +57,11 @@ router.delete(
 /**
  * Phase 3.D follow-up：销售单打印应收 ledger 窄查；
  * 仅需 PSI 销售单查看权限即可（与打印链路保持一致）。
+ * 「仅本人可见」（view_own）角色打印自己的销售单同样需要上期结余，放行 view || view_own。
  */
 router.get(
   '/partner-receivable',
-  requireSubPermission('psi:sales_bill:view'),
+  requireDocViewAnyScope('psi:sales_bill'),
   ctrl.partnerReceivable,
 );
 /** 合作单位对账「上期余额」窄查；与 partner-receivable 同 controller，权限走对账模块 */

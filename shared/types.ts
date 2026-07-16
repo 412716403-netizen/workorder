@@ -978,6 +978,56 @@ export function parseProductMaterialPricePeriodConfig(
   return null;
 }
 
+// ============================================================
+// 单据「查看范围」权限（销售订单 / 销售单 / 收款单 / 付款单）
+// ============================================================
+
+/**
+ * 单据查看范围：
+ * - `all`：`<base>:view`（或裸模块键）→ 该类型全部单据可见（现状语义）
+ * - `own`：仅 `<base>:view_own` → 只可见 `createdByUserId = 自己` 的单据
+ * - `none`：两者皆无 → 不可见
+ */
+export type DocViewScope = 'all' | 'own' | 'none';
+
+/** 参与「仅本人可见」判定的 PSI 单据 type → 权限 base */
+export const OWN_SCOPED_PSI_TYPE_PERM_BASE: Record<string, string> = {
+  SALES_ORDER: 'psi:sales_order',
+  SALES_BILL: 'psi:sales_bill',
+};
+
+/** 参与「仅本人可见」判定的财务单据 type → 权限 base */
+export const OWN_SCOPED_FINANCE_TYPE_PERM_BASE: Record<string, string> = {
+  RECEIPT: 'finance:receipt',
+  PAYMENT: 'finance:payment',
+};
+
+/**
+ * 解析某类单据的查看范围。与 `hasSubPermission` 语义一致：
+ * 持有裸模块键（如 `psi`）视为拥有该模块全部子权限 → `all`。
+ * `view` 优先于 `view_own`（两者并存时按全部可见）。
+ */
+export function resolveDocViewScope(
+  userPermissions: string[] | null | undefined,
+  permBase: string,
+): DocViewScope {
+  const perms = Array.isArray(userPermissions) ? userPermissions : [];
+  if (perms.length === 0) return 'none';
+  const module = permBase.split(':')[0];
+  if (module && perms.includes(module)) return 'all';
+  if (perms.includes(`${permBase}:view`)) return 'all';
+  if (perms.includes(`${permBase}:view_own`)) return 'own';
+  return 'none';
+}
+
+/** 是否可进入该类单据入口（查看全部或仅本人皆可） */
+export function canViewDocList(
+  userPermissions: string[] | null | undefined,
+  permBase: string,
+): boolean {
+  return resolveDocViewScope(userPermissions, permBase) !== 'none';
+}
+
 /** 待办事项 DTO（个人级；前后端共用形状） */
 export interface TodoItemDTO {
   id: string;

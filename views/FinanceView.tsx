@@ -197,7 +197,10 @@ const FinanceView: React.FC = () => {
   };
   const tabs = allTabs.filter(tab => {
     if (tab.id === 'ACCOUNT') return accountTabVisible;
-    return hasFinancePerm(permMap[tab.id]);
+    const perm = permMap[tab.id];
+    // 收/付款 Tab 兼容「仅本人可见」：持 `view_own` 同样可进入口（数据由后端过滤）
+    if (perm.endsWith(':view') && hasFinancePerm(`${perm}_own`)) return true;
+    return hasFinancePerm(perm);
   });
 
   return (

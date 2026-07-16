@@ -902,7 +902,13 @@ export async function getTransfer(tenantId: string, id: string) {
   return { ...sanitized, _acceptDispatchMode, _acceptResolvedReceiverProductId };
 }
 
-export async function acceptTransfer(tenantId: string, transferId: string, body: CollabAcceptTransferBody) {
+export async function acceptTransfer(
+  tenantId: string,
+  transferId: string,
+  body: CollabAcceptTransferBody,
+  opts?: { actorUserId?: string },
+) {
+  const createdByUserId = opts?.actorUserId ?? null;
   return basePrisma.$transaction(async (tx) => {
     const transfer = await tx.interTenantSubcontractTransfer.findUnique({
       where: { id: transferId },
@@ -1133,6 +1139,7 @@ export async function acceptTransfer(tenantId: string, transferId: string, body:
             planNumber,
             productId: finalProductId,
             status: 'APPROVED',
+            createdByUserId,
             customData: {
               sourceCollaborationTransferId: transferId,
             },
@@ -1180,6 +1187,7 @@ export async function acceptTransfer(tenantId: string, transferId: string, body:
             planNumber,
             productId: finalProductId,
             status: 'APPROVED',
+            createdByUserId,
             customData: {
               sourceCollaborationTransferId: transferId,
               sourceCollaborationDispatchId: d.id,
@@ -1213,7 +1221,13 @@ export async function acceptTransfer(tenantId: string, transferId: string, body:
   });
 }
 
-export async function createReturn(tenantId: string, transferId: string, body: { items: any[]; note?: string; dispatchId?: string; receiverProductionOrderId?: string; warehouseId?: string; returnGroupId?: string; sharedStockOutDocNo?: string }) {
+export async function createReturn(
+  tenantId: string,
+  transferId: string,
+  body: { items: any[]; note?: string; dispatchId?: string; receiverProductionOrderId?: string; warehouseId?: string; returnGroupId?: string; sharedStockOutDocNo?: string },
+  opts?: { actorUserId?: string },
+) {
+  const createdByUserId = opts?.actorUserId ?? null;
   if (!body.items?.length) throw new AppError(400, '请提供回传明细');
   const cleanItems = body.items.filter((i: any) => (Number(i.quantity) || 0) > 0);
   if (!cleanItems.length) throw new AppError(400, '回传数量须大于 0');
@@ -1268,13 +1282,14 @@ export async function createReturn(tenantId: string, transferId: string, body: {
         const sizeId = sn ? dictByName.get(`size:${sn}`) ?? null : null;
         variantId = variants.find(v => (colorId ? v.colorId === colorId : !v.colorId) && (sizeId ? v.sizeId === sizeId : !v.sizeId))?.id ?? null;
       }
-      await basePrisma.productionOpRecord.create({ data: { id: genId('prodop'), tenantId, type: 'STOCK_OUT', productId: receiverProductId, variantId, orderId: firstOrderId, quantity: qty, operator: '协作回传出库', timestamp: new Date(), status: '已完成', warehouseId: body.warehouseId ?? null, docNo: stockOutDocNo, partner: partnerName || null, collabData: { source: 'collaborationReturn', returnId: ret.id, transferId } } });
+      await basePrisma.productionOpRecord.create({ data: { id: genId('prodop'), tenantId, type: 'STOCK_OUT', productId: receiverProductId, variantId, orderId: firstOrderId, quantity: qty, operator: '协作回传出库', timestamp: new Date(), status: '已完成', warehouseId: body.warehouseId ?? null, docNo: stockOutDocNo, partner: partnerName || null, createdByUserId, collabData: { source: 'collaborationReturn', returnId: ret.id, transferId } } });
     }
   }
   return ret;
 }
 
-export async function receiveReturn(tenantId: string, returnId: string) {
+export async function receiveReturn(tenantId: string, returnId: string, opts?: { actorUserId?: string }) {
+  const createdByUserId = opts?.actorUserId ?? null;
   const ret = await basePrisma.subcontractCollaborationReturn.findUnique({ where: { id: returnId }, include: { transfer: { include: { dispatches: true } } } });
   if (!ret) throw new AppError(404, 'Return 不存在');
   assertTenantIs(tenantId, ret.transfer.senderTenantId);
@@ -1331,7 +1346,7 @@ export async function receiveReturn(tenantId: string, returnId: string) {
     const data = {
       id: genId('prodop'), tenantId, type: 'OUTSOURCE', productId: transfer.senderProductId, variantId,
       quantity: qty, operator: '协作回收', timestamp: new Date(), status: '已收回', partner: localPartnerName,
-      nodeId, orderId, docNo: receiptDocNo,
+      nodeId, orderId, docNo: receiptDocNo, createdByUserId,
       ...(hasUnitPrice ? { unitPrice: new Prisma.Decimal(itemUnitPrice) } : {}),
       ...((hasAmount || hasUnitPrice)
         ? { amount: new Prisma.Decimal(hasAmount ? itemAmountRaw : (computedAmount ?? 0)) }
@@ -1367,7 +1382,9 @@ export async function forwardTransfer(
   tenantId: string,
   transferId: string,
   body: { items: any[]; note?: string; warehouseId?: string; sharedDispatchDocNo?: string; unitPrice?: number },
+  opts?: { actorUserId?: string },
 ) {
+  const createdByUserId = opts?.actorUserId ?? null;
   if (!Array.isArray(body.items) || body.items.length === 0) throw new AppError(400, '请提供转发明细 (items)');
   for (const it of body.items) if (!it.quantity || Number(it.quantity) <= 0) throw new AppError(400, '转发数量必须大于 0');
   const transfer = await basePrisma.interTenantSubcontractTransfer.findUnique({ where: { id: transferId }, include: { dispatches: true, returns: true } });
@@ -1481,12 +1498,13 @@ export async function forwardTransfer(
     const variants = await basePrisma.productVariant.findMany({ where: { productId: receiverProductId } });
     const orderIds = transfer.dispatches.map(d => d.receiverProductionOrderId).filter((v): v is string => !!v);
     const firstOrderId = orderIds[0] ?? null;
-    for (const item of forwardItems) { const qty = Number(item.quantity) || 0; if (qty <= 0) continue; let variantId: string | null = null; if (item.colorName || item.sizeName) { const colorId = item.colorName ? dictByName.get(`color:${item.colorName}`) ?? null : null; const sizeId = item.sizeName ? dictByName.get(`size:${item.sizeName}`) ?? null : null; variantId = variants.find(v => (colorId ? v.colorId === colorId : !v.colorId) && (sizeId ? v.sizeId === sizeId : !v.sizeId))?.id ?? null; } await basePrisma.productionOpRecord.create({ data: { id: genId('prodop'), tenantId, type: 'STOCK_OUT', productId: receiverProductId, variantId, orderId: firstOrderId, quantity: qty, operator: '协作转发出库', timestamp: new Date(), status: '已完成', warehouseId: body.warehouseId ?? null, docNo: forwardStockOutDocNo } }); }
+    for (const item of forwardItems) { const qty = Number(item.quantity) || 0; if (qty <= 0) continue; let variantId: string | null = null; if (item.colorName || item.sizeName) { const colorId = item.colorName ? dictByName.get(`color:${item.colorName}`) ?? null : null; const sizeId = item.sizeName ? dictByName.get(`size:${item.sizeName}`) ?? null : null; variantId = variants.find(v => (colorId ? v.colorId === colorId : !v.colorId) && (sizeId ? v.sizeId === sizeId : !v.sizeId))?.id ?? null; } await basePrisma.productionOpRecord.create({ data: { id: genId('prodop'), tenantId, type: 'STOCK_OUT', productId: receiverProductId, variantId, orderId: firstOrderId, quantity: qty, operator: '协作转发出库', timestamp: new Date(), status: '已完成', warehouseId: body.warehouseId ?? null, docNo: forwardStockOutDocNo, createdByUserId } }); }
   }
   return { newTransferId: newTransfer.id, dispatchId: dispatch.id, nextStep, dispatchDocNo: forwardStockOutDocNo ?? null };
 }
 
-export async function confirmForward(tenantId: string, transferId: string) {
+export async function confirmForward(tenantId: string, transferId: string, opts?: { actorUserId?: string }) {
+  const createdByUserId = opts?.actorUserId ?? null;
   const transfer = await basePrisma.interTenantSubcontractTransfer.findUnique({ where: { id: transferId }, include: { dispatches: true } });
   if (!transfer) throw new AppError(404, '主单不存在');
   assertTenantIs(tenantId, transfer.originTenantId ?? transfer.senderTenantId);
@@ -1524,12 +1542,12 @@ export async function confirmForward(tenantId: string, transferId: string) {
     const orderId = (variantId && orderIdByVariant.get(variantId)) ?? null;
     const computedAmount = hasSettleUnit ? Math.round(qty * settleUnit * 100) / 100 : null;
     const receiveData = {
-      id: genId('prodop'), tenantId, type: 'OUTSOURCE', productId: transfer.senderProductId, variantId, quantity: qty, operator: '链式转发-自动收回', timestamp: new Date(), status: '已收回', partner: prevPartnerName, nodeId: prevStepDef.nodeId ?? null, orderId, docNo: receiveDocNo, collabData: { source: 'chainForwardReceive', transferId: transfer.parentTransferId, chainStep: transfer.chainStep - 1 },
+      id: genId('prodop'), tenantId, type: 'OUTSOURCE', productId: transfer.senderProductId, variantId, quantity: qty, operator: '链式转发-自动收回', timestamp: new Date(), status: '已收回', partner: prevPartnerName, nodeId: prevStepDef.nodeId ?? null, orderId, docNo: receiveDocNo, createdByUserId, collabData: { source: 'chainForwardReceive', transferId: transfer.parentTransferId, chainStep: transfer.chainStep - 1 },
       ...(hasSettleUnit ? { unitPrice: new Prisma.Decimal(settleUnit), amount: new Prisma.Decimal(computedAmount ?? 0) } : {}),
     };
     await basePrisma.productionOpRecord.create({ data: receiveData });
     await applyOutsourceProgress({ ...receiveData, tenantId });
-    await basePrisma.productionOpRecord.create({ data: { id: genId('prodop'), tenantId, type: 'OUTSOURCE', productId: transfer.senderProductId, variantId, quantity: qty, operator: '链式转发-自动发出', timestamp: new Date(), status: '加工中', partner: currPartnerName, nodeId: currStepDef.nodeId ?? null, orderId, docNo: dispatchDocNo, collabData: { source: 'chainForwardDispatch', transferId: transfer.id, chainStep: transfer.chainStep } } });
+    await basePrisma.productionOpRecord.create({ data: { id: genId('prodop'), tenantId, type: 'OUTSOURCE', productId: transfer.senderProductId, variantId, quantity: qty, operator: '链式转发-自动发出', timestamp: new Date(), status: '加工中', partner: currPartnerName, nodeId: currStepDef.nodeId ?? null, orderId, docNo: dispatchDocNo, createdByUserId, collabData: { source: 'chainForwardDispatch', transferId: transfer.id, chainStep: transfer.chainStep } } });
   }
   return { success: true, receiveDocNo, dispatchDocNo };
 }
@@ -1850,7 +1868,8 @@ export async function rejectDispatchAmendment(tenantId: string, dispatchId: stri
 
 // ── Return edit-sync (2a: PENDING_A_RECEIVE direct update, 2b: A_RECEIVED amendment) ──
 
-export async function updateReturnPayload(tenantId: string, returnId: string, body: { items: any[]; note?: string; warehouseId?: string }) {
+export async function updateReturnPayload(tenantId: string, returnId: string, body: { items: any[]; note?: string; warehouseId?: string }, opts?: { actorUserId?: string }) {
+  const createdByUserId = opts?.actorUserId ?? null;
   if (!Array.isArray(body.items) || body.items.length === 0) throw new AppError(400, '请提供回传明细');
   const ret = await basePrisma.subcontractCollaborationReturn.findUnique({ where: { id: returnId }, include: { transfer: { include: { dispatches: true } } } });
   if (!ret) throw new AppError(404, 'Return 不存在');
@@ -1890,7 +1909,7 @@ export async function updateReturnPayload(tenantId: string, returnId: string, bo
         const sizeId = sn ? dictByName.get(`size:${sn}`) ?? null : null;
         variantId = variants.find(v => (colorId ? v.colorId === colorId : !v.colorId) && (sizeId ? v.sizeId === sizeId : !v.sizeId))?.id ?? null;
       }
-      await basePrisma.productionOpRecord.create({ data: { id: genId('prodop'), tenantId, type: 'STOCK_OUT', productId: receiverProductId, variantId, orderId: firstOrderId, quantity: qty, operator: '协作回传出库', timestamp: new Date(), status: '已完成', warehouseId: body.warehouseId ?? null, docNo: stockOutDocNo, partner: partnerName || null, collabData: { source: 'collaborationReturn', returnId, transferId: ret.transferId } } });
+      await basePrisma.productionOpRecord.create({ data: { id: genId('prodop'), tenantId, type: 'STOCK_OUT', productId: receiverProductId, variantId, orderId: firstOrderId, quantity: qty, operator: '协作回传出库', timestamp: new Date(), status: '已完成', warehouseId: body.warehouseId ?? null, docNo: stockOutDocNo, partner: partnerName || null, createdByUserId, collabData: { source: 'collaborationReturn', returnId, transferId: ret.transferId } } });
     }
   }
 
@@ -1924,7 +1943,8 @@ export async function amendReturn(tenantId: string, returnId: string, body: { it
   return { success: true };
 }
 
-export async function confirmReturnAmendment(tenantId: string, returnId: string) {
+export async function confirmReturnAmendment(tenantId: string, returnId: string, opts?: { actorUserId?: string }) {
+  const createdByUserId = opts?.actorUserId ?? null;
   const ret = await basePrisma.subcontractCollaborationReturn.findUnique({
     where: { id: returnId },
     include: { transfer: { include: { dispatches: true } } },
@@ -2003,7 +2023,7 @@ export async function confirmReturnAmendment(tenantId: string, returnId: string)
       if (fallback) { nodeId = fallback.nodeId; if (!orderId) orderId = fallback.orderId; if (!variantId) variantId = fallback.variantId; }
     }
 
-    const data = { id: genId('prodop'), tenantId, type: 'OUTSOURCE', productId: transfer.senderProductId, variantId, quantity: qty, operator: '协作回收', timestamp: new Date(), status: '已收回', partner: localPartnerName, nodeId, orderId, docNo: finalReceiptDocNo, collabData: { source: 'collaborationReturn', returnId: ret.id, transferId: transfer.id } };
+    const data = { id: genId('prodop'), tenantId, type: 'OUTSOURCE', productId: transfer.senderProductId, variantId, quantity: qty, operator: '协作回收', timestamp: new Date(), status: '已收回', partner: localPartnerName, nodeId, orderId, docNo: finalReceiptDocNo, createdByUserId, collabData: { source: 'collaborationReturn', returnId: ret.id, transferId: transfer.id } };
     await basePrisma.productionOpRecord.create({ data });
     await applyOutsourceProgress({ ...data, tenantId });
   }

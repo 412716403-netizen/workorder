@@ -3,6 +3,8 @@ import { str, optStr } from '../utils/request.js';
 import * as psiService from '../services/psi.service.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { listQueryFromRequest, warnListAllFromRequest } from '../utils/listQuery.js';
+import { resolveOwnDocScope } from '../middleware/tenant.js';
+import { OWN_SCOPED_PSI_TYPE_PERM_BASE } from '../types/index.js';
 
 export const listRecords = asyncHandler(async (req, res) => {
   const db = getTenantPrisma(req.tenantId!);
@@ -12,7 +14,9 @@ export const listRecords = asyncHandler(async (req, res) => {
   const types = typesCsv
     ? typesCsv.split(',').map(s => s.trim()).filter(Boolean)
     : undefined;
+  const viewerScope = await resolveOwnDocScope(req, OWN_SCOPED_PSI_TYPE_PERM_BASE);
   res.json(await psiService.listRecords(db, {
+    viewerScope,
     type: optStr(req.query.type),
     types,
     productId: optStr(req.query.productId),
@@ -28,11 +32,11 @@ export const listRecords = asyncHandler(async (req, res) => {
 });
 
 export const createRecord = asyncHandler(async (req, res) => {
-  res.status(201).json(await psiService.createRecord(getTenantPrisma(req.tenantId!), req.body));
+  res.status(201).json(await psiService.createRecord(getTenantPrisma(req.tenantId!), req.body, req.user?.userId));
 });
 
 export const createBatchRecords = asyncHandler(async (req, res) => {
-  res.status(201).json(await psiService.createBatchRecords(getTenantPrisma(req.tenantId!), req.body.records));
+  res.status(201).json(await psiService.createBatchRecords(getTenantPrisma(req.tenantId!), req.body.records, req.user?.userId));
 });
 
 export const updateRecord = asyncHandler(async (req, res) => {
@@ -40,7 +44,7 @@ export const updateRecord = asyncHandler(async (req, res) => {
 });
 
 export const replaceRecords = asyncHandler(async (req, res) => {
-  res.json(await psiService.replaceRecords(getTenantPrisma(req.tenantId!), req.body.deleteIds, req.body.newRecords));
+  res.json(await psiService.replaceRecords(getTenantPrisma(req.tenantId!), req.body.deleteIds, req.body.newRecords, req.user?.userId));
 });
 
 export const deleteRecord = asyncHandler(async (req, res) => {

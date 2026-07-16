@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import * as api from '../services/api';
 import { clearTokens, refreshSessionSilently } from '../services/api';
 import type { TenantInfo } from '../services/api';
@@ -59,6 +60,12 @@ const AuthCtx = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
+  const clearSessionQueryCache = useCallback(() => {
+    // 切换账号/企业后清掉列表缓存，避免复用「仅本人可见」等按用户过滤的结果
+    queryClient.clear();
+  }, [queryClient]);
 
   const [currentUser, setCurrentUser] = useState<Record<string, unknown> | null>(() => {
     const saved = localStorage.getItem('currentUser');
@@ -92,6 +99,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const handleLogin = useCallback(
     (loginData: LoginData) => {
+      clearSessionQueryCache();
       setCurrentUser(loginData.user);
       localStorage.setItem('currentUser', JSON.stringify(loginData.user));
       localStorage.setItem('isLoggedIn', '1');
@@ -120,12 +128,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       navigate('/', { replace: true });
     },
-    [navigate],
+    [navigate, clearSessionQueryCache],
   );
 
   const handleLogout = useCallback(() => {
     api.auth.logout().catch(() => {});
     clearTokens();
+    clearSessionQueryCache();
     localStorage.removeItem('currentUser');
     localStorage.removeItem('tenantCtx');
     localStorage.removeItem('userTenants');
@@ -134,10 +143,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setTenantCtx(null);
     setUserTenants([]);
     navigate('/', { replace: true });
-  }, [navigate]);
+  }, [navigate, clearSessionQueryCache]);
 
   const handleTenantReady = useCallback(
     (result: TenantReadyResult) => {
+      clearSessionQueryCache();
       const ctx: TenantContext = {
         tenantId: result.tenantId,
         tenantName: result.tenantName,
@@ -167,14 +177,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .catch(() => {});
       navigate('/', { replace: true });
     },
-    [navigate],
+    [navigate, clearSessionQueryCache],
   );
 
   const handleSwitchTenant = useCallback(() => {
+    clearSessionQueryCache();
     setTenantCtx(null);
     setShowOnboarding(false);
     localStorage.removeItem('tenantCtx');
-  }, []);
+  }, [clearSessionQueryCache]);
 
   const onProfileUpdate = useCallback((user: Record<string, unknown>) => {
     setCurrentUser(user);

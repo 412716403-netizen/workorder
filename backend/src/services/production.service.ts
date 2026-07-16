@@ -403,10 +403,12 @@ export async function createRecord(
   body: Record<string, unknown>,
   tenantId?: string,
   /** `createRecordBatch` 已在外层 `basePrisma.$transaction` 内调用本函数时传入：此时 `db` 为事务内的 `tx`，无 `$transaction` 方法，不可再套一层。 */
-  opts?: { skipNestedStockTransaction?: boolean },
+  opts?: { skipNestedStockTransaction?: boolean; creatorUserId?: string },
 ) {
   const data = sanitizeCreate(body);
   if (!data.id) data.id = genId('prodop');
+  // 制单人由服务端写入；客户端传值忽略
+  data.createdByUserId = opts?.creatorUserId ?? null;
   normalizeDates(data);
   normalizeMoneyFields(data);
   normalizeQuantityField(data);
@@ -509,7 +511,11 @@ export async function createRecord(
       })();
 
   if (data.type === 'OUTSOURCE' && data.status === '已收回' && !data.sourceReworkId) {
-    await applyOutsourceProgress({ ...record, tenantId: tenantId ?? null });
+    await applyOutsourceProgress({
+      ...record,
+      tenantId: tenantId ?? null,
+      createdByUserId: opts?.creatorUserId ?? null,
+    });
   }
 
   const dispatchCompletionPending: DispatchCompletionPending[] = [];
@@ -546,6 +552,7 @@ export async function createRecordBatch(
   db: TenantPrismaClient,
   records: Record<string, unknown>[],
   tenantId?: string,
+  creatorUserId?: string,
 ) {
   if (!tenantId) {
     throw new AppError(400, '租户上下文缺失，无法批量写入生产流水');
@@ -590,7 +597,10 @@ export async function createRecordBatch(
       for (const r of records) {
         const body: Record<string, unknown> = { ...r, tenantId };
         if (!body.docNo && sharedDocNo) body.docNo = sharedDocNo;
-        const result = await createRecord(txDb, body, tenantId, { skipNestedStockTransaction: true });
+        const result = await createRecord(txDb, body, tenantId, {
+          skipNestedStockTransaction: true,
+          creatorUserId,
+        });
         out.push(result.record);
         for (const p of result.dispatchCompletionPending ?? []) {
           pendingByOrder.set(p.orderId, p);
@@ -618,6 +628,7 @@ export async function updateRecord(
   if (!oldRecord) return null;
 
   const data = sanitizeUpdate(body);
+  delete data.createdByUserId;
   normalizeDates(data);
   normalizeMoneyFields(data);
 
@@ -864,6 +875,7 @@ export async function applyOutsourceProgress(record: {
   /** 扫码收货关联的单品码/虚拟批次 id，透传到派生报工以便产品追溯链路按码命中 */
   itemCodeId?: string | null;
   virtualBatchId?: string | null;
+  createdByUserId?: string | null;
 }) {
   if (!record.nodeId) return;
   const qty = Number(record.quantity);
@@ -887,6 +899,7 @@ export async function applyOutsourceProgress(record: {
     // 透传扫码 link，使派生的 milestone/PMP 报工也能被产品追溯链路按码命中
     itemCodeId: record.itemCodeId ?? null,
     virtualBatchId: record.virtualBatchId ?? null,
+    createdByUserId: record.createdByUserId ?? null,
   };
 
   if (record.orderId) {

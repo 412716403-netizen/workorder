@@ -54,23 +54,43 @@ export const getTransfer = asyncHandler(async (req, res) => {
 });
 
 export const acceptTransfer = asyncHandler(async (req, res) => {
-  res.json(await collabService.acceptTransfer(req.tenantId!, str(req.params.id), req.body));
+  res.json(
+    await collabService.acceptTransfer(req.tenantId!, str(req.params.id), req.body, {
+      actorUserId: req.user?.userId,
+    }),
+  );
 });
 
 export const createReturn = asyncHandler(async (req, res) => {
-  res.status(201).json(await collabService.createReturn(req.tenantId!, str(req.params.id), req.body));
+  res.status(201).json(
+    await collabService.createReturn(req.tenantId!, str(req.params.id), req.body, {
+      actorUserId: req.user?.userId,
+    }),
+  );
 });
 
 export const receiveReturn = asyncHandler(async (req, res) => {
-  res.json(await collabService.receiveReturn(req.tenantId!, str(req.params.id)));
+  res.json(
+    await collabService.receiveReturn(req.tenantId!, str(req.params.id), {
+      actorUserId: req.user?.userId,
+    }),
+  );
 });
 
 export const forwardTransfer = asyncHandler(async (req, res) => {
-  res.status(201).json(await collabService.forwardTransfer(req.tenantId!, str(req.params.id), req.body));
+  res.status(201).json(
+    await collabService.forwardTransfer(req.tenantId!, str(req.params.id), req.body, {
+      actorUserId: req.user?.userId,
+    }),
+  );
 });
 
 export const confirmForward = asyncHandler(async (req, res) => {
-  res.json(await collabService.confirmForward(req.tenantId!, str(req.params.id)));
+  res.json(
+    await collabService.confirmForward(req.tenantId!, str(req.params.id), {
+      actorUserId: req.user?.userId,
+    }),
+  );
 });
 
 export const listProductMaps = asyncHandler(async (req, res) => {
@@ -128,7 +148,11 @@ export const ackDispatchPayloadRefresh = asyncHandler(async (req, res) => {
 });
 
 export const updateReturnPayload = asyncHandler(async (req, res) => {
-  res.json(await collabService.updateReturnPayload(req.tenantId!, str(req.params.id), req.body));
+  res.json(
+    await collabService.updateReturnPayload(req.tenantId!, str(req.params.id), req.body, {
+      actorUserId: req.user?.userId,
+    }),
+  );
 });
 
 export const amendReturn = asyncHandler(async (req, res) => {
@@ -136,7 +160,11 @@ export const amendReturn = asyncHandler(async (req, res) => {
 });
 
 export const confirmReturnAmendment = asyncHandler(async (req, res) => {
-  res.json(await collabService.confirmReturnAmendment(req.tenantId!, str(req.params.id)));
+  res.json(
+    await collabService.confirmReturnAmendment(req.tenantId!, str(req.params.id), {
+      actorUserId: req.user?.userId,
+    }),
+  );
 });
 
 export const rejectReturnAmendment = asyncHandler(async (req, res) => {

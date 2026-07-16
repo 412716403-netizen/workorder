@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import * as ctrl from '../controllers/products.controller.js';
-import { requireSubPermission, requireSubPermissionOrProductionOrFinanceRead } from '../middleware/tenant.js';
+import { requireSubPermission, requireTenantMemberRead } from '../middleware/tenant.js';
 import { validate } from '../middleware/validate.js';
 
 const router = Router();
@@ -42,21 +42,21 @@ const updateBomSchema = z.object({
   items: z.array(z.object({}).passthrough()).optional(),
 }).passthrough();
 
-// GET 读端点放宽给生产域 / 财务域：报工色码矩阵与收付款「关联产品」均需产品列表
-router.get('/',    requireSubPermissionOrProductionOrFinanceRead('basic:products:view'),   ctrl.listProducts);
+// GET 读端点：本企业任意成员可只读（单据/报工选商品）；增删改仍要细粒度权限
+router.get('/',    requireTenantMemberRead(),   ctrl.listProducts);
 router.post('/import', requireSubPermission('basic:products:create'), validate(importProductsSchema), ctrl.importProducts);
-router.get('/:id/receive-unit-weight-averages', requireSubPermission('basic:products:view'), ctrl.receiveUnitWeightAverages);
-router.get('/:id/variant-usage', requireSubPermission('basic:products:view'), ctrl.variantUsage);
-router.get('/:id', requireSubPermissionOrProductionOrFinanceRead('basic:products:view'),   ctrl.getProduct);
+router.get('/:id/receive-unit-weight-averages', requireTenantMemberRead(), ctrl.receiveUnitWeightAverages);
+router.get('/:id/variant-usage', requireTenantMemberRead(), ctrl.variantUsage);
+router.get('/:id', requireTenantMemberRead(),   ctrl.getProduct);
 router.post('/',   requireSubPermission('basic:products:create'), validate(createProductSchema), ctrl.createProduct);
 router.put('/:id', requireSubPermission('basic:products:edit'),   validate(updateProductSchema), ctrl.updateProduct);
 router.delete('/:id', requireSubPermission('basic:products:delete'), ctrl.deleteProduct);
 
-router.get('/:id/variants',  requireSubPermissionOrProductionOrFinanceRead('basic:products:view'),  ctrl.listVariants);
+router.get('/:id/variants',  requireTenantMemberRead(),  ctrl.listVariants);
 router.post('/:id/variants', requireSubPermission('basic:products:edit'),  validate(syncVariantsSchema), ctrl.syncVariants);
 
-router.get('/boms/all',    requireSubPermission('basic:products:view'),   ctrl.listBoms);
-router.get('/boms/:id',    requireSubPermission('basic:products:view'),   ctrl.getBom);
+router.get('/boms/all',    requireTenantMemberRead(),   ctrl.listBoms);
+router.get('/boms/:id',    requireTenantMemberRead(),   ctrl.getBom);
 router.post('/boms',       requireSubPermission('basic:products:create'), validate(createBomSchema), ctrl.createBom);
 router.put('/boms/:id',    requireSubPermission('basic:products:edit'),   validate(updateBomSchema), ctrl.updateBom);
 router.delete('/boms/:id', requireSubPermission('basic:products:delete'), ctrl.deleteBom);

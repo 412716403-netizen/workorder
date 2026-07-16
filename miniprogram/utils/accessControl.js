@@ -2,6 +2,8 @@
  * 小程序菜单/快捷入口访问控制 — 与 Web filterWorkbenchShortcutsByAccess + 协作侧栏规则对齐
  */
 
+const { canViewDocList } = require('./permissions.js');
+
 const COLLABORATION_LIST_PERM = 'collaboration:list:allow';
 
 function isTenantElevatedRole(tenantRole) {
@@ -16,6 +18,17 @@ function hasSubPermission(userPermissions, required) {
   const module = String(required).split(':')[0];
   if (module && userPermissions.includes(module)) return true;
   return false;
+}
+
+/**
+ * 快捷入口 `perm`（细粒度 view 键）判断：
+ * `:view` 结尾时兼容「仅本人可见」——持有 `<base>:view_own` 同样可进入口（对齐 Web workbenchShortcutsFilter）。
+ */
+function hasShortcutPerm(permissions, perm) {
+  if (String(perm).endsWith(':view')) {
+    return canViewDocList(permissions, String(perm).slice(0, -':view'.length));
+  }
+  return hasSubPermission(permissions, perm);
 }
 
 /** 与 Web utils/hasModulePerm.ts 一致 */
@@ -96,7 +109,7 @@ function filterShortcutsByAccess(items, plugins, tenantRole, permissions) {
     const itemPerm = readItemPerm(item);
     if (Array.isArray(item.permAnyOf) && item.permAnyOf.length > 0 && item.module) {
       if (!hasAnySubModulePerm(perms, item.module, item.permAnyOf)) return false;
-    } else if (itemPerm && !hasSubPermission(perms, itemPerm)) return false;
+    } else if (itemPerm && !hasShortcutPerm(perms, itemPerm)) return false;
 
     const itemModule = readItemModule(item);
     if (itemModule && !hasModulePerm(tenantRole, perms, itemModule, itemModule)) return false;
@@ -121,6 +134,7 @@ function canViewSettingsTab(permissions, tenantRole, tabPermission) {
 module.exports = {
   isTenantElevatedRole,
   hasSubPermission,
+  hasShortcutPerm,
   hasModulePerm,
   hasCollaborationModuleAccess,
   canViewCollaborationList,

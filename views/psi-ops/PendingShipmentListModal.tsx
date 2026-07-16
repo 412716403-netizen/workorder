@@ -6,6 +6,7 @@ import { localTodayYmd } from '../../utils/localDateTime';
 import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 import FlowListProductCell from '../../components/flow/FlowListProductCell';
+import * as api from '../../services/api';
 
 export interface PendingShipmentGroup {
   groupKey: string;
@@ -209,7 +210,17 @@ const PendingShipmentListModal: React.FC<PendingShipmentListModalProps> = ({
                   toast.error('所选明细缺少客户或仓库信息，无法生成销售单。');
                   return;
                 }
-                const newDocNumber = generateSBDocNumberForPartner(partnerId, partnerName);
+                // 正式取号走后端（全表），本地扫描仅作后端失败时的兜底：view_own 成员本地只见自己单，会与他人重号
+                const newDocNumber = await api.psi
+                  .nextDocNumber({
+                    prefix: 'XS',
+                    psiType: 'SALES_BILL',
+                    partnerId: partnerId || undefined,
+                    partnerName: partnerName || undefined,
+                    legacyPrefixes: ['SB'],
+                  })
+                  .then(res => res?.docNumber || generateSBDocNumberForPartner(partnerId, partnerName))
+                  .catch(() => generateSBDocNumberForPartner(partnerId, partnerName));
                 const timestamp = new Date().toLocaleString();
                 const createdAt = localTodayYmd();
                 let recIdx = 0;

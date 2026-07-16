@@ -35,7 +35,7 @@ export const getPlan = asyncHandler(async (req, res) => {
 export const createPlan = asyncHandler(async (req, res) => {
   const tenantId = req.tenantId!;
   const db = getTenantPrisma(tenantId);
-  const plan = await planService.createPlan(db, tenantId, req.body);
+  const plan = await planService.createPlan(db, tenantId, req.body, req.user?.userId);
   res.status(201).json(plan);
 });
 
@@ -54,20 +54,20 @@ export const deletePlan = asyncHandler(async (req, res) => {
 export const convertToOrder = asyncHandler(async (req, res) => {
   const tenantId = req.tenantId!;
   const db = getTenantPrisma(tenantId);
-  const result = await planService.convertPlanToOrders(db, tenantId, str(req.params.id));
+  const result = await planService.convertPlanToOrders(db, tenantId, str(req.params.id), req.user?.userId);
   res.status(201).json(result);
 });
 
 export const createSubPlans = asyncHandler(async (req, res) => {
   const tenantId = req.tenantId!;
   const db = getTenantPrisma(tenantId);
-  const created = await planService.createSubPlans(db, tenantId, str(req.params.id), req.body);
+  const created = await planService.createSubPlans(db, tenantId, str(req.params.id), req.body, req.user?.userId);
   res.status(201).json(created);
 });
 
 export const splitPlan = asyncHandler(async (req, res) => {
   const tenantId = req.tenantId!;
   const db = getTenantPrisma(tenantId);
-  const result = await planService.splitPlan(db, tenantId, str(req.params.id), req.body);
+  const result = await planService.splitPlan(db, tenantId, str(req.params.id), req.body, req.user?.userId);
   res.status(201).json(result);
 });

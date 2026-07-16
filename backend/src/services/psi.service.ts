@@ -4,6 +4,7 @@ import { normalizeBatchNo, BATCH_NO_UNTAGGED } from '../../../shared/types.js';
 import { genId } from '../utils/genId.js';
 import { withSerializableRetry } from '../utils/withSerializableRetry.js';
 import { sanitizeUpdate, sanitizeCreate, normalizeDates } from '../utils/request.js';
+import { ownDocScopeCondition, type OwnDocScope } from '../utils/docScope.js';
 
 const PSI_STRIP_KEYS = new Set(['_savedAtMs', 'receivedQty', 'remainingQty', 'productName', 'productSku']);
 
@@ -58,6 +59,8 @@ export async function listRecords(
     all?: boolean;
     page?: number;
     pageSize?: number;
+    /** 「仅本人可见」范围（controller 按当前用户权限解析；null 表示不加过滤） */
+    viewerScope?: OwnDocScope | null;
   },
 ) {
   const where: Record<string, unknown> = {};
@@ -90,6 +93,9 @@ export async function listRecords(
       { operator: { contains: opts.search, mode: 'insensitive' } },
     ];
   }
+  // 「仅本人可见」用 AND 叠加，避免与 search 的 OR 冲突
+  const scopeCond = ownDocScopeCondition(opts.viewerScope);
+  if (scopeCond) where.AND = [scopeCond];
   const orderBy: any = [{ createdAt: 'desc' }, { id: 'asc' }];
 
   if (opts.all) {
@@ -111,9 +117,12 @@ export async function listRecords(
 export async function createRecord(
   db: TenantPrismaClient,
   body: Record<string, unknown>,
+  creatorUserId?: string,
 ) {
   const data = cleanPsi(sanitizeCreate(body));
   if (!data.id) data.id = genId('psi');
+  // 制单人由服务端写入（权限「仅本人可见」依据），客户端传值一律忽略
+  data.createdByUserId = creatorUserId ?? null;
   normalizeDates(data);
   const created = await db.psiRecord.create({ data: data as any });
   await enrichPsiRecordsWithProductMeta(db, [created]);
@@ -123,10 +132,12 @@ export async function createRecord(
 export async function createBatchRecords(
   db: TenantPrismaClient,
   records: Record<string, unknown>[],
+  creatorUserId?: string,
 ) {
   const prepared = records.map(r => {
     const data = cleanPsi(sanitizeCreate(r));
     if (!data.id) data.id = genId('psi');
+    data.createdByUserId = creatorUserId ?? null;
     normalizeDates(data);
     return data as any;
   });
@@ -143,6 +154,8 @@ export async function updateRecord(
   body: Record<string, unknown>,
 ) {
   const data = cleanPsi(sanitizeUpdate(body));
+  // 制单人创建后不可改（防客户端篡改归属）
+  delete data.createdByUserId;
   normalizeDates(data);
   const updated = await db.psiRecord.update({ where: { id }, data });
   await enrichPsiRecordsWithProductMeta(db, [updated]);
@@ -153,10 +166,12 @@ export async function replaceRecords(
   db: TenantPrismaClient,
   deleteIds: string[] | undefined,
   newRecords: Record<string, unknown>[] | undefined,
+  creatorUserId?: string,
 ) {
   const toInsert = (newRecords || []).map(r => {
     const data = cleanPsi(sanitizeCreate(r));
     if (!data.id) data.id = genId('psi');
+    data.createdByUserId = creatorUserId ?? null;
     normalizeDates(data);
     return data as any;
   });

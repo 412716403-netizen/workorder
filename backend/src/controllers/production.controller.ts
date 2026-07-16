@@ -82,13 +82,15 @@ export const getRecord = asyncHandler(async (req, res) => {
 
 export const createRecord = asyncHandler(async (req, res) => {
   const db = getTenantPrisma(req.tenantId!);
-  res.status(201).json(await productionService.createRecord(db, req.body, req.tenantId));
+  res.status(201).json(await productionService.createRecord(db, req.body, req.tenantId, {
+    creatorUserId: req.user?.userId,
+  }));
 });
 
 export const createRecordBatch = asyncHandler(async (req, res) => {
   const db = getTenantPrisma(req.tenantId!);
   const records = Array.isArray(req.body?.records) ? req.body.records : [];
-  res.status(201).json(await productionService.createRecordBatch(db, records, req.tenantId));
+  res.status(201).json(await productionService.createRecordBatch(db, records, req.tenantId, req.user?.userId));
 });
 
 export const updateRecord = asyncHandler(async (req, res) => {

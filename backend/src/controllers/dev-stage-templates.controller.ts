@@ -8,7 +8,14 @@ export const listTemplates = asyncHandler(async (req, res) => {
 });
 
 export const createTemplate = asyncHandler(async (req, res) => {
-  res.status(201).json(await tplService.createDevStageTemplate(getTenantPrisma(req.tenantId!), req.tenantId!, req.body));
+  res.status(201).json(
+    await tplService.createDevStageTemplate(
+      getTenantPrisma(req.tenantId!),
+      req.tenantId!,
+      req.body,
+      req.user?.userId,
+    ),
+  );
 });
 
 export const updateTemplate = asyncHandler(async (req, res) => {

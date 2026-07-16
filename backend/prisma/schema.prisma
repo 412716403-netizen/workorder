@@ -497,6 +497,8 @@ model PlanOrder {
   customData       Json      @default("{}") @map("custom_data")
   nodePricingModes Json?     @map("node_pricing_modes")
   milestoneNodeIds Json?     @map("milestone_node_ids")
+  /// 制单人账号 ID（服务端创建时写入；本阶段仅关联，不做数据级权限）
+  createdByUserId  String?   @map("created_by_user_id") @db.Uuid
   createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
 
@@ -513,6 +515,7 @@ model PlanOrder {
   @@index([tenantId, createdAt])
   @@index([tenantId, status, createdAt])
   @@index([tenantId, updatedAt])
+  @@index([tenantId, createdByUserId])
   @@map("plan_orders")
 }
 
@@ -599,6 +602,8 @@ model ProductionOrder {
   dueDate       DateTime? @map("due_date") @db.Date
   status        String    @default("PLANNING") @db.VarChar(20)
   priority      String    @default("Medium") @db.VarChar(10)
+  /// 制单人账号 ID（服务端创建时写入；本阶段仅关联，不做数据级权限）
+  createdByUserId String? @map("created_by_user_id") @db.Uuid
   createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
   /** 派发完成状态：'IN_PROGRESS' | 'COMPLETED'。STOCK_IN 累计 ≥ items 总量自动写 COMPLETED；用户手动可覆盖。 */
@@ -623,6 +628,7 @@ model ProductionOrder {
   @@index([tenantId, status, createdAt])
   @@index([tenantId, updatedAt])
   @@index([tenantId, dispatchStatus])
+  @@index([tenantId, createdByUserId])
   @@map("production_orders")
 }
 
@@ -694,6 +700,8 @@ model MilestoneReport {
   approvedAt        DateTime? @map("approved_at") @db.Timestamptz()
   approvedBy        String?  @map("approved_by") @db.VarChar(50)
   rejectedReason    String?  @map("rejected_reason") @db.VarChar(500)
+  /// 提交人账号 ID（登录用户；operator 可为工人显示名）
+  createdByUserId   String?  @map("created_by_user_id") @db.Uuid
   createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   milestone Milestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
@@ -706,6 +714,7 @@ model MilestoneReport {
   @@index([itemCodeId])
   @@index([approvalStatus])
   @@index([workerId, approvalStatus])
+  @@index([createdByUserId])
   @@map("milestone_reports")
 }
 
@@ -756,6 +765,8 @@ model ProductProgressReport {
   approvedAt        DateTime? @map("approved_at") @db.Timestamptz()
   approvedBy        String?  @map("approved_by") @db.VarChar(50)
   rejectedReason    String?  @map("rejected_reason") @db.VarChar(500)
+  /// 提交人账号 ID（登录用户；operator 可为工人显示名）
+  createdByUserId   String?  @map("created_by_user_id") @db.Uuid
   createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   progress ProductMilestoneProgress @relation(fields: [progressId], references: [id], onDelete: Cascade)
@@ -767,6 +778,7 @@ model ProductProgressReport {
   @@index([itemCodeId])
   @@index([approvalStatus])
   @@index([workerId, approvalStatus])
+  @@index([createdByUserId])
   @@map("product_progress_reports")
 }
 
@@ -785,6 +797,8 @@ model ProductionOpRecord {
   reason                          String?  @db.Text
   partner                         String?  @db.VarChar(200)
   operator                        String?  @db.VarChar(100)
+  /// 制单人账号 ID（服务端创建时写入；operator 仅作展示名）
+  createdByUserId                 String?  @map("created_by_user_id") @db.Uuid
   timestamp                       DateTime @db.Timestamptz()
   status                          String?  @db.VarChar(50)
   warehouseId                     String?  @map("warehouse_id") @db.VarChar(50)
@@ -828,6 +842,7 @@ model ProductionOpRecord {
   @@index([tenantId, type, timestamp])
   @@index([tenantId, updatedAt])
   @@index([tenantId, productId, warehouseId, batchNo])
+  @@index([tenantId, createdByUserId])
   @@map("production_op_records")
 }
 
@@ -862,6 +877,8 @@ model PsiRecord {
   shippedQuantity    Decimal?  @map("shipped_quantity") @db.Decimal(12, 2)
   allocationWarehouseId String? @map("allocation_warehouse_id") @db.VarChar(50)
   operator           String?   @db.VarChar(100)
+  /// 制单人账号 ID（服务端在创建时写入，权限「仅本人可见」过滤依据；operator 仅作展示名）
+  createdByUserId    String?   @map("created_by_user_id") @db.Uuid
   /// 进销存单据级备注（如销售单「单据备注」；多明细行通常写入相同内容）
   note               String?   @db.Text
   customData         Json      @default("{}") @map("custom_data")
@@ -885,6 +902,7 @@ model PsiRecord {
   @@index([tenantId, type, createdAt])
   @@index([tenantId, updatedAt])
   @@index([tenantId, productId, warehouseId, batchNo])
+  @@index([tenantId, type, createdByUserId])
   @@map("psi_records")
 }
 
@@ -901,6 +919,8 @@ model FinanceRecord {
   relatedId      String?  @map("related_id") @db.VarChar(50)
   partner        String?  @db.VarChar(200)
   operator       String?  @db.VarChar(100)
+  /// 制单人账号 ID（服务端在创建时写入，权限「仅本人可见」过滤依据；operator 仅作展示名）
+  createdByUserId String? @map("created_by_user_id") @db.Uuid
   timestamp      DateTime @db.Timestamptz()
   note           String?  @db.Text
   status         String   @default("PENDING") @db.VarChar(20)
@@ -926,6 +946,7 @@ model FinanceRecord {
   @@index([accountTypeId])
   @@index([tenantId, type, createdAt])
   @@index([tenantId, updatedAt])
+  @@index([tenantId, type, createdByUserId])
   @@map("finance_records")
 }
 
@@ -1080,6 +1101,8 @@ model DevStyle {
   supplierId         String?  @map("supplier_id") @db.VarChar(50)
   status             String   @default("developing") @db.VarChar(20)
   publishedProductId String?  @map("published_product_id") @db.VarChar(50)
+  /// 创建人账号 ID（服务端创建时写入）
+  createdByUserId    String?  @map("created_by_user_id") @db.Uuid
   createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt          DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
 
@@ -1092,6 +1115,7 @@ model DevStyle {
   @@index([tenantId])
   @@index([categoryId])
   @@index([status])
+  @@index([tenantId, createdByUserId])
   @@map("dev_styles")
 }
 
@@ -1118,6 +1142,8 @@ model DevBom {
   variantId     String?  @map("variant_id") @db.VarChar(50)
   nodeId        String?  @map("node_id") @db.VarChar(50)
   version       String?  @db.VarChar(20)
+  /// 创建人账号 ID（服务端创建时写入）
+  createdByUserId String? @map("created_by_user_id") @db.Uuid
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
 
@@ -1126,6 +1152,7 @@ model DevBom {
 
   @@index([tenantId])
   @@index([parentStyleId])
+  @@index([tenantId, createdByUserId])
   @@map("dev_boms")
 }
 
@@ -1152,6 +1179,8 @@ model DevSample {
   name      String   @db.VarChar(100)
   colorId   String?  @map("color_id") @db.VarChar(50)
   sizeId    String?  @map("size_id") @db.VarChar(50)
+  /// 创建人账号 ID（服务端创建时写入）
+  createdByUserId String? @map("created_by_user_id") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   style  DevStyle   @relation(fields: [styleId], references: [id], onDelete: Cascade)
@@ -1159,6 +1188,7 @@ model DevSample {
   logs   DevLog[]
 
   @@index([styleId])
+  @@index([createdByUserId])
   @@map("dev_samples")
 }
 
@@ -1210,12 +1240,15 @@ model DevStageTemplate {
   tenantId  String   @map("tenant_id") @db.Uuid
   name      String   @db.VarChar(100)
   order     Int      @default(0) @map("sort_order")
+  /// 创建人账号 ID（服务端创建时写入）
+  createdByUserId String? @map("created_by_user_id") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   fields DevStageTemplateField[]
 
   @@unique([tenantId, name])
   @@index([tenantId])
+  @@index([tenantId, createdByUserId])
   @@map("dev_stage_templates")
 }
 
@@ -1240,6 +1273,8 @@ model DevLog {
   id       String   @id @db.VarChar(50)
   sampleId String   @map("sample_id") @db.VarChar(50)
   user     String   @db.VarChar(100)
+  /// 操作人账号 ID（user 仍为显示名）
+  createdByUserId String? @map("created_by_user_id") @db.Uuid
   action   String   @db.VarChar(200)
   detail   String   @db.Text
   time     DateTime @default(now()) @db.Timestamptz()
@@ -1247,6 +1282,7 @@ model DevLog {
   sample DevSample @relation(fields: [sampleId], references: [id], onDelete: Cascade)
 
   @@index([sampleId])
+  @@index([createdByUserId])
   @@map("dev_logs")
 }
 

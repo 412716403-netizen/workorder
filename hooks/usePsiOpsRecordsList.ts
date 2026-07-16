@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { psi as psiApi } from '../services/api';
 import { normalizeDecimals } from '../contexts/formSettingsDefaults';
 import { fetchAllPages, type PaginatedLike } from '../utils/fetchAllPages';
+import { useAuth } from '../contexts/AuthContext';
 
 const DOC_TYPES = new Set(['PURCHASE_ORDER', 'PURCHASE_BILL', 'SALES_ORDER', 'SALES_BILL']);
 
@@ -30,27 +31,34 @@ async function fetchAllPsiPages(filter: { type: string }): Promise<unknown[]> {
  * **新 queryKey** 让旧缓存彻底失效，触发整页重新分页拉取，浪费且会让 UI 闪空。
  * 写入后的刷新统一由 `AppDataContext.invalidateAllPsiRecords()` 走 `invalidateQueries`
  * 触发，更精准也保留缓存数据期间 UI 不闪空。
+ *
+ * queryKey 必须带 `tenantId` + `userId`：切换账号/企业后不得复用上一会话的「仅本人」列表缓存，
+ * 否则创建者会看到销售员过滤后的结果（或相反把别人的单缓存给仅本人角色）。
  */
 export function usePsiOpsRecordsList(type: string, recordsFromContext: unknown[]): unknown[] {
+  const { userId, tenantCtx } = useAuth();
+  const tenantId = tenantCtx?.tenantId ?? '';
+  const scopeKey = [tenantId, userId || ''] as const;
+
   const mainQuery = useQuery({
-    queryKey: ['psiOpsRecords', 'main', type],
+    queryKey: ['psiOpsRecords', 'main', type, ...scopeKey],
     queryFn: () => fetchAllPsiPages({ type }),
-    enabled: DOC_TYPES.has(type),
+    enabled: DOC_TYPES.has(type) && !!tenantId,
     staleTime: 15_000,
   });
 
   const purchaseBillsForPoQuery = useQuery({
-    queryKey: ['psiOpsRecords', 'PURCHASE_BILL', 'forPurchaseOrderTab'],
+    queryKey: ['psiOpsRecords', 'PURCHASE_BILL', 'forPurchaseOrderTab', ...scopeKey],
     queryFn: () => fetchAllPsiPages({ type: 'PURCHASE_BILL' }),
-    enabled: type === 'PURCHASE_ORDER',
+    enabled: type === 'PURCHASE_ORDER' && !!tenantId,
     staleTime: 15_000,
   });
 
   /** 销售订单 tab：待发货生成销售单时需统计已有销售出库单号，避免重复单号合并到同一单据 */
   const salesBillsForSoQuery = useQuery({
-    queryKey: ['psiOpsRecords', 'SALES_BILL', 'forSalesOrderTab'],
+    queryKey: ['psiOpsRecords', 'SALES_BILL', 'forSalesOrderTab', ...scopeKey],
     queryFn: () => fetchAllPsiPages({ type: 'SALES_BILL' }),
-    enabled: type === 'SALES_ORDER',
+    enabled: type === 'SALES_ORDER' && !!tenantId,
     staleTime: 15_000,
   });
 
@@ -60,79 +68,70 @@ export function usePsiOpsRecordsList(type: string, recordsFromContext: unknown[]
    * - 已收数量统计也依赖采购入库本身（已在 mainQuery 中加载），无需额外拉。
    */
   const purchaseOrdersForPbQuery = useQuery({
-    queryKey: ['psiOpsRecords', 'PURCHASE_ORDER', 'forPurchaseBillTab'],
+    queryKey: ['psiOpsRecords', 'PURCHASE_ORDER', 'forPurchaseBillTab', ...scopeKey],
     queryFn: () => fetchAllPsiPages({ type: 'PURCHASE_ORDER' }),
-    enabled: type === 'PURCHASE_BILL',
+    enabled: type === 'PURCHASE_BILL' && !!tenantId,
     staleTime: 15_000,
   });
 
   const whTransfer = useQuery({
-    queryKey: ['psiOpsRecords', 'TRANSFER'],
+    queryKey: ['psiOpsRecords', 'TRANSFER', ...scopeKey],
     queryFn: () => fetchAllPsiPages({ type: 'TRANSFER' }),
-    enabled: type === 'WAREHOUSE_MGMT',
+    enabled: type === 'WAREHOUSE_MGMT' && !!tenantId,
     staleTime: 15_000,
   });
   const whStocktake = useQuery({
-    queryKey: ['psiOpsRecords', 'STOCKTAKE'],
+    queryKey: ['psiOpsRecords', 'STOCKTAKE', ...scopeKey],
     queryFn: () => fetchAllPsiPages({ type: 'STOCKTAKE' }),
-    enabled: type === 'WAREHOUSE_MGMT',
+    enabled: type === 'WAREHOUSE_MGMT' && !!tenantId,
     staleTime: 15_000,
   });
   /** 仓库管理：流水/库存反推需要采购单入库与销售出库行（此前仅 TRANSFER+STOCKTAKE，会缺采购入库等） */
   const whPurchaseBill = useQuery({
-    queryKey: ['psiOpsRecords', 'PURCHASE_BILL', 'forWarehouseMgmt'],
+    queryKey: ['psiOpsRecords', 'PURCHASE_BILL', 'forWarehouseMgmt', ...scopeKey],
     queryFn: () => fetchAllPsiPages({ type: 'PURCHASE_BILL' }),
-    enabled: type === 'WAREHOUSE_MGMT',
+    enabled: type === 'WAREHOUSE_MGMT' && !!tenantId,
     staleTime: 15_000,
   });
   const whSalesBill = useQuery({
-    queryKey: ['psiOpsRecords', 'SALES_BILL', 'forWarehouseMgmt'],
+    queryKey: ['psiOpsRecords', 'SALES_BILL', 'forWarehouseMgmt', ...scopeKey],
     queryFn: () => fetchAllPsiPages({ type: 'SALES_BILL' }),
-    enabled: type === 'WAREHOUSE_MGMT',
+    enabled: type === 'WAREHOUSE_MGMT' && !!tenantId,
     staleTime: 15_000,
   });
 
   return useMemo(() => {
+    const mergeById = (...lists: Array<unknown[] | undefined>) => {
+      const byId = new Map<string, unknown>();
+      for (const list of lists) {
+        for (const r of list ?? []) byId.set((r as { id: string }).id, r);
+      }
+      return [...byId.values()];
+    };
+
     if (type === 'WAREHOUSE_MGMT') {
-      if (
-        whTransfer.isSuccess &&
-        whStocktake.isSuccess &&
-        whPurchaseBill.isSuccess &&
-        whSalesBill.isSuccess
-      ) {
-        return [
-          ...(whTransfer.data ?? []),
-          ...(whStocktake.data ?? []),
-          ...(whPurchaseBill.data ?? []),
-          ...(whSalesBill.data ?? []),
-        ];
+      const parts = [whTransfer.data, whStocktake.data, whPurchaseBill.data, whSalesBill.data];
+      if (parts.some(Boolean) || [whTransfer, whStocktake, whPurchaseBill, whSalesBill].some(q => q.isSuccess)) {
+        return mergeById(...parts);
       }
       return recordsFromContext;
     }
     if (type === 'PURCHASE_ORDER') {
-      if (mainQuery.isSuccess && purchaseBillsForPoQuery.isSuccess) {
-        const byId = new Map<string, unknown>();
-        for (const r of mainQuery.data ?? []) byId.set((r as { id: string }).id, r);
-        for (const r of purchaseBillsForPoQuery.data ?? []) byId.set((r as { id: string }).id, r);
-        return [...byId.values()];
+      // 主列表有数据即可展示；配套采购入库失败/加载中不挡订单列表（避免整页空白）
+      if (mainQuery.isSuccess) {
+        return mergeById(mainQuery.data, purchaseBillsForPoQuery.data);
       }
       return recordsFromContext;
     }
     if (type === 'PURCHASE_BILL') {
-      if (mainQuery.isSuccess && purchaseOrdersForPbQuery.isSuccess) {
-        const byId = new Map<string, unknown>();
-        for (const r of mainQuery.data ?? []) byId.set((r as { id: string }).id, r);
-        for (const r of purchaseOrdersForPbQuery.data ?? []) byId.set((r as { id: string }).id, r);
-        return [...byId.values()];
+      if (mainQuery.isSuccess) {
+        return mergeById(mainQuery.data, purchaseOrdersForPbQuery.data);
       }
       return recordsFromContext;
     }
     if (type === 'SALES_ORDER') {
-      if (mainQuery.isSuccess && salesBillsForSoQuery.isSuccess) {
-        const byId = new Map<string, unknown>();
-        for (const r of mainQuery.data ?? []) byId.set((r as { id: string }).id, r);
-        for (const r of salesBillsForSoQuery.data ?? []) byId.set((r as { id: string }).id, r);
-        return [...byId.values()];
+      if (mainQuery.isSuccess) {
+        return mergeById(mainQuery.data, salesBillsForSoQuery.data);
       }
       return recordsFromContext;
     }
@@ -145,11 +144,8 @@ export function usePsiOpsRecordsList(type: string, recordsFromContext: unknown[]
     recordsFromContext,
     mainQuery.isSuccess,
     mainQuery.data,
-    purchaseBillsForPoQuery.isSuccess,
     purchaseBillsForPoQuery.data,
-    salesBillsForSoQuery.isSuccess,
     salesBillsForSoQuery.data,
-    purchaseOrdersForPbQuery.isSuccess,
     purchaseOrdersForPbQuery.data,
     whTransfer.isSuccess,
     whTransfer.data,

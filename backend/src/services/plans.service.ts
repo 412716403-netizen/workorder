@@ -191,12 +191,14 @@ export async function createPlan(
   db: TenantPrismaClient,
   tenantId: string,
   body: Record<string, unknown>,
+  creatorUserId?: string,
 ) {
   const { items, childPlans, parentPlan, productionOrders, ...rest } = body;
   const data = sanitizeCreate(rest);
 
   if (!data.id) data.id = genId('plan');
   data.planNumber = await getNextPlanNumber(tenantId);
+  data.createdByUserId = creatorUserId ?? null;
   normalizeDates(data);
 
   const cleanItems = items ? sanitizeItems(items as Record<string, unknown>[]) : undefined;
@@ -216,6 +218,7 @@ export async function updatePlan(
 
   const { items, childPlans, parentPlan, productionOrders, ...rest } = body;
   const data = sanitizeUpdate(rest);
+  delete data.createdByUserId;
   if (rest.createdAt !== undefined && rest.createdAt !== null && rest.createdAt !== '') {
     data.createdAt = rest.createdAt;
   }
@@ -283,7 +286,12 @@ export async function deletePlan(db: TenantPrismaClient, planId: string) {
 
 // ── convert / sub-plans (transactions & multi-step) ─────────────────────
 
-export async function convertPlanToOrders(db: TenantPrismaClient, tenantId: string, planId: string) {
+export async function convertPlanToOrders(
+  db: TenantPrismaClient,
+  tenantId: string,
+  planId: string,
+  creatorUserId?: string,
+) {
   const plan = await db.planOrder.findUnique({
     where: { id: planId },
     include: { items: true },
@@ -327,6 +335,7 @@ export async function convertPlanToOrders(db: TenantPrismaClient, tenantId: stri
     dueDate: Date | null;
     status: string;
     priority: string;
+    createdByUserId: string | null;
     items: Array<{ variantId: string | null; quantity: number; completedQuantity: number }>;
     milestones: Prisma.MilestoneCreateWithoutProductionOrderInput[];
   }> = [];
@@ -447,6 +456,7 @@ export async function convertPlanToOrders(db: TenantPrismaClient, tenantId: stri
       dueDate: p.dueDate,
       status: 'PLANNING',
       priority: p.priority,
+      createdByUserId: creatorUserId ?? null,
       items: ((p as Record<string, unknown>).items as Array<Record<string, unknown>>)?.map(i => ({
         variantId: i.variantId as string | null,
         quantity: i.quantity as number,
@@ -514,6 +524,7 @@ export async function createSubPlans(
   tenantId: string,
   parentPlanId: string,
   body: { subPlans: Array<{ id?: string; bomNodeId?: string; productId: string; items?: Record<string, unknown>[] }> },
+  creatorUserId?: string,
 ) {
   const parentPlan = await db.planOrder.findUnique({ where: { id: parentPlanId } });
   if (!parentPlan) throw new AppError(404, '父计划单不存在');
@@ -539,6 +550,7 @@ export async function createSubPlans(
         status: 'DRAFT',
         customer: parentPlan.customer,
         priority: parentPlan.priority,
+        createdByUserId: creatorUserId ?? null,
         items: sp.items ? { create: sanitizeItems(sp.items) } : undefined,
       },
       include: { items: true },
@@ -562,6 +574,7 @@ export async function splitPlan(
   tenantId: string,
   planId: string,
   body: { items: SplitPlanItemInput[] },
+  creatorUserId?: string,
 ) {
   const plan = await db.planOrder.findUnique({
     where: { id: planId },
@@ -663,6 +676,7 @@ export async function splitPlan(
         customData: plan.customData ?? {},
         nodePricingModes: plan.nodePricingModes ?? undefined,
         milestoneNodeIds: plan.milestoneNodeIds ?? undefined,
+        createdByUserId: creatorUserId ?? null,
         items: { create: splitItemsCreate },
       },
     });

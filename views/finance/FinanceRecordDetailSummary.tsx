@@ -4,6 +4,7 @@ import { X } from 'lucide-react';
 import type { FinanceCategory, FinanceRecord, PlanFormFieldConfig, Product, ReportFieldDefinition, Worker } from '../../types';
 import { normalizeReportFieldDefinition } from '../../utils/reportCustomDocField';
 import { PlanFormCustomFieldReadonly } from '../../components/PlanFormCustomFieldControls';
+import { fmtDT } from '../../utils/formatTime';
 
 function reportFieldToPlanFormField(field: ReportFieldDefinition): PlanFormFieldConfig {
   const f = normalizeReportFieldDefinition(field);
@@ -152,7 +153,13 @@ function FinanceRecordDetailSummary({
       <DetailField label="结算金额 (CNY)" valueClassName={amountClassName}>
         ¥ {financeRec.amount.toLocaleString()}
       </DetailField>
-      <DetailField label="备注说明">
+      <DetailField label="业务时间">
+        {fmtDT(financeRec.timestamp)}
+      </DetailField>
+      <DetailField label="经办人">
+        {financeRec.operator?.trim() || '—'}
+      </DetailField>
+      <DetailField label="备注说明" className="lg:col-span-2">
         {financeRec.note?.trim() ? financeRec.note : '—'}
       </DetailField>
     </div>

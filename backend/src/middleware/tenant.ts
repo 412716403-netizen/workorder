@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
-import { hasSubPermission, isTenantElevatedRole } from '../types/index.js';
-import { loadEffectivePermissions } from '../services/auth.service.js';
+import { hasSubPermission, isTenantElevatedRole, resolveDocViewScope } from '../types/index.js';
+import { loadEffectivePermissions, loadMembershipRole } from '../services/auth.service.js';
+import type { OwnDocScope } from '../utils/docScope.js';
 
 /**
  * 权限中间件分层（约定）：
@@ -205,7 +206,8 @@ export function requirePsiRecordWrite(action: 'create' | 'edit' | 'delete'): Req
               }
               continue;
             }
-            if (!hasSubPermission(perms, `${base}:view`)) {
+            // view 前置校验兼容「仅本人可见」：仅有 view_own 的角色也可写（如销售员开自己的销售单）
+            if (resolveDocViewScope(perms, base) === 'none') {
               res.status(403).json({ error: '无权访问该功能模块' });
               return;
             }
@@ -303,12 +305,12 @@ export function requireSubPermissionOrProductionRead(required: string): RequestH
  * 背景：小程序收/付款登记依赖 `settings:finance_categories:view`、`basic:products:view` 等字典接口，
  * 但财务细粒度角色通常只有 `finance:receipt:*` / `finance:payment:*`，读分类会 403 → 前端
  * `.catch(() => [])` 得到空列表 → `linkProduct` 开关无法生效，「关联产品」不显示、产品选择器为空。
- * 放宽为：持有原细粒度键，或财务域任一权限。
+ * 放宽为：持有原细粒度键，或财务 / 进销存域任一权限（销售/采购单据同样依赖客户与商品主数据）。
  */
 export function canReadWithFinance(perms: string[], required: string): boolean {
   return (
     hasSubPermission(perms, required) ||
-    hasAnyPermUnder(perms, ['finance'])
+    hasAnyPermUnder(perms, ['finance', 'psi'])
   );
 }
 
@@ -316,16 +318,27 @@ export function requireSubPermissionOrFinanceRead(required: string): RequestHand
   return guardAny(perms => canReadWithFinance(perms, required));
 }
 
-/** 生产报工 / 财务表单共用的主数据只读（产品、产品分类等） */
+/** 生产报工 / 财务 / 进销存表单共用的主数据只读（产品、产品分类、合作单位等） */
 export function canReadWithProductionOrFinance(perms: string[], required: string): boolean {
   return (
     canReadWithProductionReport(perms, required) ||
-    hasAnyPermUnder(perms, ['finance'])
+    hasAnyPermUnder(perms, ['finance', 'psi'])
   );
 }
 
 export function requireSubPermissionOrProductionOrFinanceRead(required: string): RequestHandler {
   return guardAny(perms => canReadWithProductionOrFinance(perms, required));
+}
+
+/**
+ * 租户内任意已登录成员可只读的主数据（产品档案、合作单位及选单依赖的分类/字典）。
+ * 入口已挂 auth + requireTenant；此处不再按模块权限拦截，避免「仅有某单据/报工/协作权限」时选不到商品或客户。
+ * 增删改仍走 `requireSubPermission('basic:products|partners:…')` 等细粒度键。
+ */
+export function requireTenantMemberRead(): RequestHandler {
+  return (_req, _res, next) => {
+    next();
+  };
 }
 
 /**
@@ -386,7 +399,8 @@ export function requireFinanceRecordWrite(action: 'create' | 'edit' | 'delete'):
         const rawType = (req.body as { type?: unknown } | undefined)?.type;
         const base = typeof rawType === 'string' ? FINANCE_RECORD_TYPE_TO_PERM_BASE[rawType] : undefined;
         if (base) {
-          if (!hasSubPermission(perms, `${base}:view`)) {
+          // view 前置校验兼容「仅本人可见」：仅有 view_own 的角色也可登记收/付款
+          if (resolveDocViewScope(perms, base) === 'none') {
             res.status(403).json({ error: '无权访问该功能模块' });
             return;
           }
@@ -412,6 +426,47 @@ export function requireFinanceRecordWrite(action: 'create' | 'edit' | 'delete'):
   };
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// 单据「仅本人可见」数据范围（销售订单 / 销售单 / 收款单 / 付款单）
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * 单据查看入口（view 或 view_own 皆可）：用于「仅本人可见」角色也需要的只读依赖端点，
+ * 如销售单打印取合作单位上期结余（/finance/partner-receivable）。
+ */
+export function requireDocViewAnyScope(permBase: string): RequestHandler {
+  return guardAny(perms => resolveDocViewScope(perms, permBase) !== 'none');
+}
+
+/**
+ * 按「type → 权限 base」映射解析当前用户的仅本人范围。
+ * - owner（elevated）或全部 type 均为 `view`（全部可见）→ 返回 null（不加过滤）；
+ * - 某 type 仅有 `view_own` → 计入 ownTypes，列表只显示 `createdByUserId = 自己`；
+ * - 某 type 两者皆无 → 维持现状（模块级宽松读，见 requirePsiOrProductionRead /
+ *   requireFinanceRead 的背景说明），不在此处收紧，避免仓库流水 / 资金账户流水等
+ *   跨单据聚合页回归。
+ */
+export async function resolveOwnDocScope(
+  req: Request,
+  typePermBase: Record<string, string>,
+): Promise<OwnDocScope | null> {
+  const { tenantRole, userId, tenantId } = req.user || {};
+  if (!userId) return null;
+  if (isTenantElevatedRole(tenantRole)) return null;
+  // JWT.tenantRole 偶发缺失/过期时，以 DB 成员角色为准，避免创建者被误收成「仅本人」
+  if (tenantId) {
+    const dbRole = await loadMembershipRole(userId, tenantId);
+    if (isTenantElevatedRole(dbRole)) return null;
+  }
+  const perms = await resolvePermissions(req);
+  // 持有裸模块键（创建者 ALL_PERMISSIONS 或整模块授权）视为该模块全部可见
+  const ownTypes = Object.entries(typePermBase)
+    .filter(([, base]) => resolveDocViewScope(perms, base) === 'own')
+    .map(([type]) => type);
+  if (ownTypes.length === 0) return null;
+  return { userId, ownTypes };
+}
+
 /**
  * `system_settings` 中各业务表单配置 key → 生产模块「表单配置」细粒度权限。
  * UI 入口按右侧 `production:*_form_config:allow` 控制，但持久化走 `PUT /settings/config/:key`；
@@ -428,7 +483,11 @@ export const TENANT_CONFIG_KEY_FORM_CONFIG_ALLOW: Record<string, string> = {
 /** 纯函数：是否可读租户 `GET /settings/config`（供单测与中间件共用）。 */
 export function canReadTenantConfig(perms: string[]): boolean {
   if (hasSubPermission(perms, 'settings:config:view')) return true;
-  return Object.values(TENANT_CONFIG_KEY_FORM_CONFIG_ALLOW).some(p => hasSubPermission(perms, p));
+  if (Object.values(TENANT_CONFIG_KEY_FORM_CONFIG_ALLOW).some(p => hasSubPermission(perms, p))) {
+    return true;
+  }
+  // 进销存 / 财务单据页依赖表单配置开关（销售/采购/收付款表单设置等）；无 settings:config:view 时也需可读
+  return hasAnyPermUnder(perms, ['psi', 'finance']);
 }
 
 /** 纯函数：是否可写 `PUT /settings/config/:key`（供单测与中间件共用）。 */

@@ -175,6 +175,34 @@ refresh 依赖后端 Cookie 机制，而不是前端直接读写 refresh token�
 
 若子账号仅有外协表单配置而无上述 API 权限，会出现：创建者已勾选的「加工厂往来显示明细」等开关在子账号侧始终显示未勾选，保存后重开仍如此（前端曾落默认配置）。实现见 `backend/src/middleware/tenant.ts` 的 `requireTenantConfigRead` / `requireTenantConfigEdit`。
 
+### 4.6.2 细粒度权限：单据「仅本人可见」（view_own，数据级）
+
+四类单据支持两档查看范围（角色编辑中同一行的「查看」与「查看自己」互斥）：
+
+| 权限 base | 单据 | 落库表（type） |
+|-----------|------|----------------|
+| `psi:sales_order` | 销售订单 | `PsiRecord`（SALES_ORDER） |
+| `psi:sales_bill` | 销售单 | `PsiRecord`（SALES_BILL） |
+| `finance:receipt` | 收款单 | `FinanceRecord`（RECEIPT） |
+| `finance:payment` | 付款单 | `FinanceRecord`（PAYMENT） |
+
+语义（`shared/types.ts` 的 `resolveDocViewScope`）：
+
+- `<base>:view`（或裸模块键 / owner）→ **all**：该类型全部单据可见（现状不变）。
+- 仅 `<base>:view_own` → **own**：列表/详情只返回 `createdByUserId = 当前用户` 的单据；**服务端强制过滤**（`psi.service.listRecords` / `finance.service.listRecords` 的 `viewerScope`，`GET /finance/records/:id` 非本人按 404 处理），前端只做入口门控。
+- 两者皆无 → **none**：不显示该单据入口；但**不收紧**既有的模块级宽松读（`requirePsiOrProductionRead` / `requireFinanceRead`），避免仓库流水、资金账户流水等跨单据聚合页回归。
+
+配套规则：
+
+- `createdByUserId` 由**服务端**在创建时写入 `req.user.userId`（客户端传值忽略，编辑不可改）；`operator` 仍只是展示名。
+- **仅对新单生效**：历史存量单 `createdByUserId` 为空，对仅有 `view_own` 的用户不可见。
+- 写权限的隐式 view 前置（`requirePsiRecordWrite` / `requireFinanceRecordWrite`）放宽为 `view || view_own`；`/finance/partner-receivable`（销售单打印上期结余）同样放行 `view_own`。
+- 编辑/删除不额外限制为本人单据，仍按角色的 `create/edit/delete` 配置。
+- 勾选金额权限自动补 view 时，若已有 `view_own` 不再强补 `view`。
+- **创建者 / owner**：JWT 或 DB 成员角色为 `owner` 时不加 `viewerScope` 过滤，可见全部单据（含成员创建）。
+- **小程序入口**：应用中心 / 首页快捷与 Web 一致，`:view` 键兼容 `view_own`（`miniprogram/utils/accessControl.js` 的 `hasShortcutPerm`、`permissions.js` 的 `hasDocViewPermission`）；列表内容仍依赖后端过滤。
+- **产品 / 客户主数据只读**：`GET` 产品（含变体/BOM）、合作单位、产品分类、合作单位分类、字典对本企业**任意已登录成员**开放（`requireTenantMemberRead`），不因角色仅有报工/协作/单据 `view_own` 等其它权限组合而拦截；增删改仍受细粒度权限约束。仓库、财务分类、业务配置等仍按既有域放宽规则。
+
 ### 4.7 工作台 API（`/api/dashboard`）
 
 任意已选租户用户可访问（仅 `authMiddleware + requireTenant`）：

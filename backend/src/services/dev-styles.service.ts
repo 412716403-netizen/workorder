@@ -68,9 +68,17 @@ async function appendDevLog(
   user: string,
   action: string,
   detail: string,
+  createdByUserId?: string,
 ) {
   await db.devLog.create({
-    data: { id: genId('dlog'), sampleId, user, action, detail },
+    data: {
+      id: genId('dlog'),
+      sampleId,
+      user,
+      action,
+      detail,
+      createdByUserId: createdByUserId ?? null,
+    },
   });
 }
 
@@ -139,10 +147,12 @@ export async function createDevStyle(
   db: TenantPrismaClient,
   tenantId: string,
   body: Record<string, unknown>,
+  creatorUserId?: string,
 ) {
   const { variants, samples, templateStageNames, ...rest } = body;
   const data = sanitizeCreate(rest);
   if (!data.id) data.id = genId('dstyle');
+  data.createdByUserId = creatorUserId ?? null;
   const code = String(data.code ?? '').trim();
   const name = String(data.name ?? '').trim();
   if (!code) throw new AppError(400, '款号不能为空');
@@ -202,6 +212,7 @@ export async function updateDevStyle(
 
   const { variants, samples, ...rest } = body;
   const data = sanitizeUpdate(rest);
+  delete data.createdByUserId;
   // 状态机：常规编辑只允许在 开发中 / 已归档 间切换；
   // 发布（published）必须走 publishDevStyleToProduct，避免出现无产品档案的“已发布”脏数据。
   if ('status' in data) {
@@ -279,6 +290,7 @@ export async function addDevSample(
   db: TenantPrismaClient,
   styleId: string,
   body: { name?: string; stageNames?: string[]; colorId?: string; sizeId?: string },
+  creatorUserId?: string,
 ) {
   const style = await db.devStyle.findUnique({
     where: { id: styleId },
@@ -312,6 +324,7 @@ export async function addDevSample(
       name: body.name?.trim() || `样品 ${Date.now() % 1000}`,
       colorId: sampleColorSize.colorId,
       sizeId: sampleColorSize.sizeId,
+      createdByUserId: creatorUserId ?? null,
       stages: {
         create: names.map((n, i) => ({
           id: genId('dstg'),
@@ -359,6 +372,7 @@ export async function updateDevStage(
     attachments?: Array<{ id?: string; fileName: string; fileUrl: string; fileType?: string }>;
     user?: string;
   },
+  creatorUserId?: string,
 ) {
   const stage = await db.devStage.findUnique({
     where: { id: stageId },
@@ -430,7 +444,14 @@ export async function updateDevStage(
   });
 
   if (updates.length > 0) {
-    await appendDevLog(db, stage.sampleId, user, `节点「${stage.name}」`, updates.join('；'));
+    await appendDevLog(
+      db,
+      stage.sampleId,
+      user,
+      `节点「${stage.name}」`,
+      updates.join('；'),
+      creatorUserId,
+    );
   }
 
   return getDevStyle(db, stage.sample.styleId);
@@ -472,11 +493,13 @@ export async function createDevBom(
   db: TenantPrismaClient,
   tenantId: string,
   body: Record<string, unknown>,
+  creatorUserId?: string,
 ) {
   const { items, ...rest } = body;
   const data = sanitizeCreate(rest);
   await assertDevParentStyle(db, data.parentStyleId);
   if (!data.id) data.id = genId('dbom');
+  data.createdByUserId = creatorUserId ?? null;
   const cleanItems = items
     ? sanitizeItems(items as Record<string, unknown>[], ['bomId'])
     : undefined;
@@ -493,6 +516,7 @@ export async function createDevBom(
 export async function updateDevBom(db: TenantPrismaClient, bomId: string, body: Record<string, unknown>) {
   const { items, ...rest } = body;
   const data = sanitizeUpdate(rest);
+  delete data.createdByUserId;
   const existing = await db.devBom.findUnique({ where: { id: bomId } });
   if (!existing) throw new AppError(404, '开发 BOM 不存在');
   // 若改动父款式归属，校验新父款式同样属于当前租户，避免脏外键

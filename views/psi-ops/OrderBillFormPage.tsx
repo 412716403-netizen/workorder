@@ -527,6 +527,32 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
   ]);
 
   // ── Doc number generators ──
+  /**
+   * 新建单据保存时的正式取号：走后端 `psi.nextDocNumber`（全表扫描，不受「仅本人可见」过滤影响）。
+   * 前端本地 `nextPsiDocNumber` 只看得到当前用户可见的记录，view_own 成员会与他人重号；
+   * 后端失败时才回退本地生成（下方 exists 去重循环仍兜底）。
+   */
+  const resolveNewDocNumber = async (
+    prefix: string,
+    psiType: FormType,
+    fallback: () => string,
+    legacyPrefixes?: string[],
+  ): Promise<string> => {
+    try {
+      const res = await api.psi.nextDocNumber({
+        prefix,
+        psiType,
+        partnerId: form.partnerId || undefined,
+        partnerName: form.partner || undefined,
+        legacyPrefixes,
+      });
+      if (res?.docNumber) return res.docNumber;
+    } catch (e) {
+      console.warn('[OrderBillFormPage] nextDocNumber failed, fallback to local', e);
+    }
+    return fallback();
+  };
+
   const generatePODocNumber = (): string => {
     const pid = form.partnerId || partners.find(p => p.name === form.partner)?.id || '';
     return nextPsiDocNumber('PO', 'PURCHASE_ORDER', partners, recordsList, pid, form.partner || '');
@@ -751,7 +777,9 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       }
       const originalDocNumber = editingDocNumber || '';
       /** 采购订单单号：新增保存时自动生成；编辑沿用原单号且不可改 */
-      let docNumber = editingDocNumber ? editingDocNumber : generatePODocNumber();
+      let docNumber = editingDocNumber
+        ? editingDocNumber
+        : await resolveNewDocNumber('PO', 'PURCHASE_ORDER', generatePODocNumber);
       if (!editingDocNumber) {
         const exists = (n: string) => recordsList.some((r) => r.type === 'PURCHASE_ORDER' && (r.docNumber || '').toLowerCase() === n.toLowerCase());
         let attempts = 0;
@@ -901,7 +929,9 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       }
       const originalDocNumber = editingDocNumber || '';
       /** 采购入库单号：新增保存时自动生成；编辑沿用原单号且不可改 */
-      let docNumber = editingDocNumber ? editingDocNumber : generatePBDocNumber(form.partnerId || '', form.partner || '');
+      let docNumber = editingDocNumber
+        ? editingDocNumber
+        : await resolveNewDocNumber('PB', 'PURCHASE_BILL', () => generatePBDocNumber(form.partnerId || '', form.partner || ''));
       if (!editingDocNumber) {
         const exists = (n: string) => recordsList.some((r) => r.type === 'PURCHASE_BILL' && (r.docNumber || '').toLowerCase() === n.toLowerCase());
         let attempts = 0;
@@ -1041,7 +1071,9 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       }
       const originalDocNumber = editingDocNumber || '';
       /** 销售订单单号：新增保存时自动生成；编辑沿用原单号且不可改 */
-      let docNumber = editingDocNumber ? editingDocNumber : generateSODocNumber();
+      let docNumber = editingDocNumber
+        ? editingDocNumber
+        : await resolveNewDocNumber('SO', 'SALES_ORDER', generateSODocNumber);
       if (!editingDocNumber) {
         const exists = (n: string) => recordsList.some((r) => r.type === 'SALES_ORDER' && (r.docNumber || '').toLowerCase() === n.toLowerCase());
         let attempts = 0;
@@ -1181,7 +1213,9 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         }
       }
       const originalDocNumber = editingDocNumber || '';
-      let docNumber = (editingDocNumber || generateSBDocNumber()).trim();
+      let docNumber = (
+        editingDocNumber || (await resolveNewDocNumber('XS', 'SALES_BILL', generateSBDocNumber, ['SB']))
+      ).trim();
       if (!editingDocNumber) {
         const exists = (n: string) => recordsList.some((r) => r.type === 'SALES_BILL' && (r.docNumber || '').toLowerCase() === n.toLowerCase());
         let attempts = 0;

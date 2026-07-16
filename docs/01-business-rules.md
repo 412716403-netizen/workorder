@@ -724,6 +724,38 @@
 
 **范围外（默认不做）**：财务对账模块中的 PSI/外协金额展示与导出，仍按财务域权限控制；如需叠加金额权限可单独评估。
 
+### 5.6.1 单据「仅本人可见」查看范围（view_own）
+
+销售订单 / 销售单 / 收款单 / 付款单支持两档查看范围（角色编辑同一行「查看」与「查看自己」互斥）：
+
+- **查看**（`<base>:view`）：该类型全部单据可见（原有语义不变）。
+- **查看自己**（`<base>:view_own`）：只可见 `createdByUserId = 自己` 的单据；由**后端列表/详情强制过滤**，前端只做入口门控（Web Tab、工作台快捷入口、小程序菜单持任一档均可进入）。
+- 两者皆无：不显示该单据入口。
+
+关键规则：
+
+- **制单人绑定账号 ID**：创建单据时后端把当前登录账号写入 `createdByUserId`（客户端传值忽略、编辑不可改）；「经办人 `operator`」仍为展示名，不参与权限判断。
+- **仅对新单生效**：历史存量单 `createdByUserId` 为空，仅有「查看自己」的成员看不到；有「查看」的成员照常可见。
+- **编辑/删除**不额外限制为本人单据，仍按角色 `create/edit/delete` 配置；仅有 `view_own` 的角色也可新增/保存（隐式 view 前置放宽为 view 或 view_own）。
+- **不影响聚合口径**：库存聚合、仓库流水、资金账户余额/流水、财务对账、上期结余等仍按全量计算（入口由各自权限键控制）。
+- 范围仅限上述四类单据；采购类、调拨、盘点、账户转账不参与。
+- **单号不因数据过滤重号**：PSI 四单（PO/PB/SO/XS）新建保存的正式取号统一走后端 `GET /psi/next-doc-number`（全表扫描，不受 `view_own` 过滤影响）；前端本地扫可见列表的 `nextPsiDocNumber` 仅作预览与后端失败兜底。财务收/付款新建时前端**不再预生成 `docNo`**（原 today-count 口径对 `view_own` 成员只统计本人单），留空由后端 `createRecord` 带 advisory lock 全表取号。否则「查看自己」成员只见本人单，会与他人已占用的序号重号。
+- **依赖主数据不额外限制**：产品档案、合作单位、产品分类、合作单位分类、颜色尺码字典及 BOM **只读**对本企业任意已登录成员开放（不因其它模块权限组合而 403）；增删改仍受 `basic:products|partners|…` 细粒度约束。见 `docs/07` §4.6.2。
+
+实现锚点：`shared/types.ts`（`resolveDocViewScope` / `OWN_SCOPED_*_TYPE_PERM_BASE`）、`backend/src/middleware/tenant.ts`（`resolveOwnDocScope` / `requireTenantMemberRead`）、`backend/src/utils/docScope.ts`、`psi.service.ts` / `finance.service.ts` 的 `viewerScope`；详见 [`07-auth-tenant-session.md`](./07-auth-tenant-session.md) §4.6.2。
+
+### 5.6.2 制单人账号绑定（无数据级权限）
+
+除 §5.6.1 四类单据外，以下主数据/流水在**创建时**同样由后端写入 `createdByUserId`（客户端传值忽略、编辑不可改；历史单为空、不回填）。本阶段**仅关联制单人账号**，不做列表/详情按本人过滤；`operator` / 报工 `workerId` / `DevLog.user` 等展示名语义不变。
+
+| 域 | 表 / 模型 |
+|----|-----------|
+| 进销存 / 财务 | 全部 `PsiRecord`、`FinanceRecord` 创建路径（含采购/调拨/盘点/转账等；其中仅销售订单/销售单/收款/付款启用 `view_own`） |
+| 生产 | `PlanOrder`、`ProductionOrder`、`ProductionOpRecord`、`MilestoneReport`、`ProductProgressReport`（含协作接单建计划、协作回传/转发派生流水） |
+| 开发 | `DevStyle`、`DevSample`、`DevBom`、`DevStageTemplate`、`DevLog` |
+
+报工：`createdByUserId` = 当前登录提交人；工人身份仍写 `workerId` / `operator` 展示名。
+
 ### 5.7 成员审核权限
 
 - **成员审核（加入申请的通过/拒绝）**：owner 或**被授予「基础信息 → 成员管理 → 添加」（`basic:members:create`）** 细粒度权限的角色成员可审核。
@@ -805,4 +837,4 @@
 
 ---
 
-*最后更新：新增单价/金额查看权限规则（§5.6）。*
+*最后更新：§5.6.1 单据 view_own；§5.6.2 生产/开发等制单人账号绑定（无数据级权限）。*

@@ -76,10 +76,10 @@ export const PRODUCTION_SUB_MODULES: { key: string; label: string; actions: stri
 export const PSI_SUB_MODULES: { key: string; label: string; actions: string[]; group: string }[] = [
   { key: 'purchase_order', label: '采购订单', actions: ['view', 'create', 'edit', 'delete'], group: '采购订单' },
   { key: 'purchase_bill', label: '采购入库', actions: ['view', 'create', 'edit', 'delete'], group: '采购入库' },
-  { key: 'sales_order', label: '销售订单', actions: ['view', 'create', 'edit', 'delete'], group: '销售订单' },
+  { key: 'sales_order', label: '销售订单', actions: ['view', 'view_own', 'create', 'edit', 'delete'], group: '销售订单' },
   { key: 'sales_order_allocation', label: '配货', actions: ['allow'], group: '销售订单' },
   { key: 'sales_order_pending_shipment', label: '待发货清单', actions: ['allow'], group: '销售订单' },
-  { key: 'sales_bill', label: '销售单', actions: ['view', 'create', 'edit', 'delete'], group: '销售单' },
+  { key: 'sales_bill', label: '销售单', actions: ['view', 'view_own', 'create', 'edit', 'delete'], group: '销售单' },
   { key: 'warehouse_list', label: '主列表', actions: ['allow'], group: '仓库管理' },
   { key: 'warehouse_stocktake', label: '盘点单', actions: ['view', 'create', 'edit', 'delete'], group: '仓库管理' },
   { key: 'warehouse_transfer', label: '调拨单', actions: ['view', 'create', 'edit', 'delete'], group: '仓库管理' },
@@ -87,8 +87,8 @@ export const PSI_SUB_MODULES: { key: string; label: string; actions: string[]; g
 ];
 
 export const FINANCE_SUB_MODULES: { key: string; label: string; actions: string[]; group: string }[] = [
-  { key: 'receipt', label: '收款单', actions: ['view', 'create', 'edit', 'delete'], group: '收款单' },
-  { key: 'payment', label: '付款单', actions: ['view', 'create', 'edit', 'delete'], group: '付款单' },
+  { key: 'receipt', label: '收款单', actions: ['view', 'view_own', 'create', 'edit', 'delete'], group: '收款单' },
+  { key: 'payment', label: '付款单', actions: ['view', 'view_own', 'create', 'edit', 'delete'], group: '付款单' },
   { key: 'account', label: '资金账户', actions: ['view'], group: '资金账户' },
   { key: 'transfer', label: '账户转账', actions: ['view', 'create', 'edit', 'delete'], group: '资金账户' },
   { key: 'reconciliation', label: '财务对帐', actions: ['allow'], group: '财务对帐' },
@@ -106,10 +106,19 @@ export {
 
 export const ACTION_LABELS: Record<string, string> = {
   view: '查看',
+  view_own: '查看自己',
   create: '添加',
   edit: '编辑',
   delete: '删除',
 };
+
+/**
+ * 「全选」类操作的目标动作集合：排除 `view_own`。
+ * `view_own`（仅看自己创建的单据）与 `view`（查看全部）互斥，全选时只勾 `view`。
+ */
+export function fullSelectActions(actions: string[]): string[] {
+  return actions.filter(a => a !== 'view_own');
+}
 
 export type Member = {
   id: string; userId: string; username: string; phone?: string;

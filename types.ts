@@ -134,6 +134,11 @@ export {
   type ProcessPriceParentProductRow,
   type ProcessPriceNodesResponse,
   type ProcessPriceNodeRow,
+  type DocViewScope,
+  OWN_SCOPED_PSI_TYPE_PERM_BASE,
+  OWN_SCOPED_FINANCE_TYPE_PERM_BASE,
+  resolveDocViewScope,
+  canViewDocList,
 } from './shared/types';
 
 export { formatMaterialPriceRuleLabel, resolveParentBomDefaultRule } from './shared/materialPurchasePrice';

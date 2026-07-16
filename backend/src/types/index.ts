@@ -106,6 +106,11 @@ export {
   type MaterialPricePeriodMode,
   type MaterialPricePeriod,
   type ProductMaterialPricePeriodConfig,
+  type DocViewScope,
+  OWN_SCOPED_PSI_TYPE_PERM_BASE,
+  OWN_SCOPED_FINANCE_TYPE_PERM_BASE,
+  resolveDocViewScope,
+  canViewDocList,
 } from '../../../shared/types.js';
 
 export { formatMaterialPriceRuleLabel } from '../../../shared/materialPurchasePrice.js';

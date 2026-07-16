@@ -1,5 +1,5 @@
 const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
-const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require2 = require('../../utils/permissions.js'),hasDocViewPermission = _require2.hasDocViewPermission;
 const _require3 = require('../config/financePayments.js'),DEFAULT_PAGE_SIZE = _require3.DEFAULT_PAGE_SIZE,FINANCE_TYPE = _require3.FINANCE_TYPE;
 const _require4 =
 
@@ -83,7 +83,7 @@ Page({
       wx.reLaunch({ url: '/pages/tenant-select/tenant-select' });
       return;
     }
-    if (!hasPermission(ctx.permissions || [], 'finance:payment:view')) {
+    if (!hasDocViewPermission(ctx.permissions || [], 'finance:payment:view')) {
       wx.showToast({ title: '无权限', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 800);
       return;

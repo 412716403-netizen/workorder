@@ -70,10 +70,11 @@ SmartTrack Pro 微信小程序采用 **企业蓝 + 卡片化 + 底部 Tab** 的 
 RBAC 字段单一事实源：[`shared/workbenchShortcuts.ts`](../shared/workbenchShortcuts.ts)（小程序在 [`miniprogram/config/menus.js`](../miniprogram/config/menus.js) 维护同构 `WORKBENCH_SHORTCUT_CATALOG` + 专属 `path`）。
 
 - `HOME_QUICK_ENTRIES` / `DEFAULT_HOME_SHORTCUT_IDS`：默认快捷 id 列表，与 Web [`DEFAULT_DASHBOARD_SHORTCUT_IDS`](../shared/workbenchShortcuts.ts) 一致
-- 首页蓝色区域拉取 `GET /dashboard/shortcuts`，经 [`utils/workbenchShortcuts.js`](../miniprogram/utils/workbenchShortcuts.js) 解析后，用 [`utils/accessControl.js`](../miniprogram/utils/accessControl.js) 的 `filterShortcutsByAccess` 过滤（与 Web `filterWorkbenchShortcutsByAccess` + 协作侧栏规则一致；含 owner 提权、插件开关、协作双门控）
+- 首页蓝色区域拉取 `GET /dashboard/shortcuts`，经 [`utils/workbenchShortcuts.js`](../miniprogram/utils/workbenchShortcuts.js) 解析后，用 [`utils/accessControl.js`](../miniprogram/utils/accessControl.js) 的 `filterShortcutsByAccess` 过滤（与 Web `filterWorkbenchShortcutsByAccess` + 协作侧栏规则一致；含 owner 提权、插件开关、协作双门控；`:view` 入口兼容 `view_own`）
 - `APP_CATEGORIES`：应用中心，由同文件内 `WORKBENCH_SHORTCUT_CATALOG` 按 `group` 派生；展示顺序见 `APP_GROUP_ORDER`（**插件中心**置顶，其后生产管理、进销存、财务结算、基础信息）
 - `buildAppCategories(permissions, keyword, plugins, tenantRole)`：按 RBAC + 插件过滤（`keyword` 保留供扩展，应用页未启用搜索）
 - 系统设置 Tab 可见性：`config/settingsTabs.js` 使用 `canViewSettingsTab`（对齐 Web `SettingsView`：`owner` 全开，其余按 `settings:<tab>:view` 与裸 `settings` 模块键）
+- **单据「仅本人可见」**：销售订单 / 销售单 / 收款单 / 付款单持 `view_own` 时可进应用中心与列表页（`hasShortcutPerm` / `hasDocViewPermission`）；列表数据仍由后端 `viewerScope` 过滤
 
 ### 权限热同步
 
@@ -547,8 +548,8 @@ npm run miniprogram:icons
 
 | 页面 | 路径 | 职责 |
 |------|------|------|
-| 收款单 Hub | [`packageFinance/finance-receipts/`](../miniprogram/packageFinance/finance-receipts/) | 分页列表、搜索、流水快捷入口、新建 |
-| 收款单详情 | [`packageFinance/finance-receipt-detail/`](../miniprogram/packageFinance/finance-receipt-detail/) | 分类/客户/账户/工人/产品/自定义内容（**图片可预览**）/金额；编辑/删除 |
+| 收款单 Hub | [`packageFinance/finance-receipts/`](../miniprogram/packageFinance/finance-receipts/) | 分页列表（含**经办人**）、搜索、流水快捷入口、新建 |
+| 收款单详情 | [`packageFinance/finance-receipt-detail/`](../miniprogram/packageFinance/finance-receipt-detail/) | 分类/客户/账户/工人/产品/自定义内容（**图片可预览**）/金额/**业务时间**/**经办人**；编辑/删除 |
 | 登记/编辑 | [`packageFinance/finance-receipt-edit/`](../miniprogram/packageFinance/finance-receipt-edit/) | **日历式**创建时间（`datetime-calendar-select`）、**标签式**单据分类（`finance-category-tag-select`）、**列表式**收支账户（`finance-account-select`）、分类联动（合作单位/工人/产品）、**类型自定义内容**、金额、备注 |
 | 收款流水 | [`packageFinance/finance-receipt-flow/`](../miniprogram/packageFinance/finance-receipt-flow/) | 日期/搜索筛选流水 |
 
@@ -577,8 +578,8 @@ npm run miniprogram:icons
 
 | 页面 | 路径 | 职责 |
 |------|------|------|
-| 付款单 Hub | [`packageFinance/finance-payments/`](../miniprogram/packageFinance/finance-payments/) | 分页列表、搜索、流水快捷入口、新建 |
-| 付款单详情 | [`packageFinance/finance-payment-detail/`](../miniprogram/packageFinance/finance-payment-detail/) | 分类/收款单位/账户/工人/产品/自定义内容（**图片可预览**）/金额；编辑/删除 |
+| 付款单 Hub | [`packageFinance/finance-payments/`](../miniprogram/packageFinance/finance-payments/) | 分页列表（含**经办人**）、搜索、流水快捷入口、新建 |
+| 付款单详情 | [`packageFinance/finance-payment-detail/`](../miniprogram/packageFinance/finance-payment-detail/) | 分类/收款单位/账户/工人/产品/自定义内容（**图片可预览**）/金额/**业务时间**/**经办人**；编辑/删除 |
 | 登记/编辑 | [`packageFinance/finance-payment-edit/`](../miniprogram/packageFinance/finance-payment-edit/) | **日历式**创建时间、**标签式**单据分类、**列表式**收支账户、分类联动、**类型自定义内容**、收款单位/个人、金额、备注 |
 | 付款流水 | [`packageFinance/finance-payment-flow/`](../miniprogram/packageFinance/finance-payment-flow/) | 日期/搜索筛选流水，底部合计栏 |
 

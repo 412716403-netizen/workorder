@@ -3,6 +3,8 @@ import { str, optStr } from '../utils/request.js';
 import * as financeService from '../services/finance.service.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { listQueryFromRequest, warnListAllFromRequest } from '../utils/listQuery.js';
+import { resolveOwnDocScope } from '../middleware/tenant.js';
+import { OWN_SCOPED_FINANCE_TYPE_PERM_BASE } from '../types/index.js';
 
 function parseFinanceFilter(req: { query: Record<string, unknown> }) {
   return {
@@ -24,8 +26,10 @@ export const listRecords = asyncHandler(async (req, res) => {
   const db = getTenantPrisma(req.tenantId!);
   const { all, page, pageSize } = listQueryFromRequest(req);
   if (all) warnListAllFromRequest('finance.listRecords', req);
+  const viewerScope = await resolveOwnDocScope(req, OWN_SCOPED_FINANCE_TYPE_PERM_BASE);
   res.json(await financeService.listRecords(db, {
     ...parseFinanceFilter(req),
+    viewerScope,
     all,
     page,
     pageSize,
@@ -59,7 +63,7 @@ export const createTransfer = asyncHandler(async (req, res) => {
     timestamp: optStr(req.body.timestamp),
     note: optStr(req.body.note),
     operator: optStr(req.body.operator),
-  });
+  }, req.user?.userId);
   res.status(201).json(result);
 });
 
@@ -87,12 +91,22 @@ export const getRecord = asyncHandler(async (req, res) => {
   const db = getTenantPrisma(req.tenantId!);
   const record = await financeService.getRecord(db, str(req.params.id));
   if (!record) { res.status(404).json({ error: '记录不存在' }); return; }
+  // 「仅本人可见」：该 type 为 own 范围且非本人创建时按不存在处理（不暴露存在性）
+  const viewerScope = await resolveOwnDocScope(req, OWN_SCOPED_FINANCE_TYPE_PERM_BASE);
+  if (
+    viewerScope &&
+    viewerScope.ownTypes.includes(record.type) &&
+    record.createdByUserId !== viewerScope.userId
+  ) {
+    res.status(404).json({ error: '记录不存在' });
+    return;
+  }
   res.json(record);
 });
 
 export const createRecord = asyncHandler(async (req, res) => {
   const db = getTenantPrisma(req.tenantId!);
-  const record = await financeService.createRecord(db, req.body, req.tenantId);
+  const record = await financeService.createRecord(db, req.body, req.tenantId, req.user?.userId);
   res.status(201).json(record);
 });
 

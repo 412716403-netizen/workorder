@@ -637,6 +637,7 @@ export async function createReport(
       approvalStatus,
       approvedAt: requireApproval ? null : now,
       approvedBy: requireApproval ? null : (opts.actorUserId ?? null),
+      createdByUserId: opts.actorUserId ?? null,
     } as any,
   });
   // PENDING 不推进 completedQuantity；APPROVED 才 recalc
@@ -679,6 +680,7 @@ export async function updateReport(
   await verifyMilestoneTenant(milestoneId, tenantId);
   await assertReportAllowsMutation(reportId, 'milestone');
   const data = sanitizeUpdate(body);
+  delete data.createdByUserId;
   normalizeDates(data);
 
   if ('weight' in body) {
@@ -1075,6 +1077,7 @@ export async function createProductReport(
       approvalStatus,
       approvedAt: requireApproval ? null : now,
       approvedBy: requireApproval ? null : (opts.actorUserId ?? null),
+      createdByUserId: opts.actorUserId ?? null,
     } as any,
   });
 
@@ -1100,6 +1103,7 @@ export async function updateProductReport(
   await assertReportAllowsMutation(reportId, 'product');
 
   const updateData = sanitizeUpdate(body);
+  delete updateData.createdByUserId;
   normalizeDates(updateData);
 
   if ('weight' in body) {

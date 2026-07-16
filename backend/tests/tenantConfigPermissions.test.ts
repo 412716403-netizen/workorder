@@ -13,6 +13,12 @@ describe('tenant config permissions', () => {
     expect(canReadTenantConfig(['production:outsource_form_config:allow'])).toBe(true);
   });
 
+  it('canReadTenantConfig allows psi / finance document roles to read form settings', () => {
+    expect(canReadTenantConfig(['psi:sales_order:view_own'])).toBe(true);
+    expect(canReadTenantConfig(['psi:purchase_bill:view'])).toBe(true);
+    expect(canReadTenantConfig(['finance:receipt:view_own'])).toBe(true);
+  });
+
   it('canReadTenantConfig denies unrelated production permissions', () => {
     expect(canReadTenantConfig(['production:outsource_list:allow'])).toBe(false);
   });

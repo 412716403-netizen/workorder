@@ -1,5 +1,5 @@
 const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
-const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
+const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission,hasDocViewPermission = _require2.hasDocViewPermission;
 const _require3 = require('../config/salesBills.js'),PSI_TYPE = _require3.PSI_TYPE;
 const _require4 =
 
@@ -68,7 +68,7 @@ Page({
       wx.reLaunch({ url: '/pages/tenant-select/tenant-select' });
       return;
     }
-    if (!hasPermission(ctx.permissions || [], 'psi:sales_bill:view')) {
+    if (!hasDocViewPermission(ctx.permissions || [], 'psi:sales_bill:view')) {
       wx.showToast({ title: '无权限', icon: 'none' });
       setTimeout(() => wx.navigateBack(), 800);
       return;

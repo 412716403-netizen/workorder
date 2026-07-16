@@ -15,6 +15,7 @@ import {
   FINANCE_SUB_MODULES,
   COLLABORATION_SUB_MODULES,
   ACTION_LABELS,
+  fullSelectActions,
 } from './constants';
 import {
   AMOUNT_FINE_GRAINED_PERM_KEYS,
@@ -61,6 +62,37 @@ function computeInitialPerms(role: RoleRow | null): string[] {
     perms.push('price_amount');
   }
   return perms;
+}
+
+/**
+ * PSI / 财务单据类权限的勾选逻辑（含「查看自己 view_own」）：
+ * - `view`（查看全部）与 `view_own`（仅看自己创建）互斥，勾任一自动取消另一个；
+ * - 取消 `view` 清空该子模块全部动作（原行为）；取消 `view_own` 仅取消自身；
+ * - 勾 create/edit/delete 时，若 `view` / `view_own` 皆无则默认补 `view`（原行为）。
+ */
+function toggleDocScopedPerm(prev: string[], perm: string): string[] {
+  const parts = perm.split(':');
+  const mod = `${parts[0]}:${parts[1]}`;
+  const action = parts[2];
+  const viewPerm = `${mod}:view`;
+  const viewOwnPerm = `${mod}:view_own`;
+  if (prev.includes(perm)) {
+    if (action === 'view') {
+      return prev.filter(p => !p.startsWith(`${mod}:`));
+    }
+    return prev.filter(p => p !== perm);
+  }
+  if (action === 'view') {
+    return [...prev.filter(p => p !== viewOwnPerm), perm];
+  }
+  if (action === 'view_own') {
+    return [...prev.filter(p => p !== viewPerm), perm];
+  }
+  const next = [...prev, perm];
+  if (action !== 'allow' && !next.includes(viewPerm) && !next.includes(viewOwnPerm)) {
+    next.push(viewPerm);
+  }
+  return next;
 }
 
 function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
@@ -354,29 +386,12 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
   }
 
   function togglePsiPerm(perm: string) {
-    setRolePerms(prev => {
-      const parts = perm.split(':');
-      const mod = `${parts[0]}:${parts[1]}`;
-      const action = parts[2];
-      if (prev.includes(perm)) {
-        if (action === 'view') {
-          return prev.filter(p => !p.startsWith(`${mod}:`));
-        }
-        return prev.filter(p => p !== perm);
-      } else {
-        const next = [...prev, perm];
-        if (action !== 'view' && action !== 'allow') {
-          const viewPerm = `${mod}:view`;
-          if (!next.includes(viewPerm)) next.push(viewPerm);
-        }
-        return next;
-      }
-    });
+    setRolePerms(prev => toggleDocScopedPerm(prev, perm));
   }
 
   function togglePsiAll() {
     const allPerms = PSI_SUB_MODULES.flatMap(sm =>
-      sm.actions.map(a => `psi:${sm.key}:${a}`)
+      fullSelectActions(sm.actions).map(a => `psi:${sm.key}:${a}`)
     );
     const hasAll = allPerms.every(p => rolePerms.includes(p));
     setRolePerms(prev =>
@@ -387,7 +402,7 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
   function togglePsiSubModuleAll(smKey: string) {
     const sm = PSI_SUB_MODULES.find(s => s.key === smKey);
     if (!sm) return;
-    const perms = sm.actions.map(a => `psi:${smKey}:${a}`);
+    const perms = fullSelectActions(sm.actions).map(a => `psi:${smKey}:${a}`);
     const hasAll = perms.every(p => rolePerms.includes(p));
     setRolePerms(prev =>
       hasAll ? prev.filter(p => !p.startsWith(`psi:${smKey}:`)) : [...prev.filter(p => !p.startsWith(`psi:${smKey}:`)), ...perms]
@@ -396,7 +411,7 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
 
   function togglePsiGroupAll(group: string) {
     const groupItems = PSI_SUB_MODULES.filter(sm => sm.group === group);
-    const allPerms = groupItems.flatMap(sm => sm.actions.map(a => `psi:${sm.key}:${a}`));
+    const allPerms = groupItems.flatMap(sm => fullSelectActions(sm.actions).map(a => `psi:${sm.key}:${a}`));
     const hasAll = allPerms.every(p => rolePerms.includes(p));
     setRolePerms(prev => {
       const groupPrefixes = groupItems.map(sm => `psi:${sm.key}:`);
@@ -406,29 +421,12 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
   }
 
   function toggleFinancePerm(perm: string) {
-    setRolePerms(prev => {
-      const parts = perm.split(':');
-      const mod = `${parts[0]}:${parts[1]}`;
-      const action = parts[2];
-      if (prev.includes(perm)) {
-        if (action === 'view') {
-          return prev.filter(p => !p.startsWith(`${mod}:`));
-        }
-        return prev.filter(p => p !== perm);
-      } else {
-        const next = [...prev, perm];
-        if (action !== 'view' && action !== 'allow') {
-          const viewPerm = `${mod}:view`;
-          if (!next.includes(viewPerm)) next.push(viewPerm);
-        }
-        return next;
-      }
-    });
+    setRolePerms(prev => toggleDocScopedPerm(prev, perm));
   }
 
   function toggleFinanceAll() {
     const allPerms = FINANCE_SUB_MODULES.flatMap(sm =>
-      sm.actions.map(a => `finance:${sm.key}:${a}`)
+      fullSelectActions(sm.actions).map(a => `finance:${sm.key}:${a}`)
     );
     const hasAll = allPerms.every(p => rolePerms.includes(p));
     setRolePerms(prev =>
@@ -439,7 +437,7 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
   function toggleFinanceSubModuleAll(smKey: string) {
     const sm = FINANCE_SUB_MODULES.find(s => s.key === smKey);
     if (!sm) return;
-    const perms = sm.actions.map(a => `finance:${smKey}:${a}`);
+    const perms = fullSelectActions(sm.actions).map(a => `finance:${smKey}:${a}`);
     const hasAll = perms.every(p => rolePerms.includes(p));
     setRolePerms(prev =>
       hasAll ? prev.filter(p => !p.startsWith(`finance:${smKey}:`)) : [...prev.filter(p => !p.startsWith(`finance:${smKey}:`)), ...perms]
@@ -448,7 +446,7 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
 
   function toggleFinanceGroupAll(group: string) {
     const groupItems = FINANCE_SUB_MODULES.filter(sm => sm.group === group);
-    const allPerms = groupItems.flatMap(sm => sm.actions.map(a => `finance:${sm.key}:${a}`));
+    const allPerms = groupItems.flatMap(sm => fullSelectActions(sm.actions).map(a => `finance:${sm.key}:${a}`));
     const hasAll = allPerms.every(p => rolePerms.includes(p));
     setRolePerms(prev => {
       const groupPrefixes = groupItems.map(sm => `finance:${sm.key}:`);
@@ -501,7 +499,9 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
       const sm = PRICE_AMOUNT_SUB_MODULES.find(s => s.permKey === permKey);
       if (sm?.requiresDocViewOnEnable) {
         const viewPerm = permKey.replace(':amount', ':view');
-        if (!next.includes(viewPerm)) next.push(viewPerm);
+        const viewOwnPerm = permKey.replace(':amount', ':view_own');
+        // 已配「查看自己」时不强补「查看全部」，避免悄悄放大数据范围
+        if (!next.includes(viewPerm) && !next.includes(viewOwnPerm)) next.push(viewPerm);
       }
       return next;
     });
@@ -517,7 +517,7 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
       const next = new Set(prev);
       for (const sm of PRICE_AMOUNT_SUB_MODULES) {
         next.add(sm.permKey);
-        if (sm.requiresDocViewOnEnable) {
+        if (sm.requiresDocViewOnEnable && !next.has(sm.permKey.replace(':amount', ':view_own'))) {
           next.add(sm.permKey.replace(':amount', ':view'));
         }
       }
@@ -535,7 +535,7 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
       const next = new Set(without);
       for (const sm of items) {
         next.add(sm.permKey);
-        if (sm.requiresDocViewOnEnable) {
+        if (sm.requiresDocViewOnEnable && !next.has(sm.permKey.replace(':amount', ':view_own'))) {
           next.add(sm.permKey.replace(':amount', ':view'));
         }
       }
@@ -1033,14 +1033,14 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
                           <label className="flex items-center gap-2 cursor-pointer">
                             <input
                               type="checkbox"
-                              checked={PSI_SUB_MODULES.flatMap(sm => sm.actions.map(a => `psi:${sm.key}:${a}`)).every(p => rolePerms.includes(p))}
+                              checked={PSI_SUB_MODULES.flatMap(sm => fullSelectActions(sm.actions).map(a => `psi:${sm.key}:${a}`)).every(p => rolePerms.includes(p))}
                               onChange={togglePsiAll}
                               className="rounded border-gray-300 text-indigo-600 cursor-pointer w-4 h-4"
                             />
                             全选
                           </label>
                         </th>
-                        {['view', 'create', 'edit', 'delete'].map(a => (
+                        {['view', 'view_own', 'create', 'edit', 'delete'].map(a => (
                           <th key={a} className="text-center px-2 py-2 font-medium text-slate-600">{ACTION_LABELS[a] ?? a}</th>
                         ))}
                       </tr>
@@ -1055,11 +1055,11 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
                           const crudItems = items.filter(sm => !(sm.actions.length === 1 && sm.actions[0] === 'allow'));
                           rows.push(
                             <tr key={`psi-g-${group}`} className="bg-indigo-50/40">
-                              <td colSpan={5} className="px-4 py-1.5">
+                              <td colSpan={6} className="px-4 py-1.5">
                                 <label className="flex items-center gap-2 cursor-pointer">
                                   <input
                                     type="checkbox"
-                                    checked={items.flatMap(sm => sm.actions.map(a => `psi:${sm.key}:${a}`)).every(p => rolePerms.includes(p))}
+                                    checked={items.flatMap(sm => fullSelectActions(sm.actions).map(a => `psi:${sm.key}:${a}`)).every(p => rolePerms.includes(p))}
                                     onChange={() => togglePsiGroupAll(group)}
                                     className="rounded border-gray-300 text-indigo-600 cursor-pointer w-4 h-4"
                                   />
@@ -1070,7 +1070,7 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
                           );
                           {allowItems.length > 0 && rows.push(
                             <tr key={`psi-a-${group}`} className="hover:bg-slate-50/50">
-                              <td colSpan={5} className="px-4 pl-8 py-2.5">
+                              <td colSpan={6} className="px-4 pl-8 py-2.5">
                                 <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5">
                                   {allowItems.map(sm => (
                                     <label key={sm.key} className="flex items-center gap-1.5 cursor-pointer">
@@ -1094,14 +1094,14 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
                                   <label className="flex items-center gap-2 cursor-pointer">
                                     <input
                                       type="checkbox"
-                                      checked={sm.actions.every(a => rolePerms.includes(`psi:${sm.key}:${a}`))}
+                                      checked={fullSelectActions(sm.actions).every(a => rolePerms.includes(`psi:${sm.key}:${a}`))}
                                       onChange={() => togglePsiSubModuleAll(sm.key)}
                                       className="rounded border-gray-300 text-indigo-600 cursor-pointer w-4 h-4"
                                     />
                                     {sm.label}
                                   </label>
                                 </td>
-                                {['view', 'create', 'edit', 'delete'].map(action => {
+                                {['view', 'view_own', 'create', 'edit', 'delete'].map(action => {
                                   const perm = `psi:${sm.key}:${action}`;
                                   const available = sm.actions.includes(action);
                                   return (
@@ -1164,14 +1164,14 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
                           <label className="flex items-center gap-2 cursor-pointer">
                             <input
                               type="checkbox"
-                              checked={FINANCE_SUB_MODULES.flatMap(sm => sm.actions.map(a => `finance:${sm.key}:${a}`)).every(p => rolePerms.includes(p))}
+                              checked={FINANCE_SUB_MODULES.flatMap(sm => fullSelectActions(sm.actions).map(a => `finance:${sm.key}:${a}`)).every(p => rolePerms.includes(p))}
                               onChange={toggleFinanceAll}
                               className="rounded border-gray-300 text-indigo-600 cursor-pointer w-4 h-4"
                             />
                             全选
                           </label>
                         </th>
-                        {['view', 'create', 'edit', 'delete'].map(a => (
+                        {['view', 'view_own', 'create', 'edit', 'delete'].map(a => (
                           <th key={a} className="text-center px-2 py-2 font-medium text-slate-600">{ACTION_LABELS[a]}</th>
                         ))}
                       </tr>
@@ -1186,11 +1186,11 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
                           const crudItems = items.filter(sm => !(sm.actions.length === 1 && sm.actions[0] === 'allow'));
                           rows.push(
                             <tr key={`fin-g-${group}`} className="bg-indigo-50/40">
-                              <td colSpan={5} className="px-4 py-1.5">
+                              <td colSpan={6} className="px-4 py-1.5">
                                 <label className="flex items-center gap-2 cursor-pointer">
                                   <input
                                     type="checkbox"
-                                    checked={items.flatMap(sm => sm.actions.map(a => `finance:${sm.key}:${a}`)).every(p => rolePerms.includes(p))}
+                                    checked={items.flatMap(sm => fullSelectActions(sm.actions).map(a => `finance:${sm.key}:${a}`)).every(p => rolePerms.includes(p))}
                                     onChange={() => toggleFinanceGroupAll(group)}
                                     className="rounded border-gray-300 text-indigo-600 cursor-pointer w-4 h-4"
                                   />
@@ -1201,7 +1201,7 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
                           );
                           {allowItems.length > 0 && rows.push(
                             <tr key={`fin-a-${group}`} className="hover:bg-slate-50/50">
-                              <td colSpan={5} className="px-4 pl-8 py-2.5">
+                              <td colSpan={6} className="px-4 pl-8 py-2.5">
                                 <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5">
                                   {allowItems.map(sm => (
                                     <label key={sm.key} className="flex items-center gap-1.5 cursor-pointer">
@@ -1225,14 +1225,14 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
                                   <label className="flex items-center gap-2 cursor-pointer">
                                     <input
                                       type="checkbox"
-                                      checked={sm.actions.every(a => rolePerms.includes(`finance:${sm.key}:${a}`))}
+                                      checked={fullSelectActions(sm.actions).every(a => rolePerms.includes(`finance:${sm.key}:${a}`))}
                                       onChange={() => toggleFinanceSubModuleAll(sm.key)}
                                       className="rounded border-gray-300 text-indigo-600 cursor-pointer w-4 h-4"
                                     />
                                     {sm.label}
                                   </label>
                                 </td>
-                                {['view', 'create', 'edit', 'delete'].map(action => {
+                                {['view', 'view_own', 'create', 'edit', 'delete'].map(action => {
                                   const perm = `finance:${sm.key}:${action}`;
                                   const available = sm.actions.includes(action);
                                   return (

@@ -6,6 +6,7 @@ import {
   requireSubPermissionOrProductionRead,
   requireSubPermissionOrFinanceRead,
   requireSubPermissionOrProductionOrFinanceRead,
+  requireTenantMemberRead,
   requireTenantConfigEdit,
   requireTenantConfigRead,
 } from '../middleware/tenant.js';
@@ -49,14 +50,14 @@ const updateConfigSchema = z.object({
 });
 
 // 产品分类（列表读放宽给生产域 / 财务域：报工色码矩阵与收付款「关联产品」选择器均依赖）
-router.get('/categories',      requireSubPermissionOrProductionOrFinanceRead('settings:categories:view'),   ctrl.listCategories);
+router.get('/categories',      requireTenantMemberRead(),   ctrl.listCategories);
 router.get('/categories/usage', requireSubPermission('settings:categories:view'),  ctrl.getCategoryUsage);
 router.post('/categories',     requireSubPermission('settings:categories:create'), validate(nameRequiredSchema), ctrl.createCategory);
 router.put('/categories/:id',  requireSubPermission('settings:categories:edit'),   validate(updateNameSchema), ctrl.updateCategory);
 router.delete('/categories/:id', requireSubPermission('settings:categories:delete'), ctrl.deleteCategory);
 
 // 合作单位分类（财务收付款「关联合作单位」选择器 Tab）
-router.get('/partner-categories',      requireSubPermissionOrFinanceRead('settings:partner_categories:view'),   ctrl.listPartnerCategories);
+router.get('/partner-categories',      requireTenantMemberRead(),   ctrl.listPartnerCategories);
 router.get('/partner-categories/usage', requireSubPermission('settings:partner_categories:view'),  ctrl.getPartnerCategoryUsage);
 router.post('/partner-categories',     requireSubPermission('settings:partner_categories:create'), validate(nameRequiredSchema), ctrl.createPartnerCategory);
 router.put('/partner-categories/:id',  requireSubPermission('settings:partner_categories:edit'),   validate(updateNameSchema), ctrl.updatePartnerCategory);
@@ -70,7 +71,7 @@ router.put('/nodes/:id',  requireSubPermission('settings:nodes:edit'),   validat
 router.delete('/nodes/:id', requireSubPermission('settings:nodes:delete'), ctrl.deleteNode);
 
 // 仓库
-router.get('/warehouses',      requireSubPermission('settings:warehouses:view'),   ctrl.listWarehouses);
+router.get('/warehouses',      requireSubPermissionOrProductionOrFinanceRead('settings:warehouses:view'),   ctrl.listWarehouses);
 router.get('/warehouses/usage', requireSubPermission('settings:warehouses:view'),  ctrl.getWarehouseUsage);
 router.post('/warehouses',     requireSubPermission('settings:warehouses:create'), validate(nameRequiredSchema), ctrl.createWarehouse);
 router.put('/warehouses/:id',  requireSubPermission('settings:warehouses:edit'),   validate(updateNameSchema), ctrl.updateWarehouse);

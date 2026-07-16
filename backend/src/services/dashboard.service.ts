@@ -1,7 +1,7 @@
 import { prisma as basePrisma } from '../lib/prisma.js';
 import { getTenantPrisma, type TenantPrismaClient } from '../lib/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
-import { isTenantElevatedRole, hasSubPermission } from '../types/index.js';
+import { isTenantElevatedRole, hasSubPermission, canViewDocList } from '../types/index.js';
 import { loadEffectivePermissions } from '../services/auth.service.js';
 import * as settingsService from './settings.service.js';
 import * as productionService from './production.service.js';
@@ -146,7 +146,13 @@ function filterShortcutIdsByAccess(
       if (item.pluginId && featurePlugins[item.pluginId] === false) return false;
       if (isTenantElevatedRole(tenantRole)) return true;
       if (!permissions || permissions.length === 0) return false;
-      if (item.perm && !hasSubPermission(permissions, item.perm)) return false;
+      // `:view` 结尾的入口兼容「仅本人可见」：持 `<base>:view_own` 同样可见（数据由列表接口过滤）
+      if (item.perm) {
+        const ok = item.perm.endsWith(':view')
+          ? canViewDocList(permissions, item.perm.slice(0, -':view'.length))
+          : hasSubPermission(permissions, item.perm);
+        if (!ok) return false;
+      }
       if (item.module && !hasSubPermission(permissions, item.module)) {
         if (!permissions.some(p => p.startsWith(`${item.module}:`))) return false;
       }

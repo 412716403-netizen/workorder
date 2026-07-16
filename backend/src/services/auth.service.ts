@@ -145,6 +145,15 @@ export async function loadEffectivePermissions(userId: string, tenantId: string)
   return payload.permissions ?? [];
 }
 
+/** 当前用户在指定租户的成员角色（owner / worker 等）；供列表 scope 等与 JWT 交叉校验。 */
+export async function loadMembershipRole(
+  userId: string,
+  tenantId: string,
+): Promise<string | undefined> {
+  const payload = await buildTenantPayload(userId, tenantId);
+  return payload.tenantRole;
+}
+
 async function buildTenantPayload(userId: string, tenantId?: string): Promise<TenantPayloadResult> {
   const cacheKey = tenantCacheKey(userId, tenantId);
   if (getRedis()) {

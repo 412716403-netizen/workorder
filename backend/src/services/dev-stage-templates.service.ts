@@ -48,6 +48,7 @@ export async function createDevStageTemplate(
   db: TenantPrismaClient,
   tenantId: string,
   body: { name: string; order?: number; fields?: TemplateFieldInput[] },
+  creatorUserId?: string,
 ) {
   const name = body.name?.trim();
   if (!name) throw new AppError(400, '模板名称不能为空');
@@ -58,6 +59,7 @@ export async function createDevStageTemplate(
       tenantId,
       name,
       order: body.order ?? 0,
+      createdByUserId: creatorUserId ?? null,
       fields: body.fields?.length
         ? { create: body.fields.map((f, i) => normalizeFieldRow(f, i)) }
         : undefined,
