@@ -9,6 +9,7 @@ interface EditorInsertHandleProps {
   editable: boolean;
   onPickImage?: () => void;
   onOpenLinkDialog?: () => void;
+  onOpenProductDialog?: () => void;
 }
 
 interface HandlePos {
@@ -36,7 +37,7 @@ function findBlockElement(node: HTMLElement, root: HTMLElement): HTMLElement | n
     if (
       tag === 'P' || tag === 'H1' || tag === 'H2' || tag === 'H3'
       || tag === 'LI' || tag === 'BLOCKQUOTE' || tag === 'PRE'
-      || tag === 'HR' || tag === 'TABLE'
+      || tag === 'HR'
     ) {
       return el;
     }
@@ -45,18 +46,69 @@ function findBlockElement(node: HTMLElement, root: HTMLElement): HTMLElement | n
       if (firstLi) return firstLi as HTMLElement;
       return el;
     }
+    // 表格本身不是插入目标；继续向上，由外层再解析单元格内块
+    if (tag === 'TABLE' || el.classList.contains('tableWrapper')) {
+      el = el.parentElement;
+      continue;
+    }
     el = el.parentElement;
   }
   return null;
 }
 
-function blockElAtClientY(editor: Editor, clientY: number): HTMLElement | null {
+/** 在表格内按坐标找到可插入的块（单元格内段落等） */
+function blockInsideTable(
+  tableOrWrap: HTMLElement,
+  clientX: number,
+  clientY: number,
+): HTMLElement | null {
+  const table = tableOrWrap.tagName === 'TABLE'
+    ? tableOrWrap
+    : tableOrWrap.querySelector('table');
+  if (!(table instanceof HTMLElement)) return null;
+
+  const cells = Array.from(table.querySelectorAll('td, th'));
+  let hit: HTMLElement | null = null;
+  for (const cell of cells) {
+    if (!(cell instanceof HTMLElement)) continue;
+    const r = cell.getBoundingClientRect();
+    if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) {
+      hit = cell;
+      break;
+    }
+  }
+  // 仅命中行（鼠标在表格左侧 gutter 一带）时，取该行第一个单元格
+  if (!hit) {
+    for (const cell of cells) {
+      if (!(cell instanceof HTMLElement)) continue;
+      const r = cell.getBoundingClientRect();
+      if (clientY >= r.top && clientY <= r.bottom) {
+        hit = cell;
+        break;
+      }
+    }
+  }
+  if (!hit) return null;
+
+  const inner = hit.querySelector(':scope > p, :scope > h1, :scope > h2, :scope > h3, :scope > blockquote, :scope > pre, :scope > ul, :scope > ol');
+  if (inner instanceof HTMLElement) {
+    if (inner.tagName === 'UL' || inner.tagName === 'OL') {
+      return (inner.querySelector(':scope > li') as HTMLElement | null) ?? inner;
+    }
+    return inner;
+  }
+  return hit.firstElementChild instanceof HTMLElement ? hit.firstElementChild : null;
+}
+
+function blockElAtPoint(editor: Editor, clientX: number, clientY: number): HTMLElement | null {
   const root = editor.view.dom as HTMLElement;
   const rect = root.getBoundingClientRect();
   const style = getComputedStyle(root);
   const padLeft = parseFloat(style.paddingLeft) || 0;
-  // 采样点必须落在正文内容区（越过左侧内边距），否则 posAtCoords 取不到块
-  const sampleX = rect.left + padLeft + 6;
+  // 优先用鼠标 X；落在编辑器外时回退到正文左缘
+  const sampleX = clientX >= rect.left && clientX <= rect.right
+    ? clientX
+    : rect.left + padLeft + 6;
 
   const coords = editor.view.posAtCoords({ left: sampleX, top: clientY });
   if (coords) {
@@ -66,32 +118,68 @@ function blockElAtClientY(editor: Editor, clientY: number): HTMLElement | null {
     if (node instanceof HTMLElement) {
       const block = findBlockElement(node, root);
       if (block) return block;
+      // 点在表格空隙上时，按坐标落入单元格
+      const wrap = node.closest?.('table, .tableWrapper');
+      if (wrap instanceof HTMLElement) {
+        const inner = blockInsideTable(wrap, clientX, clientY);
+        if (inner) return inner;
+      }
     }
   }
 
-  // 回退：在所有顶层块里找与 clientY 最接近的一行（空段落/行间空白也能命中）
+  // 回退：顶层块；若是表格则深入单元格
   let best: HTMLElement | null = null;
   let bestDist = Infinity;
   for (const child of Array.from(root.children)) {
     if (!(child instanceof HTMLElement)) continue;
     const r = child.getBoundingClientRect();
-    if (clientY >= r.top && clientY <= r.bottom) return child;
+    if (clientY >= r.top && clientY <= r.bottom) {
+      if (child.tagName === 'TABLE' || child.classList.contains('tableWrapper')) {
+        return blockInsideTable(child, clientX, clientY);
+      }
+      return child;
+    }
     const dist = clientY < r.top ? r.top - clientY : clientY - r.bottom;
     if (dist < bestDist) {
       bestDist = dist;
       best = child;
     }
   }
-  return bestDist <= 24 ? best : null;
+  if (!best || bestDist > 24) return null;
+  if (best.tagName === 'TABLE' || best.classList.contains('tableWrapper')) {
+    return blockInsideTable(best, clientX, clientY);
+  }
+  return best;
 }
 
-function clampPopupTop(anchorTop: number): number {
+function clampPopupTopInShell(anchorTop: number, shellHeight: number): number {
   const margin = 8;
   let top = anchorTop;
-  if (top + POPUP_EST_HEIGHT > window.innerHeight - margin) {
-    top = Math.max(margin, window.innerHeight - POPUP_EST_HEIGHT - margin);
+  if (top + POPUP_EST_HEIGHT > shellHeight - margin) {
+    top = Math.max(margin, shellHeight - POPUP_EST_HEIGHT - margin);
   }
   return top;
+}
+
+function isInsideTableCell(el: HTMLElement): boolean {
+  return !!el.closest('td, th');
+}
+
+/** 当前输入光标所在的可插入块；无焦点时返回 null */
+function getCaretBlockEl(editor: Editor): HTMLElement | null {
+  if (!editor.isFocused) return null;
+  const root = editor.view.dom as HTMLElement;
+  try {
+    const dom = editor.view.domAtPos(editor.state.selection.from);
+    let node: Node | null = dom.node;
+    if (node.nodeType === Node.TEXT_NODE) node = node.parentElement;
+    if (node instanceof HTMLElement) {
+      return findBlockElement(node, root);
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
 }
 
 const EditorInsertHandle: React.FC<EditorInsertHandleProps> = ({
@@ -99,15 +187,23 @@ const EditorInsertHandle: React.FC<EditorInsertHandleProps> = ({
   editable,
   onPickImage,
   onOpenLinkDialog,
+  onOpenProductDialog,
 }) => {
   const wrapRef = useRef<HTMLDivElement>(null);
   const plusRef = useRef<HTMLButtonElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastBlockRef = useRef<HTMLElement | null>(null);
+  /** 表格内光标锁定的块：mousemove 蹭格线时不重算/不清除 */
+  const tableCaretLockRef = useRef<HTMLElement | null>(null);
+  const handlePosRef = useRef<HandlePos | null>(null);
+  const menuOpenRef = useRef(false);
+  const pointerDownRef = useRef(false);
   const [handlePos, setHandlePos] = useState<HandlePos | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [popupPos, setPopupPos] = useState<PopupPos | null>(null);
+
+  menuOpenRef.current = menuOpen;
 
   const clearCloseTimer = () => {
     if (closeTimer.current) {
@@ -116,19 +212,88 @@ const EditorInsertHandle: React.FC<EditorInsertHandleProps> = ({
     }
   };
 
-  const scheduleClose = () => {
+  const getShell = useCallback(() => {
+    return wrapRef.current?.parentElement as HTMLElement | null;
+  }, []);
+
+  const placeHandle = useCallback((el: HTMLElement) => {
+    const shell = getShell();
+    if (!shell) return;
+    lastBlockRef.current = el;
+    const shellRect = shell.getBoundingClientRect();
+    const blockRect = el.getBoundingClientRect();
+    const next: HandlePos = {
+      top: blockRect.top - shellRect.top + shell.scrollTop,
+      left: Math.max(0, blockRect.left - shellRect.left + shell.scrollLeft - HANDLE_WIDTH - HANDLE_GAP),
+      height: Math.max(blockRect.height, 28),
+      blockEl: el,
+    };
+    const prev = handlePosRef.current;
+    if (
+      prev
+      && prev.blockEl === next.blockEl
+      && Math.abs(prev.top - next.top) < 1
+      && Math.abs(prev.left - next.left) < 1
+      && Math.abs(prev.height - next.height) < 1
+    ) {
+      return;
+    }
+    handlePosRef.current = next;
+    setHandlePos(next);
+  }, [getShell]);
+
+  const hideHandleOnly = useCallback(() => {
+    // 保留 tableCaretLock，仅隐藏 DOM，避免拖选文字时碰到 +
+    if (menuOpenRef.current) {
+      setMenuOpen(false);
+      setPopupPos(null);
+    }
+    if (handlePosRef.current) {
+      handlePosRef.current = null;
+      setHandlePos(null);
+    }
+  }, []);
+
+  const clearHandle = useCallback(() => {
+    tableCaretLockRef.current = null;
+    handlePosRef.current = null;
+    lastBlockRef.current = null;
+    setHandlePos(null);
+  }, []);
+
+  const keepTableCaretHandle = useCallback((): boolean => {
+    if (!editor || !editable) return false;
+    if (pointerDownRef.current || !editor.state.selection.empty) return false;
+    const locked = tableCaretLockRef.current;
+    if (locked && editor.isActive('table')) {
+      if (!handlePosRef.current) placeHandle(locked);
+      return true;
+    }
+    const caretBlock = getCaretBlockEl(editor);
+    if (caretBlock && isInsideTableCell(caretBlock)) {
+      tableCaretLockRef.current = caretBlock;
+      placeHandle(caretBlock);
+      return true;
+    }
+    return false;
+  }, [editor, editable, placeHandle]);
+
+  const scheduleClose = useCallback(() => {
     clearCloseTimer();
     closeTimer.current = setTimeout(() => {
       setMenuOpen(false);
-      setHandlePos(null);
       setPopupPos(null);
-      lastBlockRef.current = null;
+      if (keepTableCaretHandle()) return;
+      clearHandle();
     }, CLOSE_DELAY_MS);
-  };
+  }, [keepTableCaretHandle, clearHandle]);
 
   const isInPopup = useCallback((node: EventTarget | null) => {
     if (!(node instanceof Node)) return false;
-    return popupRef.current?.contains(node) ?? false;
+    if (popupRef.current?.contains(node)) return true;
+    // 表格尺寸二级菜单也在 portal 里
+    if (node instanceof Element && node.closest('.kb-insert-table-picker-portal')) return true;
+    return false;
   }, []);
 
   const focusBlock = useCallback((blockEl: HTMLElement) => {
@@ -141,19 +306,19 @@ const EditorInsertHandle: React.FC<EditorInsertHandleProps> = ({
     }
   }, [editor]);
 
-  const getShell = useCallback(() => {
-    return wrapRef.current?.parentElement as HTMLElement | null;
-  }, []);
-
   const updatePopupPosition = useCallback(() => {
     const btn = plusRef.current;
-    if (!btn) return;
-    const rect = btn.getBoundingClientRect();
-    setPopupPos({
-      top: clampPopupTop(rect.top),
-      left: rect.right + 6,
-    });
-  }, []);
+    const shell = getShell();
+    if (!btn || !shell) return;
+    const btnRect = btn.getBoundingClientRect();
+    const shellRect = shell.getBoundingClientRect();
+    const top = clampPopupTopInShell(
+      btnRect.top - shellRect.top + shell.scrollTop,
+      shell.clientHeight,
+    );
+    const left = btnRect.right - shellRect.left + shell.scrollLeft + 6;
+    setPopupPos({ top, left });
+  }, [getShell]);
 
   const openMenu = useCallback(() => {
     if (!handlePos) return;
@@ -163,65 +328,178 @@ const EditorInsertHandle: React.FC<EditorInsertHandleProps> = ({
     requestAnimationFrame(updatePopupPosition);
   }, [handlePos, focusBlock, updatePopupPosition]);
 
-  const syncHandle = useCallback((clientY: number) => {
+  /** 表格：跟光标锁定；正文：可跟鼠标悬停 */
+  const syncHandle = useCallback((clientX: number, clientY: number) => {
     if (!editor || !editable) return;
     const shell = getShell();
     if (!shell) return;
 
-    const el = blockElAtClientY(editor, clientY) ?? lastBlockRef.current;
-    if (!el) {
-      if (!menuOpen) setHandlePos(null);
+    // 拖选文字 / 按住鼠标时隐藏 +，避免挡住选区
+    if (pointerDownRef.current || !editor.state.selection.empty) {
+      hideHandleOnly();
       return;
     }
 
-    lastBlockRef.current = el;
-    const shellRect = shell.getBoundingClientRect();
-    const blockRect = el.getBoundingClientRect();
-    const left = blockRect.left - shellRect.left + shell.scrollLeft - HANDLE_WIDTH - HANDLE_GAP;
-    setHandlePos({
-      top: blockRect.top - shellRect.top + shell.scrollTop,
-      left: Math.max(0, left),
-      height: Math.max(blockRect.height, 28),
-      blockEl: el,
-    });
-  }, [editor, editable, menuOpen, getShell]);
+    // 表格光标锁定中：mousemove（含蹭格线）完全不改 + 位置
+    if (tableCaretLockRef.current && editor.isActive('table')) {
+      return;
+    }
+
+    const caretBlock = getCaretBlockEl(editor);
+    if (caretBlock && isInsideTableCell(caretBlock)) {
+      tableCaretLockRef.current = caretBlock;
+      placeHandle(caretBlock);
+      return;
+    }
+
+    const el = blockElAtPoint(editor, clientX, clientY) ?? lastBlockRef.current;
+    if (!el) {
+      if (!menuOpenRef.current) clearHandle();
+      return;
+    }
+    // 表格单元格：无输入光标时不因悬停显示 +
+    if (isInsideTableCell(el)) {
+      if (!menuOpenRef.current) clearHandle();
+      return;
+    }
+
+    tableCaretLockRef.current = null;
+    placeHandle(el);
+  }, [editor, editable, getShell, placeHandle, clearHandle, hideHandleOnly]);
+
+  const syncFromSelection = useCallback(() => {
+    if (!editor || !editable || editor.isDestroyed) return;
+    // 有文字选区时隐藏插入键，防止拖选过程中被 + 抢走鼠标
+    if (!editor.state.selection.empty || pointerDownRef.current) {
+      hideHandleOnly();
+      if (!editor.state.selection.empty && editor.isActive('table')) {
+        const caretBlock = getCaretBlockEl(editor);
+        if (caretBlock && isInsideTableCell(caretBlock)) {
+          tableCaretLockRef.current = caretBlock;
+        }
+      }
+      return;
+    }
+    const caretBlock = getCaretBlockEl(editor);
+    if (caretBlock && isInsideTableCell(caretBlock)) {
+      tableCaretLockRef.current = caretBlock;
+      placeHandle(caretBlock);
+      return;
+    }
+    // 光标确实离开表格后，解除锁定
+    if (tableCaretLockRef.current || (lastBlockRef.current && isInsideTableCell(lastBlockRef.current))) {
+      if (!menuOpenRef.current) clearHandle();
+    }
+  }, [editor, editable, placeHandle, clearHandle, hideHandleOnly]);
 
   useEffect(() => {
     if (!editor || !editable) return;
     const shell = getShell();
     if (!shell) return;
 
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.button !== 0) return;
+      // 点在插入键/菜单上时不进入「拖选隐藏」
+      const t = e.target as HTMLElement | null;
+      if (t?.closest?.('.kb-insert-plus, .kb-insert-active-row, .kb-insert-popup-portal, .kb-insert-table-picker-portal')) {
+        return;
+      }
+      pointerDownRef.current = true;
+      // 点到别处：立刻收起插入菜单（避免悬停打开后残留）
+      if (menuOpenRef.current) {
+        clearCloseTimer();
+        setMenuOpen(false);
+        setPopupPos(null);
+      }
+      if (editor.isActive('table')) hideHandleOnly();
+    };
+    const onPointerUp = () => {
+      if (!pointerDownRef.current) return;
+      pointerDownRef.current = false;
+      syncFromSelection();
+    };
+
     const onMouseMove = (e: MouseEvent) => {
-      syncHandle(e.clientY);
+      syncHandle(e.clientX, e.clientY);
     };
 
     const onMouseLeave = (e: MouseEvent) => {
       const related = e.relatedTarget;
       if (related instanceof Node && shell.contains(related)) return;
       if (isInPopup(related)) return;
-      if (!menuOpen) scheduleClose();
+      // 菜单打开时离开编辑区也要关闭
+      if (menuOpenRef.current) {
+        scheduleClose();
+        return;
+      }
+      if (keepTableCaretHandle()) return;
+      scheduleClose();
     };
 
+    shell.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
     shell.addEventListener('mousemove', onMouseMove);
     shell.addEventListener('mouseleave', onMouseLeave);
     return () => {
+      shell.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
       shell.removeEventListener('mousemove', onMouseMove);
       shell.removeEventListener('mouseleave', onMouseLeave);
     };
-  }, [editor, editable, menuOpen, syncHandle, getShell, isInPopup]);
+  }, [editor, editable, syncHandle, getShell, isInPopup, scheduleClose, keepTableCaretHandle, hideHandleOnly, syncFromSelection]);
+
+  useEffect(() => {
+    if (!editor || !editable) return;
+    syncFromSelection();
+    editor.on('selectionUpdate', syncFromSelection);
+    editor.on('focus', syncFromSelection);
+    const onBlur = () => {
+      if (menuOpenRef.current) return;
+      // 点击 + 时 mousedown preventDefault，一般不会 blur；真 blur 再清
+      if (tableCaretLockRef.current || (lastBlockRef.current && isInsideTableCell(lastBlockRef.current))) {
+        // 延迟判断，避免点 + / 菜单时误清
+        window.setTimeout(() => {
+          if (menuOpenRef.current) return;
+          if (editor.isDestroyed) return;
+          if (getCaretBlockEl(editor) && editor.isActive('table')) return;
+          if (!editor.isFocused) clearHandle();
+        }, 0);
+      }
+    };
+    editor.on('blur', onBlur);
+    return () => {
+      editor.off('selectionUpdate', syncFromSelection);
+      editor.off('focus', syncFromSelection);
+      editor.off('blur', onBlur);
+    };
+  }, [editor, editable, syncFromSelection, clearHandle]);
 
   useEffect(() => {
     if (!menuOpen) return;
     updatePopupPosition();
     const shell = getShell();
     const onReposition = () => updatePopupPosition();
+    // 点在菜单外任意处关闭（含表格 gutter、正文等）
+    const onDocPointerDown = (e: PointerEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t?.closest?.('.kb-insert-plus, .kb-insert-active-row, .kb-insert-popup-portal, .kb-insert-table-picker-portal')) {
+        return;
+      }
+      clearCloseTimer();
+      setMenuOpen(false);
+      setPopupPos(null);
+    };
     shell?.addEventListener('scroll', onReposition, { passive: true });
     window.addEventListener('resize', onReposition);
     window.addEventListener('scroll', onReposition, true);
+    document.addEventListener('pointerdown', onDocPointerDown, true);
     return () => {
       shell?.removeEventListener('scroll', onReposition);
       window.removeEventListener('resize', onReposition);
       window.removeEventListener('scroll', onReposition, true);
+      document.removeEventListener('pointerdown', onDocPointerDown, true);
     };
   }, [menuOpen, updatePopupPosition, getShell]);
 
@@ -229,22 +507,25 @@ const EditorInsertHandle: React.FC<EditorInsertHandleProps> = ({
 
   const closeMenu = () => {
     setMenuOpen(false);
-    setHandlePos(null);
     setPopupPos(null);
-    lastBlockRef.current = null;
+    if (keepTableCaretHandle()) return;
+    clearHandle();
   };
 
   if (!editor || !editable) return null;
+
+  const inTableLock = !!tableCaretLockRef.current;
 
   return (
     <div ref={wrapRef} className="kb-insert-wrap">
       {handlePos && (
         <div
-          className="kb-insert-active-row"
+          className={`kb-insert-active-row${inTableLock ? ' is-table-cell' : ''}`}
           style={{ top: handlePos.top, left: handlePos.left, height: handlePos.height }}
           onMouseEnter={clearCloseTimer}
           onMouseLeave={e => {
             if (isInPopup(e.relatedTarget)) return;
+            // 离开 + 区域且未进入菜单：关闭菜单（表格锁定只保留 +，不保留菜单）
             scheduleClose();
           }}
         >
@@ -273,10 +554,12 @@ const EditorInsertHandle: React.FC<EditorInsertHandleProps> = ({
             editor={editor}
             onPickImage={onPickImage}
             onOpenLinkDialog={onOpenLinkDialog}
+            onOpenProductDialog={onOpenProductDialog}
             onClose={closeMenu}
           />
         </div>,
-        document.body,
+        // 挂到编辑器壳，避免 fixed 层挂 body 后盖住应用侧栏
+        (wrapRef.current?.parentElement as HTMLElement | null) ?? document.body,
       )}
     </div>
   );

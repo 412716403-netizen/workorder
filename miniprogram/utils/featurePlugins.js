@@ -48,6 +48,11 @@ function clearFeaturePluginsCache() {
   cachePromise = null;
 }
 
+/** 同步读取已缓存的插件开关（未加载过则为 null） */
+function getCachedFeaturePlugins() {
+  return cachedPlugins;
+}
+
 function loadTraceabilityScanEnabled(forceRefresh) {
   return loadFeaturePlugins(forceRefresh).then(isTraceabilityEnabled);
 }
@@ -57,6 +62,7 @@ module.exports = {
   isTraceabilityEnabled,
   filterByPlugin,
   loadFeaturePlugins,
+  getCachedFeaturePlugins,
   loadTraceabilityScanEnabled,
   clearFeaturePluginsCache,
 };

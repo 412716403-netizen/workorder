@@ -14,6 +14,7 @@ interface InsertMenuPopupProps {
   editor: Editor;
   onPickImage?: () => void;
   onOpenLinkDialog?: () => void;
+  onOpenProductDialog?: () => void;
   onClose?: () => void;
 }
 
@@ -203,9 +204,14 @@ const InsertMenuPopup: React.FC<InsertMenuPopupProps> = ({
   editor,
   onPickImage,
   onOpenLinkDialog,
+  onOpenProductDialog,
   onClose,
 }) => {
-  const { basic, common } = buildInsertMenuItems(onPickImage, onOpenLinkDialog);
+  const { basic, common } = buildInsertMenuItems(onPickImage, onOpenLinkDialog, onOpenProductDialog);
+  // 表格单元格内不允许再嵌套插入表格
+  const commonItems = editor.isActive('table')
+    ? common.filter(item => item.id !== 'table')
+    : common;
 
   const run = (fn: (ed: Editor) => void) => {
     fn(editor);
@@ -228,7 +234,7 @@ const InsertMenuPopup: React.FC<InsertMenuPopupProps> = ({
       <div className="kb-insert-section">
         <div className="kb-insert-section-title">常用</div>
         <div className="kb-insert-common-list">
-          {common.map(item => (
+          {commonItems.map(item => (
             <CommonRow
               key={item.id}
               item={item}

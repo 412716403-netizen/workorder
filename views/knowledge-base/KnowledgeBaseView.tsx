@@ -251,14 +251,14 @@ const KnowledgeBaseView: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="-mx-12 -mt-4 -mb-8 flex h-[calc(100vh-5rem)] items-center justify-center border-t border-slate-200 bg-white">
+      <div className="-mx-12 -mt-4 -mb-8 flex h-screen min-h-0 items-center justify-center overflow-hidden border-t border-slate-200 bg-white">
         <p className="text-sm text-slate-400">加载资料库…</p>
       </div>
     );
   }
 
   return (
-    <div className="-mx-12 -mt-4 -mb-8 flex min-h-[calc(100vh-5rem)] h-[calc(100vh-5rem)] overflow-hidden border-t border-slate-200 bg-white">
+    <div className="-mx-12 -mt-4 -mb-8 flex h-screen min-h-0 overflow-hidden border-t border-slate-200 bg-white">
       <KnowledgeTreeSidebar
         folders={folders}
         documents={documents}

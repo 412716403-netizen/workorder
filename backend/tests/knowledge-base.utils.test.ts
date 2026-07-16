@@ -28,12 +28,13 @@ describe('sanitizeKnowledgeHtml', () => {
     expect(out).toContain('href="https://example.com"');
   });
 
-  it('keeps inline text color and highlight', () => {
+  it('keeps product ref chips', () => {
     const out = sanitizeKnowledgeHtml(
-      '<p><span style="color: #dc2626">红</span><mark style="background-color: #fef08a">亮</mark></p>',
+      '<p><span data-type="product-ref" data-product-id="p1" data-label="上衣（A01）" class="kb-product-ref">上衣（A01）</span></p>',
     );
-    expect(out).toContain('color');
-    expect(out).toContain('mark');
+    expect(out).toContain('data-type="product-ref"');
+    expect(out).toContain('data-product-id="p1"');
+    expect(out).toContain('上衣（A01）');
   });
 });
 

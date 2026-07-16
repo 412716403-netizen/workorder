@@ -15,7 +15,8 @@ export const KNOWLEDGE_HTML_ALLOWED_TAGS = [
 export const KNOWLEDGE_HTML_ALLOWED_ATTR = [
   'href', 'target', 'rel',
   'src', 'alt', 'title', 'width', 'height',
-  'colspan', 'rowspan',
+  'colspan', 'rowspan', 'colwidth', 'data-colwidth',
   'data-type', 'data-checked',
+  'data-product-id', 'data-label',
   'class', 'style',
 ] as const;

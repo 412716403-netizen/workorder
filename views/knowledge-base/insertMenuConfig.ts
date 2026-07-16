@@ -3,7 +3,7 @@ import type { LucideIcon } from 'lucide-react';
 import {
   Heading1, Heading2, Heading3,
   List, ListOrdered, Table as TableIcon,
-  Minus, Image as ImageIcon, Highlighter, Link2,
+  Minus, Image as ImageIcon, Highlighter, Link2, Package,
 } from 'lucide-react';
 
 export type InsertMenuIconTone = 'slate' | 'blue' | 'amber' | 'green' | 'violet' | 'rose' | 'sky' | 'orange';
@@ -31,6 +31,7 @@ export type InsertMenuItem = InsertBasicItem | InsertCommonItem;
 export function buildInsertMenuItems(
   onPickImage?: () => void,
   onOpenLinkDialog?: () => void,
+  onOpenProductDialog?: () => void,
 ): {
   basic: InsertBasicItem[];
   common: InsertCommonItem[];
@@ -68,12 +69,23 @@ export function buildInsertMenuItems(
     },
     {
       kind: 'common',
+      id: 'product',
+      label: '关联产品',
+      icon: Package,
+      tone: 'blue',
+      run: ed => {
+        ed.chain().focus().run();
+        onOpenProductDialog?.();
+      },
+    },
+    {
+      kind: 'common',
       id: 'table',
       label: '表格',
       icon: TableIcon,
       tone: 'green',
       hasSubmenu: true,
-      run: ed => ed.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(),
+      run: ed => ed.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: false }).run(),
     },
     {
       kind: 'common',
@@ -97,5 +109,5 @@ export function buildInsertMenuItems(
 }
 
 export function insertTable(editor: Editor, rows: number, cols: number) {
-  editor.chain().focus().insertTable({ rows, cols, withHeaderRow: true }).run();
+  editor.chain().focus().insertTable({ rows, cols, withHeaderRow: false }).run();
 }

@@ -2,12 +2,13 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  /* 作为绝对定位浮动层（格式栏/插入菜单）的定位容器，避免挂到 body 盖住应用侧栏 */
+  isolation: isolate;
 }
 
 .kb-editor-tail-hit {
-  flex: 1;
-  min-height: 160px;
+  flex-shrink: 0;
+  height: 48px;
   cursor: text;
 }
 
@@ -91,13 +92,19 @@
 
 .kb-editor .ProseMirror table {
   border-collapse: collapse;
+  table-layout: fixed;
   width: 100%;
   margin: 0.5rem 0;
+  overflow: hidden;
 }
 
 .kb-editor .ProseMirror .tableWrapper {
   position: relative;
   margin: 0.5rem 0;
+  overflow: visible;
+  /* 预留飞书式行列操作条 + 左上角删表按钮空间 */
+  padding-top: 20px;
+  padding-left: 20px;
 }
 
 .kb-editor .ProseMirror table.ProseMirror-selectednode {
@@ -105,48 +112,167 @@
   outline-offset: 2px;
 }
 
-.kb-table-bubble-menu {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 4px;
-  border-radius: 8px;
-  border: 1px solid rgba(31, 35, 41, 0.08);
-  background: #fff;
-  box-shadow: 0 4px 16px rgba(31, 35, 41, 0.12);
-  z-index: 10070;
+/* 列宽拖拽：悬停单元格竖线时显示手柄 */
+.kb-editor .ProseMirror .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: -2px;
+  width: 4px;
+  background-color: #3370ff;
+  pointer-events: none;
+  z-index: 20;
 }
 
-.kb-table-bubble-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+/* 拖拽列宽时隐藏操作条，避免与蓝色拖拽线抢渲染闪烁 */
+.kb-editor .ProseMirror .tableWrapper:has(.column-resize-dragging) .kb-table-gutters {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.kb-editor .ProseMirror.resize-cursor {
+  cursor: col-resize;
+}
+
+/* 拖选文字时禁用操作条与列宽热区命中，避免抢走选区 */
+.kb-editor .ProseMirror .tableWrapper.is-text-selecting .kb-table-gutters {
+  pointer-events: none !important;
+}
+
+.kb-editor .ProseMirror .tableWrapper.is-text-selecting .column-resize-handle {
+  pointer-events: none !important;
+  opacity: 0;
+}
+
+.kb-editor .ProseMirror[contenteditable='false'] .column-resize-handle {
+  display: none;
+}
+
+/* ── 飞书式表格行列操作条 ── */
+
+.kb-table-gutters {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.kb-table-gutter-highlight {
+  position: absolute;
+  pointer-events: none;
+  z-index: 0;
+  background: rgba(51, 112, 255, 0.08);
+}
+
+.kb-table-gutter-col-rail,
+.kb-table-gutter-row-rail {
+  position: absolute;
+  z-index: 1;
+  pointer-events: auto;
+  background: #e8eaed;
+  border-radius: 2px;
+}
+
+.kb-table-gutter-seg {
+  position: absolute;
   border: none;
-  border-radius: 6px;
+  padding: 0;
+  margin: 0;
   background: transparent;
-  padding: 5px 8px;
-  font-size: 12px;
-  color: #51565d;
   cursor: pointer;
-  white-space: nowrap;
+  border-radius: 2px;
+  transition: background 0.12s;
+}
+
+.kb-table-gutter-seg-col {
+  top: 0;
+  height: 100%;
+}
+
+.kb-table-gutter-seg-row {
+  left: 0;
+  width: 100%;
+}
+
+.kb-table-gutter-seg:hover,
+.kb-table-gutter-seg.is-active {
+  background: #3370ff;
+}
+
+.kb-table-gutter-dot {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.kb-table-gutter-dot-inner {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #c0c4cc;
+  box-shadow: 0 0 0 2px #fff;
+  transition: width 0.12s, height 0.12s, background 0.12s;
+}
+
+.kb-table-gutter-dot:hover .kb-table-gutter-dot-inner,
+.kb-table-gutter-dot.is-active .kb-table-gutter-dot-inner {
+  width: 9px;
+  height: 9px;
+  background: #3370ff;
+}
+
+.kb-table-gutter-delete-table {
+  position: absolute;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 4px;
+  padding: 0;
+  background: #e8eaed;
+  color: #646a73;
+  cursor: pointer;
+  pointer-events: auto;
   transition: background 0.12s, color 0.12s;
 }
 
-.kb-table-bubble-btn:hover {
-  background: #f2f3f5;
-  color: #1f2329;
-}
-
-.kb-table-bubble-btn-danger:hover {
+.kb-table-gutter-delete-table:hover {
   background: #fef2f2;
   color: #dc2626;
 }
 
-.kb-table-bubble-divider {
-  width: 1px;
-  height: 18px;
-  background: #e5e7eb;
-  margin: 0 2px;
+.kb-table-gutter-action-btn {
+  position: absolute;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid rgba(31, 35, 41, 0.08);
+  border-radius: 6px;
+  padding: 5px 8px;
+  background: #fff;
+  box-shadow: 0 4px 12px rgba(31, 35, 41, 0.12);
+  font-size: 12px;
+  color: #dc2626;
+  cursor: pointer;
+  pointer-events: auto;
+  white-space: nowrap;
+  transition: background 0.12s;
+}
+
+.kb-table-gutter-action-btn:hover {
+  background: #fef2f2;
 }
 
 /* ── 选区行内格式浮动工具栏 ── */
@@ -160,7 +286,18 @@
   border: 1px solid rgba(31, 35, 41, 0.08);
   background: #fff;
   box-shadow: 0 4px 16px rgba(31, 35, 41, 0.12);
-  z-index: 10075;
+  z-index: 40;
+  width: max-content;
+  height: max-content;
+  /* 宿主可能被错误撑大；仅让内部工具条接收点击，避免挡住应用侧栏 */
+  pointer-events: none !important;
+}
+
+.kb-selection-bubble-inner {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  pointer-events: auto;
 }
 
 .kb-selection-bubble-btn {
@@ -224,12 +361,64 @@
   border: 1px solid rgba(31, 35, 41, 0.08);
   background: #fff;
   box-shadow: 0 4px 16px rgba(31, 35, 41, 0.12);
-  z-index: 10080;
+  z-index: 50;
+  pointer-events: auto;
 }
 
 .kb-selection-highlight-menu {
   left: auto;
   right: 0;
+}
+
+.kb-selection-align-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid rgba(31, 35, 41, 0.08);
+  background: #fff;
+  box-shadow: 0 4px 16px rgba(31, 35, 41, 0.12);
+  z-index: 50;
+  pointer-events: auto;
+}
+
+.kb-selection-align-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 8px;
+  background: transparent;
+  color: #1f2329;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s, color 0.12s;
+}
+
+.kb-selection-align-item:hover {
+  background: #f2f3f5;
+}
+
+.kb-selection-align-item.is-active {
+  color: #3370ff;
+}
+
+.kb-selection-align-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.kb-selection-align-divider {
+  height: 1px;
+  margin: 4px 6px;
+  background: #e5e7eb;
 }
 
 .kb-selection-color-swatch,
@@ -303,14 +492,16 @@
 
 .kb-editor .ProseMirror th,
 .kb-editor .ProseMirror td {
+  position: relative;
   border: 1px solid #cbd5e1;
   padding: 0.45rem 0.65rem;
   min-width: 80px;
-}
-
-.kb-editor .ProseMirror th {
-  background: #f8fafc;
-  font-weight: 600;
+  min-height: 2.2em;
+  box-sizing: border-box;
+  /* 首行与其它行字体/底色一致（覆盖浏览器 th 默认加粗） */
+  background: transparent;
+  font-weight: inherit;
+  text-align: inherit;
 }
 
 .kb-editor .ProseMirror [data-node='image'] {
@@ -334,6 +525,25 @@
 
 .kb-editor .ProseMirror [data-resize-wrapper] img {
   max-width: none;
+}
+
+/* 表格内：默认按缩略图宽度插入，可拖角缩放；点击预览原图 */
+.kb-editor .ProseMirror td [data-node='image'],
+.kb-editor .ProseMirror th [data-node='image'] {
+  max-width: 100%;
+  margin: 0.2rem 0;
+}
+
+.kb-editor .ProseMirror td [data-resize-wrapper],
+.kb-editor .ProseMirror th [data-resize-wrapper] {
+  max-width: 100%;
+}
+
+.kb-editor .ProseMirror td [data-resize-wrapper] img,
+.kb-editor .ProseMirror th [data-resize-wrapper] img {
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
 }
 
 .kb-editor .ProseMirror [data-node='image'].ProseMirror-selectednode [data-resize-wrapper] {
@@ -395,7 +605,8 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  z-index: 20;
+  /* 高于表格 gutter / 列宽拖拽线，避免移向 + 时被格线命中层抢走 */
+  z-index: 40;
 }
 
 .kb-insert-active-row {
@@ -407,9 +618,16 @@
   pointer-events: auto;
 }
 
+/* 表格内扩大命中区，移向 + 时不容易蹭到单元格边线丢焦点 */
+.kb-insert-active-row.is-table-cell {
+  width: 40px;
+  padding-right: 8px;
+  box-sizing: content-box;
+}
+
 .kb-insert-popup-portal {
-  position: fixed;
-  z-index: 10050;
+  position: absolute;
+  z-index: 50;
 }
 
 .kb-insert-plus {
@@ -419,18 +637,26 @@
   width: 24px;
   height: 24px;
   border-radius: 6px;
-  border: none;
-  background: transparent;
-  color: #8a94a6;
+  border: 1px solid rgba(31, 35, 41, 0.12);
+  background: #fff;
+  color: #646a73;
+  box-shadow: 0 1px 4px rgba(31, 35, 41, 0.1);
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
   flex-shrink: 0;
 }
 
 .kb-insert-plus:hover,
 .kb-insert-plus.is-open {
-  background: #eef0f3;
+  background: #f5f6f7;
   color: #1f2329;
+  border-color: rgba(31, 35, 41, 0.18);
+  box-shadow: 0 2px 8px rgba(31, 35, 41, 0.14);
+}
+
+.kb-insert-plus:active {
+  background: #eef0f3;
+  box-shadow: 0 1px 2px rgba(31, 35, 41, 0.1);
 }
 
 .kb-insert-popup {
@@ -677,6 +903,49 @@
 
 .kb-link-insert-confirm:hover {
   background: #64748b;
+}
+
+.kb-product-link-row {
+  align-items: flex-start;
+}
+
+.kb-product-link-select {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── 关联产品芯片 ── */
+
+.kb-editor .ProseMirror .kb-product-ref,
+.kb-editor .kb-product-ref {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  margin: 0 0.15em;
+  padding: 0.1em 0.45em;
+  border-radius: 0.35rem;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  font-size: 0.92em;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+  vertical-align: baseline;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kb-editor .ProseMirror .kb-product-ref:hover,
+.kb-editor .kb-product-ref:hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
+
+.kb-editor .ProseMirror .kb-product-ref.ProseMirror-selectednode {
+  outline: 2px solid #6366f1;
+  outline-offset: 1px;
 }
 
 /* ── 图片放大预览 ── */

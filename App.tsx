@@ -202,7 +202,7 @@ function AppLayoutReady() {
     <div className="flex h-screen bg-slate-50 text-slate-900 font-sans">
       {/* Sidebar — 打印模板编辑页隐藏，便于全宽画布 */}
       {!printEditorFullscreen && (
-      <div className="w-44 bg-white border-r border-slate-200 flex flex-col p-5 gap-8">
+      <div className="w-44 shrink-0 relative z-20 bg-white border-r border-slate-200 flex flex-col p-5 gap-8">
         <div className="flex items-center gap-3">
           <img
             src={BRAND_LOGO_PATH}
@@ -352,8 +352,8 @@ function AppLayoutReady() {
           printEditorFullscreen
             ? 'flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-100 p-3'
             : isWorkbenchRoute
-              ? 'min-h-0 flex-1 overflow-auto bg-slate-50/30 px-4 pb-6 pt-4'
-              : 'min-h-0 flex-1 overflow-auto bg-slate-50/30 px-12 pb-8 pt-4'
+              ? 'relative z-0 min-h-0 flex-1 overflow-auto bg-slate-50/30 px-4 pb-6 pt-4'
+              : 'relative z-0 min-h-0 flex-1 overflow-auto bg-slate-50/30 px-12 pb-8 pt-4'
         }
       >
         <ErrorBoundary>

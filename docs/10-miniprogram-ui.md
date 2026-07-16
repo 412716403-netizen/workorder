@@ -56,7 +56,8 @@ SmartTrack Pro 微信小程序采用 **企业蓝 + 卡片化 + 底部 Tab** 的 
 - **蓝色渐变顶栏** + **白色圆角内容区**（首页自定义布局；其余 Tab 用 `tab-shell` 组件，样式见 [`styles/tab-shell.wxss`](../miniprogram/styles/tab-shell.wxss)）
 - 顶栏安全区由 [`utils/tabShell.js`](../miniprogram/utils/tabShell.js) 计算
 - 底部使用 `custom-tab-bar`，通常为：首页 → 应用 → **报工（`pages/scan`）** → 消息 → 我的。创建者恒显示首页；成员仅在拥有裸 `workbench` 或任一 `workbench:<pageId>` 时显示首页，没有工作台权限时首页 Tab 会从导航中移除。
-- 登录、启动或切换企业时，无工作台权限但拥有 `process_report` 的成员直接进入「报工」；其它无工作台权限成员进入「应用」。直接停留在首页后权限被撤销时也会自动跳离首页。
+- **「应用」Tab**：创建者恒显示；成员若权限**仅含** `process_report`（及 `process_report:*`），或应用中心按 RBAC/插件过滤后无任何入口，则从底栏隐藏；误入应用页会跳转到默认 Tab。
+- 登录、启动或切换企业时，无工作台权限但拥有 `process_report` 的成员直接进入「报工」；其它无工作台权限且仍有应用入口的成员进入「应用」。直接停留在首页/应用后权限被撤销时也会自动跳离。
 
 ### B. 流程页壳（登录 / 选企业 / 入驻）
 

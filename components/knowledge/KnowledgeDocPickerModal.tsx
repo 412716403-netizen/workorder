@@ -1,13 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Search, ChevronRight, Folder, FileText, Check, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { useKnowledgeBaseTree, useKnowledgeDocument, useKnowledgeDocumentSearch } from '../../hooks/useKnowledgeBase';
 import { buildKnowledgeTree, type KnowledgeTreeNode } from '../../utils/knowledgeBaseTree';
 import type { KnowledgeFieldRef } from '../../utils/knowledgeFieldValue';
+import { useMasterData } from '../../contexts/AppDataContext';
 import '../../views/knowledge-base/knowledge-editor.css';
 import { bindKnowledgeEditorLinkClick } from '../../views/knowledge-base/knowledgeEditorLinkClick';
 import { bindKnowledgeEditorImageClick } from '../../views/knowledge-base/knowledgeEditorImageClick';
+import { bindKnowledgeEditorProductRefClick } from '../../views/knowledge-base/knowledgeEditorProductRef';
 import KnowledgeImagePreviewOverlay from '../../views/knowledge-base/KnowledgeImagePreviewOverlay';
 import KnowledgeDocOutline from '../../views/knowledge-base/KnowledgeDocOutline';
+import PlanProductDetail from '../../views/plan-order-list/PlanProductDetail';
 import {
   collectKnowledgeOutlineFromHtmlRoot,
   scrollHtmlToKnowledgeOutline,
@@ -235,11 +239,28 @@ export const KnowledgeDocPreviewModal: React.FC<KnowledgeDocPreviewModalProps> =
   stackZClass = 'z-[11300]',
 }) => {
   const { data: doc, isLoading, isError } = useKnowledgeDocument(isOpen ? docId : null);
+  const {
+    products,
+    categories,
+    dictionaries,
+    partners,
+    globalNodes,
+    boms,
+  } = useMasterData();
   const previewRef = useRef<HTMLDivElement>(null);
   const previewScrollRef = useRef<HTMLDivElement>(null);
   const [imagePreviewSrc, setImagePreviewSrc] = useState<string | null>(null);
+  const [viewProductId, setViewProductId] = useState<string | null>(null);
+  const [filePreview, setFilePreview] = useState<{ url: string; type: 'image' | 'pdf' } | null>(null);
   const [outlineItems, setOutlineItems] = useState<KnowledgeOutlineItem[]>([]);
   const [outlineActiveId, setOutlineActiveId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setViewProductId(null);
+      setFilePreview(null);
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     const root = previewRef.current?.querySelector('.ProseMirror');
@@ -250,14 +271,22 @@ export const KnowledgeDocPreviewModal: React.FC<KnowledgeDocPreviewModalProps> =
     }
     const unbindLink = bindKnowledgeEditorLinkClick(root);
     const unbindImage = bindKnowledgeEditorImageClick(root, setImagePreviewSrc);
+    const unbindProduct = bindKnowledgeEditorProductRefClick(root, (productId) => {
+      if (!products.some(p => p.id === productId)) {
+        toast.error('未找到该产品，可能已删除');
+        return;
+      }
+      setViewProductId(productId);
+    });
     const items = collectKnowledgeOutlineFromHtmlRoot(root);
     setOutlineItems(items);
     setOutlineActiveId(items[0]?.id ?? null);
     return () => {
       unbindLink();
       unbindImage();
+      unbindProduct();
     };
-  }, [doc?.content]);
+  }, [doc?.content, products]);
 
   if (!isOpen) return null;
 
@@ -303,6 +332,45 @@ export const KnowledgeDocPreviewModal: React.FC<KnowledgeDocPreviewModalProps> =
         src={imagePreviewSrc}
         onClose={() => setImagePreviewSrc(null)}
       />
+      {viewProductId && (
+        <PlanProductDetail
+          viewProductId={viewProductId}
+          products={products}
+          categories={categories}
+          dictionaries={dictionaries}
+          partners={partners}
+          globalNodes={globalNodes}
+          boms={boms}
+          onClose={() => setViewProductId(null)}
+          onFilePreview={(url, type) => setFilePreview({ url, type })}
+          stackZClass="z-[12000]"
+        />
+      )}
+      {filePreview && (
+        <div
+          className="fixed inset-0 z-[12100] flex items-center justify-center p-8 bg-slate-900/80 backdrop-blur-sm"
+          onClick={() => setFilePreview(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setFilePreview(null)}
+            className="absolute top-6 right-6 z-10 p-2 rounded-full bg-white/20 hover:bg-white/40 text-white transition-all"
+            aria-label="关闭"
+          >
+            <X className="w-8 h-8" />
+          </button>
+          <div
+            className="relative z-10 w-full max-w-4xl max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            {filePreview.type === 'image' ? (
+              <img src={filePreview.url} alt="预览" className="w-full h-full max-h-[85vh] object-contain" />
+            ) : (
+              <iframe src={filePreview.url} title="PDF 预览" className="w-full h-[85vh] border-0" />
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

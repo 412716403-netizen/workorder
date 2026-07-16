@@ -6,8 +6,7 @@ import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import { Table } from '@tiptap/extension-table';
 import TableRow from '@tiptap/extension-table-row';
-import TableCell from '@tiptap/extension-table-cell';
-import TableHeader from '@tiptap/extension-table-header';
+import { KnowledgeTableCell, KnowledgeTableHeader } from './knowledgeTableCellExtensions';
 import Link from '@tiptap/extension-link';
 import { ResizableImage } from './resizableImageExtension';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -18,23 +17,31 @@ import { TextStyle } from '@tiptap/extension-text-style';
 import Color from '@tiptap/extension-color';
 import { common, createLowlight } from 'lowlight';
 import { toast } from 'sonner';
-import { Loader2 } from 'lucide-react';
-import {
-  isAllowedKnowledgeExternalUrl,
-} from '../../shared/knowledgeLinkUrl';
+import { Loader2, X } from 'lucide-react';
+import { isAllowedKnowledgeExternalUrl } from '../../shared/knowledgeLinkUrl';
+import { useMasterData } from '../../contexts/AppDataContext';
 import EditorInsertHandle from './EditorInsertHandle';
-import TableBubbleMenu from './TableBubbleMenu';
+import TableGutterControls from './TableGutterControls';
 import KnowledgeSelectionBubbleMenu from './KnowledgeSelectionBubbleMenu';
 import LinkInsertDialog from './LinkInsertDialog';
+import ProductLinkInsertDialog from './ProductLinkInsertDialog';
 import { insertKnowledgeExternalLink } from './knowledgeEditorInsert';
 import { bindKnowledgeEditorLinkClick } from './knowledgeEditorLinkClick';
 import { bindKnowledgeEditorImageClick } from './knowledgeEditorImageClick';
+import {
+  bindKnowledgeEditorProductRefClick,
+  formatKnowledgeProductRefLabel,
+} from './knowledgeEditorProductRef';
 import KnowledgeImagePreviewOverlay from './KnowledgeImagePreviewOverlay';
+import { buildKnowledgeImageInsertAttrs } from './knowledgeTableImage';
+import { KnowledgeProductRef } from './knowledgeProductRefExtension';
 import { tableDeleteShortcut } from './tableDeleteShortcut';
+import { KnowledgeTextAlign } from './knowledgeTextAlignExtension';
 import { focusDocumentTail, isClickBelowEditorContent } from './focusDocumentTail';
 import { shouldApplyRemoteContentHydrate } from '../../utils/knowledgeEditorHydrate';
 import { useKnowledgeDocOutline } from '../../hooks/useKnowledgeDocOutline';
 import KnowledgeDocOutline from './KnowledgeDocOutline';
+import PlanProductDetail from '../plan-order-list/PlanProductDetail';
 import './knowledge-editor.css';
 
 const lowlight = createLowlight(common);
@@ -66,6 +73,14 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
   onSaveError,
   onUploadImage,
 }) => {
+  const {
+    products,
+    categories,
+    dictionaries,
+    partners,
+    globalNodes,
+    boms,
+  } = useMasterData();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const titleRef = useRef(title);
   const documentIdRef = useRef(documentId);
@@ -77,6 +92,9 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
   const prevDocumentIdRef = useRef<string | null>(null);
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [linkDialogInitialText, setLinkDialogInitialText] = useState('');
+  const [productDialogOpen, setProductDialogOpen] = useState(false);
+  const [viewProductId, setViewProductId] = useState<string | null>(null);
+  const [filePreview, setFilePreview] = useState<{ url: string; type: 'image' | 'pdf' } | null>(null);
   const [imagePreviewSrc, setImagePreviewSrc] = useState<string | null>(null);
   const editorScrollRef = useRef<HTMLDivElement>(null);
 
@@ -86,7 +104,8 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
   const insertImageFromFile = useCallback(async (file: File, ed: Editor | null) => {
     if (!ed || !file.type.startsWith('image/')) return;
     const url = await onUploadImage(file);
-    ed.chain().focus().setImage({ src: url }).run();
+    const attrs = buildKnowledgeImageInsertAttrs(url, ed.isActive('table'));
+    ed.chain().focus().setImage(attrs).run();
   }, [onUploadImage]);
 
   const onSaveErrorRef = useRef(onSaveError);
@@ -139,6 +158,7 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
         codeBlock: false,
         heading: { levels: [1, 2, 3] },
         link: false,
+        underline: false,
       }),
       Link.configure({
         openOnClick: false,
@@ -155,10 +175,18 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
       }),
       TaskList,
       TaskItem.configure({ nested: true }),
-      Table.configure({ resizable: true, allowTableNodeSelection: true }),
+      Table.configure({
+        resizable: true,
+        allowTableNodeSelection: true,
+        // 热区过宽会导致拖选文字时易触发列宽拖拽、选不中
+        handleWidth: 4,
+        cellMinWidth: 80,
+        lastColumnResizable: true,
+      }),
       TableRow,
-      TableHeader,
-      TableCell,
+      KnowledgeTableHeader,
+      KnowledgeTableCell,
+      KnowledgeProductRef,
       ResizableImage.configure({
         inline: false,
         allowBase64: false,
@@ -178,10 +206,12 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
       TextStyle,
       Color.configure({ types: ['textStyle'] }),
       Highlight.configure({ multicolor: true }),
+      KnowledgeTextAlign,
       tableDeleteShortcut,
     ],
     content,
-    editable,
+    // 必须初始为 true，否则 columnResizing 插件不会注册（后续 setEditable 也无法补上）
+    editable: true,
     onUpdate: ({ editor: ed }) => {
       if (hydratingRef.current) return;
       scheduleSaveRef.current(documentIdRef.current, ed);
@@ -304,6 +334,18 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
     return bindKnowledgeEditorImageClick(root, setImagePreviewSrc);
   }, [editor]);
 
+  useEffect(() => {
+    const root = editor?.view.dom;
+    if (!root) return;
+    return bindKnowledgeEditorProductRefClick(root, (productId) => {
+      if (!products.some(p => p.id === productId)) {
+        toast.error('未找到该产品，可能已删除');
+        return;
+      }
+      setViewProductId(productId);
+    });
+  }, [editor, products]);
+
   const openLinkDialog = useCallback(() => {
     if (!editor) return;
     const { from, to, empty } = editor.state.selection;
@@ -312,16 +354,28 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
     setLinkDialogOpen(true);
   }, [editor]);
 
+  const openProductDialog = useCallback(() => {
+    setProductDialogOpen(true);
+  }, []);
+
   const handleLinkConfirm = useCallback((text: string, href: string) => {
     if (!editor) return;
     insertKnowledgeExternalLink(editor, text, href);
     scheduleSaveRef.current(documentIdRef.current, editor);
   }, [editor]);
 
+  const handleProductConfirm = useCallback((productId: string) => {
+    if (!editor) return;
+    const product = products.find(p => p.id === productId);
+    const label = formatKnowledgeProductRefLabel(product ?? { name: '', sku: '' });
+    editor.commands.insertProductRef({ productId, label });
+    scheduleSaveRef.current(documentIdRef.current, editor);
+  }, [editor, products]);
+
   const handleEditorShellMouseDown = (e: React.MouseEvent) => {
     if (!editor || !editable || e.button !== 0) return;
     const target = e.target as HTMLElement;
-    if (target.closest('.kb-insert-plus, .kb-insert-popup-portal, .kb-table-bubble-menu, .kb-selection-bubble-menu, .kb-selection-color-menu, .kb-insert-wrap, .kb-link-insert-overlay')) {
+    if (target.closest('.kb-insert-plus, .kb-insert-popup-portal, .kb-table-gutters, .kb-selection-bubble-menu, .kb-selection-color-menu, .kb-selection-align-menu, .kb-insert-wrap, .kb-link-insert-overlay')) {
       return;
     }
 
@@ -390,9 +444,10 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
             editable={editable}
             onPickImage={() => fileInputRef.current?.click()}
             onOpenLinkDialog={openLinkDialog}
+            onOpenProductDialog={openProductDialog}
           />
           <div className="kb-editor">
-            <TableBubbleMenu editor={editor} editable={editable} />
+            <TableGutterControls editor={editor} editable={editable} />
             <KnowledgeSelectionBubbleMenu
               editor={editor}
               editable={editable}
@@ -416,6 +471,53 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
         onClose={() => setLinkDialogOpen(false)}
         onConfirm={handleLinkConfirm}
       />
+
+      <ProductLinkInsertDialog
+        open={productDialogOpen}
+        onClose={() => setProductDialogOpen(false)}
+        onConfirm={handleProductConfirm}
+      />
+
+      {viewProductId && (
+        <PlanProductDetail
+          viewProductId={viewProductId}
+          products={products}
+          categories={categories}
+          dictionaries={dictionaries}
+          partners={partners}
+          globalNodes={globalNodes}
+          boms={boms}
+          onClose={() => setViewProductId(null)}
+          onFilePreview={(url, type) => setFilePreview({ url, type })}
+          stackZClass="z-[12000]"
+        />
+      )}
+
+      {filePreview && (
+        <div
+          className="fixed inset-0 z-[12100] flex items-center justify-center p-8 bg-slate-900/80 backdrop-blur-sm"
+          onClick={() => setFilePreview(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setFilePreview(null)}
+            className="absolute top-6 right-6 z-10 p-2 rounded-full bg-white/20 hover:bg-white/40 text-white transition-all"
+            aria-label="关闭"
+          >
+            <X className="w-8 h-8" />
+          </button>
+          <div
+            className="relative z-10 w-full max-w-4xl max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            {filePreview.type === 'image' ? (
+              <img src={filePreview.url} alt="预览" className="w-full h-full max-h-[85vh] object-contain" />
+            ) : (
+              <iframe src={filePreview.url} title="PDF 预览" className="w-full h-[85vh] border-0" />
+            )}
+          </div>
+        </div>
+      )}
 
       <KnowledgeImagePreviewOverlay
         src={imagePreviewSrc}

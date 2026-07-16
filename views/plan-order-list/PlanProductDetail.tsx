@@ -21,6 +21,8 @@ interface PlanProductDetailProps {
   boms: BOM[];
   onClose: () => void;
   onFilePreview: (url: string, type: 'image' | 'pdf') => void;
+  /** 叠层高度；资料库等高层弹窗内打开时需提高，默认 z-[95] */
+  stackZClass?: string;
 }
 
 const PlanProductDetail: React.FC<PlanProductDetailProps> = ({
@@ -33,13 +35,14 @@ const PlanProductDetail: React.FC<PlanProductDetailProps> = ({
   boms,
   onClose,
   onFilePreview,
+  stackZClass = 'z-[95]',
 }) => {
   const p = products.find(x => x.id === viewProductId);
   const cat = p && categories.find(c => c.id === p.categoryId);
   if (!p) return null;
 
   return (
-    <div className="fixed inset-0 z-[95] flex items-center justify-center p-4">
+    <div className={`fixed inset-0 ${stackZClass} flex items-center justify-center p-4`}>
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} />
       <div className="relative bg-white w-full max-w-2xl rounded-[32px] shadow-2xl overflow-hidden max-h-[90vh] flex flex-col min-h-0" onClick={e => e.stopPropagation()}>
         <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between shrink-0">

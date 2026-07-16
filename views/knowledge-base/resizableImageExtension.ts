@@ -71,6 +71,8 @@ export const ResizableImage = Image.extend({
 
       const selectImage = (e: MouseEvent) => {
         if (!editor.isEditable) return;
+        // 点在缩放手柄上时不抢选（手柄自己处理拖拽）
+        if ((e.target as HTMLElement | null)?.closest?.('[data-resize-handle]')) return;
         const pos = getPos();
         if (pos === undefined) return;
         e.preventDefault();
