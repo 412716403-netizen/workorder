@@ -389,7 +389,7 @@ npm run miniprogram:icons
 | 页面 | 路径 | 职责 |
 |------|------|------|
 | 计划列表 | [`packageBusiness/production-plans/`](../miniprogram/packageBusiness/production-plans/) | 分页列表、搜索/派发状态筛选、采购到货进度条、下拉刷新 |
-| 计划详情 | [`packageBusiness/production-plan-detail/`](../miniprogram/packageBusiness/production-plan-detail/) | 对齐 Web：基础信息/数量/工序/BOM 横向表格（可左右滑动）；下达工单 |
+| 计划详情 | [`packageBusiness/production-plan-detail/`](../miniprogram/packageBusiness/production-plan-detail/) | 对齐 Web：基础信息/数量/工序/BOM 横向表格（可左右滑动）；下达工单；点产品名称打开只读商品信息（与资料库共用 `product-quick-detail`） |
 | 新建计划 | [`packageBusiness/production-plan-create/`](../miniprogram/packageBusiness/production-plan-create/) | 简化新建（产品+数量+客户+交期） |
 
 | 工具 / 配置 | 作用 |
@@ -942,6 +942,28 @@ npm run miniprogram:icons
 **菜单说明**：设备管理仅 Web 端维护，小程序应用中心**不含** `basic-equipment` 入口；报工/返工流程内设备选择仍受企业 `equipmentModuleEnabled` 控制。
 
 入口：[`menus.js`](../miniprogram/config/menus.js) `basic-dictionaries` → `/packageBusiness/basic-dictionaries/basic-dictionaries`。
+
+## 资料库
+
+对齐 Web [`KnowledgeBaseView`](../views/knowledge-base/KnowledgeBaseView.tsx) 的**只读浏览**（不支持新建/编辑/上传）：
+
+| 页面 | 路径 | 职责 |
+|------|------|------|
+| 树 / 搜索 | [`packageBusiness/knowledge-base/`](../miniprogram/packageBusiness/knowledge-base/) | 文件夹面包屑、当前层列表、标题/正文搜索、进入文档 |
+| 文档详情 | [`packageBusiness/knowledge-doc-detail/`](../miniprogram/packageBusiness/knowledge-doc-detail/) | 标题 + 更新时间 + 消毒后 HTML（块渲染）；鉴权图片；按文档宽度展示图片；表格可横向滚动 |
+| 产品快览 | [`packageBusiness/knowledge-product-detail/`](../miniprogram/packageBusiness/knowledge-product-detail/) + [`components/product-quick-detail/`](../miniprogram/packageBusiness/components/product-quick-detail/) | 只读商品信息共用组件：基本信息、分类扩展属性、标准生产路线、工艺 BOM；入口含资料库关联产品、生产计划详情点产品名；无编辑/删除；大图不进 `setData` |
+
+| 工具 | 作用 |
+|------|------|
+| [`utils/knowledgeApi.js`](../miniprogram/packageBusiness/utils/knowledgeApi.js) | `GET /knowledge-base/tree` · `documents` · `documents/:id` · `assets/:id`（arraybuffer） |
+| [`utils/knowledgeTree.js`](../miniprogram/packageBusiness/utils/knowledgeTree.js) | 当前层行模型、面包屑 |
+| [`utils/knowledgeHtmlForMini.js`](../miniprogram/packageBusiness/utils/knowledgeHtmlForMini.js) | 拆成 html/image/product 渲染块；表格行内边框；鉴权图片 URL |
+
+**权限 / 插件**：入口需插件 `knowledge_base` 开启；页内校验 `knowledge_base:folders:view`（树）+ `knowledge_base:documents:view`（正文/图片）。图片资源不可裸链，须 Bearer 下载后**写入本地临时文件**再引用路径（禁止 base64 塞进 `setData`，避免超大传输与渲染层错误）；正文内图片点按 `wx.previewImage`（按文档设定宽度展示，最大不超过页面宽）；关联产品芯片跳转只读产品快览（需 `basic:products:view`）。
+
+**留 Web**：新建/编辑/上传；表格内图片点按预览（表格整块 rich-text）；业务表单里 knowledge 类自定义字段仍「请在电脑端填写」。
+
+入口：[`menus.js`](../miniprogram/config/menus.js) `knowledge-base` → `/packageBusiness/knowledge-base/knowledge-base`。
 
 ## 分包与上传体积
 

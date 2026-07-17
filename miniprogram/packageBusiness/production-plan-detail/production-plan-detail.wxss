@@ -123,6 +123,10 @@
   white-space: nowrap;
 }
 
+.plan-detail-hero__product--link {
+  color: var(--color-primary, #4f46e5);
+}
+
 .plan-detail-hero__sku {
   flex-shrink: 0;
   max-width: 48%;

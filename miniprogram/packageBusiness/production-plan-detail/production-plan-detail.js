@@ -131,6 +131,19 @@ Page({
     wx.navigateBack();
   },
 
+  onProductNameTap(e) {
+    const id = e.currentTarget.dataset.id;
+    if (!id) return;
+    const ctx = readTenantCtx();
+    if (!hasPermission((ctx && ctx.permissions) || [], 'basic:products:view')) {
+      wx.showToast({ title: '无产品查看权限', icon: 'none' });
+      return;
+    }
+    wx.navigateTo({
+      url: `/packageBusiness/knowledge-product-detail/knowledge-product-detail?id=${encodeURIComponent(id)}`,
+    });
+  },
+
   async loadDetail() {
     const ctx = readTenantCtx();
     if (!ctx || !ctx.tenantId) {

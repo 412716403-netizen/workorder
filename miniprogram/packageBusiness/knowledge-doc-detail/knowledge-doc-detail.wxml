@@ -1,0 +1,164 @@
+<view class="plan-detail-shell">
+  <view class="plan-detail-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-detail-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-detail-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-detail-header__title">资料库文档</text>
+      <view class="plan-detail-header__back plan-detail-header__back--placeholder"></view>
+    </view>
+  </view>
+
+  <view class="plan-detail-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view
+    class="plan-detail-scroll"
+    scroll-y
+    show-scrollbar="{{false}}"
+    style="height: {{scrollHeight}}px;"
+  >
+    <view wx:if="{{loading}}" class="plan-detail-muted">加载中…</view>
+
+    <view wx:elif="{{found}}" class="kb-doc-page">
+      <view class="kb-doc-hero">
+        <text class="kb-doc-hero__title">{{title}}</text>
+        <text wx:if="{{updatedText}}" class="kb-doc-hero__meta">{{updatedText}}</text>
+      </view>
+
+      <view class="kb-doc-card">
+        <block wx:for="{{blocks}}" wx:for-item="block" wx:key="key">
+          <scroll-view
+            wx:if="{{block.type === 'table'}}"
+            class="kb-doc-table-scroll"
+            scroll-x
+            enhanced
+            show-scrollbar="{{true}}"
+          >
+            <view class="kb-doc-mini-table">
+              <view
+                wx:for="{{block.rows}}"
+                wx:for-item="row"
+                wx:key="key"
+                class="kb-doc-mini-table__row"
+              >
+                <view
+                  wx:for="{{row.cells}}"
+                  wx:for-item="cell"
+                  wx:key="key"
+                  class="kb-doc-mini-table__cell {{cell.isHeader ? 'kb-doc-mini-table__cell--header' : ''}}"
+                >
+                  <block wx:for="{{cell.blocks}}" wx:for-item="cellBlock" wx:key="key">
+                    <rich-text
+                      wx:if="{{cellBlock.type === 'html'}}"
+                      class="kb-doc-rich kb-doc-rich--cell"
+                      nodes="{{cellBlock.html}}"
+                      space="nbsp"
+                    ></rich-text>
+
+                    <image
+                      wx:elif="{{cellBlock.type === 'image'}}"
+                      class="kb-doc-image kb-doc-image--cell"
+                      style="{{cellBlock.imageStyle}}"
+                      src="{{cellBlock.src}}"
+                      mode="widthFix"
+                      data-index="{{cellBlock.previewIndex}}"
+                      bindtap="onImageTap"
+                    />
+
+                    <view
+                      wx:elif="{{cellBlock.type === 'product'}}"
+                      class="kb-doc-product kb-doc-product--cell"
+                      data-id="{{cellBlock.productId}}"
+                      bindtap="onProductTap"
+                    >{{cellBlock.label}}</view>
+
+                    <view
+                      wx:elif="{{cellBlock.type === 'callout'}}"
+                      class="kb-doc-callout kb-doc-callout--cell"
+                    >
+                      <block wx:for="{{cellBlock.blocks}}" wx:for-item="cellCalloutBlock" wx:key="key">
+                        <rich-text
+                          wx:if="{{cellCalloutBlock.type === 'html'}}"
+                          class="kb-doc-rich kb-doc-rich--callout"
+                          nodes="{{cellCalloutBlock.html}}"
+                          space="nbsp"
+                        ></rich-text>
+                        <image
+                          wx:elif="{{cellCalloutBlock.type === 'image'}}"
+                          class="kb-doc-image kb-doc-image--callout"
+                          style="{{cellCalloutBlock.imageStyle}}"
+                          src="{{cellCalloutBlock.src}}"
+                          mode="widthFix"
+                          data-index="{{cellCalloutBlock.previewIndex}}"
+                          bindtap="onImageTap"
+                        />
+                        <view
+                          wx:elif="{{cellCalloutBlock.type === 'product'}}"
+                          class="kb-doc-product kb-doc-product--callout"
+                          data-id="{{cellCalloutBlock.productId}}"
+                          bindtap="onProductTap"
+                        >{{cellCalloutBlock.label}}</view>
+                      </block>
+                    </view>
+                  </block>
+                </view>
+              </view>
+            </view>
+          </scroll-view>
+
+          <view wx:elif="{{block.type === 'callout'}}" class="kb-doc-callout">
+            <block wx:for="{{block.blocks}}" wx:for-item="calloutBlock" wx:key="key">
+              <rich-text
+                wx:if="{{calloutBlock.type === 'html'}}"
+                class="kb-doc-rich kb-doc-rich--callout"
+                nodes="{{calloutBlock.html}}"
+                space="nbsp"
+              ></rich-text>
+
+              <image
+                wx:elif="{{calloutBlock.type === 'image'}}"
+                class="kb-doc-image kb-doc-image--callout"
+                style="{{calloutBlock.imageStyle}}"
+                src="{{calloutBlock.src}}"
+                mode="widthFix"
+                data-index="{{calloutBlock.previewIndex}}"
+                bindtap="onImageTap"
+              />
+
+              <view
+                wx:elif="{{calloutBlock.type === 'product'}}"
+                class="kb-doc-product kb-doc-product--callout"
+                data-id="{{calloutBlock.productId}}"
+                bindtap="onProductTap"
+              >{{calloutBlock.label}}</view>
+            </block>
+          </view>
+
+          <rich-text
+            wx:elif="{{block.type === 'html'}}"
+            class="kb-doc-rich"
+            nodes="{{block.html}}"
+            space="nbsp"
+          ></rich-text>
+
+          <image
+            wx:elif="{{block.type === 'image'}}"
+            class="kb-doc-image"
+            style="{{block.imageStyle}}"
+            src="{{block.src}}"
+            mode="widthFix"
+            data-index="{{block.previewIndex}}"
+            bindtap="onImageTap"
+          />
+
+          <view
+            wx:elif="{{block.type === 'product'}}"
+            class="kb-doc-product"
+            data-id="{{block.productId}}"
+            bindtap="onProductTap"
+          >{{block.label}}</view>
+        </block>
+      </view>
+    </view>
+
+    <view wx:else class="plan-detail-muted">{{emptyText}}</view>
+  </scroll-view>
+</view>

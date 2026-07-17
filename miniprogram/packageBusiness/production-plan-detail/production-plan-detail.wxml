@@ -32,7 +32,11 @@
         </view>
         <view class="plan-detail-hero__text">
           <view class="plan-detail-hero__product-line">
-            <text class="plan-detail-hero__product">{{productHero.productName}}</text>
+            <text
+              class="plan-detail-hero__product {{productHero.canOpenProduct ? 'plan-detail-hero__product--link' : ''}}"
+              data-id="{{productHero.productId}}"
+              bindtap="onProductNameTap"
+            >{{productHero.productName}}</text>
             <text wx:if="{{productHero.showProductSku}}" class="plan-detail-hero__sku">{{productHero.productSku}}</text>
           </view>
           <view wx:if="{{productHero.showProductCustomTags}}" class="plan-detail-hero__custom-tags">

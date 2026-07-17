@@ -1,0 +1,41 @@
+<view class="plan-detail-shell">
+  <view class="plan-detail-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-detail-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-detail-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-detail-header__title">产品信息</text>
+      <view class="plan-detail-header__back plan-detail-header__back--placeholder"></view>
+    </view>
+  </view>
+
+  <view class="plan-detail-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view
+    class="plan-detail-scroll"
+    scroll-y
+    show-scrollbar="{{false}}"
+    style="height: {{scrollHeight}}px;"
+  >
+    <view wx:if="{{loading}}" class="plan-detail-muted">加载中…</view>
+
+    <product-quick-detail
+      wx:elif="{{found}}"
+      hero="{{hero}}"
+      rows="{{rows}}"
+      customRows="{{customRows}}"
+      showCustomSection="{{showCustomSection}}"
+      processRows="{{processRows}}"
+      processEmpty="{{processEmpty}}"
+      showBomSection="{{showBomSection}}"
+      bomSkuOptions="{{bomSkuOptions}}"
+      showBomSkuTabs="{{showBomSkuTabs}}"
+      bomGroups="{{bomGroups}}"
+      bomEmptyText="{{bomEmptyText}}"
+      showBomEmpty="{{showBomEmpty}}"
+      bind:previewimage="onPreviewImage"
+      bind:bomskutap="onBomSkuTap"
+      bind:customknowledgetap="onCustomKnowledgeTap"
+    />
+
+    <view wx:else class="plan-detail-muted">{{emptyText}}</view>
+  </scroll-view>
+</view>

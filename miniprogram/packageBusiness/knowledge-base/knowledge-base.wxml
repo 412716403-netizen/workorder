@@ -1,0 +1,75 @@
+<view class="plan-shell">
+  <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-header__title">资料库</text>
+      <view class="plan-header__back plan-header__back--placeholder"></view>
+    </view>
+
+    <view class="plan-header__tools">
+      <view class="plan-search">
+        <input
+          class="plan-search__input"
+          value="{{searchKeyword}}"
+          bindinput="onSearchInput"
+          placeholder="搜索文档标题或正文…"
+          confirm-type="search"
+          placeholder-class="plan-search__ph"
+        />
+        <view wx:if="{{searchKeyword}}" class="plan-search__clear" bindtap="onSearchClear">×</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <view wx:if="{{!searching}}" class="kb-crumb">
+    <view class="kb-crumb__inner">
+      <text
+        class="kb-crumb__item {{!breadcrumb.length ? 'kb-crumb__item--current' : ''}}"
+        bindtap="onBreadcrumbRoot"
+      >全部</text>
+      <block wx:for="{{breadcrumb}}" wx:key="id">
+        <text class="kb-crumb__sep">/</text>
+        <text
+          class="kb-crumb__item {{index === breadcrumb.length - 1 ? 'kb-crumb__item--current' : ''}}"
+          data-id="{{item.id}}"
+          bindtap="onBreadcrumbTap"
+        >{{item.name}}</text>
+      </block>
+    </view>
+    <view
+      wx:if="{{canGoUp}}"
+      class="kb-crumb__up"
+      bindtap="onGoUp"
+    >上级</view>
+  </view>
+
+  <view wx:elif="{{searching}}" class="kb-search-hint">搜索结果</view>
+
+  <view class="kb-page">
+    <empty-state wx:if="{{loading && !rows.length}}" loading="{{true}}" text="加载中…" />
+
+    <view wx:elif="{{rows.length}}">
+      <view
+        wx:for="{{rows}}"
+        wx:key="id"
+        class="kb-row"
+        data-id="{{item.id}}"
+        data-kind="{{item.kind}}"
+        data-title="{{item.title}}"
+        bindtap="onRowTap"
+      >
+        <image class="kb-row__icon" src="{{item.iconSrc}}" mode="aspectFit" />
+        <view class="kb-row__body">
+          <text class="kb-row__title">{{item.title}}</text>
+          <text class="kb-row__meta">{{item.meta}}</text>
+        </view>
+        <text class="kb-row__chevron">›</text>
+      </view>
+      <view class="plan-list-footer">共 {{rows.length}} 项</view>
+    </view>
+
+    <empty-state wx:else text="{{emptyText}}" />
+  </view>
+</view>

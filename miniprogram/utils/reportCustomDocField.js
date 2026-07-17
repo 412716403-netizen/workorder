@@ -135,6 +135,7 @@ function mapProductCustomTags(product, category, options) {
 }
 
 module.exports = {
+  parseKnowledgeFieldValue,
   effectiveCustomDocFieldType,
   normalizeReportFieldDefinition,
   normalizeReportFieldDefinitions,

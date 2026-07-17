@@ -1,0 +1,140 @@
+<view class="kb-product-page" wx:if="{{hero}}">
+  <view class="plan-detail-hero order-detail-hero">
+    <view class="plan-detail-hero__left">
+      <image
+        wx:if="{{hero.showImage}}"
+        class="plan-detail-hero__img"
+        src="{{hero.imageUrl}}"
+        mode="aspectFill"
+        bindtap="onPreviewImage"
+      />
+      <view wx:else class="plan-detail-hero__img plan-detail-hero__img--placeholder">
+        <image class="plan-detail-hero__placeholder-icon" src="{{hero.placeholderIconSrc}}" mode="aspectFit" />
+      </view>
+    </view>
+    <view class="plan-detail-hero__text">
+      <view class="plan-detail-hero__product-line">
+        <text class="plan-detail-hero__product">{{hero.productName}}</text>
+        <text wx:if="{{hero.showProductSku}}" class="plan-detail-hero__sku">{{hero.productSku}}</text>
+      </view>
+      <text class="kb-product-page__category">{{hero.categoryName}}</text>
+    </view>
+  </view>
+
+  <view class="plan-detail-section">
+    <view class="plan-detail-section__head">
+      <text class="plan-detail-section__title">基本信息</text>
+    </view>
+    <view class="plan-form-card">
+      <view
+        wx:for="{{rows}}"
+        wx:key="rowKey"
+        class="plan-form-cell"
+      >
+        <text class="plan-form-cell__label">{{item.label}}</text>
+        <text class="plan-form-cell__value">{{item.value}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{showCustomSection}}" class="plan-detail-section">
+    <view class="plan-detail-section__head">
+      <text class="plan-detail-section__title">分类扩展属性</text>
+    </view>
+    <view class="plan-form-card">
+      <view
+        wx:for="{{customRows}}"
+        wx:key="rowKey"
+        class="plan-form-cell"
+      >
+        <text class="plan-form-cell__label">{{item.label}}</text>
+        <text
+          wx:if="{{item.isKnowledgeLink}}"
+          class="plan-form-cell__value plan-form-cell__value--link"
+          data-id="{{item.knowledgeDocId}}"
+          data-title="{{item.knowledgeTitle}}"
+          bindtap="onCustomKnowledgeTap"
+        >{{item.value}}</text>
+        <text
+          wx:else
+          class="plan-form-cell__value {{item.empty ? 'plan-form-cell__value--empty' : ''}}"
+        >{{item.value}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="plan-detail-section">
+    <view class="plan-detail-section__head">
+      <text class="plan-detail-section__title">标准生产路线</text>
+    </view>
+    <view wx:if="{{processEmpty}}" class="kb-product-empty">暂无工序</view>
+    <view wx:else class="kb-process-list">
+      <view
+        wx:for="{{processRows}}"
+        wx:key="id"
+        class="kb-process-card"
+      >
+        <view class="kb-process-card__head">
+          <text class="kb-process-card__index">{{item.indexText}}</text>
+          <text class="kb-process-card__name">{{item.name}}</text>
+          <text wx:if="{{item.hasBOM}}" class="kb-process-card__bom">含 BOM</text>
+          <text wx:if="{{item.showPieceHint}}" class="kb-process-card__rate">{{item.pieceHint}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{showBomSection}}" class="plan-detail-section">
+    <view class="plan-detail-section__head">
+      <text class="plan-detail-section__title">工艺 BOM</text>
+    </view>
+
+    <scroll-view
+      wx:if="{{showBomSkuTabs}}"
+      class="kb-bom-tabs"
+      scroll-x
+      enhanced
+      show-scrollbar="{{false}}"
+    >
+      <view
+        wx:for="{{bomSkuOptions}}"
+        wx:key="id"
+        class="kb-bom-tab {{item.selected ? 'kb-bom-tab--active' : ''}} {{!item.hasBom ? 'kb-bom-tab--empty' : ''}}"
+        data-id="{{item.id}}"
+        bindtap="onBomSkuTap"
+      >
+        {{item.label}}<text wx:if="{{!item.hasBom}}" class="kb-bom-tab__hint">（未配置）</text>
+      </view>
+    </scroll-view>
+
+    <view wx:if="{{showBomEmpty}}" class="kb-product-empty">{{bomEmptyText}}</view>
+
+    <view wx:elif="{{bomGroups.length}}" class="kb-bom-groups">
+      <view
+        wx:for="{{bomGroups}}"
+        wx:key="id"
+        class="kb-bom-group"
+      >
+        <view class="kb-bom-group__head">
+          <text wx:if="{{item.showNodeName}}" class="kb-bom-group__node">{{item.nodeName}}</text>
+          <text class="kb-bom-group__name">{{item.name}}</text>
+        </view>
+        <view
+          wx:for="{{item.items}}"
+          wx:for-item="mat"
+          wx:key="key"
+          class="kb-bom-item"
+        >
+          <view class="kb-bom-item__main">
+            <view class="kb-bom-item__text">
+              <text class="kb-bom-item__name">{{mat.productName}}</text>
+              <text wx:if="{{mat.showProductSku}}" class="kb-bom-item__sku">{{mat.productSku}}</text>
+            </view>
+            <text class="kb-bom-item__qty">{{mat.qtyText}}</text>
+          </view>
+          <text wx:if="{{mat.showNote}}" class="kb-bom-item__note">备注：{{mat.note}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

@@ -1,0 +1,6 @@
+{
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "product-quick-detail": "../components/product-quick-detail/product-quick-detail"
+  }
+}

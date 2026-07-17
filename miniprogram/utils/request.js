@@ -61,12 +61,32 @@ function ensureFreshAccessToken() {
   return refreshToken();
 }
 
+function readErrorMessage(data, fallback) {
+  if (!data || typeof data !== 'object') return fallback;
+  const msg = data.error || data.message;
+  return typeof msg === 'string' && msg ? msg : fallback;
+}
+
 /**
  * 已登录请求：过期前自动 refresh，401 时兜底重试一次
- * @param {{ path: string, method?: string, data?: object }} opts path 以 / 开头，如 /auth/me
+ * @param {{
+ *   path: string,
+ *   method?: string,
+ *   data?: object,
+ *   timeout?: number,
+ *   responseType?: string,
+ *   returnFullResponse?: boolean,
+ * }} opts path 以 / 开头，如 /auth/me
  */
 function request(opts) {
-  const { path, method = 'GET', data, timeout = 45000 } = opts;
+  const {
+    path,
+    method = 'GET',
+    data,
+    timeout = 45000,
+    responseType,
+    returnFullResponse = false,
+  } = opts;
   const url = `${API_BASE}${path}`;
   const m = (method || 'GET').toUpperCase();
   const payload = m === 'GET' || m === 'HEAD' ? undefined : data || {};
@@ -87,18 +107,24 @@ function request(opts) {
             return;
           }
           if (res.statusCode === 403) {
-            const msg =
-              (res.data && (res.data.error || res.data.message)) || '无权访问该功能';
-            reject(Object.assign(new Error(typeof msg === 'string' ? msg : '无权访问该功能'), { statusCode: 403 }));
+            const msg = readErrorMessage(res.data, '无权访问该功能');
+            reject(Object.assign(new Error(msg), { statusCode: 403 }));
             return;
           }
           if (res.statusCode >= 200 && res.statusCode < 300) {
+            if (returnFullResponse) {
+              resolve({
+                data: res.data,
+                header: res.header || {},
+                statusCode: res.statusCode,
+              });
+              return;
+            }
             resolve(res.data);
             return;
           }
-          const msg =
-            (res.data && (res.data.error || res.data.message)) || `请求失败 ${res.statusCode}`;
-          reject(Object.assign(new Error(typeof msg === 'string' ? msg : JSON.stringify(msg)), {
+          const msg = readErrorMessage(res.data, `请求失败 ${res.statusCode}`);
+          reject(Object.assign(new Error(msg), {
             statusCode: res.statusCode,
           }));
         },
@@ -113,6 +139,7 @@ function request(opts) {
           reject(err);
         },
       };
+      if (responseType) reqOpts.responseType = responseType;
       if (payload !== undefined) reqOpts.data = payload;
       wx.request(reqOpts);
     });

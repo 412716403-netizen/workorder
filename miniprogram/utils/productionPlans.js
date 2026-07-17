@@ -464,6 +464,8 @@ plan,
   }
 
   const productHero = {
+    productId: product && product.id ? product.id : '',
+    canOpenProduct: Boolean(product && product.id),
     planNumber: plan.planNumber || '—',
     productName: productParts.name,
     productSku: productParts.sku,

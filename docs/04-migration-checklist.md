@@ -80,7 +80,7 @@
 | 账户间转账 | 已落地 | `POST /api/finance/transfers` 事务内落 PAYMENT+RECEIPT 同组（`ZZD` 单号） | 后续可加转账撤销/红冲 |
 | Dashboard / 工作台 | 已落地 | `/api/dashboard/*`：工作台页面存于 `system_settings.workbenchSharedPages`；owner 恒可见并可编辑全部页面；成员按裸 `workbench` 或 `workbench:<pageId>` 严格授权且只读，未授予任何工作台 key 时不显示入口；页面授权同时授予该页组件完整数据 | migration `20260710113000_tenant_member_role_cleanup` 将历史租户 `admin` 迁为 `worker`并清理旧 `dashboard` 权限；存量用户旧 `preferences.dashboardWorkbench` 中的自定义页不会自动迁入共享池 |
 | 追溯码插件 | 已落地 | `featurePlugins.traceability`：计划追溯码、扫码累加、扫码称重 UI gate | 插件中心开通；存量租户默认开启 |
-| 资料库 | 已落地 | `/api/knowledge-base/*`：文件夹/文档 CRUD、图片资源上传 | 前端 `KnowledgeBaseView`；插件 `knowledge_base` 可开关 |
+| 资料库 | 已落地 | `/api/knowledge-base/*`：文件夹/文档 CRUD、图片资源上传 | 前端 `KnowledgeBaseView`；插件 `knowledge_base` 可开关；**小程序只读**（树+详情，见 §10） |
 | 收支汇总、库存预警、订单进度 | 部分落地 | 已有后端聚合方向 | 继续按指标逐项校验计算口径 |
 
 ---
@@ -156,4 +156,5 @@
 | **合作单位** | **部分落地** | 档案列表（分类 Tab/搜索/分页）+ 单位编辑（名称/分类/扩展字段）；`packageBusiness/basic-partners` / `basic-partner-edit`；**不含**批量导入 | 协作租户绑定、file/knowledge 附件上传留 Web |
 | **成员管理** | **部分落地** | Hub 三 Tab（成员列表/待审核/邀请码）+ 分配角色 + 工序分配 + 移除成员；`packageBusiness/basic-members`；对齐 Web `MemberManagementView`（**不含**角色 CRUD） | 角色权限树编辑、直接编辑成员 permissions 留 Web |
 | **公共数据字典** | **已落地** | 列表（类型 Tab/搜索/分页）+ 字典项编辑（颜色/尺码/单位 CRUD）；`packageBusiness/basic-dictionaries` / `basic-dictionary-edit`；应用中心**不含**设备管理入口 | — |
+| **资料库** | **部分落地（只读）** | 应用中心入口 + 文件夹树/搜索 + 文档详情（`rich-text` + 鉴权图片）；`packageBusiness/knowledge-base` / `knowledge-doc-detail` | 新建/编辑/上传、关联产品弹层、表单 knowledge 字段填写留 Web |
 | **系统设置** | **已落地** | 6 Tab 全量对齐 Web `SettingsView`：档案类 `settings-archive-list` / `settings-archive-edit`（CRUD + 扩展字段 + 工序排序）；生产业务配置 `pages/settings-tab`（数量上限/扫码称重容差/物料成本口径，即时 PUT）；`utils/settingsApi.js` | `productionLinkMode`、各业务表单配置、收支账户类型、file/knowledge 上传、工序 `reportTemplate` 留 Web |
