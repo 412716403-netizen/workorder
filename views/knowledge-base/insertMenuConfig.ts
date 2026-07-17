@@ -3,7 +3,7 @@ import type { LucideIcon } from 'lucide-react';
 import {
   Heading1, Heading2, Heading3,
   List, ListOrdered, Table as TableIcon,
-  Minus, Image as ImageIcon, Highlighter, Link2, Package,
+  Minus, Image as ImageIcon, Highlighter, Link2, Package, Paperclip,
 } from 'lucide-react';
 
 export type InsertMenuIconTone = 'slate' | 'blue' | 'amber' | 'green' | 'violet' | 'rose' | 'sky' | 'orange';
@@ -32,6 +32,7 @@ export function buildInsertMenuItems(
   onPickImage?: () => void,
   onOpenLinkDialog?: () => void,
   onOpenProductDialog?: () => void,
+  onPickFile?: () => void,
 ): {
   basic: InsertBasicItem[];
   common: InsertCommonItem[];
@@ -42,6 +43,30 @@ export function buildInsertMenuItems(
     { kind: 'basic', id: 'h3', label: '标题 3', icon: Heading3, run: ed => ed.chain().focus().toggleHeading({ level: 3 }).run() },
     { kind: 'basic', id: 'bullet', label: '无序列表', icon: List, run: ed => ed.chain().focus().toggleBulletList().run() },
     { kind: 'basic', id: 'ordered', label: '有序列表', icon: ListOrdered, run: ed => ed.chain().focus().toggleOrderedList().run() },
+    {
+      kind: 'basic',
+      id: 'highlight',
+      label: '高亮块',
+      icon: Highlighter,
+      run: ed => ed.chain().focus().toggleBlockquote().run(),
+    },
+    {
+      kind: 'basic',
+      id: 'link',
+      label: '超链接',
+      icon: Link2,
+      run: ed => {
+        ed.chain().focus().run();
+        onOpenLinkDialog?.();
+      },
+    },
+    {
+      kind: 'basic',
+      id: 'divider',
+      label: '分割线',
+      icon: Minus,
+      run: ed => ed.chain().focus().setHorizontalRule().run(),
+    },
   ];
 
   const common: InsertCommonItem[] = [
@@ -58,13 +83,13 @@ export function buildInsertMenuItems(
     },
     {
       kind: 'common',
-      id: 'link',
-      label: '超链接',
-      icon: Link2,
-      tone: 'violet',
+      id: 'file',
+      label: '附件',
+      icon: Paperclip,
+      tone: 'sky',
       run: ed => {
         ed.chain().focus().run();
-        onOpenLinkDialog?.();
+        onPickFile?.();
       },
     },
     {
@@ -86,22 +111,6 @@ export function buildInsertMenuItems(
       tone: 'green',
       hasSubmenu: true,
       run: ed => ed.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: false }).run(),
-    },
-    {
-      kind: 'common',
-      id: 'highlight',
-      label: '高亮块',
-      icon: Highlighter,
-      tone: 'orange',
-      run: ed => ed.chain().focus().toggleBlockquote().run(),
-    },
-    {
-      kind: 'common',
-      id: 'divider',
-      label: '分割线',
-      icon: Minus,
-      tone: 'sky',
-      run: ed => ed.chain().focus().setHorizontalRule().run(),
     },
   ];
 

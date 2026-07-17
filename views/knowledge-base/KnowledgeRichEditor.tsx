@@ -33,8 +33,10 @@ import {
   formatKnowledgeProductRefLabel,
 } from './knowledgeEditorProductRef';
 import KnowledgeImagePreviewOverlay from './KnowledgeImagePreviewOverlay';
+import KnowledgeFilePreviewOverlay from './KnowledgeFilePreviewOverlay';
 import { buildKnowledgeImageInsertAttrs } from './knowledgeTableImage';
 import { KnowledgeProductRef } from './knowledgeProductRefExtension';
+import { KnowledgeFileAttachment, type KnowledgeAttachmentInfo } from './knowledgeFileAttachmentExtension';
 import { tableDeleteShortcut } from './tableDeleteShortcut';
 import { KnowledgeTextAlign } from './knowledgeTextAlignExtension';
 import { focusDocumentTail, isClickBelowEditorContent } from './focusDocumentTail';
@@ -59,6 +61,7 @@ interface KnowledgeRichEditorProps {
   onSave: (payload: { docId: string; title: string; content: string }) => void | Promise<void>;
   onSaveError?: () => void;
   onUploadImage: (file: File) => Promise<string>;
+  onUploadFile: (file: File) => Promise<KnowledgeAttachmentInfo>;
 }
 
 const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
@@ -72,6 +75,7 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
   onSave,
   onSaveError,
   onUploadImage,
+  onUploadFile,
 }) => {
   const {
     products,
@@ -82,6 +86,7 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
     boms,
   } = useMasterData();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
   const titleRef = useRef(title);
   const documentIdRef = useRef(documentId);
   const onSaveRef = useRef(onSave);
@@ -96,6 +101,7 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
   const [viewProductId, setViewProductId] = useState<string | null>(null);
   const [filePreview, setFilePreview] = useState<{ url: string; type: 'image' | 'pdf' } | null>(null);
   const [imagePreviewSrc, setImagePreviewSrc] = useState<string | null>(null);
+  const [attachmentPreview, setAttachmentPreview] = useState<KnowledgeAttachmentInfo | null>(null);
   const editorScrollRef = useRef<HTMLDivElement>(null);
 
   documentIdRef.current = documentId;
@@ -187,6 +193,9 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
       KnowledgeTableHeader,
       KnowledgeTableCell,
       KnowledgeProductRef,
+      KnowledgeFileAttachment.configure({
+        onPreview: (info) => setAttachmentPreview(info),
+      }),
       ResizableImage.configure({
         inline: false,
         allowBase64: false,
@@ -296,6 +305,19 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
       await insertImageFromFile(file, editor);
     } catch {
       /* toast handled by parent */
+    }
+  };
+
+  const handleAttachmentChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !editor) return;
+    try {
+      const info = await onUploadFile(file);
+      editor.commands.insertFileAttachment(info);
+      scheduleSaveRef.current(documentIdRef.current, editor);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : '附件上传失败');
     }
   };
 
@@ -445,6 +467,7 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
             onPickImage={() => fileInputRef.current?.click()}
             onOpenLinkDialog={openLinkDialog}
             onOpenProductDialog={openProductDialog}
+            onPickFile={() => attachmentInputRef.current?.click()}
           />
           <div className="kb-editor">
             <TableGutterControls editor={editor} editable={editable} />
@@ -524,12 +547,24 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
         onClose={() => setImagePreviewSrc(null)}
       />
 
+      <KnowledgeFilePreviewOverlay
+        attachment={attachmentPreview}
+        onClose={() => setAttachmentPreview(null)}
+      />
+
       <input
         ref={fileInputRef}
         type="file"
         accept="image/*"
         className="hidden"
         onChange={handleFileChange}
+      />
+
+      <input
+        ref={attachmentInputRef}
+        type="file"
+        className="hidden"
+        onChange={handleAttachmentChange}
       />
     </div>
   );

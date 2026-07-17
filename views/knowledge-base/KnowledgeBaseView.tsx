@@ -18,6 +18,8 @@ import {
 import KnowledgeTreeSidebar from './KnowledgeTreeSidebar';
 import KnowledgeRichEditor from './KnowledgeRichEditor';
 import KnowledgeFolderModal from './KnowledgeFolderModal';
+import type { KnowledgeAttachmentInfo } from './knowledgeFileAttachmentExtension';
+import { resolveUploadMimeType } from '../../utils/knowledgeAttachment';
 
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -111,6 +113,18 @@ const KnowledgeBaseView: React.FC = () => {
     const data = await readFileAsDataUrl(file);
     const res = await uploadAsset.mutateAsync({ data, mimeType: file.type });
     return res.url;
+  };
+
+  const handleUploadFile = async (file: File): Promise<KnowledgeAttachmentInfo> => {
+    const mimeType = resolveUploadMimeType(file.name, file.type);
+    const data = await readFileAsDataUrl(file);
+    const res = await uploadAsset.mutateAsync({ data, mimeType, fileName: file.name });
+    return {
+      assetUrl: res.url,
+      fileName: res.fileName ?? file.name,
+      mimeType: res.mimeType,
+      sizeBytes: res.sizeBytes,
+    };
   };
 
   const handleMoveDocument = async (
@@ -298,6 +312,7 @@ const KnowledgeBaseView: React.FC = () => {
             onSave={handleSave}
             onSaveError={() => toast.error('自动保存失败，请检查网络后继续编辑')}
             onUploadImage={handleUploadImage}
+            onUploadFile={handleUploadFile}
           />
         </div>
       ) : (

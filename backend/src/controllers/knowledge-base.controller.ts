@@ -74,7 +74,7 @@ export const deleteDocument = asyncHandler(async (req, res) => {
 export const uploadAsset = asyncHandler(async (req, res) => {
   const tenantId = req.tenantId!;
   const db = getTenantPrisma(tenantId);
-  const body = req.body as { data?: string; mimeType?: string };
+  const body = req.body as { data?: string; mimeType?: string; fileName?: string };
   res.status(201).json(await svc.uploadAsset(db, tenantId, body));
 });
 
@@ -83,5 +83,16 @@ export const getAsset = asyncHandler(async (req, res) => {
   const asset = await svc.getAsset(db, str(req.params.id));
   res.setHeader('Content-Type', asset.mimeType);
   res.setHeader('Cache-Control', 'private, max-age=86400');
+  if (optStr(req.query.download)) {
+    const fallback = 'attachment';
+    const name = asset.fileName?.trim() || fallback;
+    // RFC 5987：ASCII filename 兜底 + UTF-8 filename* 保留中文名
+    const asciiName = name.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '_');
+    const encoded = encodeURIComponent(name);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${asciiName}"; filename*=UTF-8''${encoded}`,
+    );
+  }
   res.send(asset.data);
 });

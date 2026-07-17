@@ -269,6 +269,47 @@ export async function request<T = unknown>(path: string, options: RequestInit = 
   return JSON.parse(text) as T;
 }
 
+/**
+ * 带鉴权的原始 fetch：复用与 `request()` 相同的令牌续期 / Authorization / Cookie 逻辑，
+ * 但返回原始 `Response`，用于拉取二进制资源（如资料库附件 Blob 供 Excel 解析）。
+ */
+export async function authorizedFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const url = `${API_BASE}${path}`;
+
+  if (localStorage.getItem('isLoggedIn') && isAccessTokenExpiringSoon()) {
+    await tryRefresh();
+  }
+
+  const headers: Record<string, string> = {
+    ...(init.headers as Record<string, string> || {}),
+  };
+  if (memoryAccessToken) {
+    headers['Authorization'] = `Bearer ${memoryAccessToken}`;
+  }
+
+  let res = await fetchWithTimeout(url, {
+    ...init,
+    headers,
+    credentials: 'include',
+    cache: init.cache ?? 'no-store',
+  });
+
+  if (res.status === 401) {
+    const refreshResult = await tryRefreshDetailed();
+    if (refreshResult === 'ok') {
+      if (memoryAccessToken) headers['Authorization'] = `Bearer ${memoryAccessToken}`;
+      res = await fetchWithTimeout(url, {
+        ...init,
+        headers,
+        credentials: 'include',
+        cache: init.cache ?? 'no-store',
+      });
+    }
+  }
+
+  return res;
+}
+
 // ── Pagination types ──
 export interface PaginatedResponse<T> {
   data: T[];

@@ -9,11 +9,15 @@ const {
   removeKnowledgeAssetTempFiles,
 } = require('../utils/knowledgeApi.js');
 const {
-  extractKnowledgeAssetIdsFromHtml,
+  extractImageAssetIdsFromHtml,
   buildKnowledgeDocBlocks,
   applyImageBlockLayout,
 } = require('../utils/knowledgeHtmlForMini.js');
 const { formatDateShort } = require('../utils/knowledgeTree.js');
+const {
+  resolveOpenDocumentFileType,
+  formatUnpreviewableMessage,
+} = require('../utils/knowledgeAttachmentForMini.js');
 
 function computeHeaderBlockHeight(nav) {
   return nav.statusBarHeight + nav.navBarHeight;
@@ -43,6 +47,7 @@ Page({
     this._docId = docId;
     this._windowWidth = win.windowWidth || 375;
     this._tempAssetPaths = [];
+    this._fileTempByAssetId = {};
     this.setData({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
@@ -55,6 +60,7 @@ Page({
   onUnload() {
     removeKnowledgeAssetTempFiles(this._tempAssetPaths || []);
     this._tempAssetPaths = [];
+    this._fileTempByAssetId = {};
   },
 
   onShow() {
@@ -115,6 +121,77 @@ Page({
     });
   },
 
+  async onFileTap(e) {
+    const ds = e.currentTarget.dataset || {};
+    const assetId = ds.assetId;
+    const fileName = ds.fileName || '附件';
+    const mimeType = ds.mimeType || 'application/octet-stream';
+    const kind = ds.kind || 'other';
+    if (!assetId) {
+      wx.showToast({ title: '附件无效', icon: 'none' });
+      return;
+    }
+
+    if (kind === 'image') {
+      try {
+        const path = await this.ensureFileTempPath(assetId, fileName, mimeType);
+        wx.previewImage({ current: path, urls: [path] });
+      } catch (err) {
+        wx.showToast({ title: (err && err.message) || '预览失败', icon: 'none' });
+      }
+      return;
+    }
+
+    const fileType = resolveOpenDocumentFileType(fileName, mimeType);
+    if (!fileType) {
+      wx.showModal({
+        title: '无法预览',
+        content: `${formatUnpreviewableMessage(fileName)}，请在电脑端打开或下载。`,
+        showCancel: false,
+      });
+      return;
+    }
+
+    wx.showLoading({ title: '打开中…', mask: true });
+    try {
+      const filePath = await this.ensureFileTempPath(assetId, fileName, mimeType);
+      await new Promise((resolve, reject) => {
+        wx.openDocument({
+          filePath,
+          fileType,
+          showMenu: true,
+          success: resolve,
+          fail: reject,
+        });
+      });
+    } catch (err) {
+      wx.showModal({
+        title: '无法打开',
+        content: (err && err.errMsg) || (err && err.message) || '打开失败，请在电脑端查看',
+        showCancel: false,
+      });
+    } finally {
+      wx.hideLoading();
+    }
+  },
+
+  async ensureFileTempPath(assetId, fileName, mimeType) {
+    const cached = this._fileTempByAssetId && this._fileTempByAssetId[assetId];
+    if (cached) return cached;
+    const { buffer, mimeType: serverMime } = await fetchKnowledgeAssetBuffer(assetId);
+    if (!buffer) throw new Error('下载失败');
+    const filePath = await writeKnowledgeAssetTempFile(
+      assetId,
+      buffer,
+      serverMime || mimeType,
+      fileName,
+    );
+    this._fileTempByAssetId = this._fileTempByAssetId || {};
+    this._fileTempByAssetId[assetId] = filePath;
+    this._tempAssetPaths = (this._tempAssetPaths || []).concat(filePath);
+    return filePath;
+  },
+
   async loadDocument() {
     const id = this._docId;
     if (!id) {
@@ -130,7 +207,8 @@ Page({
       }
       this._loaded = true;
       const content = String(doc.content || '');
-      const assetIds = extractKnowledgeAssetIdsFromHtml(content);
+      // 仅预拉正文图片；附件按点击再下载（避免大 PDF/Excel 拖慢首屏）
+      const assetIds = extractImageAssetIdsFromHtml(content);
       const urlById = {};
       const tempPaths = [];
 
@@ -139,7 +217,6 @@ Page({
           try {
             const { buffer, mimeType } = await fetchKnowledgeAssetBuffer(assetId);
             if (!buffer) return;
-            // 写本地文件，禁止把 base64 塞进 setData（易触发 1MB+ 传输与渲染层错误）
             const filePath = await writeKnowledgeAssetTempFile(assetId, buffer, mimeType);
             urlById[assetId] = filePath;
             tempPaths.push(filePath);

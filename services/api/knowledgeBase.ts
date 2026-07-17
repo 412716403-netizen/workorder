@@ -1,4 +1,4 @@
-import { request, buildQs } from './_client';
+import { request, buildQs, authorizedFetch } from './_client';
 import type {
   KnowledgeFolderDto,
   KnowledgeDocumentSummaryDto,
@@ -68,11 +68,39 @@ export const knowledgeBase = {
       method: 'DELETE',
     }),
 
-  uploadAsset: (body: { data: string; mimeType: string }) =>
+  uploadAsset: (body: { data: string; mimeType: string; fileName?: string }) =>
     request<KnowledgeAssetUploadResponse>('/knowledge-base/assets', {
       method: 'POST',
       body: JSON.stringify(body),
     }),
 };
+
+/** 资源 URL 形如 `/api/knowledge-base/assets/{id}`，转换为相对 API_BASE 的路径 */
+function assetUrlToApiPath(assetUrl: string): string {
+  return assetUrl.replace(/^\/api(?=\/)/, '');
+}
+
+/** 带鉴权拉取附件二进制（供 Excel 解析）。 */
+export async function fetchKnowledgeAssetBlob(assetUrl: string): Promise<Blob> {
+  const res = await authorizedFetch(assetUrlToApiPath(assetUrl));
+  if (!res.ok) throw new Error('加载附件失败');
+  return res.blob();
+}
+
+/** 下载附件：拉取 Blob 后以原始文件名触发保存（避免依赖跨站 Cookie）。 */
+export async function downloadKnowledgeAsset(assetUrl: string, fileName: string): Promise<void> {
+  const blob = await fetchKnowledgeAssetBlob(assetUrl);
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = fileName || 'attachment';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+  }
+}
 
 export type { KnowledgeTreeResponse };

@@ -5,6 +5,9 @@ import { sanitizeCreate, sanitizeUpdate } from '../utils/request.js';
 import { extractKnowledgeAssetIdsFromHtml } from '../../../shared/knowledgeAssetRefs.js';
 import {
   KNOWLEDGE_DOCUMENT_CONTENT_MAX_CHARS,
+  KNOWLEDGE_ASSET_IMAGE_MIME_TYPES,
+  KNOWLEDGE_ASSET_IMAGE_MAX_BYTES,
+  KNOWLEDGE_ASSET_FILE_MAX_BYTES,
   type KnowledgeDocumentDto,
   type KnowledgeDocumentReferencesResponse,
   type KnowledgeDocumentSummaryDto,
@@ -19,13 +22,7 @@ import {
   hasKnowledgeDocumentReferences,
 } from '../utils/knowledgeDocReferences.js';
 
-const MAX_ASSET_BYTES = 10 * 1024 * 1024;
-const ALLOWED_IMAGE_MIME = new Set([
-  'image/jpeg',
-  'image/png',
-  'image/gif',
-  'image/webp',
-]);
+const ALLOWED_IMAGE_MIME = new Set<string>(KNOWLEDGE_ASSET_IMAGE_MIME_TYPES);
 
 const DOCUMENT_SUMMARY_SELECT = {
   id: true,
@@ -338,40 +335,55 @@ export async function deleteDocument(db: TenantPrismaClient, id: string) {
   return { ok: true };
 }
 
-function decodeBase64Payload(data: string): Buffer {
+function decodeBase64Payload(data: string, maxBytes: number, label: string): Buffer {
   const trimmed = data.trim();
   const base64 = trimmed.includes(',') ? trimmed.split(',').pop()! : trimmed;
   let buf: Buffer;
   try {
     buf = Buffer.from(base64, 'base64');
   } catch {
-    throw new AppError(400, '图片数据格式无效');
+    throw new AppError(400, `${label}数据格式无效`);
   }
-  if (!buf.length) throw new AppError(400, '图片数据为空');
-  if (buf.length > MAX_ASSET_BYTES) {
-    throw new AppError(400, `图片不能超过 ${MAX_ASSET_BYTES / 1024 / 1024}MB`);
+  if (!buf.length) throw new AppError(400, `${label}数据为空`);
+  if (buf.length > maxBytes) {
+    throw new AppError(400, `${label}不能超过 ${maxBytes / 1024 / 1024}MB`);
   }
   return buf;
+}
+
+/** 规范化用户上传的文件名：去路径、限长，避免脏数据落库 */
+function normalizeAssetFileName(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const cleaned = raw.trim().split(/[\\/]/).pop()?.trim() ?? '';
+  if (!cleaned) return null;
+  return cleaned.slice(0, 255);
 }
 
 export async function uploadAsset(
   db: TenantPrismaClient,
   tenantId: string,
-  body: { data?: string; mimeType?: string },
+  body: { data?: string; mimeType?: string; fileName?: string },
 ) {
-  const mimeType = String(body.mimeType ?? '').trim().toLowerCase();
-  if (!mimeType || !ALLOWED_IMAGE_MIME.has(mimeType)) {
-    throw new AppError(400, '不支持的图片格式');
+  // 附件：任意 MIME 均可上传；仅正文插图路径要求白名单图片格式
+  let mimeType = String(body.mimeType ?? '').trim().toLowerCase();
+  if (!mimeType) mimeType = 'application/octet-stream';
+  if (mimeType.length > 100) {
+    throw new AppError(400, '文件类型无效');
   }
+  const isImage = ALLOWED_IMAGE_MIME.has(mimeType);
   const dataStr = body.data;
-  if (!dataStr) throw new AppError(400, '缺少图片数据');
-  const buf = decodeBase64Payload(dataStr);
+  if (!dataStr) throw new AppError(400, '缺少文件数据');
+  const maxBytes = isImage ? KNOWLEDGE_ASSET_IMAGE_MAX_BYTES : KNOWLEDGE_ASSET_FILE_MAX_BYTES;
+  const label = isImage ? '图片' : '文件';
+  const buf = decodeBase64Payload(dataStr, maxBytes, label);
+  const fileName = normalizeAssetFileName(body.fileName);
   const id = genId('ka');
   await db.knowledgeAsset.create({
     data: {
       id,
       tenantId,
       mimeType,
+      fileName,
       sizeBytes: buf.length,
       data: buf,
     },
@@ -381,14 +393,15 @@ export async function uploadAsset(
     url: `/api/knowledge-base/assets/${id}`,
     mimeType,
     sizeBytes: buf.length,
+    fileName,
   };
 }
 
 export async function getAsset(db: TenantPrismaClient, id: string) {
   const row = await db.knowledgeAsset.findFirst({
     where: { id },
-    select: { mimeType: true, data: true },
+    select: { mimeType: true, fileName: true, data: true },
   });
   if (!row) throw new AppError(404, '资源不存在');
-  return { mimeType: row.mimeType, data: row.data };
+  return { mimeType: row.mimeType, fileName: row.fileName, data: row.data };
 }

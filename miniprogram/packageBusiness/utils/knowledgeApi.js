@@ -65,16 +65,36 @@ function mimeToExt(mimeType) {
   if (m.indexOf('gif') >= 0) return 'gif';
   if (m.indexOf('webp') >= 0) return 'webp';
   if (m.indexOf('jpeg') >= 0 || m.indexOf('jpg') >= 0) return 'jpg';
+  if (m === 'application/pdf' || m.indexOf('pdf') >= 0) return 'pdf';
+  if (m.indexOf('spreadsheetml') >= 0) return 'xlsx';
+  if (m === 'application/vnd.ms-excel') return 'xls';
+  if (m.indexOf('wordprocessingml') >= 0) return 'docx';
+  if (m === 'application/msword') return 'doc';
+  if (m.indexOf('presentationml') >= 0) return 'pptx';
+  if (m.indexOf('powerpoint') >= 0) return 'ppt';
+  if (m.indexOf('zip') >= 0) return 'zip';
   return 'bin';
+}
+
+function extFromFileName(fileName) {
+  const base = String(fileName || '')
+    .trim()
+    .split(/[\\/]/)
+    .pop() || '';
+  const i = base.lastIndexOf('.');
+  if (i <= 0 || i === base.length - 1) return '';
+  return base.slice(i + 1).toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
 /**
  * 将资源写入本地临时文件，避免 base64 塞进 setData（易超 1MB）
+ * @param {string} [fileName] 可选：用扩展名写入正确后缀（openDocument 依赖）
  * @returns {Promise<string>} 本地文件路径
  */
-function writeKnowledgeAssetTempFile(assetId, buffer, mimeType) {
+function writeKnowledgeAssetTempFile(assetId, buffer, mimeType, fileName) {
   const id = String(assetId || 'x').replace(/[^a-zA-Z0-9_-]/g, '');
-  const ext = mimeToExt(mimeType);
+  const fromName = extFromFileName(fileName);
+  const ext = fromName || mimeToExt(mimeType);
   const base =
     (typeof wx !== 'undefined' && wx.env && wx.env.USER_DATA_PATH) ||
     '';

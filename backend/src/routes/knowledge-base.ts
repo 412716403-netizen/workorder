@@ -32,6 +32,7 @@ const updateDocumentSchema = z.object({
 const uploadAssetSchema = z.object({
   data: z.string().min(1),
   mimeType: z.string().trim().min(1).max(100),
+  fileName: z.string().trim().max(255).optional(),
 });
 
 router.get('/tree', requireSubPermission('knowledge_base:folders:view'), ctrl.getTree);

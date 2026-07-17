@@ -1,8 +1,15 @@
 /** 资料库正文 → 小程序可渲染块（纯函数，便于单测） */
 
+const {
+  formatFileSize,
+  resolveAttachmentKind,
+} = require('./knowledgeAttachmentForMini.js');
+
 const ASSET_URL_RE = /\/api\/knowledge-base\/assets\/([a-zA-Z0-9_-]+)/g;
 const PRODUCT_REF_RE =
   /<span\b[^>]*\bdata-type=(["'])product-ref\1[^>]*>[\s\S]*?<\/span>/gi;
+const FILE_ATTACH_RE =
+  /<div\b(?=[^>]*\bdata-type=(["'])file-attachment\1)[^>]*>[\s\S]*?<\/div>/gi;
 const TABLE_RE = /<table\b[\s\S]*?<\/table>/gi;
 const BLOCKQUOTE_RE = /<blockquote\b[\s\S]*?<\/blockquote>/gi;
 const TOP_BLOCK_RE = /<(table|blockquote)\b[\s\S]*?<\/\1>/gi;
@@ -41,6 +48,34 @@ function extractKnowledgeAssetIdsFromHtml(html) {
     m = re.exec(html);
   }
   return Array.from(ids);
+}
+
+/** 去掉附件节点后再抽 id，避免把 PDF/Excel 等当图片预拉 */
+function stripFileAttachments(html) {
+  return String(html || '').replace(FILE_ATTACH_RE, '');
+}
+
+function extractImageAssetIdsFromHtml(html) {
+  return extractKnowledgeAssetIdsFromHtml(stripFileAttachments(html));
+}
+
+function parseFileAttachmentTag(tag) {
+  const assetUrl = extractAttr(tag, 'data-asset-url');
+  let assetId = '';
+  const idMatch = String(assetUrl).match(/\/assets\/([a-zA-Z0-9_-]+)/);
+  if (idMatch) assetId = idMatch[1];
+  const fileName = extractAttr(tag, 'data-file-name') || '附件';
+  const mimeType = extractAttr(tag, 'data-mime-type') || 'application/octet-stream';
+  const sizeRaw = Number(extractAttr(tag, 'data-size-bytes'));
+  const sizeBytes = Number.isFinite(sizeRaw) && sizeRaw > 0 ? sizeRaw : 0;
+  return {
+    assetId,
+    fileName,
+    mimeType,
+    sizeBytes,
+    sizeText: formatFileSize(sizeBytes),
+    kind: resolveAttachmentKind(mimeType, fileName),
+  };
 }
 
 function replaceKnowledgeAssetUrls(html, urlById) {
@@ -239,13 +274,20 @@ function isBlankHtml(html) {
 }
 
 /**
- * 非表格流：拆成 html / image / product 块，便于原生点击
+ * 非表格流：拆成 html / image / product / file 块，便于原生点击
  * （不含 blockquote；由 splitFlowIntoBlocks 先拆高亮块）
  */
 function splitInlineFlowIntoBlocks(flowHtml, previewUrls, keyPrefix, maxContentWidthPx) {
   const products = [];
   const images = [];
+  const files = [];
   let s = String(flowHtml || '');
+
+  s = s.replace(FILE_ATTACH_RE, (tag) => {
+    const idx = files.length;
+    files.push(parseFileAttachmentTag(tag));
+    return `\u0001KBFILE${idx}\u0001`;
+  });
 
   s = s.replace(PRODUCT_REF_RE, (tag) => {
     const idx = products.length;
@@ -261,13 +303,29 @@ function splitInlineFlowIntoBlocks(flowHtml, previewUrls, keyPrefix, maxContentW
     return `\u0001KBIMG${idx}\u0001`;
   });
 
-  const parts = s.split(/(\u0001KB(?:PROD|IMG)\d+\u0001)/);
+  const parts = s.split(/(\u0001KB(?:FILE|PROD|IMG)\d+\u0001)/);
   const blocks = [];
 
   parts.forEach((part, i) => {
     if (!part) return;
+    const fileM = part.match(/^\u0001KBFILE(\d+)\u0001$/);
     const prodM = part.match(/^\u0001KBPROD(\d+)\u0001$/);
     const imgM = part.match(/^\u0001KBIMG(\d+)\u0001$/);
+    if (fileM) {
+      const f = files[Number(fileM[1])];
+      if (!f || !f.assetId) return;
+      blocks.push({
+        type: 'file',
+        key: `${keyPrefix}-f${i}`,
+        assetId: f.assetId,
+        fileName: f.fileName,
+        mimeType: f.mimeType,
+        sizeBytes: f.sizeBytes,
+        sizeText: f.sizeText,
+        kind: f.kind,
+      });
+      return;
+    }
     if (prodM) {
       const p = products[Number(prodM[1])];
       if (!p) return;
@@ -430,7 +488,15 @@ function buildKnowledgeDocBlocks(html, urlById, opts) {
       ? opts.maxContentWidthPx
       : 9999;
   let s = String(html || '');
+  // 先抽出附件占位，避免 data-asset-url 被当成图片路径替换
+  const earlyFiles = [];
+  s = s.replace(FILE_ATTACH_RE, (tag) => {
+    const idx = earlyFiles.length;
+    earlyFiles.push(tag);
+    return `\u0001KBFILETAG${idx}\u0001`;
+  });
   if (urlById) s = replaceKnowledgeAssetUrls(s, urlById);
+  s = s.replace(/\u0001KBFILETAG(\d+)\u0001/g, (_, idx) => earlyFiles[Number(idx)] || '');
   s = styleKnowledgeTables(s);
   s = styleKnowledgeMarks(s);
   s = stripUnsupportedAttrs(s);
@@ -491,6 +557,8 @@ function assetBufferToDataUrl(buffer, mimeType) {
 
 module.exports = {
   extractKnowledgeAssetIdsFromHtml,
+  extractImageAssetIdsFromHtml,
+  stripFileAttachments,
   replaceKnowledgeAssetUrls,
   convertProductRefsToText,
   stripUnsupportedAttrs,
@@ -505,4 +573,5 @@ module.exports = {
   assetBufferToDataUrl,
   escapeHtml,
   parseProductRefTag,
+  parseFileAttachmentTag,
 };

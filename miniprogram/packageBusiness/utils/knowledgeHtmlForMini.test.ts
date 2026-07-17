@@ -151,4 +151,30 @@ describe('knowledgeHtmlForMini', () => {
       callout.blocks.some((b) => b.type === 'html' && String(b.html).includes('格内高亮')),
     ).toBe(true);
   });
+
+  it('builds file attachment blocks and keeps asset id after image url replace', () => {
+    const html =
+      '<p>见附件</p><div data-type="file-attachment" data-asset-url="/api/knowledge-base/assets/ka-file1" data-file-name="BOM.xlsx" data-mime-type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" data-size-bytes="12345"></div><p><img src="/api/knowledge-base/assets/ka-img1" /></p>';
+    const { blocks, previewUrls } = buildKnowledgeDocBlocks(html, {
+      'ka-img1': 'wxfile://img',
+      'ka-file1': 'wxfile://should-not-use',
+    });
+    const file = blocks.find((b) => b.type === 'file');
+    expect(file).toBeTruthy();
+    expect(file.assetId).toBe('ka-file1');
+    expect(file.fileName).toBe('BOM.xlsx');
+    expect(file.kind).toBe('excel');
+    expect(file.sizeText).toContain('KB');
+    expect(blocks.some((b) => b.type === 'image' && b.src === 'wxfile://img')).toBe(true);
+    expect(previewUrls).toEqual(['wxfile://img']);
+  });
+
+  it('extractImageAssetIdsFromHtml skips attachment assets', () => {
+    const {
+      extractImageAssetIdsFromHtml,
+    } = require('./knowledgeHtmlForMini.js');
+    const html =
+      '<div data-type="file-attachment" data-asset-url="/api/knowledge-base/assets/ka-pdf" data-file-name="a.pdf" data-mime-type="application/pdf" data-size-bytes="1"></div><img src="/api/knowledge-base/assets/ka-img" />';
+    expect(extractImageAssetIdsFromHtml(html)).toEqual(['ka-img']);
+  });
 });

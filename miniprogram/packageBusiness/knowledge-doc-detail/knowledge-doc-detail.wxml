@@ -71,6 +71,23 @@
                     >{{cellBlock.label}}</view>
 
                     <view
+                      wx:elif="{{cellBlock.type === 'file'}}"
+                      class="kb-doc-file kb-doc-file--cell"
+                      data-asset-id="{{cellBlock.assetId}}"
+                      data-file-name="{{cellBlock.fileName}}"
+                      data-mime-type="{{cellBlock.mimeType}}"
+                      data-kind="{{cellBlock.kind}}"
+                      bindtap="onFileTap"
+                    >
+                      <view class="kb-doc-file__icon kb-doc-file__icon--{{cellBlock.kind}}">{{cellBlock.kind === 'pdf' ? 'PDF' : cellBlock.kind === 'excel' ? 'XLS' : cellBlock.kind === 'image' ? 'IMG' : 'FILE'}}</view>
+                      <view class="kb-doc-file__meta">
+                        <text class="kb-doc-file__name">{{cellBlock.fileName}}</text>
+                        <text class="kb-doc-file__size">{{cellBlock.sizeText}}</text>
+                      </view>
+                      <text class="kb-doc-file__hint">打开</text>
+                    </view>
+
+                    <view
                       wx:elif="{{cellBlock.type === 'callout'}}"
                       class="kb-doc-callout kb-doc-callout--cell"
                     >
@@ -96,6 +113,22 @@
                           data-id="{{cellCalloutBlock.productId}}"
                           bindtap="onProductTap"
                         >{{cellCalloutBlock.label}}</view>
+                        <view
+                          wx:elif="{{cellCalloutBlock.type === 'file'}}"
+                          class="kb-doc-file kb-doc-file--callout"
+                          data-asset-id="{{cellCalloutBlock.assetId}}"
+                          data-file-name="{{cellCalloutBlock.fileName}}"
+                          data-mime-type="{{cellCalloutBlock.mimeType}}"
+                          data-kind="{{cellCalloutBlock.kind}}"
+                          bindtap="onFileTap"
+                        >
+                          <view class="kb-doc-file__icon kb-doc-file__icon--{{cellCalloutBlock.kind}}">{{cellCalloutBlock.kind === 'pdf' ? 'PDF' : cellCalloutBlock.kind === 'excel' ? 'XLS' : cellCalloutBlock.kind === 'image' ? 'IMG' : 'FILE'}}</view>
+                          <view class="kb-doc-file__meta">
+                            <text class="kb-doc-file__name">{{cellCalloutBlock.fileName}}</text>
+                            <text class="kb-doc-file__size">{{cellCalloutBlock.sizeText}}</text>
+                          </view>
+                          <text class="kb-doc-file__hint">打开</text>
+                        </view>
                       </block>
                     </view>
                   </block>
@@ -129,6 +162,23 @@
                 data-id="{{calloutBlock.productId}}"
                 bindtap="onProductTap"
               >{{calloutBlock.label}}</view>
+
+              <view
+                wx:elif="{{calloutBlock.type === 'file'}}"
+                class="kb-doc-file kb-doc-file--callout"
+                data-asset-id="{{calloutBlock.assetId}}"
+                data-file-name="{{calloutBlock.fileName}}"
+                data-mime-type="{{calloutBlock.mimeType}}"
+                data-kind="{{calloutBlock.kind}}"
+                bindtap="onFileTap"
+              >
+                <view class="kb-doc-file__icon kb-doc-file__icon--{{calloutBlock.kind}}">{{calloutBlock.kind === 'pdf' ? 'PDF' : calloutBlock.kind === 'excel' ? 'XLS' : calloutBlock.kind === 'image' ? 'IMG' : 'FILE'}}</view>
+                <view class="kb-doc-file__meta">
+                  <text class="kb-doc-file__name">{{calloutBlock.fileName}}</text>
+                  <text class="kb-doc-file__size">{{calloutBlock.sizeText}}</text>
+                </view>
+                <text class="kb-doc-file__hint">打开</text>
+              </view>
             </block>
           </view>
 
@@ -155,6 +205,23 @@
             data-id="{{block.productId}}"
             bindtap="onProductTap"
           >{{block.label}}</view>
+
+          <view
+            wx:elif="{{block.type === 'file'}}"
+            class="kb-doc-file"
+            data-asset-id="{{block.assetId}}"
+            data-file-name="{{block.fileName}}"
+            data-mime-type="{{block.mimeType}}"
+            data-kind="{{block.kind}}"
+            bindtap="onFileTap"
+          >
+            <view class="kb-doc-file__icon kb-doc-file__icon--{{block.kind}}">{{block.kind === 'pdf' ? 'PDF' : block.kind === 'excel' ? 'XLS' : block.kind === 'image' ? 'IMG' : 'FILE'}}</view>
+            <view class="kb-doc-file__meta">
+              <text class="kb-doc-file__name">{{block.fileName}}</text>
+              <text class="kb-doc-file__size">{{block.sizeText}}</text>
+            </view>
+            <text class="kb-doc-file__hint">打开</text>
+          </view>
         </block>
       </view>
     </view>

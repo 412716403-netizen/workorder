@@ -1121,3 +1121,359 @@
 .kb-editor .ProseMirror h3 {
   scroll-margin-top: 16px;
 }
+
+/* ── 附件卡片（飞书式） ── */
+
+.kb-file-attachment-card {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 460px;
+  margin: 0.5rem 0;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid #e6e8eb;
+  border-radius: 10px;
+  background: #fff;
+  transition: border-color 0.12s, box-shadow 0.12s, background 0.12s;
+}
+
+.kb-file-attachment-card:hover {
+  border-color: #d3d7dd;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+}
+
+.kb-file-attachment-card.is-selected {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 1px #6366f1;
+}
+
+.kb-file-attachment-main {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.kb-file-attachment-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+}
+
+.kb-file-attachment-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.kb-file-attachment-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1f2329;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-file-attachment-size {
+  font-size: 11px;
+  color: #8f959e;
+  line-height: 1.2;
+}
+
+.kb-file-attachment-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.kb-file-attachment-card:hover .kb-file-attachment-actions,
+.kb-file-attachment-card.is-selected .kb-file-attachment-actions {
+  opacity: 1;
+}
+
+.kb-file-attachment-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #646a73;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.kb-file-attachment-action:hover {
+  background: #f2f3f5;
+  color: #1f2329;
+}
+
+/* ── 附件全屏预览壳 ── */
+
+.kb-file-preview-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10300;
+  display: flex;
+  flex-direction: column;
+  background: #f5f6f7;
+  animation: kb-image-preview-fade-in 0.15s ease-out;
+}
+
+.kb-file-preview-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-shrink: 0;
+  height: 56px;
+  padding: 0 1rem;
+  background: #fff;
+  border-bottom: 1px solid #eceef0;
+}
+
+.kb-file-preview-exit {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: none;
+  background: transparent;
+  color: #1f2329;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  transition: background 0.12s;
+}
+
+.kb-file-preview-exit:hover {
+  background: #f2f3f5;
+}
+
+.kb-file-preview-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.kb-file-preview-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2329;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-file-preview-size {
+  font-size: 12px;
+  color: #8f959e;
+  line-height: 1.2;
+}
+
+.kb-file-preview-download {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  border: 1px solid #dee0e3;
+  background: #fff;
+  color: #1f2329;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0.4rem 0.75rem;
+  border-radius: 6px;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.kb-file-preview-download:hover:not(:disabled) {
+  background: #f2f3f5;
+  border-color: #d3d7dd;
+}
+
+.kb-file-preview-download:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.kb-file-preview-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.kb-file-preview-frame {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  border: none;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.kb-file-preview-image-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+}
+
+.kb-file-preview-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(15, 23, 42, 0.12);
+}
+
+.kb-file-preview-hint {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  color: #8f959e;
+  font-size: 14px;
+}
+
+.kb-file-preview-fallback-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #646a73;
+}
+
+.kb-file-preview-fallback-sub {
+  font-size: 12px;
+  color: #8f959e;
+}
+
+.kb-file-preview-fallback-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+  border: 1px solid #dee0e3;
+  background: #fff;
+  color: #1f2329;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0.4rem 0.9rem;
+  border-radius: 6px;
+  transition: background 0.12s;
+}
+
+.kb-file-preview-fallback-btn:hover:not(:disabled) {
+  background: #f2f3f5;
+}
+
+/* Excel 预览：多 sheet 页签 + 网格 */
+
+.kb-excel-preview {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.kb-excel-sheet {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.5rem;
+}
+
+.kb-excel-sheet table {
+  border-collapse: collapse;
+  font-size: 12px;
+  color: #1f2329;
+}
+
+.kb-excel-sheet td,
+.kb-excel-sheet th {
+  border: 1px solid #e6e8eb;
+  padding: 4px 8px;
+  min-width: 48px;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* ExcelJS 网格：固定列宽 + 单元格内嵌图片 */
+
+.kb-excel-grid {
+  table-layout: fixed;
+}
+
+.kb-excel-grid td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.kb-excel-img {
+  display: block;
+  margin: 2px auto;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.kb-excel-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  padding: 0.25rem 0.5rem;
+  border-top: 1px solid #eceef0;
+  background: #fafbfc;
+  overflow-x: auto;
+}
+
+.kb-excel-tab {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: #646a73;
+  font-size: 12px;
+  padding: 0.3rem 0.65rem;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.kb-excel-tab:hover {
+  background: #f2f3f5;
+}
+
+.kb-excel-tab.is-active {
+  background: #e8f3ff;
+  color: #1456f0;
+  font-weight: 600;
+}

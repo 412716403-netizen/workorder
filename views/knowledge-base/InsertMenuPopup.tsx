@@ -15,6 +15,7 @@ interface InsertMenuPopupProps {
   onPickImage?: () => void;
   onOpenLinkDialog?: () => void;
   onOpenProductDialog?: () => void;
+  onPickFile?: () => void;
   onClose?: () => void;
 }
 
@@ -205,9 +206,10 @@ const InsertMenuPopup: React.FC<InsertMenuPopupProps> = ({
   onPickImage,
   onOpenLinkDialog,
   onOpenProductDialog,
+  onPickFile,
   onClose,
 }) => {
-  const { basic, common } = buildInsertMenuItems(onPickImage, onOpenLinkDialog, onOpenProductDialog);
+  const { basic, common } = buildInsertMenuItems(onPickImage, onOpenLinkDialog, onOpenProductDialog, onPickFile);
   // 表格单元格内不允许再嵌套插入表格
   const commonItems = editor.isActive('table')
     ? common.filter(item => item.id !== 'table')

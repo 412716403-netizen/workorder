@@ -39,6 +39,7 @@
     "@tiptap/starter-kit": "^3.26.0",
     "@zxing/browser": "^0.1.5",
     "@zxing/library": "^0.21.3",
+    "exceljs": "^4.4.0",
     "jspdf": "^4.2.1",
     "lowlight": "^3.3.0",
     "lucide-react": "^0.563.0",

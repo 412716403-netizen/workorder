@@ -950,18 +950,19 @@ npm run miniprogram:icons
 | 页面 | 路径 | 职责 |
 |------|------|------|
 | 树 / 搜索 | [`packageBusiness/knowledge-base/`](../miniprogram/packageBusiness/knowledge-base/) | 文件夹面包屑、当前层列表、标题/正文搜索、进入文档 |
-| 文档详情 | [`packageBusiness/knowledge-doc-detail/`](../miniprogram/packageBusiness/knowledge-doc-detail/) | 标题 + 更新时间 + 消毒后 HTML（块渲染）；鉴权图片；按文档宽度展示图片；表格可横向滚动 |
+| 文档详情 | [`packageBusiness/knowledge-doc-detail/`](../miniprogram/packageBusiness/knowledge-doc-detail/) | 标题 + 更新时间 + 消毒后 HTML（块渲染）；鉴权图片；按文档宽度展示图片；表格可横向滚动；**附件卡片**（PDF/Excel/Office 点按 `wx.openDocument`，图片点按预览，其它类型提示无法预览） |
 | 产品快览 | [`packageBusiness/knowledge-product-detail/`](../miniprogram/packageBusiness/knowledge-product-detail/) + [`components/product-quick-detail/`](../miniprogram/packageBusiness/components/product-quick-detail/) | 只读商品信息共用组件：基本信息、分类扩展属性、标准生产路线、工艺 BOM；入口含资料库关联产品、生产计划详情点产品名；无编辑/删除；大图不进 `setData` |
 
 | 工具 | 作用 |
 |------|------|
 | [`utils/knowledgeApi.js`](../miniprogram/packageBusiness/utils/knowledgeApi.js) | `GET /knowledge-base/tree` · `documents` · `documents/:id` · `assets/:id`（arraybuffer） |
 | [`utils/knowledgeTree.js`](../miniprogram/packageBusiness/utils/knowledgeTree.js) | 当前层行模型、面包屑 |
-| [`utils/knowledgeHtmlForMini.js`](../miniprogram/packageBusiness/utils/knowledgeHtmlForMini.js) | 拆成 html/image/product 渲染块；表格行内边框；鉴权图片 URL |
+| [`utils/knowledgeHtmlForMini.js`](../miniprogram/packageBusiness/utils/knowledgeHtmlForMini.js) | 拆成 html/image/product/file/callout/table 渲染块；表格行内边框；鉴权图片 URL；附件节点 `div[data-type=file-attachment]` |
+| [`utils/knowledgeAttachmentForMini.js`](../miniprogram/packageBusiness/utils/knowledgeAttachmentForMini.js) | 附件类型判定、体积文案、`openDocument` 支持的扩展名 |
 
-**权限 / 插件**：入口需插件 `knowledge_base` 开启；页内校验 `knowledge_base:folders:view`（树）+ `knowledge_base:documents:view`（正文/图片）。图片资源不可裸链，须 Bearer 下载后**写入本地临时文件**再引用路径（禁止 base64 塞进 `setData`，避免超大传输与渲染层错误）；正文内图片点按 `wx.previewImage`（按文档设定宽度展示，最大不超过页面宽）；关联产品芯片跳转只读产品快览（需 `basic:products:view`）。
+**权限 / 插件**：入口需插件 `knowledge_base` 开启；页内校验 `knowledge_base:folders:view`（树）+ `knowledge_base:documents:view`（正文/图片/附件）。图片资源不可裸链，须 Bearer 下载后**写入本地临时文件**再引用路径（禁止 base64 塞进 `setData`，避免超大传输与渲染层错误）；正文内图片点按 `wx.previewImage`（按文档设定宽度展示，最大不超过页面宽）；关联产品芯片跳转只读产品快览（需 `basic:products:view`）。附件卡片点击后鉴权下载到临时文件：PDF/Excel/Word/PPT 用 `wx.openDocument({ showMenu: true })` 系统预览；附件为图片时用 `previewImage`；CAD 等不支持类型弹窗提示「无法预览，请在电脑端打开」。首屏只预拉正文图片资源，附件按点击再下载。
 
-**留 Web**：新建/编辑/上传；表格内图片点按预览（表格整块 rich-text）；业务表单里 knowledge 类自定义字段仍「请在电脑端填写」。
+**留 Web**：新建/编辑/上传；业务表单里 knowledge 类自定义字段仍「请在电脑端填写」。
 
 入口：[`menus.js`](../miniprogram/config/menus.js) `knowledge-base` → `/packageBusiness/knowledge-base/knowledge-base`。
 

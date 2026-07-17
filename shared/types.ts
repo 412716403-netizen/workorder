@@ -646,7 +646,32 @@ export interface KnowledgeAssetUploadResponse {
   url: string;
   mimeType: string;
   sizeBytes: number;
+  fileName: string | null;
 }
+
+/** 资料库图片资产允许的 MIME（正文插图；不含 SVG） */
+export const KNOWLEDGE_ASSET_IMAGE_MIME_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+] as const;
+
+/**
+ * 附件可在线预览的 MIME（PDF / Excel）。
+ * 上传不限此名单：任意文件均可作为附件上传（≤30MB），不可预览类型仅提供下载。
+ */
+export const KNOWLEDGE_ASSET_FILE_MIME_TYPES = [
+  'application/pdf',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+] as const;
+
+/** 图片资产体积上限（10MB） */
+export const KNOWLEDGE_ASSET_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+
+/** 附件体积上限（30MB；含 PDF/Excel 及不可预览的通用文件） */
+export const KNOWLEDGE_ASSET_FILE_MAX_BYTES = 30 * 1024 * 1024;
 
 // ============================================================
 // 待办提醒（todo_reminder 插件）

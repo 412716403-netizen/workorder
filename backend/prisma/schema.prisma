@@ -1329,6 +1329,7 @@ model KnowledgeAsset {
   id        String   @id @db.VarChar(50)
   tenantId  String   @map("tenant_id") @db.Uuid
   mimeType  String   @map("mime_type") @db.VarChar(100)
+  fileName  String?  @map("file_name") @db.VarChar(255)
   sizeBytes Int      @map("size_bytes")
   data      Bytes
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
