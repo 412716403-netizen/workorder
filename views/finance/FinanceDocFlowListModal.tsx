@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { ModalPortal } from '../../components/ModalPortal';
 import { useQuery } from '@tanstack/react-query';
 import { ScrollText, X, Filter, FileText, Loader2 } from 'lucide-react';
 import type { FinanceCategory, FinanceRecord, Product } from '../../types';
@@ -105,7 +106,8 @@ const FinanceDocFlowListModal: React.FC<FinanceDocFlowListModalProps> = ({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[350] flex items-center justify-center p-3 sm:p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[350] flex items-center justify-center p-4 sm:p-6">
       <div
         className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200"
         onClick={onClose}
@@ -115,7 +117,7 @@ const FinanceDocFlowListModal: React.FC<FinanceDocFlowListModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="finance-flow-title"
-        className="relative bg-white w-full max-w-6xl max-h-[92vh] flex flex-col rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200"
+        className="relative z-10 bg-white w-full max-w-6xl max-h-[min(92vh,960px)] flex flex-col rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200"
         onClick={e => e.stopPropagation()}
       >
         <div className="shrink-0 flex items-center justify-between gap-4 px-5 sm:px-6 py-4 border-b border-slate-100">
@@ -326,6 +328,7 @@ const FinanceDocFlowListModal: React.FC<FinanceDocFlowListModalProps> = ({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

@@ -21,6 +21,7 @@ import {
   AMOUNT_FINE_GRAINED_PERM_KEYS,
   PRICE_AMOUNT_SUB_MODULES,
 } from '../../utils/amountPermissionKeys';
+import { ModalPortal } from '../../components/ModalPortal';
 
 interface RoleEditModalProps {
   editingRole: RoleRow | null;
@@ -596,8 +597,10 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col mx-4"
+    <ModalPortal>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/40" aria-hidden />
+      <div className="relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[min(92vh,960px)] flex flex-col"
         onClick={e => e.stopPropagation()}>
         <div className="p-6 border-b border-slate-100 flex-shrink-0">
           <h3 className="text-lg font-bold text-slate-900">{editingRole ? '编辑角色' : '新建角色'}</h3>
@@ -1615,6 +1618,7 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 

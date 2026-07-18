@@ -1,5 +1,6 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ModalPortal } from '../components/ModalPortal';
 import {
   CalendarRange,
   Plus,
@@ -1176,7 +1177,8 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
         };
 
         return (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+        <ModalPortal>
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 sm:p-6">
           <button
             type="button"
             className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
@@ -1189,7 +1191,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
           <div
             role="dialog"
             aria-modal="true"
-            className="relative w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl"
+            className="relative z-10 w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
@@ -1257,6 +1259,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
             </div>
           </div>
         </div>
+        </ModalPortal>
         );
       })()}
 
@@ -1282,11 +1285,13 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
 
       {/* 文件预览弹窗 (图片/PDF) */}
       {filePreviewUrl && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-8 bg-slate-900/80 backdrop-blur-sm" onClick={() => setFilePreviewUrl(null)}>
-          <button onClick={() => setFilePreviewUrl(null)} className="absolute top-6 right-6 z-10 p-2 rounded-full bg-white/20 hover:bg-white/40 text-white transition-all">
+        <ModalPortal>
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6" onClick={() => setFilePreviewUrl(null)}>
+          <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" aria-hidden />
+          <button onClick={() => setFilePreviewUrl(null)} className="absolute top-6 right-6 z-20 p-2 rounded-full bg-white/20 hover:bg-white/40 text-white transition-all">
             <X className="w-8 h-8" />
           </button>
-          <div className="relative z-10 w-full max-w-4xl max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+          <div className="relative z-10 w-full max-w-4xl max-h-[min(92vh,960px)] bg-white rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
             {filePreviewType === 'image' ? (
               <img src={filePreviewUrl} alt="预览" className="w-full h-full max-h-[85vh] object-contain" />
             ) : (
@@ -1294,6 +1299,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
             )}
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {planPrintTemplateManageScope && (

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { ModalPortal } from '../../components/ModalPortal';
 import { Layers, Split, X } from 'lucide-react';
 import { toast } from 'sonner';
 import type { AppDictionaries, PlanItem, PlanOrder, Product, ProductCategory } from '../../types';
@@ -103,12 +104,13 @@ const PlanSplitModal: React.FC<PlanSplitModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[130] flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 sm:p-6">
       <button type="button" className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" aria-label="关闭" onClick={onClose} />
       <div
         role="dialog"
         aria-modal="true"
-        className="relative w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden rounded-[28px] bg-white shadow-2xl"
+        className="relative z-10 w-full max-w-2xl max-h-[min(92vh,960px)] flex flex-col overflow-hidden rounded-[28px] bg-white shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
@@ -202,6 +204,7 @@ const PlanSplitModal: React.FC<PlanSplitModalProps> = ({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

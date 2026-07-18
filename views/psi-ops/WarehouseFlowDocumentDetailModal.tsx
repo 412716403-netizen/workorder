@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { ModalPortal } from '../../components/ModalPortal';
 import { X, ScrollText } from 'lucide-react';
 import { Product, Warehouse, ProductCategory, AppDictionaries, ProductVariant } from '../../types';
 import { BATCH_NO_UNTAGGED } from '../../types';
@@ -159,9 +160,10 @@ const WarehouseFlowDocumentDetailModal: React.FC<WarehouseFlowDocumentDetailModa
   })();
 
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/60" onClick={onClose} aria-hidden />
-      <div className="relative bg-white w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-xl border border-slate-200 flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+      <div className="relative z-10 bg-white w-full max-w-4xl max-h-[min(92vh,960px)] rounded-2xl shadow-xl border border-slate-200 flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
           <h3 className="text-lg font-black text-slate-900 flex items-center gap-2"><ScrollText className="w-5 h-5 text-indigo-600" /> 单据详情 · {mainInfo.docNumber}</h3>
           <button type="button" onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
@@ -266,6 +268,7 @@ const WarehouseFlowDocumentDetailModal: React.FC<WarehouseFlowDocumentDetailModa
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

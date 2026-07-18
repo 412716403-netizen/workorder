@@ -10,6 +10,7 @@ import { VariantNodeWeightSection } from '../../views/product-management/Variant
 import { getProductScanWeighingNodes } from '../../utils/variantNodeUnitWeight';
 import { useReceiveUnitWeightAverages } from '../../hooks/useReceiveUnitWeightAverages';
 import { useTraceabilityPlugin } from '../../hooks/useTraceabilityPlugin';
+import { ModalPortal } from '../ModalPortal';
 
 export interface ScanUnitWeightScanContext {
   variantId: string;
@@ -128,15 +129,16 @@ export function ScanUnitWeightSettingPopover({
         <Settings2 className="h-3.5 w-3.5" />
       </button>
       {open ? (
+        <ModalPortal>
         <div
-          className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/50 p-4"
+          className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/50 p-4 sm:p-6"
           role="dialog"
           aria-modal="true"
           aria-labelledby="scan-unit-weight-title"
           onClick={() => !saving && setOpen(false)}
         >
           <div
-            className="flex max-h-[min(88dvh,40rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+            className="relative z-10 flex max-h-[min(88dvh,40rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-4 py-3">
@@ -216,6 +218,7 @@ export function ScanUnitWeightSettingPopover({
             </div>
           </div>
         </div>
+        </ModalPortal>
       ) : null}
     </>
   );

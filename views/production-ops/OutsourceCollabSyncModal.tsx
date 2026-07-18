@@ -8,6 +8,7 @@ import {
   writeOutsourceCollabRoutePreference,
 } from '../../utils/outsourceCollabRoutePreference';
 import { outsourceRouteMatchesAllProductMilestones } from '../../shared/outsourceRouteProductMatch';
+import { ModalPortal } from '../../components/ModalPortal';
 
 export interface OutsourceCollabSyncConfirmPayload {
   partnerName: string;
@@ -85,9 +86,10 @@ const OutsourceCollabSyncModal: React.FC<OutsourceCollabSyncModalProps> = ({
   }, [tenantId, collabSyncConfirm.collaborationTenantId, collabSyncConfirm.productIds, matchingRoutes]);
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/50" onClick={onClose} aria-hidden />
-      <div className="relative bg-white w-full max-w-md rounded-2xl shadow-xl border border-slate-200 p-4 space-y-4" onClick={e => e.stopPropagation()}>
+      <div className="relative z-10 bg-white w-full max-w-md rounded-2xl shadow-xl border border-slate-200 p-4 space-y-4" onClick={e => e.stopPropagation()}>
         <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
           <Building2 className="w-5 h-5 text-indigo-600" /> 同步到协作企业
         </h3>
@@ -164,6 +166,7 @@ const OutsourceCollabSyncModal: React.FC<OutsourceCollabSyncModalProps> = ({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

@@ -1,4 +1,5 @@
 import React, { useCallback, useState } from 'react';
+import { ModalPortal } from '../../components/ModalPortal';
 import { FileDown, Plus, Printer, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
@@ -170,7 +171,8 @@ const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
         };
 
         return (
-          <div className="fixed inset-0 z-[72] flex items-center justify-center p-4">
+          <ModalPortal>
+          <div className="fixed inset-0 z-[72] flex items-center justify-center p-4 sm:p-6">
             <button
               type="button"
               className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
@@ -183,7 +185,7 @@ const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
             <div
               role="dialog"
               aria-modal="true"
-              className="relative w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl"
+              className="relative z-10 w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl"
               onClick={e => e.stopPropagation()}
             >
               <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
@@ -266,6 +268,7 @@ const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
               </div>
             </div>
           </div>
+          </ModalPortal>
         );
       })()}
 
@@ -313,12 +316,13 @@ const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
         };
 
         return (
-          <div className="fixed inset-0 z-[73] flex items-center justify-center p-4">
+          <ModalPortal>
+          <div className="fixed inset-0 z-[73] flex items-center justify-center p-4 sm:p-6">
             <button type="button" className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" aria-label="关闭" onClick={closeBulk} />
             <div
               role="dialog"
               aria-modal="true"
-              className="relative w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl"
+              className="relative z-10 w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl"
               onClick={e => e.stopPropagation()}
             >
               <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
@@ -378,6 +382,7 @@ const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
               </div>
             </div>
           </div>
+          </ModalPortal>
         );
       })()}
 
@@ -401,7 +406,8 @@ const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
           setItemCodeSinglePrintModal(null);
         };
         return (
-          <div className="fixed inset-0 z-[73] flex items-center justify-center p-4">
+          <ModalPortal>
+          <div className="fixed inset-0 z-[73] flex items-center justify-center p-4 sm:p-6">
             <button
               type="button"
               className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
@@ -411,7 +417,7 @@ const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
             <div
               role="dialog"
               aria-modal="true"
-              className="relative w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl"
+              className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl"
               onClick={e => e.stopPropagation()}
             >
               <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
@@ -467,6 +473,7 @@ const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
               </div>
             </div>
           </div>
+          </ModalPortal>
         );
       })()}
 
@@ -498,7 +505,8 @@ const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
           setBatchPrintModal(null);
         };
         return (
-          <div className="fixed inset-0 z-[73] flex items-center justify-center p-4">
+          <ModalPortal>
+          <div className="fixed inset-0 z-[73] flex items-center justify-center p-4 sm:p-6">
             <button
               type="button"
               className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
@@ -508,7 +516,7 @@ const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
             <div
               role="dialog"
               aria-modal="true"
-              className="relative w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl"
+              className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl"
               onClick={e => e.stopPropagation()}
             >
               <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
@@ -563,6 +571,7 @@ const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
               </div>
             </div>
           </div>
+          </ModalPortal>
         );
       })()}
     </>

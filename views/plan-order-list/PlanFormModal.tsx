@@ -2,6 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAsyncSubmitLock } from '../../hooks/useAsyncSubmitLock';
+import { ModalPortal } from '../../components/ModalPortal';
 import {
   AlertCircle,
   CalendarClock,
@@ -312,6 +313,7 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
   const showSalesOrderPicker = creationMethod === 'FROM_SALES_ORDER' && !fromSalesOrderReady;
 
   return (
+    <ModalPortal>
     <div className="fixed inset-0 z-[65] flex items-center justify-center p-4 sm:p-6">
       <div
         className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
@@ -322,7 +324,7 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="plan-create-modal-title"
-        className="relative flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl animate-in zoom-in-95 fade-in duration-200"
+        className="relative z-10 flex max-h-[min(92vh,960px)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl animate-in zoom-in-95 fade-in duration-200 sm:max-w-4xl md:max-w-5xl"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex shrink-0 flex-col gap-3 border-b border-slate-100 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
@@ -667,6 +669,7 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

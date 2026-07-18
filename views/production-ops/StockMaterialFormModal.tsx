@@ -23,6 +23,7 @@ import {
 } from '../../utils/warehouseDocPreference';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 import DocEntryTimeField from '../../components/DocEntryTimeField';
+import { ModalPortal } from '../../components/ModalPortal';
 import { defaultEntryDatetimeLocal, entryDatetimeLocalToTimestamp } from '../../utils/docEntryTime';
 
 export interface StockMaterialFormModalProps {
@@ -211,9 +212,10 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/50" onClick={onClose} aria-hidden />
-      <div className="relative bg-white w-full max-w-md rounded-2xl shadow-xl border border-slate-200 p-4 space-y-4">
+      <div className="relative z-10 bg-white w-full max-w-md max-h-[min(92vh,960px)] rounded-2xl shadow-xl border border-slate-200 p-4 space-y-4 overflow-auto">
         <h3 className="text-lg font-black text-slate-900">
           {stockModalMode === 'stock_return' ? '生产退料' : '生产领料'}
         </h3>
@@ -348,6 +350,7 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

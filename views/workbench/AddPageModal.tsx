@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
+import { ModalPortal } from '../../components/ModalPortal';
 
 interface AddPageModalProps {
   open: boolean;
@@ -13,8 +14,9 @@ const AddPageModal: React.FC<AddPageModalProps> = ({ open, onClose, onConfirm })
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+    <ModalPortal>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 sm:p-6">
+      <div className="relative z-10 w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-black text-slate-900">添加页面</h2>
           <button type="button" onClick={onClose} className="rounded-lg p-2 hover:bg-slate-100">
@@ -43,6 +45,7 @@ const AddPageModal: React.FC<AddPageModalProps> = ({ open, onClose, onConfirm })
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

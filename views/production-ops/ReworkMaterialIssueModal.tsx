@@ -25,6 +25,7 @@ import {
   WAREHOUSE_DOC_KIND,
 } from '../../utils/warehouseDocPreference';
 import DocEntryTimeField from '../../components/DocEntryTimeField';
+import { ModalPortal } from '../../components/ModalPortal';
 import { defaultEntryDatetimeLocal, entryDatetimeLocalToTimestamp } from '../../utils/docEntryTime';
 
 export interface ReworkMaterialIssueModalProps {
@@ -204,9 +205,10 @@ const ReworkMaterialIssueModal: React.FC<ReworkMaterialIssueModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[76] flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[76] flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={handleClose} aria-hidden />
-      <div className="relative bg-white w-full max-w-2xl rounded-[32px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]" onClick={e => e.stopPropagation()}>
+      <div className="relative z-10 bg-white w-full max-w-2xl rounded-[32px] shadow-2xl flex flex-col overflow-hidden max-h-[min(92vh,960px)]" onClick={e => e.stopPropagation()}>
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
           <div>
             <h3 className="text-lg font-black text-slate-900 flex items-center gap-2"><Package className="w-5 h-5 text-indigo-600" /> 返工领料</h3>
@@ -295,6 +297,7 @@ const ReworkMaterialIssueModal: React.FC<ReworkMaterialIssueModalProps> = ({
         )}
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

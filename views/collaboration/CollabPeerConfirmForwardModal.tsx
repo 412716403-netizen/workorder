@@ -6,6 +6,7 @@ import QtyMatrixTable from '../../components/variant-matrix/QtyMatrixTable';
 import { collabPayloadItemsToQtyMatrixProps, type CollabPayloadItem } from './collabDocDisplay';
 import { resolvePreferredCollabMatrixOrder } from './collabHelpers';
 import { AMOUNT_PERMISSION_KEYS, useCanViewAmount } from '../../utils/canViewAmount';
+import { ModalPortal } from '../../components/ModalPortal';
 
 interface CollabPeerConfirmForwardModalProps {
   open: boolean;
@@ -143,10 +144,11 @@ const CollabPeerConfirmForwardModal: React.FC<CollabPeerConfirmForwardModalProps
   const allSelected = rows.length > 0 && rows.every(r => r.selected);
 
   return (
-    <div className="fixed inset-0 z-[86] flex items-center justify-center p-3 sm:p-4" role="dialog" aria-modal="true">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[86] flex items-center justify-center p-4 sm:p-6" role="dialog" aria-modal="true">
       <button type="button" aria-label="关闭" className="absolute inset-0 z-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
       <div
-        className="relative z-[1] flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+        className="relative z-10 flex max-h-[min(92vh,960px)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-slate-200 bg-white shrink-0">
@@ -278,6 +280,7 @@ const CollabPeerConfirmForwardModal: React.FC<CollabPeerConfirmForwardModalProps
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

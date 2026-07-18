@@ -6,6 +6,7 @@ import { useConfirm } from '../../contexts/ConfirmContext';
 import * as api from '../../services/api';
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 import { CollabDocQtyPriceFooter, firstFiniteCollabUnitPrice } from './collabDocDisplay';
+import { ModalPortal } from '../../components/ModalPortal';
 
 type ProductVariant = { id: string; colorId: string; sizeId: string; [k: string]: any };
 
@@ -291,9 +292,10 @@ const CollabReturnFlowDocDetailModal: React.FC<CollabReturnFlowDocDetailModalPro
   };
 
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/60" onClick={() => { onClose(); setEditMode(false); }} aria-hidden />
-      <div className="relative bg-white w-full max-w-3xl max-h-[85vh] rounded-2xl shadow-xl border border-slate-200 flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+      <div className="relative z-10 bg-white w-full max-w-3xl max-h-[min(92vh,960px)] rounded-2xl shadow-xl border border-slate-200 flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
 
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
@@ -444,6 +446,7 @@ const CollabReturnFlowDocDetailModal: React.FC<CollabReturnFlowDocDetailModalPro
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

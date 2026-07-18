@@ -1,4 +1,5 @@
 import React from 'react';
+import { ModalPortal } from '../../components/ModalPortal';
 import {
   Plus,
   X,
@@ -67,9 +68,10 @@ const TransferOrderModal: React.FC<TransferOrderModalProps> = ({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} aria-hidden />
-      <div className="relative bg-white w-full max-w-4xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+      <div className="relative z-10 bg-white w-full max-w-4xl max-h-[min(92vh,960px)] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50/50">
           <div>
             <h3 className="font-black text-slate-800 flex items-center gap-2 text-lg"><MoveRight className="w-5 h-5 text-indigo-600" /> {editingDocNumber ? '编辑调拨单' : '调拨单'}</h3>
@@ -229,6 +231,7 @@ const TransferOrderModal: React.FC<TransferOrderModalProps> = ({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { ModalPortal } from '../../components/ModalPortal';
 
 interface KnowledgeFolderModalProps {
   open: boolean;
@@ -30,9 +31,10 @@ const KnowledgeFolderModal: React.FC<KnowledgeFolderModalProps> = ({
   const heading = title ?? (mode === 'create' ? '新建文件夹' : '重命名文件夹');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+    <ModalPortal>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 sm:p-6" onClick={onClose}>
       <div
-        className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl mx-4"
+        className="relative z-10 w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl mx-4"
         onClick={e => e.stopPropagation()}
       >
         <h3 className="text-lg font-bold text-slate-900 mb-4">{heading}</h3>
@@ -66,6 +68,7 @@ const KnowledgeFolderModal: React.FC<KnowledgeFolderModalProps> = ({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

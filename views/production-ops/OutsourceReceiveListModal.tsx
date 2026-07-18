@@ -15,6 +15,7 @@ import { useConfigData, useMasterData } from '../../contexts/AppDataContext';
 import { useTraceabilityPlugin } from '../../hooks/useTraceabilityPlugin';
 import { getVariantNodeUnitWeightKg } from '../../utils/variantNodeUnitWeight';
 import FlowListProductCell from '../../components/flow/FlowListProductCell';
+import { ModalPortal } from '../../components/ModalPortal';
 
 export interface ReceiveRow {
   orderId?: string;
@@ -400,10 +401,11 @@ const OutsourceReceiveListModal: React.FC<OutsourceReceiveListModalProps> = ({
   }, [outsourceReceiveRows, searchOrder, searchProduct, searchPartner, searchNodeId, products, showOrderNumberCol]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/50" onClick={onClose} aria-hidden />
       <div
-        className="relative flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"
+        className="relative z-10 flex max-h-[min(92vh,960px)] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-5 py-3.5 sm:px-6">
@@ -656,6 +658,7 @@ const OutsourceReceiveListModal: React.FC<OutsourceReceiveListModalProps> = ({
       />
       ) : null}
     </div>
+    </ModalPortal>
   );
 };
 

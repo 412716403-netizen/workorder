@@ -13,6 +13,7 @@ import {
 import { normalizeScanPayloadForIntent, type ScanIntent } from '../../utils/scanBatchIntent';
 import type { ScanBatchRowDetail } from '../../utils/scanBatchRowDetail';
 import { playScanErrorSound, playScanSuccessSound } from '../../utils/scanFeedbackSound';
+import { ModalPortal } from '../ModalPortal';
 import { checkScanSessionOverlap } from '../../utils/scanSessionOverlap';
 import {
   checkWeightTolerance,
@@ -535,14 +536,15 @@ export function ScanBatchSessionModal({
   if (!open) return null;
 
   return (
+    <ModalPortal>
     <div
-      className="fixed inset-0 z-[95] flex items-center justify-center bg-slate-900/50 p-4"
+      className="fixed inset-0 z-[95] flex items-center justify-center bg-slate-900/50 p-4 sm:p-6"
       role="dialog"
       aria-modal="true"
       aria-labelledby="scan-batch-title"
     >
       <div
-        className="flex max-h-[min(92dvh,52rem)] min-h-[min(78dvh,40rem)] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+        className="relative z-10 flex max-h-[min(92dvh,52rem)] min-h-[min(78dvh,40rem)] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-4 py-3">
@@ -779,5 +781,6 @@ export function ScanBatchSessionModal({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }

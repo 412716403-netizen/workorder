@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { ModalPortal } from '../../components/ModalPortal';
 import { X, Filter, FileText, ScrollText } from 'lucide-react';
 import { Warehouse, Product } from '../../types';
 import { computeWarehouseFlowTotals, formatWarehouseFlowQty } from './warehouseFlowHelpers';
@@ -67,9 +68,10 @@ const ProductFlowDetailModal: React.FC<ProductFlowDetailModalProps> = ({
   const flowTotals = useMemo(() => computeWarehouseFlowTotals(filteredRows), [filteredRows]);
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} aria-hidden />
-      <div className="relative bg-white w-full max-w-6xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+      <div className="relative z-10 bg-white w-full max-w-6xl max-h-[min(92vh,960px)] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
         <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
           <h3 className="font-bold text-slate-800 flex items-center gap-2">
             <ScrollText className="w-5 h-5 text-indigo-600" />
@@ -210,6 +212,7 @@ const ProductFlowDetailModal: React.FC<ProductFlowDetailModalProps> = ({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

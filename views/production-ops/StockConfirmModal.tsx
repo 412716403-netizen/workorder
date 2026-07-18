@@ -17,6 +17,7 @@ import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDo
 import { useStockSnapshot } from '../../hooks/useStockSnapshot';
 import { formStandardControlClass, formStandardLabelClass } from '../../styles/uiDensity';
 import DocEntryTimeField from '../../components/DocEntryTimeField';
+import { ModalPortal } from '../../components/ModalPortal';
 
 export interface StockConfirmModalProps {
   visible: boolean;
@@ -129,10 +130,11 @@ const StockConfirmModal: React.FC<StockConfirmModalProps> = ({
   });
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} aria-hidden />
       <div
-        className="relative bg-white w-full max-w-4xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95"
+        className="relative z-10 bg-white w-full max-w-4xl max-h-[min(92vh,960px)] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95"
         onClick={e => e.stopPropagation()}
       >
         <div className="px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4 shrink-0 bg-white">
@@ -313,6 +315,7 @@ const StockConfirmModal: React.FC<StockConfirmModalProps> = ({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

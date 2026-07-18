@@ -20,6 +20,7 @@ import { fmtDT } from '../../utils/formatTime';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import AccountTransferModal, { type TransferEditTarget } from './AccountTransferModal';
 import AccountTypesModal from '../settings/AccountTypesModal';
+import { ModalPortal } from '../../components/ModalPortal';
 import FinanceDetailModal from './FinanceDetailModal';
 
 interface AccountBalancesTabProps {
@@ -351,9 +352,10 @@ const AccountBalancesTab: React.FC<AccountBalancesTabProps> = ({
       )}
 
       {drillAccountId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <ModalPortal>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setDrillAccountId(null)} />
-          <div className="relative bg-white w-full max-w-5xl rounded-[32px] shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+          <div className="relative z-10 bg-white w-full max-w-5xl rounded-[32px] shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
             <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between gap-4 bg-slate-50/80 shrink-0">
               <div className="min-w-0">
                 <h2 className="text-lg font-bold text-slate-800 truncate">{drillAccountName} · 账户流水</h2>
@@ -440,6 +442,7 @@ const AccountBalancesTab: React.FC<AccountBalancesTabProps> = ({
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {detailRec && (

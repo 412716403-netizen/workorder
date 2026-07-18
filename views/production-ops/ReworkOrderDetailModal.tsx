@@ -2,6 +2,7 @@ import React from 'react';
 import { X } from 'lucide-react';
 import { ProductionOpRecord, ProductionOrder, Product, GlobalNodeTemplate, AppDictionaries } from '../../types';
 import AddTodoButton from '../../components/AddTodoButton';
+import { ModalPortal } from '../../components/ModalPortal';
 
 export interface ReworkOrderDetailModalProps {
   reworkDetailOrderId: string;
@@ -61,9 +62,10 @@ const ReworkOrderDetailModal: React.FC<ReworkOrderDetailModalProps> = ({
   const getReworkTargetNodes = (rec: ProductionOpRecord) => (rec.reworkNodeIds?.length ? rec.reworkNodeIds.map(nid => globalNodes.find(n => n.id === nid)?.name ?? nid).join('、') : (rec.nodeId ? (globalNodes.find(n => n.id === rec.nodeId)?.name ?? rec.nodeId) : '—'));
 
   return (
-    <div className="fixed inset-0 z-[75] flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[75] flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} aria-hidden />
-      <div className="relative bg-white w-full max-w-4xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+      <div className="relative z-10 bg-white w-full max-w-4xl max-h-[min(92vh,960px)] rounded-[32px] shadow-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="px-6 py-5 border-b border-slate-100 shrink-0">
           <div className="flex items-start justify-between gap-3">
             <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
@@ -154,6 +156,7 @@ const ReworkOrderDetailModal: React.FC<ReworkOrderDetailModalProps> = ({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

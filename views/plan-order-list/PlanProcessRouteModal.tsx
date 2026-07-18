@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { ModalPortal } from '../../components/ModalPortal';
 import { ClipboardCheck, X } from 'lucide-react';
 import { toast } from 'sonner';
 import type { GlobalNodeTemplate } from '../../types';
@@ -74,7 +75,8 @@ const PlanProcessRouteModal: React.FC<PlanProcessRouteModalProps> = ({
       : '确认后立即保存到本计划单';
 
   return (
-    <div className="fixed inset-0 z-[130] flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 sm:p-6">
       <button
         type="button"
         className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
@@ -86,7 +88,7 @@ const PlanProcessRouteModal: React.FC<PlanProcessRouteModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="plan-process-route-modal-title"
-        className="relative w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden rounded-[28px] bg-white shadow-2xl"
+        className="relative z-10 w-full max-w-3xl max-h-[min(92vh,960px)] flex flex-col overflow-hidden rounded-[28px] bg-white shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 shrink-0">
@@ -145,6 +147,7 @@ const PlanProcessRouteModal: React.FC<PlanProcessRouteModalProps> = ({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

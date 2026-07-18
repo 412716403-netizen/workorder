@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { ModalPortal } from './ModalPortal';
 import { X, Bell, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTodos } from '../hooks/useTodos';
@@ -112,14 +112,15 @@ const AddTodoModal: React.FC<AddTodoModalProps> = ({
     }
   };
 
-  return createPortal(
+  return (
+    <ModalPortal>
     <div
-      className={`fixed inset-0 ${zIndexClass} flex items-center justify-center bg-slate-900/45 p-4`}
+      className={`fixed inset-0 ${zIndexClass} flex items-center justify-center p-4 sm:p-6`}
       role="presentation"
-      onClick={onClose}
     >
+      <div className="absolute inset-0 bg-slate-900/45" onClick={onClose} aria-hidden />
       <div
-        className="flex w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+        className="relative z-10 flex w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
         role="dialog"
         aria-modal="true"
         onClick={e => e.stopPropagation()}
@@ -219,8 +220,8 @@ const AddTodoModal: React.FC<AddTodoModalProps> = ({
           </button>
         </div>
       </div>
-    </div>,
-    document.body,
+    </div>
+    </ModalPortal>
   );
 };
 

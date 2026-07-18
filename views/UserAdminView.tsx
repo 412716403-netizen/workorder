@@ -34,6 +34,7 @@ import {
 } from '../types';
 import { pageSubtitleClass, pageTitleClass, primaryToolbarButtonClass } from '../styles/uiDensity';
 import { useSetMainScrollSegment } from '../contexts/MainScrollSegmentContext';
+import { ModalPortal } from '../components/ModalPortal';
 
 interface UserAdminViewProps {
   currentUserId: string;
@@ -527,8 +528,10 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
           </div>
 
           {tenantModal && tenantModal.action !== 'reject' && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
-              <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-y-auto">
+            <ModalPortal>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+              <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" aria-hidden />
+              <div className="relative z-10 bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md max-h-[min(92vh,960px)] overflow-y-auto">
                 <div className="p-6 border-b border-slate-100">
                   <h2 className="text-lg font-black text-slate-900">
                     {tenantModal.action === 'approve' ? '审核通过' : '企业管理'}：{tenantModal.tenant.name}
@@ -640,11 +643,14 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
                 </div>
               </div>
             </div>
+            </ModalPortal>
           )}
 
           {tenantModal && tenantModal.action === 'reject' && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
-              <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-sm overflow-y-auto">
+            <ModalPortal>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+              <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" aria-hidden />
+              <div className="relative z-10 bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-sm max-h-[min(92vh,960px)] overflow-y-auto">
                 <div className="p-6 text-center space-y-4">
                   <XCircle className="w-12 h-12 text-red-400 mx-auto" />
                   <h2 className="text-lg font-black text-slate-900">确认拒绝</h2>
@@ -659,6 +665,7 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
                 </div>
               </div>
             </div>
+            </ModalPortal>
           )}
         </div>
       )}
@@ -808,8 +815,10 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
       </div>}
 
       {modal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <ModalPortal>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" aria-hidden />
+          <div className="relative z-10 bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md max-h-[min(92vh,960px)] overflow-y-auto">
             <div className="p-6 border-b border-slate-100">
               <h2 className="text-lg font-black text-slate-900">
                 {modal === 'create' ? '新建用户' : `编辑：${editing?.username}`}
@@ -946,12 +955,14 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
             </form>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* Delete confirmation dialog */}
       {deleteTarget && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[300]" onClick={() => setDeleteTarget(null)}>
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
+        <ModalPortal>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[300] p-4 sm:p-6" onClick={() => setDeleteTarget(null)}>
+          <div className="relative z-10 bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-bold text-slate-800 mb-2">确认删除</h3>
             <p className="text-sm text-slate-600 mb-6">
               确定删除用户「<span className="font-bold">{deleteTarget.username}</span>」？此操作不可恢复。
@@ -974,6 +985,7 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
     </div>
   );

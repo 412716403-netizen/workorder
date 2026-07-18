@@ -16,6 +16,7 @@ import {
 import FlowListSummaryFooter from '../../components/flow/FlowListSummaryFooter';
 import FlowListTableShell from '../../components/flow/FlowListTableShell';
 import FlowListProductCell from '../../components/flow/FlowListProductCell';
+import { ModalPortal } from '../../components/ModalPortal';
 
 export interface DefectTreatmentFlowListModalProps {
   productionLinkMode: 'order' | 'product';
@@ -104,9 +105,10 @@ const DefectTreatmentFlowListModal: React.FC<DefectTreatmentFlowListModalProps> 
   const getDocNo = (rec: ProductionOpRecord) => (rec.docNo) ? rec.docNo : '—';
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} aria-hidden />
-      <div className="relative bg-white w-full max-w-6xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+      <div className="relative z-10 bg-white w-full max-w-6xl max-h-[min(92vh,960px)] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
         <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
           <h3 className="font-bold text-slate-800 flex items-center gap-2"><ScrollText className="w-5 h-5 text-indigo-600" /> 处理不良品流水</h3>
           <button type="button" onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
@@ -203,6 +205,7 @@ const DefectTreatmentFlowListModal: React.FC<DefectTreatmentFlowListModalProps> 
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Camera, Keyboard, X } from 'lucide-react';
 import { useScanPassthroughInputSubmit } from '../../hooks/useScanPassthroughInputSubmit';
 import { notifyScanImeCompositionStart } from '../../utils/scanPassthroughInput';
+import { ModalPortal } from '../ModalPortal';
 
 export interface CameraScannerModalProps {
   onClose: () => void;
@@ -77,8 +78,9 @@ export function CameraScannerModal({ onClose, onScan }: CameraScannerModalProps)
   }, [onScan]);
 
   return (
-    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-slate-900/60 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-slate-900/60 p-4 sm:p-6">
+      <div className="relative z-10 w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
             <Camera className="w-5 h-5 text-indigo-600" /> 摄像头扫码
@@ -140,5 +142,6 @@ export function CameraScannerModal({ onClose, onScan }: CameraScannerModalProps)
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }

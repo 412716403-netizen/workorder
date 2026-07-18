@@ -13,6 +13,7 @@ import { bindKnowledgeEditorDocumentRefClick } from '../../views/knowledge-base/
 import KnowledgeImagePreviewOverlay from '../../views/knowledge-base/KnowledgeImagePreviewOverlay';
 import KnowledgeDocOutline from '../../views/knowledge-base/KnowledgeDocOutline';
 import PlanProductDetail from '../../views/plan-order-list/PlanProductDetail';
+import { ModalPortal } from '../ModalPortal';
 import {
   collectKnowledgeOutlineFromHtmlRoot,
   scrollHtmlToKnowledgeOutline,
@@ -151,9 +152,10 @@ export const KnowledgeDocPickerModal: React.FC<KnowledgeDocPickerModalProps> = (
   };
 
   return (
-    <div className={`fixed inset-0 ${stackZClass} flex items-center justify-center p-4`}>
+    <ModalPortal>
+    <div className={`fixed inset-0 ${stackZClass} flex items-center justify-center p-4 sm:p-6`}>
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} role="presentation" />
-      <div className="relative flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+      <div className="relative z-10 flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
           <h2 className="text-lg font-bold text-slate-800">选择资料库文件</h2>
           <button type="button" onClick={onClose} className="rounded-full p-2 text-slate-400 hover:text-slate-600">
@@ -237,6 +239,7 @@ export const KnowledgeDocPickerModal: React.FC<KnowledgeDocPickerModalProps> = (
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 
@@ -313,9 +316,10 @@ export const KnowledgeDocPreviewModal: React.FC<KnowledgeDocPreviewModalProps> =
   if (!isOpen) return null;
 
   return (
-    <div className={`fixed inset-0 ${stackZClass} flex items-center justify-center p-4`}>
+    <ModalPortal>
+    <div className={`fixed inset-0 ${stackZClass} flex items-center justify-center p-4 sm:p-6`}>
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} role="presentation" />
-      <div className="relative flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+      <div className="relative z-10 flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
           <h2 className="min-w-0 flex-1 truncate text-lg font-bold text-slate-800">
             {doc?.title?.trim() || '资料库文件'}
@@ -376,7 +380,7 @@ export const KnowledgeDocPreviewModal: React.FC<KnowledgeDocPreviewModalProps> =
       />
       {filePreview && (
         <div
-          className="fixed inset-0 z-[12100] flex items-center justify-center p-8 bg-slate-900/80 backdrop-blur-sm"
+          className="fixed inset-0 z-[12100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/80 backdrop-blur-sm"
           onClick={() => setFilePreview(null)}
         >
           <button
@@ -388,7 +392,7 @@ export const KnowledgeDocPreviewModal: React.FC<KnowledgeDocPreviewModalProps> =
             <X className="w-8 h-8" />
           </button>
           <div
-            className="relative z-10 w-full max-w-4xl max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden"
+            className="relative z-10 w-full max-w-4xl max-h-[min(92vh,960px)] bg-white rounded-2xl shadow-2xl overflow-hidden"
             onClick={e => e.stopPropagation()}
           >
             {filePreview.type === 'image' ? (
@@ -400,6 +404,7 @@ export const KnowledgeDocPreviewModal: React.FC<KnowledgeDocPreviewModalProps> =
         </div>
       )}
     </div>
+    </ModalPortal>
   );
 };
 

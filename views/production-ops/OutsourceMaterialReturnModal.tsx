@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Undo2, X, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { ModalPortal } from '../../components/ModalPortal';
 import type {
   ProductionOpRecord,
   ProductionOrder,
@@ -424,10 +425,11 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
   const headerLabel = isProductMode ? (targetProduct?.name ?? '—') : `${targetOrder?.orderNumber ?? '—'} — ${targetProduct?.name ?? '—'}`;
 
   return (
-    <div className="fixed inset-0 z-[55] flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[55] flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} aria-hidden />
       <div
-        className="relative bg-white w-full max-w-4xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden"
+        className="relative z-10 bg-white w-full max-w-4xl max-h-[min(92vh,960px)] rounded-[32px] shadow-2xl flex flex-col overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         <div className="px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4 shrink-0 bg-white">
@@ -646,6 +648,7 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
         )}
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

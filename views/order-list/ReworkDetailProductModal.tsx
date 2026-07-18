@@ -2,6 +2,7 @@
 import React, { useMemo } from 'react';
 import { ProductionOrder, Product, GlobalNodeTemplate, ProductionOpRecord, AppDictionaries, ProductMilestoneProgress, ProcessSequenceMode } from '../../types';
 import { fmtDT } from '../../utils/formatTime';
+import { ModalPortal } from '../../components/ModalPortal';
 
 interface ReworkDetailProductModalProps {
   productId: string;
@@ -100,9 +101,10 @@ const ReworkDetailProductModal: React.FC<ReworkDetailProductModalProps> = ({
   const getReworkTargetNodes = (rec: ProductionOpRecord) => (rec.reworkNodeIds?.length ? rec.reworkNodeIds.map(nid => globalNodes.find(n => n.id === nid)?.name ?? nid).join('、') : (rec.nodeId ? (globalNodes.find(n => n.id === rec.nodeId)?.name ?? rec.nodeId) : '—'));
 
   return (
-    <div className="fixed inset-0 z-[75] flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[75] flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} aria-hidden />
-      <div className="relative bg-white w-full max-w-4xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+      <div className="relative z-10 bg-white w-full max-w-4xl max-h-[min(92vh,960px)] rounded-[32px] shadow-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="px-6 py-5 border-b border-slate-100 shrink-0">
           <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
             <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">{product.name}</span>
@@ -182,6 +184,7 @@ const ReworkDetailProductModal: React.FC<ReworkDetailProductModalProps> = ({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

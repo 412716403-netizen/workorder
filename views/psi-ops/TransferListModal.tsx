@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { ModalPortal } from '../../components/ModalPortal';
 import {
   Plus,
   X,
@@ -59,9 +60,10 @@ const TransferListModal: React.FC<TransferListModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={handleClose} aria-hidden />
-      <div className="relative bg-white w-full max-w-3xl max-h-[85vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+      <div className="relative z-10 bg-white w-full max-w-3xl max-h-[min(92vh,960px)] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50/50">
           <div className="flex items-center gap-3">
             {detailDocNumber ? (
@@ -172,6 +174,7 @@ const TransferListModal: React.FC<TransferListModalProps> = ({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

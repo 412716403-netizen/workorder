@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { ModalPortal } from '../../components/ModalPortal';
 import { X, Save, ClipboardCheck, Activity, ListChecks, Settings2 } from 'lucide-react';
 import type { DevStageDto, DevStageTemplateDto, ReportFieldDefinition } from '../../types';
 import { DEV_STAGE_STATUS_LABEL, DevStageStatus } from '../../types';
@@ -172,7 +173,8 @@ const DevStageRegisterModal: React.FC<DevStageRegisterModalProps> = ({
 
   return (
     <>
-    <div className="fixed inset-0 z-[360] flex items-center justify-center p-3 sm:p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[360] flex items-center justify-center p-4 sm:p-6">
       <div
         className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200"
         onClick={onClose}
@@ -183,7 +185,7 @@ const DevStageRegisterModal: React.FC<DevStageRegisterModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="dev-stage-register-title"
-        className="relative flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl animate-in zoom-in-95 duration-200"
+        className="relative z-10 flex max-h-[min(92vh,960px)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="shrink-0 flex items-center justify-between gap-4 border-b border-slate-100 bg-white px-5 py-4 sm:px-6">
@@ -289,6 +291,7 @@ const DevStageRegisterModal: React.FC<DevStageRegisterModalProps> = ({
         </div>
       </div>
     </div>
+    </ModalPortal>
 
     {canOpenTemplateSettings && (
       <DevStageTemplateModal

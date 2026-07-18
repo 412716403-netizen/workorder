@@ -5,6 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { HiddenPrintSlot, usePrintTemplateAction } from '../print-editor/PrintPreview';
 import { createBlankCustomTemplate } from '../../utils/printTemplateDefaults';
 import { mergeTenantPrintContext } from '../../utils/mergeTenantPrintContext';
+import { ModalPortal } from '../ModalPortal';
 
 export interface OrderCenterDetailPrintBlockProps {
   printSlot?: PlanListPrintSettings;
@@ -104,7 +105,8 @@ export const OrderCenterDetailPrintBlock: React.FC<OrderCenterDetailPrintBlockPr
         </button>
       ) : null}
       {showBtn && pickerOpen ? (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+        <ModalPortal>
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 sm:p-6">
           <button
             type="button"
             className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
@@ -114,7 +116,7 @@ export const OrderCenterDetailPrintBlock: React.FC<OrderCenterDetailPrintBlockPr
           <div
             role="dialog"
             aria-modal="true"
-            className="relative w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl"
+            className="relative z-10 w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
@@ -180,6 +182,7 @@ export const OrderCenterDetailPrintBlock: React.FC<OrderCenterDetailPrintBlockPr
             </div>
           </div>
         </div>
+        </ModalPortal>
       ) : null}
     </>
   );

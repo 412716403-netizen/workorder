@@ -3,6 +3,7 @@ import { ClipboardList, X, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Product } from '../../types';
 import FlowListProductCell from '../../components/flow/FlowListProductCell';
+import { ModalPortal } from '../../components/ModalPortal';
 
 export interface DispatchRow {
   orderId?: string;
@@ -69,9 +70,10 @@ const OutsourceDispatchListModal: React.FC<OutsourceDispatchListModalProps> = ({
   }, [outsourceDispatchRows, searchOrder, searchProduct, searchNodeId, products, productionLinkMode]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/50" onClick={onClose} aria-hidden />
-      <div className="relative bg-white w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-xl border border-slate-200 flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+      <div className="relative z-10 bg-white w-full max-w-4xl max-h-[min(92vh,960px)] rounded-2xl shadow-xl border border-slate-200 flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
           <h3 className="text-lg font-black text-slate-900 flex items-center gap-2"><ClipboardList className="w-5 h-5 text-indigo-600" /> 待发清单</h3>
           <button type="button" onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100"><X className="w-5 h-5" /></button>
@@ -165,6 +167,7 @@ const OutsourceDispatchListModal: React.FC<OutsourceDispatchListModalProps> = ({
         )}
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

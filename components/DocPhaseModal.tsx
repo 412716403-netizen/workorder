@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Printer, Pencil, Trash2, X } from 'lucide-react';
 import { useConfirm } from '../contexts/ConfirmContext';
+import { ModalPortal } from './ModalPortal';
 
 /** 编辑态顶栏「取消编辑」左侧挂载点（如保存），供 `renderContent` 内 `createPortal` 使用 */
 export const DocPhaseEditToolbarPortalContext = React.createContext<HTMLElement | null>(null);
@@ -93,10 +94,11 @@ const DocPhaseModal: React.FC<DocPhaseModalProps> = ({
       : formContent;
 
   return (
-    <div className={`fixed inset-0 ${zIndexClass} flex items-center justify-center p-4`}>
+    <ModalPortal>
+    <div className={`fixed inset-0 ${zIndexClass} flex items-center justify-center p-4 sm:p-6`}>
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} aria-hidden />
       <div
-        className={`relative bg-white w-full ${maxWidthClass} max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95`}
+        className={`relative z-10 bg-white w-full ${maxWidthClass} max-h-[min(92vh,960px)] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95`}
         onClick={e => e.stopPropagation()}
       >
         <DocPhaseEditToolbarPortalContext.Provider value={editToolbarHost}>
@@ -183,6 +185,7 @@ const DocPhaseModal: React.FC<DocPhaseModalProps> = ({
         </DocPhaseEditToolbarPortalContext.Provider>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

@@ -1,5 +1,6 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { ModalPortal } from '../../components/ModalPortal';
 import { ScrollText, X, Check, Pencil, Trash2, Clock, User, Package } from 'lucide-react';
 import { toast } from 'sonner';
 import type {
@@ -569,7 +570,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
     </button>
   );
 
-  return (
+  const content = (
     <>
       {layout === 'docPhase' && editActive && docPhaseEditToolbarHost
         ? createPortal(saveDetailToolbarButton, docPhaseEditToolbarHost)
@@ -577,7 +578,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
       <div
         className={
           layout === 'standalone'
-            ? 'fixed inset-0 z-[90] flex items-center justify-center p-4'
+            ? 'fixed inset-0 z-[90] flex items-center justify-center p-4 sm:p-6'
             : 'flex min-h-0 w-full max-w-4xl flex-1 flex-col'
         }
       >
@@ -587,7 +588,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
         <div
           className={
             layout === 'standalone'
-              ? 'relative flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl'
+              ? 'relative z-10 flex max-h-[min(92vh,960px)] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl'
               : 'relative flex min-h-0 w-full flex-1 flex-col overflow-hidden'
           }
           onClick={e => e.stopPropagation()}
@@ -1142,6 +1143,11 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
       <ProductImageLightbox target={detailImagePreview} onClose={() => setDetailImagePreview(null)} />
   </>
   );
+
+  if (layout === 'standalone') {
+    return <ModalPortal>{content}</ModalPortal>;
+  }
+  return content;
 };
 
 export default React.memo(OutsourceFlowDocumentDetailModal);

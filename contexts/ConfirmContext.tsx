@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { ModalPortal } from '../components/ModalPortal';
 
 export type ConfirmOptions = {
   title?: string;
@@ -50,7 +51,8 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
     <ConfirmContext.Provider value={confirm}>
       {children}
       {open && opts && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+        <ModalPortal>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6">
           <button
             type="button"
             className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"
@@ -62,7 +64,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
             aria-modal="true"
             aria-labelledby="app-confirm-title"
             aria-describedby="app-confirm-desc"
-            className="relative w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
+            className="relative z-10 w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <h2 id="app-confirm-title" className="text-lg font-semibold text-slate-900 tracking-tight">
@@ -94,6 +96,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
     </ConfirmContext.Provider>
   );

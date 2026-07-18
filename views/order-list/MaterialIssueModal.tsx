@@ -22,6 +22,7 @@ import { normalizeDecimals } from '../../contexts/formSettingsDefaults';
 import { fetchAllPages, type PaginatedLike } from '../../utils/fetchAllPages';
 import { clampBatchNoInput } from '../../hooks/useBatchPicker';
 import { MaterialIssueBatchSelect } from '../../components/MaterialIssueBatchSelect';
+import { ModalPortal } from '../../components/ModalPortal';
 import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 import {
@@ -373,9 +374,10 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
       handleClose();
     };
     return (
-      <div className="fixed inset-0 z-[75] flex items-center justify-center p-4">
+      <ModalPortal>
+      <div className="fixed inset-0 z-[75] flex items-center justify-center p-4 sm:p-6">
         <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={handleClose} aria-hidden />
-        <div className="relative bg-white w-full max-w-4xl rounded-[32px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]" onClick={e => e.stopPropagation()}>
+        <div className="relative z-10 bg-white w-full max-w-4xl rounded-[32px] shadow-2xl flex flex-col overflow-hidden max-h-[min(92vh,960px)]" onClick={e => e.stopPropagation()}>
           <div className="px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4 shrink-0 bg-white">
             <div>
               <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
@@ -546,6 +548,7 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
           )}
         </div>
       </div>
+      </ModalPortal>
     );
   }
 
@@ -719,13 +722,14 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
     };
     const orderLabels = groupOrders.map(o => o.orderNumber).filter(Boolean).join('、');
     return (
-      <div className="fixed inset-0 z-[75] flex items-center justify-center p-4">
+      <ModalPortal>
+      <div className="fixed inset-0 z-[75] flex items-center justify-center p-4 sm:p-6">
         <div
           className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
           onClick={handleClose}
           aria-hidden
         />
-        <div className="relative bg-white w-full max-w-4xl rounded-[32px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]" onClick={e => e.stopPropagation()}>
+        <div className="relative z-10 bg-white w-full max-w-4xl rounded-[32px] shadow-2xl flex flex-col overflow-hidden max-h-[min(92vh,960px)]" onClick={e => e.stopPropagation()}>
           <div className="px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4 shrink-0 bg-white">
             <div>
               <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
@@ -913,6 +917,7 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
           )}
         </div>
       </div>
+      </ModalPortal>
     );
   }
 

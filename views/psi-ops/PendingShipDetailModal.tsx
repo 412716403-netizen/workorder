@@ -3,6 +3,7 @@ import { X, Pencil, Check, Trash2 } from 'lucide-react';
 import { Product, Warehouse, AppDictionaries, ProductVariant } from '../../types';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import type { PendingShipmentGroup } from './PendingShipmentListModal';
+import { ModalPortal } from '../../components/ModalPortal';
 
 interface PendingShipDetailModalProps {
   group: PendingShipmentGroup;
@@ -89,9 +90,10 @@ const PendingShipDetailModal: React.FC<PendingShipDetailModalProps> = ({
   const pendingShipQty = (r: any) => Math.max(0, (Number(r.allocatedQuantity) || 0) - (Number(r.shippedQuantity) || 0));
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={handleClose} aria-hidden />
-      <div className="relative bg-white w-full max-w-2xl max-h-[90vh] rounded-2xl shadow-xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+      <div className="relative z-10 bg-white w-full max-w-2xl max-h-[min(92vh,960px)] rounded-2xl shadow-xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
           <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
             <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">{g.docNumber}</span>
@@ -267,6 +269,7 @@ const PendingShipDetailModal: React.FC<PendingShipDetailModalProps> = ({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

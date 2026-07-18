@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { ModalPortal } from '../../components/ModalPortal';
 import { useQuery } from '@tanstack/react-query';
 import { ScrollText, X, Filter, FileText, Loader2 } from 'lucide-react';
 import type { Product, PsiRecordType, Warehouse } from '../../types';
@@ -157,10 +158,11 @@ const PsiOrderBillFlowListModal: React.FC<PsiOrderBillFlowListModalProps> = ({
 
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} aria-hidden />
       <div
-        className="relative bg-white w-full max-w-6xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95"
+        className="relative z-10 bg-white w-full max-w-6xl max-h-[min(92vh,960px)] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95"
         onClick={e => e.stopPropagation()}
       >
         <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
@@ -389,6 +391,7 @@ const PsiOrderBillFlowListModal: React.FC<PsiOrderBillFlowListModalProps> = ({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

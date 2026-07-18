@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ModalPortal } from '../ModalPortal';
 import { X, Sliders, Printer } from 'lucide-react';
 import { toast } from 'sonner';
 import type { PlanFormFieldConfig } from '../../types';
@@ -200,9 +201,10 @@ export function BusinessFormConfigModal<TSettings extends Record<string, unknown
   const subtitle = resolveSubtitle(schema.subtitle, tab?.id);
 
   return (
-    <div className="fixed inset-0 z-[130] flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => { void handleClose(); }} />
-      <div className="relative flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-[32px] bg-white shadow-2xl">
+      <div className="relative z-10 flex max-h-[min(92vh,960px)] w-full max-w-6xl flex-col overflow-hidden rounded-[32px] bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 px-8 py-6">
           <div>
             <h3 className="flex items-center gap-2 text-lg font-black text-slate-900">
@@ -305,6 +307,7 @@ export function BusinessFormConfigModal<TSettings extends Record<string, unknown
         />
       )}
     </div>
+    </ModalPortal>
   );
 }
 

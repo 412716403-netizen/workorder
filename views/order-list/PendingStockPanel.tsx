@@ -38,6 +38,7 @@ import PendingStockTable from './pending-stock/PendingStockTable';
 import PendingStockBatchModal from './pending-stock/PendingStockBatchModal';
 import PendingStockSingleModal from './pending-stock/PendingStockSingleModal';
 import { StockInFlowModal } from './StockInFlowModal';
+import { ModalPortal } from '../../components/ModalPortal';
 
 interface PendingStockPanelProps {
   open: boolean;
@@ -211,8 +212,9 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
       />
 
       {stockInFilePreview && (
+        <ModalPortal>
         <div
-          className="fixed inset-0 z-[140] flex items-center justify-center p-8 bg-slate-900/80 backdrop-blur-sm"
+          className="fixed inset-0 z-[140] flex items-center justify-center p-4 sm:p-6 bg-slate-900/80 backdrop-blur-sm"
           onClick={() => setStockInFilePreview(null)}
         >
           <button
@@ -224,7 +226,7 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
             <X className="h-8 w-8" />
           </button>
           <div
-            className="relative z-10 max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-2xl"
+            className="relative z-10 max-h-[min(92vh,960px)] w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-2xl"
             onClick={e => e.stopPropagation()}
           >
             {stockInFilePreview.type === 'image' ? (
@@ -234,6 +236,7 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
             )}
           </div>
         </div>
+        </ModalPortal>
       )}
     </>
   );

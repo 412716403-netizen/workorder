@@ -10,6 +10,7 @@ import type {
 } from '../../types';
 import ProductQuickDetailBody from '../shared/ProductQuickDetailBody';
 import { productThumbSrc } from '../../utils/productImageSrc';
+import { ModalPortal } from '../../components/ModalPortal';
 
 interface PlanProductDetailProps {
   viewProductId: string;
@@ -42,9 +43,10 @@ const PlanProductDetail: React.FC<PlanProductDetailProps> = ({
   if (!p) return null;
 
   return (
-    <div className={`fixed inset-0 ${stackZClass} flex items-center justify-center p-4`}>
+    <ModalPortal>
+    <div className={`fixed inset-0 ${stackZClass} flex items-center justify-center p-4 sm:p-6`}>
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} />
-      <div className="relative bg-white w-full max-w-2xl rounded-[32px] shadow-2xl overflow-hidden max-h-[90vh] flex flex-col min-h-0" onClick={e => e.stopPropagation()}>
+      <div className="relative z-10 bg-white w-full max-w-2xl rounded-[32px] shadow-2xl overflow-hidden max-h-[min(92vh,960px)] flex flex-col min-h-0" onClick={e => e.stopPropagation()}>
         <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-4 min-w-0">
             {productThumbSrc(p) ? (
@@ -72,6 +74,7 @@ const PlanProductDetail: React.FC<PlanProductDetailProps> = ({
         />
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

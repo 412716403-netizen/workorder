@@ -2,6 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { Sliders, X } from 'lucide-react';
 import { toast } from 'sonner';
 import type { MaterialPanelSettings } from '../../types';
+import { ModalPortal } from '../../components/ModalPortal';
 
 interface MaterialPanelConfigModalProps {
   onClose: () => void;
@@ -33,9 +34,10 @@ const MaterialPanelConfigModal: React.FC<MaterialPanelConfigModalProps> = ({
   }, [draft, onUpdate]);
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} />
-      <div className="relative bg-white w-full max-w-md rounded-[32px] shadow-2xl flex flex-col overflow-hidden">
+      <div className="relative z-10 bg-white w-full max-w-md max-h-[min(92vh,960px)] rounded-[32px] shadow-2xl flex flex-col overflow-hidden">
         <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between">
           <div>
             <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
@@ -71,6 +73,7 @@ const MaterialPanelConfigModal: React.FC<MaterialPanelConfigModalProps> = ({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

@@ -2,6 +2,7 @@
  * 计划单 - 追溯码 - 拆批快捷设置弹窗 (Phase P5 抽离自 PlanTraceSection)。
  */
 import React from 'react';
+import { ModalPortal } from '../../../components/ModalPortal';
 
 interface Props {
   open: boolean;
@@ -24,12 +25,13 @@ const BulkQuickSettingsModal: React.FC<Props> = ({
 }) => {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[85] flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[85] flex items-center justify-center p-4 sm:p-6">
       <button type="button" className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" aria-label="关闭" onClick={onClose} />
       <div
         role="dialog"
         aria-modal="true"
-        className="relative w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+        className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
         <div className="border-b border-slate-100 px-5 py-4">
@@ -82,6 +84,7 @@ const BulkQuickSettingsModal: React.FC<Props> = ({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

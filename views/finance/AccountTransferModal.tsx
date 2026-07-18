@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ModalPortal } from '../../components/ModalPortal';
 import { X, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 import * as api from '../../services/api';
@@ -68,9 +69,10 @@ const AccountTransferModal: React.FC<AccountTransferModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white w-full max-w-md rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 flex flex-col">
+      <div className="relative z-10 bg-white w-full max-w-md rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 flex flex-col max-h-[min(92vh,960px)]">
         <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
           <h2 className="text-lg font-bold text-slate-800">{isEdit ? '编辑账户转账' : '账户间转账'}</h2>
           <button type="button" onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-white transition-all">
@@ -114,6 +116,7 @@ const AccountTransferModal: React.FC<AccountTransferModalProps> = ({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

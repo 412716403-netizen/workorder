@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { toast } from 'sonner';
+import { ModalPortal } from '../ModalPortal';
 import type {
   PlanFormSettings,
   PlanOrder,
@@ -331,12 +332,13 @@ export const PlanPrintTemplateManageDialog: React.FC<PlanPrintTemplateManageDial
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 sm:p-6">
       <button type="button" className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" aria-label="关闭" onClick={onClose} />
       <div
         role="dialog"
         aria-modal="true"
-        className="relative flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-[28px] bg-white shadow-2xl"
+        className="relative z-10 flex max-h-[min(92vh,960px)] w-full max-w-3xl flex-col overflow-hidden rounded-[28px] bg-white shadow-2xl sm:max-w-4xl md:max-w-5xl xl:max-w-6xl"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-100 px-6 py-4">
@@ -384,5 +386,6 @@ export const PlanPrintTemplateManageDialog: React.FC<PlanPrintTemplateManageDial
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };

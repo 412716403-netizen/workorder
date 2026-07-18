@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { ModalPortal } from '../components/ModalPortal';
 import {
   X,
   User,
@@ -167,8 +168,10 @@ export default function ProfileModal({ open, onClose, onUpdated, tenantId, tenan
 
   return (
     <>
-      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/40 backdrop-blur-sm">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[92vh] overflow-hidden flex flex-col border border-slate-200">
+      <ModalPortal>
+      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+        <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} aria-hidden />
+        <div className="relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[min(92vh,960px)] overflow-hidden flex flex-col border border-slate-200">
           <div className="shrink-0 p-5 sm:p-6 border-b border-slate-100 flex items-start justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center shrink-0">
@@ -376,6 +379,7 @@ export default function ProfileModal({ open, onClose, onUpdated, tenantId, tenan
           </div>
         </div>
       </div>
+      </ModalPortal>
 
       <ChangePhoneModal
         open={changePhoneOpen}

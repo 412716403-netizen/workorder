@@ -3,6 +3,7 @@
  */
 import React, { useMemo } from 'react';
 import { X } from 'lucide-react';
+import { ModalPortal } from '../../components/ModalPortal';
 import type {
   AppDictionaries,
   GlobalNodeTemplate,
@@ -104,10 +105,11 @@ const ReportPendingApprovalDetailModal: React.FC<ReportPendingApprovalDetailModa
     '—';
 
   return (
-    <div className="fixed inset-0 z-[92] flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[92] flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} />
       <div
-        className="relative bg-white w-full max-w-4xl max-h-[90vh] rounded-[28px] shadow-2xl border border-slate-100 overflow-hidden flex flex-col"
+        className="relative z-10 bg-white w-full max-w-4xl max-h-[min(92vh,960px)] rounded-[28px] shadow-2xl border border-slate-100 overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
@@ -145,6 +147,7 @@ const ReportPendingApprovalDetailModal: React.FC<ReportPendingApprovalDetailModa
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

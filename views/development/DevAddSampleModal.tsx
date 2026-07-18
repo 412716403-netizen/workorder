@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { ModalPortal } from '../../components/ModalPortal';
 import { X } from 'lucide-react';
 import { toast } from 'sonner';
 import type { DevSampleDto, DevStageTemplateDto, DevStyleVariantDto, AppDictionaries } from '../../types';
@@ -88,9 +89,10 @@ const DevAddSampleModal: React.FC<DevAddSampleModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[340] flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[340] flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/40" onClick={onClose} role="presentation" />
-      <div className="relative bg-white rounded-2xl shadow-xl p-6 w-full max-w-md space-y-4">
+      <div className="relative z-10 bg-white rounded-2xl shadow-xl p-6 w-full max-w-md space-y-4 max-h-[min(92vh,960px)] overflow-y-auto">
         <div className="flex justify-between items-center">
           <h3 className={sectionTitleClass}>{isFirstSample ? '新增头样' : '新增样品轮次'}</h3>
           <button type="button" onClick={onClose}><X className="h-5 w-5 text-slate-400" /></button>
@@ -133,6 +135,7 @@ const DevAddSampleModal: React.FC<DevAddSampleModalProps> = ({
         </button>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

@@ -51,6 +51,7 @@ import { shouldApplyRemoteContentHydrate } from '../../utils/knowledgeEditorHydr
 import { useKnowledgeDocOutline } from '../../hooks/useKnowledgeDocOutline';
 import KnowledgeDocOutline from './KnowledgeDocOutline';
 import PlanProductDetail from '../plan-order-list/PlanProductDetail';
+import { ModalPortal } from '../../components/ModalPortal';
 import './knowledge-editor.css';
 
 const lowlight = createLowlight(common);
@@ -566,8 +567,9 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
       )}
 
       {filePreview && (
+        <ModalPortal>
         <div
-          className="fixed inset-0 z-[12100] flex items-center justify-center p-8 bg-slate-900/80 backdrop-blur-sm"
+          className="fixed inset-0 z-[12100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/80 backdrop-blur-sm"
           onClick={() => setFilePreview(null)}
         >
           <button
@@ -579,7 +581,7 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
             <X className="w-8 h-8" />
           </button>
           <div
-            className="relative z-10 w-full max-w-4xl max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden"
+            className="relative z-10 w-full max-w-4xl max-h-[min(92vh,960px)] bg-white rounded-2xl shadow-2xl overflow-hidden"
             onClick={e => e.stopPropagation()}
           >
             {filePreview.type === 'image' ? (
@@ -589,6 +591,7 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
             )}
           </div>
         </div>
+        </ModalPortal>
       )}
 
       <KnowledgeImagePreviewOverlay

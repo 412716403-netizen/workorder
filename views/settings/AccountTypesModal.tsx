@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import * as api from '../../services/api';
 import { formStandardControlClass } from '../../styles/uiDensity';
 import { hasSettingsNameConflict } from '../../utils/settingsNameUnique';
+import { ModalPortal } from '../../components/ModalPortal';
 
 interface AccountTypesModalProps {
   financeAccountTypes: FinanceAccountType[];
@@ -104,9 +105,10 @@ const AccountTypesModal: React.FC<AccountTypesModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white w-full max-w-md rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 flex flex-col max-h-[85vh]">
+      <div className="relative z-10 bg-white w-full max-w-md rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 flex flex-col max-h-[min(92vh,960px)]">
         <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/80 shrink-0">
           <h2 className="text-lg font-bold text-slate-800">收支账户类型</h2>
           <button type="button" onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-white transition-all">
@@ -241,6 +243,7 @@ const AccountTypesModal: React.FC<AccountTypesModalProps> = ({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

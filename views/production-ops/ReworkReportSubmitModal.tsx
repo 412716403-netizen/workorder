@@ -65,6 +65,7 @@ import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
 import DocEntryTimeField from '../../components/DocEntryTimeField';
 import { defaultEntryDatetimeLocal, entryDatetimeLocalToTimestamp } from '../../utils/docEntryTime';
 import { productThumbSrc } from '../../utils/productImageSrc';
+import { ModalPortal } from '../../components/ModalPortal';
 
 function reworkReportCollabFromValues(values: Record<string, unknown>): { collabData?: Record<string, unknown> } {
   const clean = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== '' && v != null && v !== undefined));
@@ -812,14 +813,15 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[55] flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[55] flex items-center justify-center p-4 sm:p-6">
       <div
         className="absolute inset-0 z-0 bg-slate-900/60"
         onClick={onClose}
         aria-hidden
       />
       <div
-        className="relative z-10 bg-white w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-xl border border-slate-200 flex flex-col overflow-hidden"
+        className="relative z-10 bg-white w-full max-w-4xl max-h-[min(92vh,960px)] rounded-2xl shadow-xl border border-slate-200 flex flex-col overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
@@ -1298,6 +1300,7 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
         )}
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

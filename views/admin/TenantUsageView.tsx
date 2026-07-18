@@ -11,6 +11,7 @@ import {
   Users,
   X,
 } from 'lucide-react';
+import { ModalPortal } from '../../components/ModalPortal';
 import {
   adminTenants,
   type AdminTenantUsageDetail,
@@ -407,8 +408,10 @@ export default function TenantUsageView() {
       ) : null}
 
       {detailTenantId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <ModalPortal>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" aria-hidden />
+          <div className="relative z-10 bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg max-h-[min(92vh,960px)] overflow-y-auto">
             <div className="p-5 border-b border-slate-100 flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <h2 className="text-lg font-black text-slate-900">{detail?.name ?? '加载中…'}</h2>
@@ -512,6 +515,7 @@ export default function TenantUsageView() {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
     </div>
   );

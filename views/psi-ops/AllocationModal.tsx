@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { ModalPortal } from '../../components/ModalPortal';
 import { X, PackageCheck } from 'lucide-react';
 import { Product, Warehouse, AppDictionaries } from '../../types';
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
@@ -49,9 +50,10 @@ const AllocationModal: React.FC<AllocationModalProps> = ({
   }, [allocationModal.product, allocationModal.grp]);
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white w-full max-w-2xl rounded-2xl shadow-xl border border-slate-100 overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="relative z-10 bg-white w-full max-w-2xl rounded-2xl shadow-xl border border-slate-100 overflow-hidden flex flex-col max-h-[min(92vh,960px)]">
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <PackageCheck className="w-5 h-5 text-indigo-500" />
@@ -155,6 +157,7 @@ const AllocationModal: React.FC<AllocationModalProps> = ({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

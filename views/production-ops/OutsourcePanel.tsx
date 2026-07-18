@@ -105,6 +105,7 @@ import {
 } from '../../utils/warehouseDocPreference';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 import DocEntryTimeField from '../../components/DocEntryTimeField';
+import { ModalPortal } from '../../components/ModalPortal';
 import { defaultEntryDatetimeLocal, entryDatetimeLocalToTimestamp } from '../../utils/docEntryTime';
 import { buildOutsourceDispatchCollabSnapshot, outsourceCustomCollabPart } from '../../utils/productionOpCollab/outsource';
 import OutsourceFormConfigModal from './OutsourceFormConfigModal';
@@ -1940,9 +1941,10 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
       )}
 
       {receiveModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <ModalPortal>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6">
           <div className="absolute inset-0 bg-slate-900/50" onClick={() => { setReceiveModal(null); setReceiveQty(0); }} aria-hidden />
-          <div className="relative bg-white w-full max-w-md rounded-2xl shadow-xl border border-slate-200 p-4 space-y-4">
+          <div className="relative z-10 bg-white w-full max-w-md max-h-[min(92vh,960px)] rounded-2xl shadow-xl border border-slate-200 p-4 space-y-4 overflow-auto">
             <h3 className="text-lg font-black text-slate-900">委外收回</h3>
             <div className="text-sm space-y-1">
               {receiveModal.orderNumber != null && <p><span className="text-slate-500">工单：</span><span className="font-bold text-slate-800">{receiveModal.orderNumber}</span></p>}
@@ -1985,6 +1987,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {collabSyncConfirm && (
@@ -2016,11 +2019,12 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
       )}
 
       {filePreviewUrl && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-8 bg-slate-900/80 backdrop-blur-sm" onClick={() => setFilePreviewUrl(null)}>
+        <ModalPortal>
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6 bg-slate-900/80 backdrop-blur-sm" onClick={() => setFilePreviewUrl(null)}>
           <button type="button" onClick={() => setFilePreviewUrl(null)} className="absolute top-6 right-6 z-10 p-2 rounded-full bg-white/20 hover:bg-white/40 text-white transition-all">
             <X className="w-8 h-8" />
           </button>
-          <div className="relative z-10 w-full max-w-4xl max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+          <div className="relative z-10 w-full max-w-4xl max-h-[min(92vh,960px)] bg-white rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
             {filePreviewType === 'image' ? (
               <img src={filePreviewUrl} alt="预览" className="w-full h-full max-h-[85vh] object-contain" />
             ) : (
@@ -2028,6 +2032,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
             )}
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {viewProductId && dictionaries && (

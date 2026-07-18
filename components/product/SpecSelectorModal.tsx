@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Plus, Search, Check } from 'lucide-react';
 import type { DictionaryItem } from '../../types';
 import { productArchiveFormControlIconClass } from '../../styles/uiDensity';
+import { ModalPortal } from '../ModalPortal';
 
 export interface SpecSelectorModalProps {
   isOpen: boolean;
@@ -37,9 +38,10 @@ const SpecSelectorModal: React.FC<SpecSelectorModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className={`fixed inset-0 ${stackZClass} flex items-center justify-center p-4`}>
+    <ModalPortal>
+    <div className={`fixed inset-0 ${stackZClass} flex items-center justify-center p-4 sm:p-6`}>
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} role="presentation" />
-      <div className="relative bg-white w-full max-w-xl rounded-[40px] shadow-2xl animate-in zoom-in-95 duration-200 overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="relative z-10 bg-white w-full max-w-xl rounded-[40px] shadow-2xl animate-in zoom-in-95 duration-200 overflow-hidden flex flex-col max-h-[min(92vh,960px)]">
         <div className="px-8 py-6 border-b border-slate-50 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <h2 className="text-xl font-bold text-slate-800">{title}</h2>
@@ -126,6 +128,7 @@ const SpecSelectorModal: React.FC<SpecSelectorModalProps> = ({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

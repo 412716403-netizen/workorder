@@ -51,6 +51,7 @@ import { getVariantNodeUnitWeightKg } from '../../utils/variantNodeUnitWeight';
 import { computeReportRowDerivations } from '../../utils/reportRowDerivations';
 import { ScanBatchTrigger } from '../../components/scan/ScanBatchTrigger';
 import DocEntryTimeField from '../../components/DocEntryTimeField';
+import { ModalPortal } from '../../components/ModalPortal';
 
 export type { ReportModalData };
 
@@ -316,9 +317,10 @@ const ReportModal: React.FC<ReportModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} />
-      <div className="relative bg-white w-full max-w-4xl min-h-0 max-h-[min(90vh,calc(100dvh-2rem))] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+      <div className="relative z-10 bg-white w-full max-w-4xl min-h-0 max-h-[min(92vh,960px)] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
         <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
           <h3 className="font-bold text-slate-800 flex items-center gap-2">
             <FileText className="w-5 h-5 text-indigo-600" /> {reportModal.milestone.name} · 报工
@@ -549,6 +551,7 @@ const ReportModal: React.FC<ReportModalProps> = ({
         </div>
       )}
     </div>
+    </ModalPortal>
   );
 };
 

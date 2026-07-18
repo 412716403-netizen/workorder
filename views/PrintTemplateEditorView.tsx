@@ -41,6 +41,7 @@ import {
   stashPrintTemplateForEditorBootstrap,
 } from '../utils/printTemplateBootstrap';
 import * as api from '../services/api';
+import { ModalPortal } from '../components/ModalPortal';
 
 function CanvasDropZone({
   children,
@@ -602,11 +603,12 @@ export default function PrintTemplateEditorView() {
         </div>
         <HiddenPrintSlot template={template} ctx={previewCtx} printRef={printRef} />
         {previewOpen && (
+          <ModalPortal>
           <div
-            className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm"
+            className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 p-4 sm:p-6 backdrop-blur-sm"
             onClick={() => setPreviewOpen(false)}
           >
-            <div className="max-h-[90vh] overflow-auto rounded-2xl bg-white p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="relative z-10 max-h-[min(92vh,960px)] overflow-auto rounded-2xl bg-white p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
               <h3 className="mb-4 text-lg font-black text-slate-900">打印预览</h3>
               <PrintPaper template={template} ctx={previewCtx} />
               <div className="mt-4 flex justify-end gap-2">
@@ -626,6 +628,7 @@ export default function PrintTemplateEditorView() {
               </div>
             </div>
           </div>
+          </ModalPortal>
         )}
       </>
     );
@@ -849,8 +852,9 @@ export default function PrintTemplateEditorView() {
       <HiddenPrintSlot template={template} ctx={previewCtx} printRef={printRef} />
 
       {previewOpen && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm" onClick={() => setPreviewOpen(false)}>
-          <div className="max-h-[90vh] overflow-auto rounded-2xl bg-white p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <ModalPortal>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 p-4 sm:p-6 backdrop-blur-sm" onClick={() => setPreviewOpen(false)}>
+          <div className="relative z-10 max-h-[min(92vh,960px)] overflow-auto rounded-2xl bg-white p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
             <h3 className="mb-4 text-lg font-black text-slate-900">打印预览</h3>
             <PrintPaper template={template} ctx={previewCtx} />
             <div className="mt-4 flex justify-end gap-2">
@@ -870,6 +874,7 @@ export default function PrintTemplateEditorView() {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
     </DndContext>
   );

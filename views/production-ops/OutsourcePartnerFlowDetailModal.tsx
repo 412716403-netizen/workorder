@@ -11,6 +11,7 @@ import type {
 import { DEFAULT_OUTSOURCE_FORM_SETTINGS } from '../../types';
 import OutsourcePartnerFlowDetailTable from './OutsourcePartnerFlowDetailTable';
 import AddTodoButton from '../../components/AddTodoButton';
+import { ModalPortal } from '../../components/ModalPortal';
 import FlowListTableShell from '../../components/flow/FlowListTableShell';
 import { flowRecordsEarliestMs } from '../../utils/flowDocSort';
 import {
@@ -165,10 +166,11 @@ const OutsourcePartnerFlowDetailModal: React.FC<OutsourcePartnerFlowDetailModalP
   if (!open || !seed) return null;
 
   return (
-    <div className={`fixed inset-0 ${overlayZIndexClass} flex items-center justify-center p-4`}>
+    <ModalPortal>
+    <div className={`fixed inset-0 ${overlayZIndexClass} flex items-center justify-center p-4 sm:p-6`}>
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} aria-hidden />
       <div
-        className="relative flex w-full max-w-6xl max-h-[90vh] flex-col overflow-hidden rounded-[32px] bg-white shadow-2xl animate-in zoom-in-95"
+        className="relative z-10 flex w-full max-w-6xl max-h-[min(92vh,960px)] flex-col overflow-hidden rounded-[32px] bg-white shadow-2xl animate-in zoom-in-95"
         onClick={e => e.stopPropagation()}
       >
         {/* 头部 */}
@@ -276,6 +278,7 @@ const OutsourcePartnerFlowDetailModal: React.FC<OutsourcePartnerFlowDetailModalP
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

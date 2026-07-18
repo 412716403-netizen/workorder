@@ -2,6 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { History, X, Filter, FileText, Loader2 } from 'lucide-react';
+import { ModalPortal } from '../../components/ModalPortal';
 import {
   ProductionOrder,
   Product,
@@ -370,9 +371,10 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
     : '默认显示当天，扩大日期范围需手动改';
 
   return (
-    <div className="fixed inset-0 z-[88] flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[88] flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} />
-      <div className="relative bg-white w-full max-w-6xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+      <div className="relative z-10 bg-white w-full max-w-6xl max-h-[min(92vh,960px)] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
         <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
           <h3 className="font-bold text-slate-800 flex items-center gap-2"><History className="w-5 h-5 text-indigo-600" /> 报工流水</h3>
           <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
@@ -541,6 +543,7 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

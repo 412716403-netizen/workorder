@@ -20,6 +20,7 @@ import {
   firstFiniteCollabUnitPrice,
   type CollabPayloadItem,
 } from './collabDocDisplay';
+import { ModalPortal } from '../../components/ModalPortal';
 
 type DocKind = 'dispatch' | 'return';
 
@@ -656,7 +657,8 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
 
   return (
     <>
-      <div className="fixed inset-0 z-[86] flex items-center justify-center p-3 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="collab-doc-modal-title">
+      <ModalPortal>
+      <div className="fixed inset-0 z-[86] flex items-center justify-center p-4 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="collab-doc-modal-title">
         <button
           type="button"
           aria-label="关闭"
@@ -664,7 +666,7 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
           onClick={onClose}
         />
         <div
-          className="relative z-[1] w-full max-w-2xl max-h-[92vh] flex flex-col rounded-2xl shadow-2xl border border-slate-200 bg-white overflow-hidden"
+          className="relative z-10 w-full max-w-2xl max-h-[min(92vh,960px)] flex flex-col rounded-2xl shadow-2xl border border-slate-200 bg-white overflow-hidden"
           onClick={e => e.stopPropagation()}
         >
           {/* 头部 */}
@@ -1108,6 +1110,7 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
           )}
         </div>
       </div>
+      </ModalPortal>
     </>
   );
 };

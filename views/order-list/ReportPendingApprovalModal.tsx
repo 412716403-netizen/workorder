@@ -4,6 +4,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ban, Check, ClipboardCheck, FileText, Loader2, X } from 'lucide-react';
+import { ModalPortal } from '../../components/ModalPortal';
 import type {
   AppDictionaries,
   Product,
@@ -300,9 +301,10 @@ const ReportPendingApprovalModal: React.FC<ReportPendingApprovalModalProps> = ({
 
   return (
     <>
-      <div className="fixed inset-0 z-[88] flex items-center justify-center p-4">
+      <ModalPortal>
+      <div className="fixed inset-0 z-[88] flex items-center justify-center p-4 sm:p-6">
         <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} />
-        <div className="relative bg-white w-full max-w-6xl max-h-[90vh] rounded-[28px] shadow-2xl border border-slate-100 overflow-hidden flex flex-col">
+        <div className="relative z-10 bg-white w-full max-w-6xl max-h-[min(92vh,960px)] rounded-[28px] shadow-2xl border border-slate-100 overflow-hidden flex flex-col">
           <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
             <h3 className="font-bold text-slate-800 flex items-center gap-2">
               <ClipboardCheck className="w-5 h-5 text-amber-600" /> 报工审核
@@ -473,6 +475,7 @@ const ReportPendingApprovalModal: React.FC<ReportPendingApprovalModalProps> = ({
           </div>
         </div>
       </div>
+      </ModalPortal>
 
       {detailBatch && dictionaries && (
         <ReportPendingApprovalDetailModal

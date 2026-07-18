@@ -5,6 +5,7 @@
  */
 import React from 'react';
 import { Route, Settings2, Truck, X } from 'lucide-react';
+import { ModalPortal } from '../../../components/ModalPortal';
 import CollabSettingsPanel from '../CollabSettingsPanel';
 import CollabRoutesPanel from '../CollabRoutesPanel';
 import CollabReturnFlowPanel from '../CollabReturnFlowPanel';
@@ -97,7 +98,8 @@ const Shell: React.FC<{
 }> = ({ title, icon, max, onClose, children, contentClassName }) => {
   const maxCls = { sm: 'max-w-2xl', md: 'max-w-3xl', lg: 'max-w-4xl', xl: 'max-w-6xl' }[max];
   return (
-    <div className="fixed inset-0 z-[85] flex items-center justify-center p-3 sm:p-4" role="dialog" aria-modal="true">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[85] flex items-center justify-center p-4 sm:p-6" role="dialog" aria-modal="true">
       <button
         type="button"
         aria-label="关闭"
@@ -105,7 +107,7 @@ const Shell: React.FC<{
         onClick={onClose}
       />
       <div
-        className={`relative w-full ${maxCls} max-h-[92vh] flex flex-col rounded-2xl shadow-2xl border border-slate-200 bg-slate-50 overflow-hidden`}
+        className={`relative z-10 w-full ${maxCls} max-h-[min(92vh,960px)] flex flex-col rounded-2xl shadow-2xl border border-slate-200 bg-slate-50 overflow-hidden`}
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-200 bg-white shrink-0">
@@ -125,6 +127,7 @@ const Shell: React.FC<{
         <div className={contentClassName ?? 'flex-1 min-h-0 overflow-y-auto p-3 sm:p-4'}>{children}</div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

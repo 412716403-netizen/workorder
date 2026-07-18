@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { X, Smartphone, Loader2, ChevronRight, ChevronLeft } from 'lucide-react';
 import { auth } from '../services/api';
+import { ModalPortal } from '../components/ModalPortal';
 
 const CN_PHONE_RE = /^1[3-9]\d{9}$/;
 const COOLDOWN_SEC = 60;
@@ -167,8 +168,10 @@ export default function ChangePhoneModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md max-h-[90vh] overflow-y-auto">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6">
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" aria-hidden />
+      <div className="relative z-10 bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md max-h-[min(92vh,960px)] overflow-y-auto">
         <div className="p-5 border-b border-slate-100 flex items-start justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center shrink-0">
@@ -314,5 +317,6 @@ export default function ChangePhoneModal({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }

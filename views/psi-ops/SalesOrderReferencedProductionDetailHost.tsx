@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
+import { ModalPortal } from '../../components/ModalPortal';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { PlanOrder, PrintTemplate, ProductionOpRecord } from '../../types';
@@ -221,13 +222,15 @@ const SalesOrderReferencedProductionDetailHost: React.FC<
       />
 
       {filePreviewUrl && (
+        <ModalPortal>
         <div
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/70 p-4"
+          className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6"
           onClick={() => setFilePreviewUrl(null)}
           role="presentation"
         >
+          <div className="absolute inset-0 bg-slate-900/70" aria-hidden />
           <div
-            className="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-xl bg-white"
+            className="relative z-10 max-h-[min(92vh,960px)] w-full max-w-4xl overflow-hidden rounded-xl bg-white"
             onClick={e => e.stopPropagation()}
           >
             {filePreviewType === 'image' ? (
@@ -237,6 +240,7 @@ const SalesOrderReferencedProductionDetailHost: React.FC<
             )}
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* 计划详情内触发列表打印时占位；完整打印链路请在计划单模块使用 */}

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useCallback } from 'react';
+import { ModalPortal } from '../components/ModalPortal';
 import {
   X, Download, Upload, FileSpreadsheet, Check, AlertTriangle,
   XCircle, ChevronRight, ChevronLeft, Loader2, Info,
@@ -307,9 +308,11 @@ export default function PartnerImportModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={handleClose}>
+    <ModalPortal>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={handleClose} aria-hidden />
       <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden"
+        className="relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[min(92vh,960px)] flex flex-col overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-8 py-5 border-b border-slate-100">
@@ -586,5 +589,6 @@ export default function PartnerImportModal({
         )}
       </div>
     </div>
+    </ModalPortal>
   );
 }

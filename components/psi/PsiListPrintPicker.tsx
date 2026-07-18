@@ -13,6 +13,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { HiddenPrintSlot, usePrintTemplateAction } from '../print-editor/PrintPreview';
 import { mergeTenantPrintContext } from '../../utils/mergeTenantPrintContext';
 import { createBlankCustomTemplate } from '../../utils/printTemplateDefaults';
+import { ModalPortal } from '../ModalPortal';
 import { OrderCenterDetailPrintBlock } from '../order-print/OrderCenterDetailPrintBlock';
 
 /**
@@ -190,7 +191,8 @@ function PsiListPrintControllerInner<TDoc>(
     <>
       <HiddenPrintSlot template={activeTemplate} ctx={activeCtx} printRef={printRef} />
       {pickerOpen && pickerDocNum ? (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+        <ModalPortal>
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 sm:p-6">
           <button
             type="button"
             className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
@@ -200,7 +202,7 @@ function PsiListPrintControllerInner<TDoc>(
           <div
             role="dialog"
             aria-modal="true"
-            className="relative w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl"
+            className="relative z-10 w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
@@ -265,6 +267,7 @@ function PsiListPrintControllerInner<TDoc>(
             </div>
           </div>
         </div>
+        </ModalPortal>
       ) : null}
     </>
   );

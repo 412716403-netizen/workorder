@@ -55,6 +55,7 @@ import { orderBelongsToProductInList } from '../../utils/reworkMergeBucketOrderI
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 import PlanProductDetail from '../plan-order-list/PlanProductDetail';
 import { productThumbSrc } from '../../utils/productImageSrc';
+import { ModalPortal } from '../../components/ModalPortal';
 
 /** sourceReworkId → partner 的预建索引 */
 function buildReworkPartnerMap(allRecords: ProductionOpRecord[]): Map<string, string> {
@@ -1213,11 +1214,12 @@ const ReworkPanel: React.FC<PanelProps> = ({
         )}
 
       {filePreviewUrl && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-8 bg-slate-900/80 backdrop-blur-sm" onClick={() => setFilePreviewUrl(null)}>
+        <ModalPortal>
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6 bg-slate-900/80 backdrop-blur-sm" onClick={() => setFilePreviewUrl(null)}>
           <button type="button" onClick={() => setFilePreviewUrl(null)} className="absolute top-6 right-6 z-10 p-2 rounded-full bg-white/20 hover:bg-white/40 text-white transition-all">
             <X className="w-8 h-8" />
           </button>
-          <div className="relative z-10 w-full max-w-4xl max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+          <div className="relative z-10 w-full max-w-4xl max-h-[min(92vh,960px)] bg-white rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
             {filePreviewType === 'image' ? (
               <img src={filePreviewUrl} alt="预览" className="w-full h-full max-h-[85vh] object-contain" />
             ) : (
@@ -1225,6 +1227,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
             )}
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {viewProductId && dictionaries && (

@@ -18,6 +18,7 @@ import {
   type CollabReturnRow,
 } from './collabHelpers';
 import CollabPeerQtyMatrixBlock from './CollabPeerQtyMatrixBlock';
+import { ModalPortal } from '../../components/ModalPortal';
 
 interface CollabPeerReturnModalProps {
   open: boolean;
@@ -255,9 +256,10 @@ const CollabPeerReturnModal: React.FC<CollabPeerReturnModalProps> = ({
   const allSelected = totalEligible > 0 && blocks.every(b => b.selected);
 
   return (
-    <div className="fixed inset-0 z-[86] flex items-center justify-center p-3 sm:p-4" role="dialog" aria-modal="true">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[86] flex items-center justify-center p-4 sm:p-6" role="dialog" aria-modal="true">
       <div className="absolute inset-0 z-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} aria-hidden />
-      <div className="relative z-[1] w-full max-w-5xl max-h-[92vh] rounded-2xl border border-slate-200 bg-white shadow-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+      <div className="relative z-10 w-full max-w-5xl max-h-[min(92vh,960px)] rounded-2xl border border-slate-200 bg-white shadow-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-slate-200 bg-white shrink-0">
           <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
             <Truck className="w-5 h-5 text-emerald-600" /> 批量回传
@@ -394,6 +396,7 @@ const CollabPeerReturnModal: React.FC<CollabPeerReturnModalProps> = ({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

@@ -6,6 +6,7 @@ import { effectiveCustomDocFieldType } from '../../utils/reportCustomDocField';
 import { getFileExtFromDataUrl } from '../../utils/fileHelpers';
 import { formatLocalDateTimeZh } from '../../utils/localDateTime';
 import { getStageRegisteredDisplayFields } from '../../utils/devStageDisplay';
+import { ModalPortal } from '../../components/ModalPortal';
 import { formStandardLabelClass } from '../../styles/uiDensity';
 
 interface DevStageRegisteredContentProps {
@@ -48,8 +49,9 @@ function DevStageFieldValue({
     return (
       <>
         {previewOpen && (
+          <ModalPortal>
           <div
-            className="fixed inset-0 z-[500] flex items-center justify-center bg-slate-900/90 p-10 backdrop-blur-xl"
+            className="fixed inset-0 z-[500] flex items-center justify-center bg-slate-900/90 p-4 sm:p-6 backdrop-blur-xl"
             onClick={() => setPreviewOpen(false)}
             role="presentation"
           >
@@ -63,10 +65,11 @@ function DevStageFieldValue({
             <img
               src={str}
               alt=""
-              className="max-h-full max-w-full rounded-2xl object-contain shadow-2xl"
+              className="relative z-10 max-h-full max-w-full rounded-2xl object-contain shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             />
           </div>
+          </ModalPortal>
         )}
         <div className="flex items-center gap-3">
           <button

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { Loader2, X } from 'lucide-react';
+import { ModalPortal } from './ModalPortal';
 import * as api from '../services/api';
 import type { Product } from '../types';
 import { productThumbSrc, type ProductImageFields } from '../utils/productImageSrc';
@@ -83,22 +83,24 @@ const ProductImageLightbox: React.FC<ProductImageLightboxProps> = ({
 
   if (!target || !displaySrc) return null;
 
-  return createPortal(
+  return (
+    <ModalPortal>
     <div
-      className={`fixed inset-0 ${zIndexClass} flex items-center justify-center p-4 bg-black/80 animate-in fade-in`}
+      className={`fixed inset-0 ${zIndexClass} flex items-center justify-center p-4 sm:p-6`}
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label={alt}
     >
+      <div className="absolute inset-0 bg-black/80 animate-in fade-in" aria-hidden />
       <img
         src={displaySrc}
         alt={alt}
-        className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+        className="relative z-10 max-w-full max-h-full object-contain rounded-lg shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       />
       {loadingOriginal && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 rounded-full bg-black/50 px-3 py-1.5 text-xs text-white">
+        <div className="absolute bottom-6 left-1/2 z-10 -translate-x-1/2 flex items-center gap-2 rounded-full bg-black/50 px-3 py-1.5 text-xs text-white">
           <Loader2 className="w-3.5 h-3.5 animate-spin" />
           加载原图…
         </div>
@@ -106,13 +108,13 @@ const ProductImageLightbox: React.FC<ProductImageLightboxProps> = ({
       <button
         type="button"
         onClick={onClose}
-        className="absolute top-4 right-4 p-2 rounded-full bg-white/20 text-white hover:bg-white/30 transition-all"
+        className="absolute top-4 right-4 z-10 p-2 rounded-full bg-white/20 text-white hover:bg-white/30 transition-all"
         aria-label="关闭"
       >
         <X className="w-6 h-6" />
       </button>
-    </div>,
-    document.body,
+    </div>
+    </ModalPortal>
   );
 };
 

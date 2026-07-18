@@ -3,6 +3,7 @@ import { ClipboardList, ScrollText, X } from 'lucide-react';
 import { Product, ProductMilestoneProgress, ProductionOrder } from '../../types';
 import { ReworkPendingRow } from './types';
 import FlowListProductCell from '../../components/flow/FlowListProductCell';
+import { ModalPortal } from '../../components/ModalPortal';
 
 function reworkReportsMatchDocSearch(
   reports: { reportNo?: string; reportBatchId?: string; id: string }[] | undefined,
@@ -127,9 +128,10 @@ const ReworkPendingDefectiveModal: React.FC<ReworkPendingDefectiveModalProps> = 
   }, [reworkPendingRows]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/50" onClick={onClose} aria-hidden />
-      <div className="relative bg-white w-full max-w-6xl max-h-[90vh] rounded-2xl shadow-xl border border-slate-200 flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+      <div className="relative z-10 bg-white w-full max-w-6xl max-h-[min(92vh,960px)] rounded-2xl shadow-xl border border-slate-200 flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="px-5 sm:px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-4 shrink-0">
           <div className="min-w-0">
             <h3 className="text-lg font-black text-slate-900 flex items-center gap-2"><ClipboardList className="w-5 h-5 text-indigo-600 shrink-0" /> 待处理不良</h3>
@@ -288,6 +290,7 @@ const ReworkPendingDefectiveModal: React.FC<ReworkPendingDefectiveModalProps> = 
         )}
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

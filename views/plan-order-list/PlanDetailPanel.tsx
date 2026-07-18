@@ -1,5 +1,6 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Layers,
@@ -1355,11 +1356,16 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   const sourceSalesOrderDocNumber = getPlanSourceSalesOrderDocNumber(viewPlan);
 
   // --- Render ---
-  return (
+  return createPortal(
     <>
-      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300" onClick={() => { void handlePanelClose(); }}></div>
-        <div className="relative bg-white w-full max-w-6xl rounded-[40px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 max-h-[92vh]">
+      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6">
+        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300" onClick={() => { void handlePanelClose(); }} />
+        <div
+          className="relative z-10 flex w-full max-h-[min(92vh,960px)] max-w-3xl flex-col overflow-hidden rounded-[32px] bg-white shadow-2xl animate-in zoom-in-95 duration-200 sm:max-w-4xl md:max-w-5xl xl:max-w-6xl"
+          role="dialog"
+          aria-modal="true"
+          aria-label="查看生产计划"
+        >
 
           <div className="px-10 py-6 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-50">
              <div className="flex items-center gap-5">
@@ -2400,7 +2406,8 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
           }}
         />
       )}
-    </>
+    </>,
+    document.body,
   );
 };
 

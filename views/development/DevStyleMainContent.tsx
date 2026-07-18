@@ -39,6 +39,7 @@ import DevAddSampleModal from './DevAddSampleModal';
 import DevStyleLogModal from './DevStyleLogModal';
 import DevBomConfigSection from './DevBomConfigSection';
 import AddTodoButton from '../../components/AddTodoButton';
+import { ModalPortal } from '../../components/ModalPortal';
 import { devSingleSkuVariantId } from '../../utils/devBomHelpers';
 import {
   formStandardLabelClass,
@@ -219,16 +220,18 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
   return (
     <main className="flex-1 flex flex-col bg-white overflow-y-auto min-w-0">
       {showFullImage && style.imageUrl && (
+        <ModalPortal>
         <div
-          className="fixed inset-0 z-[500] bg-slate-900/90 flex items-center justify-center p-10"
+          className="fixed inset-0 z-[500] bg-slate-900/90 flex items-center justify-center p-4 sm:p-6"
           onClick={() => setShowFullImage(false)}
           role="presentation"
         >
           <button type="button" className="absolute top-10 right-10 p-4 text-white" onClick={() => setShowFullImage(false)}>
             <X className="w-8 h-8" />
           </button>
-          <img src={style.imageUrl} alt="" className="max-w-full max-h-full object-contain rounded-2xl" onClick={(e) => e.stopPropagation()} />
+          <img src={style.imageUrl} alt="" className="relative z-10 max-w-full max-h-full object-contain rounded-2xl" onClick={(e) => e.stopPropagation()} />
         </div>
+        </ModalPortal>
       )}
 
       <div className="p-8 lg:p-10 flex flex-col lg:flex-row gap-8 border-b border-slate-100">
@@ -487,9 +490,10 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
       </div>
 
       {bomModalOpen && activeSample && (
-        <div className="fixed inset-0 z-[280] flex items-center justify-center p-4">
+        <ModalPortal>
+        <div className="fixed inset-0 z-[280] flex items-center justify-center p-4 sm:p-6">
           <div className="absolute inset-0 bg-slate-900/40" onClick={() => setBomModalOpen(false)} role="presentation" />
-          <div className="relative flex max-h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
+          <div className="relative z-10 flex max-h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
             <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-6 py-4">
               <h3 className={sectionTitleClass}>
                 BOM 录入 · {activeSample.name}
@@ -541,6 +545,7 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       <DevAddSampleModal

@@ -7,6 +7,7 @@ import {
 } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useFeaturePlugins } from '../../hooks/useFeaturePlugins';
+import { ModalPortal } from '../../components/ModalPortal';
 
 const CATEGORY_LABELS: Record<string, string> = {
   general: '通用',
@@ -67,8 +68,9 @@ const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
+    <ModalPortal>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 sm:p-6">
+      <div className="relative z-10 flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
           <h2 className="text-lg font-black text-slate-900">添加组件</h2>
           <button type="button" onClick={onClose} className="rounded-lg p-2 hover:bg-slate-100">
@@ -139,6 +141,7 @@ const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

@@ -1,4 +1,5 @@
 import React from 'react';
+import { ModalPortal } from '../../components/ModalPortal';
 import { useQuery } from '@tanstack/react-query';
 import { Pencil, Printer, Trash2, X } from 'lucide-react';
 import * as api from '../../services/api';
@@ -135,9 +136,10 @@ function FinanceDetailModal({
   if (!detailRecord) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white w-full max-w-3xl rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 max-h-[90vh] flex flex-col">
+      <div className="relative z-10 bg-white w-full max-w-3xl rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 max-h-[min(92vh,960px)] flex flex-col">
         <div className="px-8 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
           <h2 className="text-lg font-bold text-slate-800">
             单据详情
@@ -494,6 +496,7 @@ function FinanceDetailModal({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
+import { ModalPortal } from '../../components/ModalPortal';
 import {
   X,
   Plus,
@@ -203,8 +204,9 @@ const DevStageTemplateModal: React.FC<DevStageTemplateModalProps> = ({
   };
 
   return (
+    <ModalPortal>
     <div
-      className="fixed inset-0 flex items-center justify-center p-3 sm:p-4"
+      className="fixed inset-0 flex items-center justify-center p-4 sm:p-6"
       style={{ zIndex: overlayZIndex }}
     >
       <div
@@ -216,7 +218,7 @@ const DevStageTemplateModal: React.FC<DevStageTemplateModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="dev-stage-template-title"
-        className="relative flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl animate-in zoom-in-95 duration-200"
+        className="relative z-10 flex max-h-[min(92vh,960px)] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="shrink-0 flex items-center justify-between gap-4 border-b border-slate-100 bg-white px-5 py-4 sm:px-6">
@@ -468,6 +470,7 @@ const DevStageTemplateModal: React.FC<DevStageTemplateModalProps> = ({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 

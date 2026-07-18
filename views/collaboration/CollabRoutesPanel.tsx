@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import * as api from '../../services/api';
 import type { Partner, GlobalNodeTemplate, OutsourceRoute, OutsourceRouteStep } from '../../types';
+import { ModalPortal } from '../../components/ModalPortal';
 
 interface CollabRoutesPanelProps {
   onBack: () => void;
@@ -175,8 +176,9 @@ const CollabRoutesPanel: React.FC<CollabRoutesPanelProps> = ({
 
       {/* 路线编辑弹窗 */}
       {routeEditOpen && (
-        <div className="fixed inset-0 bg-black/30 z-[95] flex items-center justify-center p-4" onClick={() => setRouteEditOpen(false)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[80vh] overflow-y-auto z-[96]" onClick={e => e.stopPropagation()}>
+        <ModalPortal>
+        <div className="fixed inset-0 bg-black/30 z-[95] flex items-center justify-center p-4 sm:p-6" onClick={() => setRouteEditOpen(false)}>
+          <div className="relative z-10 bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[min(92vh,960px)] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
               <h3 className="text-lg font-black text-slate-900">{editingRoute ? '编辑路线' : '新建路线'}</h3>
               <button onClick={() => setRouteEditOpen(false)}><X className="w-5 h-5 text-slate-400 hover:text-slate-600" /></button>
@@ -248,6 +250,7 @@ const CollabRoutesPanel: React.FC<CollabRoutesPanelProps> = ({
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
     </div>
   );

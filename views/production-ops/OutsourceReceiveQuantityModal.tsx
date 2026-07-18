@@ -39,6 +39,7 @@ import {
   psiOrderBillCompactSummaryUnitClass,
 } from '../../styles/uiDensity';
 import { productThumbSrc } from '../../utils/productImageSrc';
+import { ModalPortal } from '../../components/ModalPortal';
 
 /** 外协收货矩阵：与明细行 `psiOrderBillCompactLineInputClass` 同高 (h-9)；「最多」在输入框右侧由 hint 展示 */
 const receiveQtyMatrixInputClass =
@@ -215,7 +216,7 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
       className={
         embedded
           ? 'flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-white'
-          : 'relative flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl'
+          : 'relative z-10 flex max-h-[min(92vh,960px)] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl'
       }
       onClick={e => e.stopPropagation()}
     >
@@ -849,10 +850,12 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
   if (embedded) return body;
 
   return (
-    <div className="fixed inset-0 z-[55] flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[55] flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/60" onClick={onClose} aria-hidden />
       {body}
     </div>
+    </ModalPortal>
   );
 };
 

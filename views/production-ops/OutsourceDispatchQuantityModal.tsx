@@ -42,6 +42,7 @@ import {
 import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
 import DocEntryTimeField from '../../components/DocEntryTimeField';
 import { productThumbSrc } from '../../utils/productImageSrc';
+import { ModalPortal } from '../../components/ModalPortal';
 
 export interface DispatchRow {
   orderId?: string;
@@ -429,7 +430,7 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
       className={
         embedded
           ? 'flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-white'
-          : 'relative flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl'
+          : 'relative z-10 flex max-h-[min(92vh,960px)] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl'
       }
       onClick={e => e.stopPropagation()}
     >
@@ -916,10 +917,12 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
   if (embedded) return body;
 
   return (
-    <div className="fixed inset-0 z-[55] flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[55] flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/60" onClick={onClose} aria-hidden />
       {body}
     </div>
+    </ModalPortal>
   );
 };
 

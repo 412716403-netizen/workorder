@@ -33,6 +33,7 @@ import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayNa
 import { DEFECT_TREATMENT_CUSTOM_DATA_KEY } from '../../utils/productionOpCollab/rework';
 import DocEntryTimeField from '../../components/DocEntryTimeField';
 import { defaultEntryDatetimeLocal, entryDatetimeLocalToTimestamp } from '../../utils/docEntryTime';
+import { ModalPortal } from '../../components/ModalPortal';
 
 function defectTreatmentCollabFromValues(values: Record<string, unknown>): { collabData?: Record<string, unknown> } {
   const clean = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== '' && v != null && v !== undefined));
@@ -561,9 +562,10 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
     ) : null;
 
   return (
-    <div className="fixed inset-0 z-[55] flex items-center justify-center p-4">
+    <ModalPortal>
+    <div className="fixed inset-0 z-[55] flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/60" onClick={resetAndClose} aria-hidden />
-      <div className={`relative bg-white w-full rounded-2xl shadow-xl border border-slate-200 flex flex-col overflow-hidden ${reworkActionMode === null ? 'max-w-md' : 'max-w-4xl max-h-[90vh]'}`} onClick={e => e.stopPropagation()}>
+      <div className={`relative z-10 bg-white w-full rounded-2xl shadow-xl border border-slate-200 flex flex-col overflow-hidden ${reworkActionMode === null ? 'max-w-md' : 'max-w-4xl max-h-[min(92vh,960px)]'}`} onClick={e => e.stopPropagation()}>
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
           <h3 className="text-lg font-black text-slate-900">不良品处理</h3>
           <button type="button" onClick={resetAndClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100"><X className="w-5 h-5" /></button>
@@ -707,6 +709,7 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 };
 
