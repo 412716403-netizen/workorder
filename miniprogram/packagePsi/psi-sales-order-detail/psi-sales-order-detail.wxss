@@ -88,7 +88,7 @@
 
 .po-line-progress__nums {
   font-size: 22rpx;
-  color: #9ca3af;
+  color: var(--color-text-primary, #1f2329);
 }
 
 .po-line-progress__tag {
@@ -114,6 +114,10 @@
 
 .so-detail-allocate {
   margin-top: 12rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6rpx;
 }
 
 .so-detail-allocate__btn {
@@ -125,4 +129,21 @@
   color: #2f6bff;
   background: #eef2ff;
   border-radius: 12rpx;
+}
+
+.so-detail-allocate__done {
+  display: inline-flex;
+  align-items: center;
+  padding: 8rpx 24rpx;
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #059669;
+  background: #ecfdf5;
+  border-radius: 12rpx;
+}
+
+.so-detail-allocate__progress {
+  font-size: 22rpx;
+  color: var(--color-text-primary, #1f2329);
+  line-height: 1.35;
 }

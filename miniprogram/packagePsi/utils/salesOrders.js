@@ -9,7 +9,7 @@ const {
   lineGroupTotalQty,
   formatPsiQtyDisplay,
 } = require('../../utils/psiOpsAggregators.js');
-const { effectiveAllocatedQuantity, linePendingShipQty } = require('./psiAllocationDisplay.js');
+const { effectiveAllocatedQuantity, isSalesOrderLineFullyShipped, linePendingShipQty } = require('./psiAllocationDisplay.js');
 const { flowRecordsEarliestMs, formatLocalDateTimeZh } = require('../../utils/flowDocSortLite.js');
 const { formatReportTime } = require('../../utils/orderReportHistory.js');
 const { listProductDisplayFieldsFromMap } = require('../../utils/listProductThumb.js');
@@ -77,7 +77,7 @@ function shipmentProgressMeta(ordered, shipped, allocatedEff) {
   else if (ship > 0) progressLabel = `${Math.round((ship / ordered) * 100)}%`;
   else if (allocPending > 0) progressLabel = '有待发';
   else if (allocatedEff > 0) progressLabel = '已配货';
-  else progressLabel = '未配货';
+  else progressLabel = '';
 
   let progressShippedBarPct = 0;
   let progressAllocBarPct = 0;
@@ -191,6 +191,7 @@ function mapLineGroupPreview(docNumber, lineGroupId, items, ctx) {
   const price = Number(first.salesPrice) || 0;
   const amount = ordered * price;
   const unitName = getProductUnitName(product, dictionaries);
+  const fullyShipped = isSalesOrderLineFullyShipped(ordered, shipped);
 
   return {
     lineGroupId,
@@ -201,11 +202,12 @@ function mapLineGroupPreview(docNumber, lineGroupId, items, ctx) {
     showAmount: Boolean(showAmount),
     showPrice: Boolean(showAmount),
     progressSummaryText: `${shipped}/${ordered}`,
-    showAllocateBtn: Boolean(canAllocate),
-    allocProgressText: ordered > 0
-      ? `已发 ${shipped} / 待发 ${allocPendingQty}${allocatedQty > ordered ? '（超配）' : ''}${shipped >= ordered && ordered > 0 ? ' · 已发齐' : ''}`
-      : '',
-    showAllocProgress: ordered > 0,
+    showAllocateBtn: Boolean(canAllocate && !fullyShipped),
+    showFullyShippedLabel: fullyShipped,
+    allocProgressText: `已发 ${shipped} / 待发 ${allocPendingQty}`,
+    showAllocProgress: true,
+    allocOverText: allocatedQty > ordered ? '（超配）' : '',
+    showAllocOver: allocatedQty > ordered,
     ...progress,
   };
 }
@@ -273,8 +275,11 @@ function slimSalesOrderLinePreview(line) {
     shippedText: line.shippedText,
     orderedText: line.orderedText,
     showAllocateBtn: line.showAllocateBtn,
+    showFullyShippedLabel: line.showFullyShippedLabel,
     allocProgressText: line.allocProgressText,
     showAllocProgress: line.showAllocProgress,
+    allocOverText: line.allocOverText,
+    showAllocOver: line.showAllocOver,
   };
 }
 
@@ -328,7 +333,9 @@ function buildDetailLineRows(docNumber, items, ctx) {
       matrixLayout = buildVariantMatrixUiModel(product, dictionaries, qtyMap);
     }
     const flow = resolveSalesOrderLineFlowStatus(grp);
-    const canAllocateLine = Boolean(canAllocate && flow.statusKey !== 'fully_shipped');
+    const fullyShipped = isSalesOrderLineFullyShipped(ordered, shipped);
+    const allocatedQty = (grp || []).reduce((s, i) => s + formatPsiQtyDisplay(i.allocatedQuantity), 0);
+    const allocPendingQty = Math.max(0, allocatedQty - shipped);
 
     rows.push({
       lineGroupId,
@@ -343,7 +350,11 @@ function buildDetailLineRows(docNumber, items, ctx) {
       unitName,
       statusLabel: flow.statusLabel,
       statusPillClass: flow.pillClass,
-      showAllocateBtn: canAllocateLine,
+      showAllocateBtn: Boolean(canAllocate && !fullyShipped),
+      showFullyShippedLabel: fullyShipped,
+      allocProgressText: `已发 ${shipped} / 待发 ${allocPendingQty}`,
+      showAllocProgress: true,
+      showAllocOver: allocatedQty > ordered,
       ...progress,
     });
   });
@@ -367,17 +378,17 @@ function mapSalesOrderDetailView(docNumber, items, ctx) {
   const hero = {
     partner: String(first.partner || '').trim() || '—',
     docNumberDisplay: formatPsiDocNumForList(docNumber),
-    showStatusPill: fullyShipped || progress.progressLabel,
-    statusLabel: fullyShipped ? '已完成' : progress.progressLabel,
-    statusPillClass: fullyShipped ? 'st-pill--success' : 'st-pill--primary',
-    showDispatchPill: true,
+    showStatusPill: fullyShipped,
+    statusLabel: fullyShipped ? '已完成' : '',
+    statusPillClass: fullyShipped ? 'st-pill--success' : '',
+    showDispatchPill: fullyShipped,
   };
 
   const summaryStats = {
     totalText: `${ordered} PCS`,
     shippedText: `${shipped} PCS`,
     allocatedText: `${allocatedEff} PCS`,
-    progressLabel: progress.progressLabel,
+    progressLabel: progress.progressShortText,
     showProgress: progress.showProgress,
   };
 

@@ -143,8 +143,8 @@ Page({
       const bubble = (this.data.bubbles || []).find((b) => b.id === id);
       const href = (bubble && bubble.href) || '';
       try {
-        const { resolveDevTodoMiniPath } = require('../../utils/devTodoNavigate.js');
-        const miniPath = resolveDevTodoMiniPath(href);
+        const { resolveTodoMiniPath } = require('../../utils/todoNavigate.js');
+        const miniPath = resolveTodoMiniPath(href);
         if (miniPath) {
           wx.navigateTo({ url: miniPath });
           return;

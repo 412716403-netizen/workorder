@@ -1,0 +1,105 @@
+@import "/styles/plan-create-form.wxss";
+@import "/styles/report-batch-detail-page.wxss";
+@import "/styles/tokens.wxss";
+
+.todo-edit-doc {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin: 0 0 16rpx;
+  padding: 24rpx;
+  border-radius: var(--radius-card);
+  background: var(--color-primary-light);
+  box-sizing: border-box;
+}
+
+.todo-edit-doc--link:active {
+  opacity: 0.88;
+}
+
+.todo-edit-doc__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.todo-edit-doc__label {
+  display: block;
+  font-size: 22rpx;
+  font-weight: 600;
+  color: rgba(47, 107, 255, 0.72);
+  margin-bottom: 6rpx;
+}
+
+.todo-edit-doc__title {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 700;
+  color: var(--color-primary);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.todo-edit-doc__chevron {
+  flex-shrink: 0;
+  font-size: 40rpx;
+  font-weight: 300;
+  color: var(--color-primary);
+  line-height: 1;
+}
+
+.todo-edit-textarea {
+  width: 100%;
+  min-height: 180rpx;
+  padding: 0;
+  font-size: 28rpx;
+  color: var(--color-text-primary);
+  line-height: 1.5;
+  box-sizing: border-box;
+}
+
+.todo-edit-textarea__ph {
+  color: var(--color-text-secondary);
+}
+
+.todo-edit-remind {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24rpx;
+  padding: 28rpx 24rpx;
+}
+
+.todo-edit-remind__label {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.todo-edit-switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 72rpx;
+  height: 40rpx;
+  border-radius: 20rpx;
+  background: #c9cdd4;
+  transition: background 0.2s;
+}
+
+.todo-edit-switch--on {
+  background: #f43f5e;
+}
+
+.todo-edit-switch__knob {
+  position: absolute;
+  top: 4rpx;
+  left: 4rpx;
+  width: 32rpx;
+  height: 32rpx;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s;
+}
+
+.todo-edit-switch--on .todo-edit-switch__knob {
+  transform: translateX(32rpx);
+}

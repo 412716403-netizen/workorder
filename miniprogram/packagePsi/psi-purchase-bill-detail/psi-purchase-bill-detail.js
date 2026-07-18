@@ -10,6 +10,8 @@ const _require9 = require('../../utils/orderApi.js'),fetchWarehousesAll = _requi
 const _require0 = require('../../utils/productionPlans.js'),normalizeAppDictionaries = _require0.normalizeAppDictionaries;
 const _require1 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require1.readNavBarMetrics,readWindowMetrics = _require1.readWindowMetrics;
 const _require10 = require('../../utils/saveNavigation.js'),LIST_ROUTES = _require10.LIST_ROUTES,afterSaveReturnToList = _require10.afterSaveReturnToList;
+const { loadFeaturePlugins, isPluginEnabled } = require('../../utils/featurePlugins.js');
+const { openTodoEdit } = require('../../utils/todosApi.js');
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
@@ -44,6 +46,7 @@ Page({
     canEdit: false,
     canDelete: false,
     showFooter: false,
+    showTodoBtn: false,
     statusBarHeight: 20,
     navBarHeight: 44,
     headerBlockHeight: 88,
@@ -73,6 +76,9 @@ Page({
       setTimeout(() => wx.navigateBack(), 800);
       return;
     }
+    loadFeaturePlugins().then((plugins) => {
+      this.setData({ showTodoBtn: isPluginEnabled(plugins, 'todo_reminder') });
+    });
     this.loadDetail();
   },
 
@@ -85,6 +91,22 @@ Page({
 
   onHeaderBack() {
     wx.navigateBack();
+  },
+
+  onAddTodoTap() {
+    if (!this.data.showTodoBtn || !this.data.docNumber) return;
+    const partner = (this.data.hero && this.data.hero.partner) || '';
+    const doc = this.data.docNumber;
+    const partnerOk = partner && partner !== '—';
+    openTodoEdit({
+      seed: {
+        sourceType: 'purchase_bill',
+        sourceId: doc,
+        sourceDocNo: '采购入库',
+        sourceTitle: partnerOk ? `${doc} · ${partner}` : doc,
+        href: `/psi?tab=PURCHASE_BILL&psiDoc=${encodeURIComponent(doc)}`,
+      },
+    });
   },
 
   onEditTap() {

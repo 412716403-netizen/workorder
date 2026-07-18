@@ -7,3 +7,10 @@ export function effectiveAllocatedQuantity(allocatedQuantity: unknown, shippedQu
   const s = Number(shippedQuantity) || 0;
   return s + Math.max(0, a - s);
 }
+
+/** 行组订货量已发齐（含超发） */
+export function isSalesOrderLineFullyShipped(orderQty: unknown, shippedQty: unknown): boolean {
+  const ordered = Number(orderQty) || 0;
+  const shipped = Number(shippedQty) || 0;
+  return ordered > 0 && shipped >= ordered;
+}

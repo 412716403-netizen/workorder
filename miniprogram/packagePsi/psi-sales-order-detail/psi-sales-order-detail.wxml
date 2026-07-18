@@ -18,7 +18,12 @@
     <view wx:if="{{loading}}" class="plan-detail-muted">加载中…</view>
 
     <view wx:elif="{{hero}}" class="plan-detail-page">
-      <view class="plan-detail-hero po-detail-hero">
+      <view class="plan-detail-hero po-detail-hero {{showTodoBtn ? 'plan-detail-hero--todo' : ''}}">
+        <view
+          wx:if="{{showTodoBtn}}"
+          class="todo-entry-btn todo-entry-btn--corner"
+          bindtap="onAddTodoTap"
+        >待办</view>
         <view class="plan-detail-hero__text plan-detail-hero__text--full">
           <text class="po-detail-hero__partner">{{hero.partner}}</text>
           <text class="po-detail-hero__doc">{{hero.docNumberDisplay}}</text>
@@ -108,12 +113,16 @@
                     </view>
                   </view>
 
-                  <view wx:if="{{line.showAllocateBtn}}" class="so-detail-allocate">
+                  <view wx:if="{{line.showAllocateBtn || line.showFullyShippedLabel || line.showAllocProgress}}" class="so-detail-allocate">
                     <view
+                      wx:if="{{line.showAllocateBtn}}"
                       class="so-detail-allocate__btn"
                       data-line-group-id="{{line.lineGroupId}}"
                       bindtap="onAllocateTap"
                     >配货</view>
+                    <text wx:elif="{{line.showFullyShippedLabel}}" class="so-detail-allocate__done">已发齐</text>
+                    <text wx:if="{{line.showAllocProgress}}" class="so-detail-allocate__progress">{{line.allocProgressText}}</text>
+                    <text wx:if="{{line.showAllocOver}}" class="po-line-progress__tag">超配</text>
                   </view>
                 </view>
               </view>

@@ -2,6 +2,7 @@
 @import './plan-form-cell.wxss';
 @import './doc-entry-datetime.wxss';
 @import './matrix-keyboard-page.wxss';
+@import './todo-entry.wxss';
 
 page {
   background: var(--color-bg-page);

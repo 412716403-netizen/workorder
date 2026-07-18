@@ -1,52 +1,16 @@
-const { request } = require('../../utils/request.js');
-
-function createTodo(body) {
-  return request({
-    path: '/todos',
-    method: 'POST',
-    data: body || {},
-  });
-}
-
 /**
- * 简易加待办：弹窗输入备注后创建。
+ * 兼容旧入口：开发节点等页原先用 promptCreateTodo 弹窗；
+ * 现统一跳转 todo-edit 全量表单（含提醒时间）。
  */
+const { createTodo, openTodoEdit } = require('../../utils/todosApi.js');
+
 function promptCreateTodo(seed) {
-  return new Promise((resolve) => {
-    wx.showModal({
-      title: '添加待办',
-      editable: true,
-      placeholderText: '填写备注内容',
-      success: (res) => {
-        if (!res.confirm) {
-          resolve(null);
-          return;
-        }
-        const note = String(res.content || '').trim() || (seed && seed.sourceTitle) || '待办';
-        createTodo({
-          sourceType: seed.sourceType,
-          sourceId: seed.sourceId,
-          sourceDocNo: seed.sourceDocNo || '开发管理',
-          sourceTitle: seed.sourceTitle,
-          href: seed.href,
-          note,
-          remindEnabled: false,
-        })
-          .then((todo) => {
-            wx.showToast({ title: '已添加待办', icon: 'success' });
-            resolve(todo);
-          })
-          .catch((err) => {
-            wx.showToast({ title: (err && err.message) || '添加失败', icon: 'none' });
-            resolve(null);
-          });
-      },
-      fail: () => resolve(null),
-    });
-  });
+  openTodoEdit({ seed: seed || null });
+  return Promise.resolve(null);
 }
 
 module.exports = {
   createTodo,
   promptCreateTodo,
+  openTodoEdit,
 };

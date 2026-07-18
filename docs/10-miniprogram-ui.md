@@ -380,7 +380,9 @@ npm run miniprogram:icons
 | [`utils/messagesCache.js`](../miniprogram/utils/messagesCache.js) | 跨页面数据缓存 |
 | [`utils/messagesTabBadge.js`](../miniprogram/utils/messagesTabBadge.js) | Tab 角标 |
 
-进入「消息中心」会话时自动标记系统消息已读；Tab 角标 = 未读消息 + 未完成待办 + 协作待处理。点击气泡可查看详情；协作操作提示去电脑端处理。
+进入「消息中心」会话时自动标记系统消息已读；Tab 角标 = 未读消息 + 未完成待办 + 协作待处理。点击气泡可查看详情（待办气泡经 [`utils/todoNavigate.js`](../miniprogram/utils/todoNavigate.js) 深链到小程序详情）；协作操作提示去电脑端处理。
+
+完整待办管理（对齐 Web `TodoPanelModal`）见下方「待办提醒」节；消息 Tab 内「待办事项」会话为快捷时间轴视图。
 
 ## 生产计划
 
@@ -459,7 +461,7 @@ npm run miniprogram:icons
 
 | 页面 | 路径 | 职责 |
 |------|------|------|
-| 采购订单 Hub | [`packageBusiness/psi-purchase-orders/`](../miniprogram/packageBusiness/psi-purchase-orders/) | 按单号分组卡片列表、搜索/仅未交清筛选、行级入库进度预览、新建入口 |
+| 采购订单 Hub | [`packagePsi/psi-purchase-orders/`](../miniprogram/packagePsi/psi-purchase-orders/) | 按单号分组卡片列表（布局对齐销售订单：供应商+单号，下一行日期/经办，右侧总件数/金额；行内入库进度+数量·单价·金额三列卡片）、搜索/仅未交清筛选、新建入口 |
 | 采购订单详情 | [`packageBusiness/psi-purchase-order-detail/`](../miniprogram/packageBusiness/psi-purchase-order-detail/) | 供应商/单号/明细/行级入库进度；编辑/删除 |
 | 登记/编辑 | [`packageBusiness/psi-purchase-order-edit/`](../miniprogram/packageBusiness/psi-purchase-order-edit/) | 供应商、多行明细、色码矩阵、保存/删除 |
 | 订单流水 | [`packageBusiness/psi-purchase-order-flow/`](../miniprogram/packageBusiness/psi-purchase-order-flow/) | 行级履约流水（未入库/部分/已入库筛选） |
@@ -488,7 +490,7 @@ npm run miniprogram:icons
 
 | 页面 | 路径 | 职责 |
 |------|------|------|
-| 销售订单 Hub | [`packageBusiness/psi-sales-orders/`](../miniprogram/packageBusiness/psi-sales-orders/) | 按单号分组卡片列表、搜索/仅未发齐筛选、行级配货/发货进度预览、新建入口 |
+| 销售订单 Hub | [`packagePsi/psi-sales-orders/`](../miniprogram/packagePsi/psi-sales-orders/) | 按单号分组卡片列表（头区状态标签右侧为总件数/金额；行内品名标签右侧为发货进度+配货，发齐后配货位显示「已发齐」）、搜索/仅未发齐筛选、行级配货/发货进度预览、新建入口 |
 | 销售订单详情 | [`packageBusiness/psi-sales-order-detail/`](../miniprogram/packageBusiness/psi-sales-order-detail/) | 客户/单号/明细/行级进度；配货入口；编辑/删除 |
 | 登记/编辑 | [`packageBusiness/psi-sales-order-edit/`](../miniprogram/packageBusiness/psi-sales-order-edit/) | 客户、多行明细、色码矩阵、销售价、保存/删除 |
 | 订单流水 | [`packageBusiness/psi-sales-order-flow/`](../miniprogram/packageBusiness/psi-sales-order-flow/) | 行级发货流水（未发货/发部分/已发齐筛选） |
@@ -520,7 +522,7 @@ npm run miniprogram:icons
 
 | 页面 | 路径 | 职责 |
 |------|------|------|
-| 销售单 Hub | [`packageBusiness/psi-sales-bills/`](../miniprogram/packageBusiness/psi-sales-bills/) | 按单号分组卡片列表、搜索、仓库展示、流水快捷入口、新建 |
+| 销售单 Hub | [`packagePsi/psi-sales-bills/`](../miniprogram/packagePsi/psi-sales-bills/) | 按单号分组卡片列表（布局对齐销售订单：头区客户下一行日期/经办/仓库，右侧总件数/金额；行内数量·销售价·金额三列卡片）、搜索、流水快捷入口、新建 |
 | 销售单详情 | [`packageBusiness/psi-sales-bill-detail/`](../miniprogram/packageBusiness/psi-sales-bill-detail/) | 客户/单号/出库仓库/明细/批次；编辑/删除 |
 | 登记/编辑 | [`packageBusiness/psi-sales-bill-edit/`](../miniprogram/packageBusiness/psi-sales-bill-edit/) | 客户、出库仓库、多行明细、色码矩阵、销售价、出库批次、保存/删除 |
 | 销售流水 | [`packageBusiness/psi-sales-bill-flow/`](../miniprogram/packageBusiness/psi-sales-bill-flow/) | 行级出库流水（日期/搜索筛选） |
@@ -657,7 +659,7 @@ npm run miniprogram:icons
 
 | 页面 | 路径 | 职责 |
 |------|------|------|
-| 采购入库 Hub | [`packageBusiness/psi-purchase-bills/`](../miniprogram/packageBusiness/psi-purchase-bills/) | 按单号分组卡片列表、搜索、仓库/来源订单展示、新建入口 |
+| 采购入库 Hub | [`packagePsi/psi-purchase-bills/`](../miniprogram/packagePsi/psi-purchase-bills/) | 按单号分组卡片列表（布局对齐销售订单/销售单）、搜索、仓库/来源订单展示、新建入口 |
 | 采购入库详情 | [`packageBusiness/psi-purchase-bill-detail/`](../miniprogram/packageBusiness/psi-purchase-bill-detail/) | 供应商/单号/仓库/明细；来源订单跳转；编辑/删除 |
 | 登记/编辑 | [`packageBusiness/psi-purchase-bill-edit/`](../miniprogram/packageBusiness/psi-purchase-bill-edit/) | 手动创建或引用采购订单、仓库选择、色码矩阵、批次、保存/删除 |
 | 入库流水 | [`packageBusiness/psi-purchase-bill-flow/`](../miniprogram/packageBusiness/psi-purchase-bill-flow/) | 行级入库流水（日期/搜索筛选） |
@@ -720,7 +722,7 @@ npm run miniprogram:icons
 | 待处理不良 | [`packageBusiness/production-rework-pending/`](../miniprogram/packageBusiness/production-rework-pending/) | 不良待处理列表 + 搜索/工序筛选 |
 | 处理不良 | [`packageBusiness/production-rework-defect-action/`](../miniprogram/packageBusiness/production-rework-defect-action/) | 报损/厂内返工/委外返工；返工目标工序与 Web 一致（产品工艺全工序 + 其他工序，可多选） |
 | 返工报工 | [`packageBusiness/production-rework-report/`](../miniprogram/packageBusiness/production-rework-report/) | 手输返工报工（路径分组、矩阵、人员/设备/加工费、跳转扫码）；单产品时价格区为「数量 + 单价 + 金额」一行（简单路径可编辑数量，矩阵为已填合计只读） |
-| 返工详情 | [`packageBusiness/production-rework-detail/`](../miniprogram/packageBusiness/production-rework-detail/) | 工序不良汇总、返工进度、处理/报工记录只读 |
+| 返工详情 | [`packageBusiness/production-rework-detail/`](../miniprogram/packageBusiness/production-rework-detail/) | 工序不良汇总、返工进度、处理/报工记录只读；`todo_reminder` 开启时可加待办 |
 | 处理不良流水 | [`packageBusiness/production-rework-defect-flow/`](../miniprogram/packageBusiness/production-rework-defect-flow/) | REWORK+SCRAP 按 docNo 聚合列表 |
 | 处理不良详情 | [`packageBusiness/production-rework-defect-flow-detail/`](../miniprogram/packageBusiness/production-rework-defect-flow-detail/) | 查看/编辑/删除 |
 | 返工报工流水 | [`packageBusiness/production-rework-report-flow/`](../miniprogram/packageBusiness/production-rework-report-flow/) | REWORK_REPORT 流水列表 |
@@ -966,6 +968,29 @@ npm run miniprogram:icons
 
 入口：[`menus.js`](../miniprogram/config/menus.js) `knowledge-base` → `/packageBusiness/knowledge-base/knowledge-base`。
 
+## 待办提醒
+
+对齐 Web 待办提醒插件（`todo_reminder`）：个人级待办，复用 `/api/todos`，无需模块 RBAC。
+
+| 页面 | 路径 | 职责 |
+|------|------|------|
+| 管理页 | [`packageBusiness/todos/`](../miniprogram/packageBusiness/todos/) | 未完成 / 已完成 Tab、搜索、完成/还原、编辑、删除、点关联单据跳转 |
+| 新建/编辑 | [`packageBusiness/todo-edit/`](../miniprogram/packageBusiness/todo-edit/) | 备注 + 定时提醒（`datetime-calendar-select`）；可带单据 seed |
+
+| 工具 | 作用 |
+|------|------|
+| [`utils/todosApi.js`](../miniprogram/utils/todosApi.js) | `list/create/update/delete` + `openTodoEdit` |
+| [`utils/todoNavigate.js`](../miniprogram/utils/todoNavigate.js) | Web `href` → 小程序详情深链（计划/工单/外协/进销存/开发） |
+| [`utils/devTodoCreate.js`](../miniprogram/packageBusiness/utils/devTodoCreate.js) | 兼容旧入口，转调 `openTodoEdit` |
+
+**插件门控**：`todo_reminder` 开启后，应用中心「插件中心」出现「待办事项」入口；下列详情**首卡右上角**显示浅蓝胶囊「待办」（不放顶栏，避免与微信胶囊冲突）：
+
+- 生产计划详情、工单详情、返工详情、加工厂往来数量明细
+- 开发节点登记、BOM 录入
+- 进销存：采购订单 / 采购入库 / 销售订单 / 销售单详情
+
+入口：[`menus.js`](../miniprogram/config/menus.js) `todo-reminder` → `/packageBusiness/todos/todos`。
+
 ## 开发管理
 
 对齐 Web [`views/development/`](../views/development/) 全功能（移动端改为「列表 Hub → 详情 → 子页」）：
@@ -983,11 +1008,11 @@ npm run miniprogram:icons
 |------|------|
 | [`utils/developmentApi.js`](../miniprogram/packageBusiness/utils/developmentApi.js) | `/dev/styles*` · `/dev/styles/boms*` · `/dev/stage-templates*` |
 | [`utils/devStyleListFilter.js`](../miniprogram/packageBusiness/utils/devStyleListFilter.js) 等 | 列表筛选/展示/表单/登记/BOM view-model |
-| [`utils/devTodoNavigate.js`](../miniprogram/utils/devTodoNavigate.js) | 消息待办 Web href → 小程序详情深链 |
+| [`utils/todoNavigate.js`](../miniprogram/utils/todoNavigate.js) | 消息/管理页待办 Web href → 小程序详情深链 |
 
 **权限 / 插件**：插件 `development`；款式 `development:styles:*`；节点库 `development:templates:*`。保存后导航：`LIST_ROUTES.DEVELOPMENT_STYLES`。
 
-**与 Web 差异**：BOM 为格子下钻编辑；待办加注使用简易备注弹窗（完整提醒时间仍建议 Web）。
+**与 Web 差异**：BOM 为格子下钻编辑；待办新建/编辑与 Web 同为备注 + 提醒时间（`todo-edit` 页）。
 
 入口：[`menus.js`](../miniprogram/config/menus.js) `development` → `/packageBusiness/development-styles/development-styles`。
 

@@ -42,6 +42,8 @@ const {
   fetchAllOrdersByProductId,
   fetchOrdersForProductMaterialFamily,
 } = require('../utils/productReportHints.js');
+const { loadFeaturePlugins, isPluginEnabled } = require('../../utils/featurePlugins.js');
+const { openTodoEdit } = require('../utils/todosApi.js');
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
@@ -111,6 +113,7 @@ Page({
     canEdit: false,
     canViewReportHistory: false,
     canViewPendingStock: false,
+    showTodoBtn: false,
     statusBarHeight: 20,
     navBarHeight: 44,
     headerBlockHeight: 88,
@@ -140,7 +143,11 @@ Page({
   onShow() {
     if (!wx.getStorageSync('accessToken')) {
       wx.reLaunch({ url: '/pages/login/login' });
+      return;
     }
+    loadFeaturePlugins().then((plugins) => {
+      this.setData({ showTodoBtn: isPluginEnabled(plugins, 'todo_reminder') });
+    });
   },
 
   updateScrollHeight(editing) {
@@ -150,6 +157,24 @@ Page({
 
   onHeaderBack() {
     wx.navigateBack();
+  },
+
+  onAddTodoTap() {
+    if (!this.data.showTodoBtn || !this._order) return;
+    const order = this._order;
+    const productName =
+      (this.data.productHero && this.data.productHero.productName) ||
+      order.productName ||
+      '';
+    openTodoEdit({
+      seed: {
+        sourceType: 'production_order',
+        sourceId: order.id,
+        sourceDocNo: '工单中心',
+        sourceTitle: `${order.orderNumber || ''}${productName ? ` · ${productName}` : ''}`,
+        href: `/production?tab=orders&orderId=${order.id}`,
+      },
+    });
   },
 
   onEditTap() {

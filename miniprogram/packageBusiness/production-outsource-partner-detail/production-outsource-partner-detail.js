@@ -16,6 +16,8 @@ const _require7 = require('../../utils/planApi.js'),fetchDictionaries = _require
 const _require8 = require('../../utils/productionPlans.js'),normalizeMasterList = _require8.normalizeMasterList,normalizeAppDictionaries = _require8.normalizeAppDictionaries;
 const _require9 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require9.readNavBarMetrics,readWindowMetrics = _require9.readWindowMetrics;
 const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../../utils/planFilterPanel.js');
+const { loadFeaturePlugins, isPluginEnabled } = require('../../utils/featurePlugins.js');
+const { openTodoEdit } = require('../utils/todosApi.js');
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
@@ -53,6 +55,7 @@ Page({
     draftDateFrom: '',
     draftDateTo: '',
     draftDocTypeIndex: 0,
+    showTodoBtn: false,
     statusBarHeight: 20,
     navBarHeight: 44,
     headerBlockHeight: 88
@@ -80,11 +83,28 @@ Page({
       navBarHeight: nav.navBarHeight,
       headerBlockHeight: computeHeaderBlockHeight(nav)
     });
+    loadFeaturePlugins().then((plugins) => {
+      this.setData({ showTodoBtn: isPluginEnabled(plugins, 'todo_reminder') });
+    });
     this.loadData();
   },
 
   onHeaderBack() {
     wx.navigateBack();
+  },
+
+  onAddTodoTap() {
+    if (!this.data.showTodoBtn || !this._seed) return;
+    const seed = this._seed;
+    openTodoEdit({
+      seed: {
+        sourceType: 'outsource',
+        sourceId: seed.orderId || seed.productId || null,
+        sourceDocNo: '外协管理',
+        sourceTitle: `${seed.partner || ''} · ${seed.nodeName || ''} · ${seed.productName || ''}`,
+        href: `/production?tab=OUTSOURCE&outsourceFlow=${encodeURIComponent(JSON.stringify(seed))}`,
+      },
+    });
   },
 
   onPageScroll() {

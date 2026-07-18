@@ -1,10 +1,167 @@
-@import '/styles/psi-purchase-orders-page.wxss';
+@import '/styles/production-plans-page.wxss';
+@import '/styles/production-orders-page.wxss';
+@import '/styles/report-history-page.wxss';
+@import '../../styles/qty-price-amount-summary.wxss';
+
+.po-flow-btn {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 64rpx;
+  padding: 0 4rpx;
+}
+
+.po-flow-btn__icon {
+  width: 40rpx;
+  height: 40rpx;
+  filter: brightness(0) invert(1);
+  opacity: 0.92;
+}
+
+.po-flow-btn__label {
+  margin-top: 2rpx;
+  font-size: 20rpx;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+  line-height: 1.2;
+}
 
 .pb-bills-page {
   padding: 0 var(--spacing-page) calc(120rpx + env(safe-area-inset-bottom));
 }
 
-.po-doc-card__warehouse {
+.po-doc-card {
+  margin-bottom: 16rpx;
+  background: var(--color-bg-card);
+  border-radius: 16rpx;
+  overflow: hidden;
+  box-shadow: 0 4rpx 24rpx rgba(15, 23, 42, 0.04);
+}
+
+.sb-doc-card__head {
+  padding: 20rpx 24rpx 14rpx;
+  border-bottom: 1rpx solid var(--color-border);
+}
+
+.sb-doc-card__title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.sb-doc-card__title-left {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4rpx;
+}
+
+.sb-doc-card__name-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10rpx 12rpx;
+}
+
+.sb-doc-card__title-right {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4rpx;
+  padding-top: 2rpx;
+}
+
+.sb-doc-card__partner {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  line-height: 1.3;
+}
+
+.sb-doc-card__doc {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  line-height: 1.3;
+}
+
+.sb-doc-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8rpx 16rpx;
+  margin: 0;
+  line-height: 1.3;
+}
+
+.po-doc-card__meta-item {
   font-size: 24rpx;
   color: var(--color-text-secondary);
+}
+
+.po-doc-card__meta-item--operator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6rpx;
+}
+
+.po-doc-card__meta-icon {
+  width: 22rpx;
+  height: 22rpx;
+  flex-shrink: 0;
+  opacity: 0.5;
+}
+
+.po-doc-card__qty,
+.po-doc-card__amount {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+}
+
+.po-doc-card__line-count {
+  font-size: 22rpx;
+  color: var(--color-text-tertiary);
+}
+
+.po-doc-card__lines {
+  padding: 0;
+}
+
+.sb-doc-card__line {
+  padding: 14rpx 24rpx;
+  border-bottom: 1rpx solid #f3f4f6;
+}
+
+.sb-doc-card__line:last-child {
+  border-bottom: none;
+}
+
+.sb-doc-card__line .report-history-row__body {
+  gap: 14rpx;
+}
+
+.sb-doc-card__line .report-history-row__left {
+  width: 88rpx;
+}
+
+.sb-doc-card__line .report-history-row__img {
+  width: 88rpx;
+  height: 88rpx;
+}
+
+.sb-line-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8rpx;
+  margin-bottom: 8rpx;
 }

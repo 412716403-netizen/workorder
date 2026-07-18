@@ -22,12 +22,14 @@ function readWindowMetrics() {
 
 function readNavBarMetrics() {
   try {
-    const { statusBarHeight } = readWindowMetrics();
+    const { statusBarHeight, windowWidth } = readWindowMetrics();
     const menu = wx.getMenuButtonBoundingClientRect();
     const navBarHeight = (menu.top - statusBarHeight) * 2 + menu.height;
-    return { statusBarHeight, navBarHeight };
+    /** 顶栏右侧需预留的宽度，避免内容被微信胶囊遮挡 */
+    const menuRightInset = Math.max(0, Math.ceil(windowWidth - menu.left + 8));
+    return { statusBarHeight, navBarHeight, menuRightInset };
   } catch (err) {
-    return { statusBarHeight: 20, navBarHeight: 44 };
+    return { statusBarHeight: 20, navBarHeight: 44, menuRightInset: 96 };
   }
 }
 

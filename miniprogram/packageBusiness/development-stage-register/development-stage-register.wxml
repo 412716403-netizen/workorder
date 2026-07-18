@@ -3,8 +3,7 @@
     <view class="plan-create-header__bar" style="height: {{navBarHeight}}px;">
       <view class="plan-create-header__back" bindtap="onHeaderBack">‹</view>
       <text class="plan-create-header__title">节点登记</text>
-      <view wx:if="{{showTodoBtn}}" class="plan-create-header__action" bindtap="onAddTodoTap">待办</view>
-      <view wx:else class="plan-create-header__back plan-create-header__back--placeholder"></view>
+      <view class="plan-create-header__back plan-create-header__back--placeholder"></view>
     </view>
   </view>
   <view class="plan-create-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
@@ -12,7 +11,12 @@
   <scroll-view class="plan-create-scroll" scroll-y style="height: {{scrollHeight}}px;" show-scrollbar="{{false}}">
     <view wx:if="{{loading}}" class="plan-create-muted">加载中…</view>
     <view wx:else class="plan-create-page">
-      <view class="plan-form-card">
+      <view class="plan-form-card {{showTodoBtn ? 'plan-form-card--todo' : ''}}">
+        <view
+          wx:if="{{showTodoBtn}}"
+          class="todo-entry-btn todo-entry-btn--corner"
+          bindtap="onAddTodoTap"
+        >待办</view>
         <view class="plan-form-cell">
           <text class="plan-form-cell__label">节点</text>
           <text class="plan-form-cell__value">{{stageName}}</text>

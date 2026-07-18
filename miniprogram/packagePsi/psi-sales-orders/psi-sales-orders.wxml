@@ -67,24 +67,28 @@
     <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
 
     <view wx:elif="{{cards.length}}">
-      <view wx:for="{{cards}}" wx:key="docNumber" class="po-doc-card">
-        <view class="po-doc-card__head" bindtap="onCardTap" data-doc-number="{{item.docNumber}}">
-          <view class="po-doc-card__title-row">
-            <text class="so-doc-card__partner">{{item.partner}}</text>
-            <text class="so-doc-card__doc">{{item.docNumberDisplay}}</text>
-            <view wx:if="{{item.showStatusPill}}" class="st-pill {{item.statusPillClass}}">{{item.statusLabel}}</view>
-          </view>
-          <view class="po-doc-card__meta">
-            <text wx:if="{{item.showCreatedAt}}" class="po-doc-card__meta-item">{{item.createdAtText}}</text>
-            <view wx:if="{{item.showOperator}}" class="po-doc-card__meta-item po-doc-card__meta-item--operator">
-              <image class="po-doc-card__meta-icon" src="/assets/icons/user.png" mode="aspectFit" />
-              <text>{{item.operator}}</text>
+      <view wx:for="{{cards}}" wx:key="docNumber" class="po-doc-card so-doc-card">
+        <view class="po-doc-card__head so-doc-card__head" bindtap="onCardTap" data-doc-number="{{item.docNumber}}">
+          <view class="so-doc-card__title-row">
+            <view class="so-doc-card__title-left">
+              <view class="so-doc-card__name-row">
+                <text class="so-doc-card__partner">{{item.partner}}</text>
+                <text class="so-doc-card__doc">{{item.docNumberDisplay}}</text>
+                <view wx:if="{{item.showStatusPill}}" class="st-pill {{item.statusPillClass}}">{{item.statusLabel}}</view>
+              </view>
+              <view class="po-doc-card__meta so-doc-card__meta">
+                <text wx:if="{{item.showCreatedAt}}" class="po-doc-card__meta-item">{{item.createdAtText}}</text>
+                <view wx:if="{{item.showOperator}}" class="po-doc-card__meta-item po-doc-card__meta-item--operator">
+                  <image class="po-doc-card__meta-icon" src="/assets/icons/user.png" mode="aspectFit" />
+                  <text>{{item.operator}}</text>
+                </view>
+                <text class="po-doc-card__line-count">共 {{item.lineCount}} 项产品</text>
+              </view>
             </view>
-          </view>
-          <view class="po-doc-card__totals">
-            <text class="po-doc-card__qty">合计 {{item.orderedText}}</text>
-            <text wx:if="{{item.showDocAmount}}" class="po-doc-card__amount">{{item.totalAmountText}}</text>
-            <text class="po-doc-card__line-count">共 {{item.lineCount}} 项产品</text>
+            <view class="so-doc-card__title-right">
+              <text class="po-doc-card__qty">{{item.orderedText}}</text>
+              <text wx:if="{{item.showDocAmount}}" class="po-doc-card__amount">{{item.totalAmountText}}</text>
+            </view>
           </view>
         </view>
 
@@ -93,7 +97,7 @@
             wx:for="{{item.lines}}"
             wx:for-item="line"
             wx:key="lineGroupId"
-            class="po-doc-card__line"
+            class="po-doc-card__line so-doc-card__line"
             bindtap="onCardTap"
             data-doc-number="{{item.docNumber}}"
           >
@@ -116,20 +120,22 @@
               </view>
 
               <view class="report-history-row__content">
-                <view class="report-history-row__product">
-                  <view class="report-history-row__product-left">
+                <view class="so-line-main">
+                  <view class="so-line-main__left">
                     <text class="report-history-row__product-name">{{line.productName}}</text>
                     <text wx:if="{{line.showProductSku}}" class="report-history-row__sku">{{line.productSku}}</text>
                   </view>
-                  <view wx:if="{{line.showProgress || line.showAllocateBtn}}" class="so-line-progress-col">
-                    <view class="po-line-progress po-line-progress--compact po-line-progress--product so-line-progress">
-                      <view wx:if="{{line.showProgress}}" class="po-line-progress__bar so-progress-bar">
+                  <view wx:if="{{line.showProgress || line.showAllocateBtn || line.showFullyShippedLabel || line.showAllocProgress}}" class="so-line-main__right">
+                    <view wx:if="{{line.showProgress}}" class="so-line-progress-inline">
+                      <view class="po-line-progress__bar so-progress-bar">
                         <view class="so-progress-bar__shipped" style="width: {{line.progressShippedBarPct}}%;"></view>
                         <view class="so-progress-bar__alloc" style="width: {{line.progressAllocBarPct}}%;"></view>
                         <view wx:if="{{line.progressOverBarPct > 0}}" class="so-progress-bar__over" style="width: {{line.progressOverBarPct}}%;"></view>
                       </view>
-                      <text wx:if="{{line.showProgress}}" class="po-line-progress__nums">{{line.progressShortText}}</text>
-                      <text wx:if="{{line.showProgress && line.progressOverAllocated}}" class="po-line-progress__tag">超配</text>
+                      <text class="po-line-progress__nums">{{line.progressShortText}}</text>
+                      <text wx:if="{{line.progressOverAllocated}}" class="po-line-progress__tag">超配</text>
+                    </view>
+                    <view wx:if="{{line.showAllocateBtn || line.showFullyShippedLabel || line.showAllocProgress}}" class="so-line-allocate-col">
                       <view
                         wx:if="{{line.showAllocateBtn}}"
                         class="so-list-allocate__btn"
@@ -137,8 +143,10 @@
                         data-doc-number="{{item.docNumber}}"
                         data-line-group-id="{{line.lineGroupId}}"
                       >配货</view>
+                      <text wx:elif="{{line.showFullyShippedLabel}}" class="so-list-allocate__done">已发齐</text>
+                      <text wx:if="{{line.showAllocProgress}}" class="so-list-alloc-progress__text">{{line.allocProgressText}}</text>
+                      <text wx:if="{{line.showAllocOver}}" class="po-line-progress__tag">超配</text>
                     </view>
-                    <text wx:if="{{line.showAllocProgress}}" class="so-list-alloc-progress__text">{{line.allocProgressText}}</text>
                   </view>
                 </view>
 

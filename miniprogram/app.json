@@ -127,7 +127,9 @@
         "development-stage-register/development-stage-register",
         "development-bom-edit/development-bom-edit",
         "development-stage-templates/development-stage-templates",
-        "development-stage-template-edit/development-stage-template-edit"
+        "development-stage-template-edit/development-stage-template-edit",
+        "todos/todos",
+        "todo-edit/todo-edit"
       ]
     },
     {

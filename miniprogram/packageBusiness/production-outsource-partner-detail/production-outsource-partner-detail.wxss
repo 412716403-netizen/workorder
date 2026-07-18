@@ -1,5 +1,6 @@
 @import '/styles/production-plans-page.wxss';
 @import '../../styles/outsource-shared.wxss';
+@import '/styles/todo-entry.wxss';
 
 .partner-detail-page {
   padding-bottom: calc(32rpx + env(safe-area-inset-bottom));

@@ -23,6 +23,8 @@ const _require5 =
 
   require('../../utils/planApi.js'),getPlan = _require5.getPlan,getProduct = _require5.getProduct,convertPlan = _require5.convertPlan,fetchPlanRelated = _require5.fetchPlanRelated,fetchTenantConfig = _require5.fetchTenantConfig,fetchProductsAll = _require5.fetchProductsAll,fetchCategoriesAll = _require5.fetchCategoriesAll,fetchNodesAll = _require5.fetchNodesAll,fetchEquipmentAll = _require5.fetchEquipmentAll,fetchBomsAll = _require5.fetchBomsAll,fetchStockMap = _require5.fetchStockMap,fetchDictionaries = _require5.fetchDictionaries;
 const _require6 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require6.readNavBarMetrics,readWindowMetrics = _require6.readWindowMetrics;
+const { loadFeaturePlugins, isPluginEnabled } = require('../../utils/featurePlugins.js');
+const { openTodoEdit } = require('../utils/todosApi.js');
 
 /** 当前计划 + 子计划（getPlan 已含 childPlans，不再拉全量计划列表） */
 function collectPlanTreePlans(plan) {
@@ -85,6 +87,7 @@ Page({
     showSupplementConvertBtn: false,
     showFooter: false,
     converting: false,
+    showTodoBtn: false,
     statusBarHeight: 20,
     navBarHeight: 44,
     headerBlockHeight: 88,
@@ -112,7 +115,11 @@ Page({
   onShow() {
     if (!wx.getStorageSync('accessToken')) {
       wx.reLaunch({ url: '/pages/login/login' });
+      return;
     }
+    loadFeaturePlugins().then((plugins) => {
+      this.setData({ showTodoBtn: isPluginEnabled(plugins, 'todo_reminder') });
+    });
   },
 
   onUnload() {
@@ -129,6 +136,23 @@ Page({
 
   onHeaderBack() {
     wx.navigateBack();
+  },
+
+  onAddTodoTap() {
+    if (!this.data.showTodoBtn) return;
+    const ctx = this._detailCtx;
+    if (!ctx || !ctx.plan) return;
+    const plan = ctx.plan;
+    const productName = (ctx.product && ctx.product.name) || (this.data.productHero && this.data.productHero.productName) || '';
+    openTodoEdit({
+      seed: {
+        sourceType: 'plan',
+        sourceId: plan.id,
+        sourceDocNo: '生产计划',
+        sourceTitle: `${plan.planNumber || ''}${productName ? ` · ${productName}` : ''}`,
+        href: `/production?tab=plans&planId=${plan.id}`,
+      },
+    });
   },
 
   onProductNameTap(e) {

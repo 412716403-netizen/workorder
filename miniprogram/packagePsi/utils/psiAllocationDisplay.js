@@ -8,6 +8,12 @@ function effectiveAllocatedQuantity(allocatedQuantity, shippedQuantity) {
   return s + Math.max(0, a - s);
 }
 
+function isSalesOrderLineFullyShipped(orderQty, shippedQty) {
+  const ordered = Number(orderQty) || 0;
+  const shipped = Number(shippedQty) || 0;
+  return ordered > 0 && shipped >= ordered;
+}
+
 function linePendingShipQty(record) {
   const allocated = Number(record && record.allocatedQuantity) || 0;
   const shipped = Number(record && record.shippedQuantity) || 0;
@@ -16,5 +22,6 @@ function linePendingShipQty(record) {
 
 module.exports = {
   effectiveAllocatedQuantity,
+  isSalesOrderLineFullyShipped,
   linePendingShipQty,
 };

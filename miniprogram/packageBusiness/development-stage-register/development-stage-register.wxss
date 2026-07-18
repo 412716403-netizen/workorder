@@ -10,11 +10,4 @@
   font-weight: 600;
 }
 
-.plan-create-header__action {
-  min-width: 64rpx;
-  text-align: right;
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #2f6bff;
-  padding: 0 8rpx;
-}
+

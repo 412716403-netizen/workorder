@@ -1,5 +1,6 @@
 @import './list.wxss';
 @import './plan-form-cell.wxss';
+@import './todo-entry.wxss';
 
 .plan-detail-shell {
   min-height: 100vh;
@@ -64,6 +65,7 @@
 }
 
 .plan-detail-hero {
+  position: relative;
   display: flex;
   align-items: flex-start;
   gap: 20rpx;

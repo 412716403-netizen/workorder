@@ -62,6 +62,7 @@ const WORKBENCH_SHORTCUT_CATALOG = [
   { id: 'settings', label: '系统设置', group: '基础信息', icon: 'Settings', module: 'settings', perm: 'settings:categories:view', path: '/pages/settings/settings' },
 
   { id: 'collaboration-inbox', label: '协作管理', group: '插件中心', icon: 'Inbox', module: 'collaboration', pluginId: 'collaboration', path: '/pages/messages/messages' },
+  { id: 'todo-reminder', label: '待办事项', group: '插件中心', icon: 'ClipboardList', pluginId: 'todo_reminder', path: '/packageBusiness/todos/todos' },
   { id: 'trace-scan', label: '追溯查询', group: '插件中心', icon: 'ScanLine', pluginId: 'traceability', path: '/packageBusiness/product-trace/product-trace' },
   { id: 'knowledge-base', label: '资料库', group: '插件中心', icon: 'BookOpen', module: 'knowledge_base', perm: 'knowledge_base:documents:view', pluginId: 'knowledge_base', path: '/packageBusiness/knowledge-base/knowledge-base' },
   {

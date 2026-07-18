@@ -42,25 +42,29 @@
     <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
 
     <view wx:elif="{{cards.length}}">
-      <view wx:for="{{cards}}" wx:key="docNumber" class="po-doc-card">
-        <view class="po-doc-card__head" bindtap="onCardTap" data-doc-number="{{item.docNumber}}">
-          <view class="po-doc-card__title-row">
-            <text class="sb-doc-card__partner">{{item.partner}}</text>
-            <text class="sb-doc-card__doc">{{item.docNumberDisplay}}</text>
-            <view wx:if="{{item.showStatusPill}}" class="st-pill {{item.statusPillClass}}">{{item.statusLabel}}</view>
-          </view>
-          <view class="po-doc-card__meta">
-            <text class="po-doc-card__meta-item po-doc-card__warehouse">{{item.warehouseName}}</text>
-            <text wx:if="{{item.showCreatedAt}}" class="po-doc-card__meta-item">{{item.createdAtText}}</text>
-            <view wx:if="{{item.showOperator}}" class="po-doc-card__meta-item po-doc-card__meta-item--operator">
-              <image class="po-doc-card__meta-icon" src="/assets/icons/user.png" mode="aspectFit" />
-              <text>{{item.operator}}</text>
+      <view wx:for="{{cards}}" wx:key="docNumber" class="po-doc-card sb-doc-card">
+        <view class="po-doc-card__head sb-doc-card__head" bindtap="onCardTap" data-doc-number="{{item.docNumber}}">
+          <view class="sb-doc-card__title-row">
+            <view class="sb-doc-card__title-left">
+              <view class="sb-doc-card__name-row">
+                <text class="sb-doc-card__partner">{{item.partner}}</text>
+                <text class="sb-doc-card__doc">{{item.docNumberDisplay}}</text>
+                <view wx:if="{{item.showStatusPill}}" class="st-pill {{item.statusPillClass}}">{{item.statusLabel}}</view>
+              </view>
+              <view class="po-doc-card__meta sb-doc-card__meta">
+                <text wx:if="{{item.warehouseName}}" class="po-doc-card__meta-item">{{item.warehouseName}}</text>
+                <text wx:if="{{item.showCreatedAt}}" class="po-doc-card__meta-item">{{item.createdAtText}}</text>
+                <view wx:if="{{item.showOperator}}" class="po-doc-card__meta-item po-doc-card__meta-item--operator">
+                  <image class="po-doc-card__meta-icon" src="/assets/icons/user.png" mode="aspectFit" />
+                  <text>{{item.operator}}</text>
+                </view>
+                <text class="po-doc-card__line-count">共 {{item.lineCount}} 项产品</text>
+              </view>
             </view>
-          </view>
-          <view class="po-doc-card__totals">
-            <text class="po-doc-card__qty">合计 {{item.orderedText}}</text>
-            <text wx:if="{{item.showDocAmount}}" class="po-doc-card__amount">{{item.totalAmountText}}</text>
-            <text class="po-doc-card__line-count">共 {{item.lineCount}} 项产品</text>
+            <view class="sb-doc-card__title-right">
+              <text class="po-doc-card__qty">{{item.orderedText}}</text>
+              <text wx:if="{{item.showDocAmount}}" class="po-doc-card__amount">{{item.totalAmountText}}</text>
+            </view>
           </view>
         </view>
 
@@ -69,7 +73,7 @@
             wx:for="{{item.lines}}"
             wx:for-item="line"
             wx:key="lineGroupId"
-            class="po-doc-card__line"
+            class="po-doc-card__line sb-doc-card__line"
             bindtap="onCardTap"
             data-doc-number="{{item.docNumber}}"
           >
@@ -92,11 +96,9 @@
               </view>
 
               <view class="report-history-row__content">
-                <view class="report-history-row__product">
-                  <view class="report-history-row__product-left">
-                    <text class="report-history-row__product-name">{{line.productName}}</text>
-                    <text wx:if="{{line.showProductSku}}" class="report-history-row__sku">{{line.productSku}}</text>
-                  </view>
+                <view class="sb-line-main">
+                  <text class="report-history-row__product-name">{{line.productName}}</text>
+                  <text wx:if="{{line.showProductSku}}" class="report-history-row__sku">{{line.productSku}}</text>
                 </view>
 
                 <view class="order-detail-summary order-detail-summary--compact">

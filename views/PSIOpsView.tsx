@@ -80,7 +80,7 @@ import {
   recordDocLineTimeMs,
 } from '../utils/flowDocSort';
 import { nextSalesBillDocNumber } from '../utils/partnerDocNumber';
-import { effectiveAllocatedQuantity } from '../utils/psiAllocationDisplay';
+import { effectiveAllocatedQuantity, isSalesOrderLineFullyShipped } from '../utils/psiAllocationDisplay';
 import { effectivePlanFormFieldType } from '../utils/planFormCustomField';
 import { getProductCategoryCustomFieldEntries } from '../utils/reportCustomDocField';
 import { toLocalDateYmd, formatCustomFieldDatetimeForPrint } from '../utils/localDateTime';
@@ -1719,7 +1719,10 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                               referencedPlanConverted ? canViewOrderDetail : canViewPlanDetail
                             );
                             const showAllocateBtn = type === 'SALES_ORDER'
-                              && hasPsiPerm('psi:sales_order_allocation:allow');
+                              && hasPsiPerm('psi:sales_order_allocation:allow')
+                              && !isSalesOrderLineFullyShipped(orderQty, shippedQty);
+                            const showFullyShippedLabel = type === 'SALES_ORDER'
+                              && isSalesOrderLineFullyShipped(orderQty, shippedQty);
                           return (
                               <tr key={gid} className="hover:bg-slate-50/30 transition-colors">
                                 <td className="py-2.5 pr-3">
@@ -1847,34 +1850,23 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                                 )}
                                 {type === 'SALES_ORDER' && (
                                   <td className="py-2.5 px-3">
-                                    <div className="flex flex-col gap-2">
-                                      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden w-full flex">
-                                        {orderQty <= 0 ? null : (
-                                          <>
-                                            <div className="h-full bg-sky-500 shrink-0 transition-all" title="已发" style={{ width: `${soBarShipPct}%` }} />
-                                            <div className="h-full bg-indigo-500 shrink-0 transition-all" title="待发（已配−已发）" style={{ width: `${soBarAllocPct}%` }} />
-                                            {soBarRosePct > 0 && (
-                                              <div className="h-full bg-rose-500 shrink-0" title="超配" style={{ width: `${soBarRosePct}%` }} />
-                                            )}
-                                          </>
-                                        )}
-                                      </div>
-                                      <span className="text-[10px] font-bold text-slate-500 leading-snug">
-                                        <span className="text-sky-600">已发 {shippedQty}</span>
-                                        <span className="text-slate-300 mx-1">/</span>
-                                        <span className="text-indigo-600">待发 {allocPendingQty}</span>
-                                        {allocatedQty > orderQty && <span className="text-rose-600 ml-1">（超配）</span>}
-                                        {orderQty > 0 && shippedQty >= orderQty && (
-                                          <span className="text-emerald-600 ml-1">· 已发齐</span>
-                                        )}
-                                      </span>
+                                    <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden w-full flex">
+                                      {orderQty <= 0 ? null : (
+                                        <>
+                                          <div className="h-full bg-sky-500 shrink-0 transition-all" title="已发" style={{ width: `${soBarShipPct}%` }} />
+                                          <div className="h-full bg-indigo-500 shrink-0 transition-all" title="待发（已配−已发）" style={{ width: `${soBarAllocPct}%` }} />
+                                          {soBarRosePct > 0 && (
+                                            <div className="h-full bg-rose-500 shrink-0" title="超配" style={{ width: `${soBarRosePct}%` }} />
+                                          )}
+                                        </>
+                                      )}
                                     </div>
                                   </td>
                                 )}
                                 {type === 'SALES_ORDER' && (
                                   <td className="py-2.5 px-3 text-center">
-                                    {showReferencedPlanLink || showAllocateBtn ? (
-                                    <div className="flex flex-col items-center gap-1.5">
+                                    {showReferencedPlanLink || showAllocateBtn || showFullyShippedLabel ? (
+                                    <div className="flex flex-col items-center gap-1">
                                       {showReferencedPlanLink && referencedPlan && (
                                         <button
                                           type="button"
@@ -1972,9 +1964,24 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                                           <PackageCheck className="w-3.5 h-3.5 shrink-0" /> 配货
                                         </button>
                                       )}
+                                      {showFullyShippedLabel && (
+                                        <span className="px-2.5 py-1 text-[10px] font-black rounded-lg border border-emerald-100 text-emerald-600 bg-emerald-50 inline-flex items-center gap-1 whitespace-nowrap">
+                                          <PackageCheck className="w-3.5 h-3.5 shrink-0" /> 已发齐
+                                        </span>
+                                      )}
+                                      <span className="text-[10px] font-bold text-slate-800 leading-snug whitespace-nowrap">
+                                        <span>已发 {shippedQty}</span>
+                                        <span className="text-slate-400 mx-1">/</span>
+                                        <span>待发 {allocPendingQty}</span>
+                                        {allocatedQty > orderQty && <span className="text-rose-600 ml-1">（超配）</span>}
+                                      </span>
                                     </div>
                                     ) : (
-                                      <span className="text-[10px] text-slate-300">—</span>
+                                      <span className="text-[10px] font-bold text-slate-800 leading-snug whitespace-nowrap">
+                                        <span>已发 {shippedQty}</span>
+                                        <span className="text-slate-400 mx-1">/</span>
+                                        <span>待发 {allocPendingQty}</span>
+                                      </span>
                                     )}
                                   </td>
                                 )}

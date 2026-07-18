@@ -6,6 +6,8 @@ const _require5 = require('../utils/pendingStockBadge.js'),fetchAllOrdersPaginat
 const _require6 = require('../utils/reworkRecordsLoad.js'),fetchReworkRecordsForPanel = _require6.fetchReworkRecordsForPanel;
 const _require7 = require('../utils/reworkDetailLite.js'),buildReworkDetailView = _require7.buildReworkDetailView;
 const _require8 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require8.readNavBarMetrics,readWindowMetrics = _require8.readWindowMetrics;
+const { loadFeaturePlugins, isPluginEnabled } = require('../../utils/featurePlugins.js');
+const { openTodoEdit } = require('../utils/todosApi.js');
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
@@ -55,6 +57,7 @@ Page({
     reworkStatRows: [],
     defectRecordsList: [],
     reworkReportList: [],
+    showTodoBtn: false,
     statusBarHeight: 20,
     navBarHeight: 44,
     headerBlockHeight: 88,
@@ -84,11 +87,31 @@ Page({
   onShow() {
     if (!wx.getStorageSync('accessToken')) {
       wx.reLaunch({ url: '/pages/login/login' });
+      return;
     }
+    loadFeaturePlugins().then((plugins) => {
+      this.setData({ showTodoBtn: isPluginEnabled(plugins, 'todo_reminder') });
+    });
   },
 
   onHeaderBack() {
     wx.navigateBack();
+  },
+
+  onAddTodoTap() {
+    if (!this.data.showTodoBtn || !this._reworkOrderId) return;
+    const orderNumber = this.data.title || '';
+    const productName =
+      (this.data.productHero && this.data.productHero.productName) || '';
+    openTodoEdit({
+      seed: {
+        sourceType: 'rework',
+        sourceId: this._reworkOrderId,
+        sourceDocNo: '返工管理',
+        sourceTitle: `${orderNumber}${productName ? ` · ${productName}` : ''}`,
+        href: `/production?tab=REWORK&reworkOrderId=${this._reworkOrderId}`,
+      },
+    });
   },
 
   onProductImageError() {

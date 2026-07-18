@@ -18,7 +18,12 @@
     <view wx:if="{{loading}}" class="plan-detail-muted">加载中…</view>
 
     <view wx:else class="plan-detail-page">
-      <view wx:if="{{productHero}}" class="plan-detail-hero">
+      <view wx:if="{{productHero}}" class="plan-detail-hero {{showTodoBtn ? 'plan-detail-hero--todo' : ''}}">
+        <view
+          wx:if="{{showTodoBtn}}"
+          class="todo-entry-btn todo-entry-btn--corner"
+          bindtap="onAddTodoTap"
+        >待办</view>
         <view class="plan-detail-hero__left">
           <image
             wx:if="{{productHero.showProductImage}}"

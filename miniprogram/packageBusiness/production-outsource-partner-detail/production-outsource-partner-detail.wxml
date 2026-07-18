@@ -54,12 +54,15 @@
   <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
 
   <view class="partner-detail-page">
-    
-
     <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
 
     <block wx:elif="{{header}}">
-      <view class="outsource-detail-hero">
+      <view class="outsource-detail-hero {{showTodoBtn ? 'outsource-detail-hero--todo' : ''}}">
+        <view
+          wx:if="{{showTodoBtn}}"
+          class="todo-entry-btn todo-entry-btn--corner"
+          bindtap="onAddTodoTap"
+        >待办</view>
         <text class="outsource-detail-hero__title">{{header.titleLine}}</text>
         <text class="outsource-detail-hero__sub">{{header.subtitleLine}}</text>
         <view class="outsource-detail-stats">

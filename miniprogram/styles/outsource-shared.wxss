@@ -283,6 +283,7 @@
 
 /* 往来明细 */
 .outsource-detail-hero {
+  position: relative;
   padding: 20rpx 32rpx;
   background: var(--color-bg-card);
   border-bottom: 1rpx solid var(--color-border);

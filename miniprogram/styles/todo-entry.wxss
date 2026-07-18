@@ -1,0 +1,34 @@
+/* 详情页「待办」入口：嵌在首卡右上角，避免与微信胶囊抢顶栏 */
+
+.todo-entry-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 96rpx;
+  height: 48rpx;
+  padding: 0 22rpx;
+  border-radius: var(--radius-pill, 999rpx);
+  background: var(--color-primary-light, #eaf1ff);
+  color: var(--color-primary, #2f6bff);
+  font-size: 24rpx;
+  font-weight: 700;
+  box-sizing: border-box;
+}
+
+.todo-entry-btn:active {
+  opacity: 0.85;
+}
+
+.todo-entry-btn--corner {
+  position: absolute;
+  top: 20rpx;
+  right: 20rpx;
+  z-index: 2;
+}
+
+.plan-detail-hero--todo,
+.outsource-detail-hero--todo,
+.plan-form-card--todo {
+  position: relative;
+  padding-right: 136rpx;
+}

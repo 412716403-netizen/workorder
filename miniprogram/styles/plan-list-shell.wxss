@@ -1,5 +1,6 @@
 @import './tokens.wxss';
 @import './list.wxss';
+@import './todo-entry.wxss';
 
 page {
   background: var(--color-bg-page);

@@ -3,8 +3,7 @@
     <view class="plan-create-header__bar" style="height: {{navBarHeight}}px;">
       <view class="plan-create-header__back" bindtap="onHeaderBack">‹</view>
       <text class="plan-create-header__title">{{mode === 'items' ? '编辑 BOM' : 'BOM 录入'}}</text>
-      <view wx:if="{{showTodoBtn}}" class="plan-create-header__action" bindtap="onAddTodoTap">待办</view>
-      <view wx:else class="plan-create-header__back plan-create-header__back--placeholder"></view>
+      <view class="plan-create-header__back plan-create-header__back--placeholder"></view>
     </view>
   </view>
   <view class="plan-create-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
@@ -17,10 +16,15 @@
       <view
         wx:for="{{cells}}"
         wx:key="key"
-        class="dev-bom-cell"
+        class="dev-bom-cell {{index === 0 && showTodoBtn ? 'plan-form-card--todo' : ''}}"
         data-key="{{item.key}}"
         bindtap="onCellTap"
       >
+        <view
+          wx:if="{{index === 0 && showTodoBtn}}"
+          class="todo-entry-btn todo-entry-btn--corner"
+          catchtap="onAddTodoTap"
+        >待办</view>
         <view class="dev-bom-cell__title">{{item.variantLabel}} · {{item.nodeName}}</view>
         <view class="dev-bom-cell__status {{item.configured ? 'dev-bom-cell__status--on' : ''}}">
           {{item.configured ? '已配置' : '未配置'}}
@@ -29,7 +33,12 @@
     </view>
 
     <view wx:elif="{{mode === 'items'}}" class="plan-create-page">
-      <view class="plan-form-card">
+      <view class="plan-form-card {{showTodoBtn ? 'plan-form-card--todo' : ''}}">
+        <view
+          wx:if="{{showTodoBtn}}"
+          class="todo-entry-btn todo-entry-btn--corner"
+          bindtap="onAddTodoTap"
+        >待办</view>
         <view class="plan-form-cell">
           <text class="plan-form-cell__label">规格 / 工序</text>
           <text class="plan-form-cell__value">{{activeCell.variantLabel}} · {{activeCell.nodeName}}</text>
