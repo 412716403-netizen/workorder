@@ -64,7 +64,16 @@ const WORKBENCH_SHORTCUT_CATALOG = [
   { id: 'collaboration-inbox', label: '协作管理', group: '插件中心', icon: 'Inbox', module: 'collaboration', pluginId: 'collaboration', path: '/pages/messages/messages' },
   { id: 'trace-scan', label: '追溯查询', group: '插件中心', icon: 'ScanLine', pluginId: 'traceability', path: '/packageBusiness/product-trace/product-trace' },
   { id: 'knowledge-base', label: '资料库', group: '插件中心', icon: 'BookOpen', module: 'knowledge_base', perm: 'knowledge_base:documents:view', pluginId: 'knowledge_base', path: '/packageBusiness/knowledge-base/knowledge-base' },
-  { id: 'development', label: '开发管理', group: '插件中心', icon: 'FlaskConical', module: 'development', pluginId: 'development' },
+  {
+    id: 'development',
+    label: '开发管理',
+    group: '插件中心',
+    icon: 'FlaskConical',
+    module: 'development',
+    pluginId: 'development',
+    perm: 'development:styles:view',
+    path: '/packageBusiness/development-styles/development-styles',
+  },
 ];
 
 const GROUP_KEYS = {

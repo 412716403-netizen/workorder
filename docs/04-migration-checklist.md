@@ -16,6 +16,7 @@
 |------|------|------|------|
 | 登录、登出、刷新 token | 已落地 | 已有后端认证接口与前端 API 封装 | 继续收敛会话缓存语义，减少文档与实现漂移 |
 | 租户选择、成员与权限 | 已落地 | 已有 tenants / roles / admin 相关接口 | 统一权限模型与文档说明 |
+| 平台企业使用情况 | 已落地 | `GET /api/admin/tenants/usage`：业务/负担/MAU/告警；`GET /api/admin/audit-logs`；登录写 `last_login_*` / `last_active_at` | 告警暂为看板红标，未做消息推送 | |
 | 浏览器本地缓存 | 部分落地 | `currentUser`、`tenantCtx`、`userTenants`、`isLoggedIn` 仍保存在 `localStorage` | 明确哪些属于会话缓存，哪些不得再作为业务真源 |
 
 ---
@@ -99,6 +100,7 @@
 | 开发 BOM | 已落地 | 创建/编辑均支持工序+变体矩阵（`BomVariantMatrix`）；`node-boms` 同步；发布时 `bomId`/`nodeBoms` 重映射到产品档案 | — |
 | 开发流程模板 | 已落地 | `/api/dev/stage-templates` | 新建款式时可选模板初始化可加强 |
 | 发布大货商品 | 已落地 | `POST /api/dev/styles/:id/publish` → `products` + `variants` + `boms` | 发布后跳转产品档案入口可补 |
+| 小程序开发管理 | 已落地 | `packageBusiness/development-*`：列表/详情/创建编辑/样品/节点登记/BOM 格子下钻/节点库；菜单 `development` + 插件门控；待办深链 | BOM 非 Web 整表矩阵；待办备注为简易弹窗 |
 
 ---
 

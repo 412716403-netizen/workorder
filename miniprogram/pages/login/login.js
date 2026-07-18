@@ -45,7 +45,7 @@ Page({
       url: `${API_BASE}/auth/login`,
       method: 'POST',
       header: { 'Content-Type': 'application/json' },
-      data: { username, password },
+      data: { username, password, client: 'miniprogram' },
       success: (res) => {
         if (res.statusCode !== 200 || !res.data || !res.data.accessToken) {
           const msg =

@@ -3,11 +3,15 @@
 const {
   formatFileSize,
   resolveAttachmentKind,
+  normalizeAttachmentDisplayMode,
+  resolveAttachmentKindLabel,
 } = require('./knowledgeAttachmentForMini.js');
 
 const ASSET_URL_RE = /\/api\/knowledge-base\/assets\/([a-zA-Z0-9_-]+)/g;
 const PRODUCT_REF_RE =
   /<span\b[^>]*\bdata-type=(["'])product-ref\1[^>]*>[\s\S]*?<\/span>/gi;
+const DOCUMENT_REF_RE =
+  /<span\b[^>]*\bdata-type=(["'])document-ref\1[^>]*>[\s\S]*?<\/span>/gi;
 const FILE_ATTACH_RE =
   /<div\b(?=[^>]*\bdata-type=(["'])file-attachment\1)[^>]*>[\s\S]*?<\/div>/gi;
 const TABLE_RE = /<table\b[\s\S]*?<\/table>/gi;
@@ -68,14 +72,35 @@ function parseFileAttachmentTag(tag) {
   const mimeType = extractAttr(tag, 'data-mime-type') || 'application/octet-stream';
   const sizeRaw = Number(extractAttr(tag, 'data-size-bytes'));
   const sizeBytes = Number.isFinite(sizeRaw) && sizeRaw > 0 ? sizeRaw : 0;
+  const kind = resolveAttachmentKind(mimeType, fileName);
+  const displayMode = normalizeAttachmentDisplayMode(
+    extractAttr(tag, 'data-display-mode'),
+    mimeType,
+    fileName,
+  );
   return {
     assetId,
     fileName,
     mimeType,
     sizeBytes,
     sizeText: formatFileSize(sizeBytes),
-    kind: resolveAttachmentKind(mimeType, fileName),
+    kind,
+    displayMode,
+    kindLabel: resolveAttachmentKindLabel(kind),
   };
+}
+
+/** 内嵌播放模式的视频附件 id（首屏预拉，供 `<video src>`） */
+function extractPlayerVideoAssetIdsFromHtml(html) {
+  const ids = [];
+  String(html || '').replace(FILE_ATTACH_RE, (tag) => {
+    const f = parseFileAttachmentTag(tag);
+    if (f.kind === 'video' && f.displayMode === 'player' && f.assetId) {
+      ids.push(f.assetId);
+    }
+    return '';
+  });
+  return Array.from(new Set(ids));
 }
 
 function replaceKnowledgeAssetUrls(html, urlById) {
@@ -120,10 +145,32 @@ function parseProductRefTag(tag) {
   };
 }
 
+function parseDocumentRefTag(tag) {
+  const idMatch = tag.match(/\bdata-document-id=(["'])([\s\S]*?)\1/i);
+  const labelMatch = tag.match(/\bdata-label=(["'])([\s\S]*?)\1/i);
+  let label = labelMatch ? decodeHtmlAttr(labelMatch[2]).trim() : '';
+  if (!label) {
+    const inner = tag.match(/>([\s\S]*?)<\/span\s*>/i);
+    label = inner ? String(inner[1] || '').replace(/<[^>]+>/g, '').trim() : '';
+    label = decodeHtmlAttr(label).trim();
+  }
+  return {
+    documentId: idMatch ? decodeHtmlAttr(idMatch[2]).trim() : '',
+    label: label || '关联文档',
+  };
+}
+
 function convertProductRefsToText(html) {
   return String(html || '').replace(PRODUCT_REF_RE, (tag) => {
     const { label } = parseProductRefTag(tag);
     return `<span style="display:inline-block;padding:2px 8px;border-radius:999px;background:#dbeafe;color:#1d4ed8;font-size:13px;">${escapeHtml(label)}</span>`;
+  });
+}
+
+function convertDocumentRefsToText(html) {
+  return String(html || '').replace(DOCUMENT_REF_RE, (tag) => {
+    const { label } = parseDocumentRefTag(tag);
+    return `<span style="display:inline-block;padding:2px 8px;border-radius:999px;background:#ede9fe;color:#6d28d9;font-size:13px;">${escapeHtml(label)}</span>`;
   });
 }
 
@@ -277,16 +324,24 @@ function isBlankHtml(html) {
  * 非表格流：拆成 html / image / product / file 块，便于原生点击
  * （不含 blockquote；由 splitFlowIntoBlocks 先拆高亮块）
  */
-function splitInlineFlowIntoBlocks(flowHtml, previewUrls, keyPrefix, maxContentWidthPx) {
+function splitInlineFlowIntoBlocks(flowHtml, previewUrls, keyPrefix, maxContentWidthPx, urlById) {
   const products = [];
+  const documents = [];
   const images = [];
   const files = [];
+  const assetMap = urlById && typeof urlById === 'object' ? urlById : {};
   let s = String(flowHtml || '');
 
   s = s.replace(FILE_ATTACH_RE, (tag) => {
     const idx = files.length;
     files.push(parseFileAttachmentTag(tag));
     return `\u0001KBFILE${idx}\u0001`;
+  });
+
+  s = s.replace(DOCUMENT_REF_RE, (tag) => {
+    const idx = documents.length;
+    documents.push(parseDocumentRefTag(tag));
+    return `\u0001KBDOC${idx}\u0001`;
   });
 
   s = s.replace(PRODUCT_REF_RE, (tag) => {
@@ -303,17 +358,19 @@ function splitInlineFlowIntoBlocks(flowHtml, previewUrls, keyPrefix, maxContentW
     return `\u0001KBIMG${idx}\u0001`;
   });
 
-  const parts = s.split(/(\u0001KB(?:FILE|PROD|IMG)\d+\u0001)/);
+  const parts = s.split(/(\u0001KB(?:FILE|DOC|PROD|IMG)\d+\u0001)/);
   const blocks = [];
 
   parts.forEach((part, i) => {
     if (!part) return;
     const fileM = part.match(/^\u0001KBFILE(\d+)\u0001$/);
+    const docM = part.match(/^\u0001KBDOC(\d+)\u0001$/);
     const prodM = part.match(/^\u0001KBPROD(\d+)\u0001$/);
     const imgM = part.match(/^\u0001KBIMG(\d+)\u0001$/);
     if (fileM) {
       const f = files[Number(fileM[1])];
       if (!f || !f.assetId) return;
+      const isPlayer = f.kind === 'video' && f.displayMode === 'player';
       blocks.push({
         type: 'file',
         key: `${keyPrefix}-f${i}`,
@@ -323,6 +380,20 @@ function splitInlineFlowIntoBlocks(flowHtml, previewUrls, keyPrefix, maxContentW
         sizeBytes: f.sizeBytes,
         sizeText: f.sizeText,
         kind: f.kind,
+        kindLabel: f.kindLabel,
+        displayMode: f.displayMode,
+        localSrc: isPlayer && assetMap[f.assetId] ? assetMap[f.assetId] : '',
+      });
+      return;
+    }
+    if (docM) {
+      const d = documents[Number(docM[1])];
+      if (!d || !d.documentId) return;
+      blocks.push({
+        type: 'document',
+        key: `${keyPrefix}-d${i}`,
+        documentId: d.documentId,
+        label: d.label,
       });
       return;
     }
@@ -364,11 +435,17 @@ function splitInlineFlowIntoBlocks(flowHtml, previewUrls, keyPrefix, maxContentW
 }
 
 /** 插入菜单「高亮块」= blockquote，用原生 view 渲染浅蓝底+左边线 */
-function buildCalloutBlock(blockquoteHtml, previewUrls, keyPrefix, maxContentWidthPx) {
+function buildCalloutBlock(blockquoteHtml, previewUrls, keyPrefix, maxContentWidthPx, urlById) {
   const inner = String(blockquoteHtml || '')
     .replace(/^<blockquote\b[^>]*>/i, '')
     .replace(/<\/blockquote>\s*$/i, '');
-  const innerBlocks = splitInlineFlowIntoBlocks(inner, previewUrls, `${keyPrefix}-in`, maxContentWidthPx);
+  const innerBlocks = splitInlineFlowIntoBlocks(
+    inner,
+    previewUrls,
+    `${keyPrefix}-in`,
+    maxContentWidthPx,
+    urlById,
+  );
   return {
     type: 'callout',
     key: keyPrefix,
@@ -382,7 +459,7 @@ function buildCalloutBlock(blockquoteHtml, previewUrls, keyPrefix, maxContentWid
  * 流式内容：先拆高亮块（blockquote），再拆图/关联产品。
  * 表格单元格内的高亮块也走此路径（rich-text 无法可靠渲染 blockquote）。
  */
-function splitFlowIntoBlocks(flowHtml, previewUrls, keyPrefix, maxContentWidthPx) {
+function splitFlowIntoBlocks(flowHtml, previewUrls, keyPrefix, maxContentWidthPx, urlById) {
   const s = String(flowHtml || '');
   const bqRe = new RegExp(BLOCKQUOTE_RE.source, 'gi');
   const blocks = [];
@@ -398,11 +475,14 @@ function splitFlowIntoBlocks(flowHtml, previewUrls, keyPrefix, maxContentWidthPx
           previewUrls,
           `${keyPrefix}-f${seg}`,
           maxContentWidthPx,
+          urlById,
         ),
       );
       seg += 1;
     }
-    blocks.push(buildCalloutBlock(m[0], previewUrls, `${keyPrefix}-q${seg}`, maxContentWidthPx));
+    blocks.push(
+      buildCalloutBlock(m[0], previewUrls, `${keyPrefix}-q${seg}`, maxContentWidthPx, urlById),
+    );
     seg += 1;
     last = m.index + m[0].length;
     m = bqRe.exec(s);
@@ -410,7 +490,13 @@ function splitFlowIntoBlocks(flowHtml, previewUrls, keyPrefix, maxContentWidthPx
 
   if (last < s.length) {
     blocks.push(
-      ...splitInlineFlowIntoBlocks(s.slice(last), previewUrls, `${keyPrefix}-f${seg}`, maxContentWidthPx),
+      ...splitInlineFlowIntoBlocks(
+        s.slice(last),
+        previewUrls,
+        `${keyPrefix}-f${seg}`,
+        maxContentWidthPx,
+        urlById,
+      ),
     );
   } else if (last === 0 && !s) {
     // empty
@@ -426,7 +512,7 @@ function parseIntAttr(attrs, name) {
   return Number.isFinite(n) && n > 0 ? n : 1;
 }
 
-function buildTableBlock(tableHtml, previewUrls, keyPrefix, maxContentWidthPx) {
+function buildTableBlock(tableHtml, previewUrls, keyPrefix, maxContentWidthPx, urlById) {
   const rows = [];
   const rowRe = /<tr\b[^>]*>[\s\S]*?<\/tr>/gi;
   let rowMatch = rowRe.exec(tableHtml);
@@ -448,6 +534,7 @@ function buildTableBlock(tableHtml, previewUrls, keyPrefix, maxContentWidthPx) {
         previewUrls,
         `${keyPrefix}-r${rowIndex}-c${cellIndex}`,
         maxContentWidthPx,
+        urlById,
       );
       cells.push({
         key: `${keyPrefix}-r${rowIndex}-c${cellIndex}`,
@@ -510,14 +597,22 @@ function buildKnowledgeDocBlocks(html, urlById, opts) {
 
   while (m) {
     if (m.index > last) {
-      blocks.push(...splitFlowIntoBlocks(s.slice(last, m.index), previewUrls, `s${seg}`, maxContentWidthPx));
+      blocks.push(
+        ...splitFlowIntoBlocks(
+          s.slice(last, m.index),
+          previewUrls,
+          `s${seg}`,
+          maxContentWidthPx,
+          urlById,
+        ),
+      );
       seg += 1;
     }
     const tag = String(m[1] || '').toLowerCase();
     if (tag === 'table') {
-      blocks.push(buildTableBlock(m[0], previewUrls, `t${seg}`, maxContentWidthPx));
+      blocks.push(buildTableBlock(m[0], previewUrls, `t${seg}`, maxContentWidthPx, urlById));
     } else if (tag === 'blockquote') {
-      blocks.push(buildCalloutBlock(m[0], previewUrls, `q${seg}`, maxContentWidthPx));
+      blocks.push(buildCalloutBlock(m[0], previewUrls, `q${seg}`, maxContentWidthPx, urlById));
     }
     seg += 1;
     last = m.index + m[0].length;
@@ -525,7 +620,9 @@ function buildKnowledgeDocBlocks(html, urlById, opts) {
   }
 
   if (last < s.length) {
-    blocks.push(...splitFlowIntoBlocks(s.slice(last), previewUrls, `s${seg}`, maxContentWidthPx));
+    blocks.push(
+      ...splitFlowIntoBlocks(s.slice(last), previewUrls, `s${seg}`, maxContentWidthPx, urlById),
+    );
   }
 
   return { blocks, previewUrls };
@@ -535,6 +632,7 @@ function buildKnowledgeDocBlocks(html, urlById, opts) {
 function prepareKnowledgeHtmlForRichText(html, urlById) {
   let out = String(html || '');
   out = convertProductRefsToText(out);
+  out = convertDocumentRefsToText(out);
   if (urlById) out = replaceKnowledgeAssetUrls(out, urlById);
   out = styleKnowledgeTables(out);
   out = styleKnowledgeMarks(out);
@@ -558,9 +656,11 @@ function assetBufferToDataUrl(buffer, mimeType) {
 module.exports = {
   extractKnowledgeAssetIdsFromHtml,
   extractImageAssetIdsFromHtml,
+  extractPlayerVideoAssetIdsFromHtml,
   stripFileAttachments,
   replaceKnowledgeAssetUrls,
   convertProductRefsToText,
+  convertDocumentRefsToText,
   stripUnsupportedAttrs,
   styleKnowledgeTables,
   styleKnowledgeImages,
@@ -573,5 +673,6 @@ module.exports = {
   assetBufferToDataUrl,
   escapeHtml,
   parseProductRefTag,
+  parseDocumentRefTag,
   parseFileAttachmentTag,
 };

@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../middleware/validate.js';
 import * as adminUsersCtrl from '../controllers/adminUsers.controller.js';
+import * as adminUsageCtrl from '../controllers/adminUsage.controller.js';
+import * as adminAuditCtrl from '../controllers/adminAudit.controller.js';
 
 const router = Router();
 
@@ -45,6 +47,9 @@ const tenantUpdateSchema = z
   .refine((b) => Object.keys(b).length > 0, { message: '至少提供一项要修改的字段' });
 
 router.get('/tenants', adminUsersCtrl.listTenants);
+router.get('/tenants/usage', adminUsageCtrl.getTenantUsage);
+router.get('/tenants/:id/usage', adminUsageCtrl.getTenantUsageDetail);
 router.put('/tenants/:id', validate(tenantUpdateSchema), adminUsersCtrl.updateTenant);
+router.get('/audit-logs', adminAuditCtrl.list);
 
 export default router;

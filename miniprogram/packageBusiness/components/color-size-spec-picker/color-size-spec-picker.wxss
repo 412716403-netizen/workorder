@@ -1,23 +1,38 @@
 @import '../../../components/searchable-partner-select/searchable-partner-select.wxss';
 
 .cssp__confirm-link {
+  min-width: 96rpx;
+  text-align: right;
   font-size: 28rpx;
   font-weight: 600;
-  color: var(--color-primary);
+  color: var(--color-primary, #2f6bff);
 }
 
 .cssp__selected-wrap {
-  padding: 20rpx 32rpx;
+  flex-shrink: 0;
+  padding: 16rpx 32rpx 20rpx;
   border-bottom: 1rpx solid #f3f4f6;
   background: #f8fafc;
 }
 
-.cssp__selected-title {
-  display: block;
+.cssp__selected-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: 12rpx;
+}
+
+.cssp__selected-title {
   font-size: 24rpx;
   font-weight: 600;
-  color: var(--color-text-secondary);
+  color: var(--color-text-secondary, #646a73);
+}
+
+.cssp__selected-clear {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: var(--color-primary, #2f6bff);
+  padding: 4rpx 0;
 }
 
 .cssp__selected-chips {
@@ -27,8 +42,8 @@
 }
 
 .cssp__selected-empty {
-  font-size: 26rpx;
-  color: var(--color-text-tertiary);
+  font-size: 24rpx;
+  color: var(--color-text-tertiary, #8f959e);
 }
 
 .cssp__chip {
@@ -38,17 +53,23 @@
   padding: 8rpx 16rpx;
   font-size: 24rpx;
   font-weight: 600;
-  color: var(--color-text-secondary);
+  color: var(--color-text-secondary, #646a73);
   background: #fff;
   border: 1rpx solid #e5e7eb;
   border-radius: 999rpx;
 }
 
+.cssp__chip--on {
+  color: var(--color-primary, #2f6bff);
+  border-color: rgba(47, 107, 255, 0.35);
+  background: rgba(47, 107, 255, 0.08);
+}
+
 .cssp__chip-remove {
-  margin-left: 4rpx;
+  margin-left: 2rpx;
   font-size: 28rpx;
   line-height: 1;
-  color: var(--color-text-tertiary);
+  color: var(--color-text-tertiary, #8f959e);
 }
 
 .cssp__dot {
@@ -59,10 +80,48 @@
   flex-shrink: 0;
 }
 
-.cssp__row-main {
+.cssp__list {
+  padding-top: 8rpx;
+}
+
+.cssp__pool {
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
   gap: 16rpx;
+  padding: 8rpx 0 16rpx;
+}
+
+.cssp__opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 10rpx;
+  min-width: 120rpx;
+  justify-content: center;
+  padding: 18rpx 24rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--color-text-secondary, #646a73);
+  background: #f8fafc;
+  border: 2rpx solid #e5e7eb;
+  border-radius: 16rpx;
+  box-sizing: border-box;
+}
+
+.cssp__opt--on {
+  color: var(--color-primary, #2f6bff);
+  background: rgba(47, 107, 255, 0.1);
+  border-color: rgba(47, 107, 255, 0.45);
+}
+
+.cssp__opt-name {
+  line-height: 1.2;
+}
+
+.cssp__opt-check {
+  font-size: 24rpx;
+  font-weight: 700;
+  color: var(--color-primary, #2f6bff);
+  line-height: 1;
 }
 
 .cssp__quick {
@@ -70,6 +129,7 @@
   gap: 12rpx;
   padding: 16rpx 32rpx;
   border-top: 1rpx solid #f3f4f6;
+  flex-shrink: 0;
 }
 
 .cssp__quick-input {
@@ -87,14 +147,15 @@
   font-size: 26rpx;
   font-weight: 600;
   color: #fff;
-  background: var(--color-primary);
+  background: var(--color-primary, #2f6bff);
   border-radius: 12rpx;
 }
 
 .cssp__add-row {
-  padding: 20rpx 32rpx;
+  flex-shrink: 0;
+  padding: 24rpx 32rpx;
   font-size: 28rpx;
   font-weight: 600;
-  color: var(--color-primary);
+  color: var(--color-primary, #2f6bff);
   border-top: 1rpx solid #f3f4f6;
 }

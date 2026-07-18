@@ -3,6 +3,7 @@
 const OPEN_DOCUMENT_EXTS = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'pdf'];
 
 const PREVIEWABLE_IMAGE_EXT = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp']);
+const VIDEO_EXTS = new Set(['mp4', 'webm', 'ogg', 'ogv', 'mov', 'm4v']);
 
 function getFileExtension(fileName) {
   const base = String(fileName || '')
@@ -29,7 +30,7 @@ function formatFileSize(bytes) {
 }
 
 /**
- * @returns {'excel'|'pdf'|'image'|'office'|'other'}
+ * @returns {'excel'|'pdf'|'image'|'video'|'office'|'other'}
  * office = Word/PPT（小程序 openDocument 可开，非表格/PDF 专属预览）
  */
 function resolveAttachmentKind(mimeType, fileName) {
@@ -51,6 +52,9 @@ function resolveAttachmentKind(mimeType, fileName) {
   ) {
     return 'image';
   }
+  if (mime.indexOf('video/') === 0 || VIDEO_EXTS.has(ext)) {
+    return 'video';
+  }
   if (
     mime.indexOf('word') >= 0 ||
     mime.indexOf('presentation') >= 0 ||
@@ -60,6 +64,12 @@ function resolveAttachmentKind(mimeType, fileName) {
     return 'office';
   }
   return 'other';
+}
+
+/** 视频：tag 标签卡片 / player 内嵌窗口；非视频强制 tag */
+function normalizeAttachmentDisplayMode(mode, mimeType, fileName) {
+  if (resolveAttachmentKind(mimeType, fileName) !== 'video') return 'tag';
+  return mode === 'player' ? 'player' : 'tag';
 }
 
 /** wx.openDocument 的 fileType；不支持则 null */
@@ -83,11 +93,23 @@ function formatUnpreviewableMessage(fileName) {
   return ext ? `.${ext} 文件类型无法预览` : '该文件类型无法预览';
 }
 
+/** 卡片角标文案 */
+function resolveAttachmentKindLabel(kind) {
+  if (kind === 'pdf') return 'PDF';
+  if (kind === 'excel') return 'XLS';
+  if (kind === 'image') return 'IMG';
+  if (kind === 'video') return 'VID';
+  if (kind === 'office') return 'DOC';
+  return 'FILE';
+}
+
 module.exports = {
   getFileExtension,
   formatFileSize,
   resolveAttachmentKind,
+  normalizeAttachmentDisplayMode,
   resolveOpenDocumentFileType,
   formatUnpreviewableMessage,
+  resolveAttachmentKindLabel,
   OPEN_DOCUMENT_EXTS,
 };

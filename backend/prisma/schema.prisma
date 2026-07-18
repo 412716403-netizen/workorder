@@ -22,6 +22,10 @@ model User {
   status           String    @default("active") @db.VarChar(20)
   isEnterprise     Boolean   @default(false) @map("is_enterprise")
   accountExpiresAt DateTime? @map("account_expires_at") @db.Timestamptz()
+  /** 最近一次成功登录时间（平台用量 / MAU） */
+  lastLoginAt      DateTime? @map("last_login_at") @db.Timestamptz()
+  /** 最近登录客户端：web | miniprogram | unknown */
+  lastLoginClient  String?   @map("last_login_client") @db.VarChar(20)
   createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
 
@@ -30,7 +34,24 @@ model User {
   joinApplications JoinApplication[]
   todoItems        TodoItem[]
 
+  @@index([lastLoginAt])
   @@map("users")
+}
+
+/** 平台管理员关键操作审计（改企业/账号等） */
+model PlatformAuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  actorUserId String   @map("actor_user_id") @db.Uuid
+  action      String   @db.VarChar(80)
+  targetType  String   @map("target_type") @db.VarChar(40)
+  targetId    String   @map("target_id") @db.VarChar(80)
+  detail      Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@index([createdAt(sort: Desc)])
+  @@index([targetType, targetId])
+  @@index([actorUserId])
+  @@map("platform_audit_logs")
 }
 
 model RefreshToken {
@@ -84,6 +105,8 @@ model TenantMembership {
   roleId               String?  @map("role_id") @db.VarChar(50)
   assignedMilestoneIds Json     @default("[]") @map("assigned_milestone_ids")
   preferences          Json     @default("{}")
+  /** 该成员在此企业最近活跃（登录选企业 / 带租户登录） */
+  lastActiveAt         DateTime? @map("last_active_at") @db.Timestamptz()
   createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt            DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
 
@@ -92,6 +115,7 @@ model TenantMembership {
   customRole Role?  @relation(fields: [roleId], references: [id], onDelete: SetNull)
 
   @@unique([userId, tenantId])
+  @@index([tenantId, lastActiveAt])
   @@map("tenant_memberships")
 }
 

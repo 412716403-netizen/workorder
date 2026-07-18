@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import type { Prisma } from '@prisma/client';
 import { AppError } from '../middleware/errorHandler.js';
 import { prisma } from '../lib/prisma.js';
+import { writePlatformAudit } from './platformAudit.service.js';
 
 const userPublicSelect = {
   id: true,
@@ -65,14 +66,17 @@ export async function listAdminUsers(opts: { all?: boolean; page?: number; pageS
   return { data, total, page, pageSize };
 }
 
-export async function createAdminUser(data: {
-  username: string;
-  password: string;
-  displayName?: string;
-  email?: string | null;
-  role?: string;
-  accountExpiresAt?: string | null;
-}) {
+export async function createAdminUser(
+  actorUserId: string,
+  data: {
+    username: string;
+    password: string;
+    displayName?: string;
+    email?: string | null;
+    role?: string;
+    accountExpiresAt?: string | null;
+  },
+) {
   const username = data.username.trim();
   if (username.length < 2) throw new AppError(400, '用户名至少2个字符');
   if (data.password.length < 6) throw new AppError(400, '密码至少6位');
@@ -95,6 +99,13 @@ export async function createAdminUser(data: {
       accountExpiresAt: exp === undefined ? null : exp,
     },
     select: userPublicSelect,
+  });
+  await writePlatformAudit({
+    actorUserId,
+    action: 'user.create',
+    targetType: 'user',
+    targetId: user.id,
+    detail: { username: user.username, role: user.role },
   });
   return {
     ...user,
@@ -178,6 +189,16 @@ export async function updateAdminUser(
     data: updates,
     select: userPublicSelect,
   });
+  await writePlatformAudit({
+    actorUserId,
+    action: 'user.update',
+    targetType: 'user',
+    targetId: id,
+    detail: {
+      fields: Object.keys(updates).filter((k) => k !== 'passwordHash'),
+      passwordChanged: Boolean(updates.passwordHash),
+    },
+  });
   return { ...u, accountExpiresAt: u.accountExpiresAt?.toISOString() ?? null };
 }
 
@@ -190,4 +211,11 @@ export async function deleteAdminUser(actorUserId: string, id: string) {
     if (n < 1) throw new AppError(400, '不能删除唯一的管理员账号');
   }
   await prisma.user.delete({ where: { id } });
+  await writePlatformAudit({
+    actorUserId,
+    action: 'user.delete',
+    targetType: 'user',
+    targetId: id,
+    detail: { username: user.username, role: user.role },
+  });
 }

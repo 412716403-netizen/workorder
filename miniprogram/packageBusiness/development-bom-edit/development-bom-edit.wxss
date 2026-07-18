@@ -1,0 +1,57 @@
+@import "/styles/plan-create-form.wxss";
+
+.dev-bom-cell {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 28rpx 24rpx;
+  background: #fff;
+  border-radius: 16rpx;
+  margin-bottom: 16rpx;
+  border: 1rpx solid #eef0f3;
+}
+
+.dev-bom-cell__title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #1f2329;
+  flex: 1;
+  padding-right: 16rpx;
+}
+
+.dev-bom-cell__status {
+  font-size: 22rpx;
+  color: #8f959e;
+  background: #f2f3f5;
+  padding: 6rpx 14rpx;
+  border-radius: 8rpx;
+}
+
+.dev-bom-cell__status--on {
+  color: #039855;
+  background: rgba(3, 152, 85, 0.1);
+}
+
+.dev-bom-add {
+  text-align: center;
+  padding: 28rpx;
+  color: #2f6bff;
+  font-weight: 600;
+  font-size: 28rpx;
+}
+
+.dev-bom-remove {
+  padding: 16rpx 24rpx 24rpx;
+  color: #d92d20;
+  font-size: 24rpx;
+  text-align: right;
+}
+
+.plan-create-header__action {
+  min-width: 64rpx;
+  text-align: right;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #2f6bff;
+  padding: 0 8rpx;
+}

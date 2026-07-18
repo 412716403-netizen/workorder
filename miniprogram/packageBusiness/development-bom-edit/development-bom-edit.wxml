@@ -1,0 +1,77 @@
+<view class="plan-create-shell">
+  <view class="plan-create-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-create-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-create-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-create-header__title">{{mode === 'items' ? '编辑 BOM' : 'BOM 录入'}}</text>
+      <view wx:if="{{showTodoBtn}}" class="plan-create-header__action" bindtap="onAddTodoTap">待办</view>
+      <view wx:else class="plan-create-header__back plan-create-header__back--placeholder"></view>
+    </view>
+  </view>
+  <view class="plan-create-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view class="plan-create-scroll" scroll-y style="height: {{scrollHeight}}px;" show-scrollbar="{{false}}">
+    <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
+
+    <view wx:elif="{{mode === 'cells'}}" class="plan-create-page">
+      <view wx:if="{{!cells.length}}" class="plan-create-muted">暂无可配置格子（请先配置大货工序与颜色尺码）</view>
+      <view
+        wx:for="{{cells}}"
+        wx:key="key"
+        class="dev-bom-cell"
+        data-key="{{item.key}}"
+        bindtap="onCellTap"
+      >
+        <view class="dev-bom-cell__title">{{item.variantLabel}} · {{item.nodeName}}</view>
+        <view class="dev-bom-cell__status {{item.configured ? 'dev-bom-cell__status--on' : ''}}">
+          {{item.configured ? '已配置' : '未配置'}}
+        </view>
+      </view>
+    </view>
+
+    <view wx:elif="{{mode === 'items'}}" class="plan-create-page">
+      <view class="plan-form-card">
+        <view class="plan-form-cell">
+          <text class="plan-form-cell__label">规格 / 工序</text>
+          <text class="plan-form-cell__value">{{activeCell.variantLabel}} · {{activeCell.nodeName}}</text>
+        </view>
+      </view>
+
+      <view
+        wx:for="{{itemRows}}"
+        wx:key="rowKey"
+        class="plan-form-card"
+      >
+        <searchable-product-select
+          cell="{{true}}"
+          label="物料"
+          products="{{products}}"
+          categories="{{categories}}"
+          value-id="{{item.productId}}"
+          value-name="{{item.productName}}"
+          data-key="{{item.rowKey}}"
+          bind:change="onProductChange"
+          bind:sheetopen="onPickerSheetOpen"
+          bind:sheetclose="onPickerSheetClose"
+        />
+        <view class="plan-form-cell plan-form-cell--input">
+          <text class="plan-form-cell__label">用量</text>
+          <input class="plan-form-cell__input" type="digit" value="{{item.quantityText}}" data-key="{{item.rowKey}}" bindinput="onQtyInput" />
+        </view>
+        <view class="plan-form-cell plan-form-cell--input">
+          <text class="plan-form-cell__label">备注</text>
+          <input class="plan-form-cell__input" value="{{item.note}}" data-key="{{item.rowKey}}" bindinput="onNoteInput" />
+        </view>
+        <view class="dev-bom-remove" data-key="{{item.rowKey}}" bindtap="onRemoveItem">删除此行</view>
+      </view>
+
+      <view class="dev-bom-add" bindtap="onAddItemRow">+ 添加物料</view>
+    </view>
+  </scroll-view>
+
+  <view wx:if="{{mode === 'items' && !loading && !pickerSheetOpen}}" class="report-batch-footer">
+    <view
+      class="report-batch-footer__btn report-batch-footer__btn--primary {{submitting ? 'report-batch-footer__btn--disabled' : ''}}"
+      bindtap="onSaveItems"
+    >{{submitting ? '保存中…' : '保存 BOM'}}</view>
+  </view>
+</view>

@@ -11,6 +11,7 @@ interface EditorInsertHandleProps {
   onOpenLinkDialog?: () => void;
   onOpenProductDialog?: () => void;
   onPickFile?: () => void;
+  onOpenDocumentDialog?: () => void;
 }
 
 interface HandlePos {
@@ -153,13 +154,24 @@ function blockElAtPoint(editor: Editor, clientX: number, clientY: number): HTMLE
   return best;
 }
 
-function clampPopupTopInShell(anchorTop: number, shellHeight: number): number {
+/**
+ * 计算插入菜单在滚动壳内的 content 绝对 top。
+ * 先在可视区内相对按钮夹紧，再加回 scrollTop，避免滚到文末时弹窗被夹到页面顶部。
+ */
+export function resolveInsertPopupContentTop(
+  btnRelTop: number,
+  shellClientHeight: number,
+  scrollTop: number,
+  popupEstHeight = POPUP_EST_HEIGHT,
+): number {
   const margin = 8;
-  let top = anchorTop;
-  if (top + POPUP_EST_HEIGHT > shellHeight - margin) {
-    top = Math.max(margin, shellHeight - POPUP_EST_HEIGHT - margin);
+  const viewH = Math.max(0, shellClientHeight);
+  let relTop = btnRelTop;
+  if (relTop + popupEstHeight > viewH - margin) {
+    relTop = Math.max(margin, viewH - popupEstHeight - margin);
   }
-  return top;
+  if (relTop < margin) relTop = margin;
+  return relTop + scrollTop;
 }
 
 function isInsideTableCell(el: HTMLElement): boolean {
@@ -190,6 +202,7 @@ const EditorInsertHandle: React.FC<EditorInsertHandleProps> = ({
   onOpenLinkDialog,
   onOpenProductDialog,
   onPickFile,
+  onOpenDocumentDialog,
 }) => {
   const wrapRef = useRef<HTMLDivElement>(null);
   const plusRef = useRef<HTMLButtonElement>(null);
@@ -314,9 +327,10 @@ const EditorInsertHandle: React.FC<EditorInsertHandleProps> = ({
     if (!btn || !shell) return;
     const btnRect = btn.getBoundingClientRect();
     const shellRect = shell.getBoundingClientRect();
-    const top = clampPopupTopInShell(
-      btnRect.top - shellRect.top + shell.scrollTop,
+    const top = resolveInsertPopupContentTop(
+      btnRect.top - shellRect.top,
       shell.clientHeight,
+      shell.scrollTop,
     );
     const left = btnRect.right - shellRect.left + shell.scrollLeft + 6;
     setPopupPos({ top, left });
@@ -558,6 +572,7 @@ const EditorInsertHandle: React.FC<EditorInsertHandleProps> = ({
             onOpenLinkDialog={onOpenLinkDialog}
             onOpenProductDialog={onOpenProductDialog}
             onPickFile={onPickFile}
+            onOpenDocumentDialog={onOpenDocumentDialog}
             onClose={closeMenu}
           />
         </div>,

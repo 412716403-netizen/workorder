@@ -148,6 +148,17 @@ refresh 依赖后端 Cookie 机制，而不是前端直接读写 refresh token�
 - 当 `industryKind` 为 `sweater_factory`、且该企业 **`industry_preset_applied_at` 仍为空**、且五类基础表（产品分类、合作单位分类、仓库、财务类型、工序节点）**均为空**时，后端会在同一事务内灌入代码预设（`backend/src/lib/tenantIndustryPresets.ts`），并写入 `industry_preset_applied_at`；若任一类已有数据则跳过灌入并在响应中返回 `presetSkippedReason`。预设含产品分类「原料」（默认关闭采购价、关联合作单位，开启批次管理）与「成衣」（工序、颜色尺码、销售价）等。
 - 普通租户成员 JWT 不依赖上述平台字段；行业类型与生产模式仅用于平台侧初始化、列表展示与各业务页只读消费。
 
+### 4.5.1 平台管理员：企业使用情况
+
+- 全局 `role=admin` 通过 **`GET /api/admin/tenants/usage?days=30`**（`requireAdmin`，默认近 30 天，可选 7/30/90）获取跨租户用量聚合；单企业详情 **`GET /api/admin/tenants/:id/usage?days=`** 独立时间窗，业务/负担指标按窗统计、存储为快照；**不**进入业务模块代操作。
+- 响应含：
+  - **overview**：企业总数 / 待审 / 已过期、近窗有报工企业数、本周新增、**平台 MAU/DAU**、登录客户端分布（web / miniprogram）、全平台单品码与近 7 日新增、资料库/产品图/存储合计、RefreshToken 总量与已过期数、负担 Top、7 天内到期、**异常用量 alerts**（阈值见 `adminUsageAlerts.ts`）。
+  - **tenants[]**：成员数、**MAU/DAU**、客户端分布、计划/工单、报工、进销存/财务、单品码/批次、操作流水（含按 type 分布）、资料库、**产品图字节**、**开发附件**、存储合计、最近活跃、健康度、模块渗透。
+- 登录埋点：`POST /auth/login` 与 `POST /tenants/:id/select` 可传 `client: web | miniprogram`；写入 `users.last_login_at` / `last_login_client`，以及对应 `tenant_memberships.last_active_at`（租户 MAU）。
+- 健康度规则：`active` 且已过 `expiresAt` → `expired`；最近业务 ≤7 天 → `active`；≤30 天 → `low`；否则 `silent`。最近业务含业务单据与成员 `last_active_at`。
+- 审计：`GET /api/admin/audit-logs`；平台改用户/企业时写入 `platform_audit_logs`（migration `20260718140000`）。
+- 前端入口：账号管理 **「使用情况」** Tab（`views/admin/TenantUsageView.tsx`）。
+
 ### 4.6 细粒度权限：单价/金额查看（前端展示）
 
 以下 key 在**角色编辑**中配置，控制进销存、外协、协作模块的单价/金额是否在 UI / 打印 / 导出中展示。语义见 [`01-business-rules.md`](./01-business-rules.md) §5.6。
@@ -239,6 +250,7 @@ refresh 依赖后端 Cookie 机制，而不是前端直接读写 refresh token�
 | 租户列表与切换 | `services/api.ts`、`contexts/AuthContext.tsx` |
 | 租户隔离 | `backend/src/middleware/tenant.ts`、`backend/src/lib/prisma.ts` |
 | 平台管理员更新企业与行业预设 | `backend/src/routes/admin.ts`、`backend/src/services/adminTenants.service.ts`、`backend/src/lib/tenantIndustryPresets.ts` |
+| 平台管理员企业使用情况 | `GET /api/admin/tenants/usage`、`backend/src/services/adminUsage.service.ts`、`views/admin/TenantUsageView.tsx` |
 
 ---
 

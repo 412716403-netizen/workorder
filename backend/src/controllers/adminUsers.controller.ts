@@ -13,7 +13,7 @@ export const list = asyncHandler(async (req, res) => {
 });
 
 export const create = asyncHandler(async (req, res) => {
-  const user = await adminUsersService.createAdminUser(req.body);
+  const user = await adminUsersService.createAdminUser(req.user!.userId, req.body);
   res.status(201).json(user);
 });
 
@@ -92,6 +92,6 @@ export const listTenants = asyncHandler(async (req, res) => {
 
 export const updateTenant = asyncHandler(async (req, res) => {
   const id = str(req.params.id);
-  const result = await adminTenantsService.updatePlatformTenant(id, req.body);
+  const result = await adminTenantsService.updatePlatformTenant(id, req.body, req.user!.userId);
   res.json(result);
 });

@@ -9,6 +9,7 @@ import '../../views/knowledge-base/knowledge-editor.css';
 import { bindKnowledgeEditorLinkClick } from '../../views/knowledge-base/knowledgeEditorLinkClick';
 import { bindKnowledgeEditorImageClick } from '../../views/knowledge-base/knowledgeEditorImageClick';
 import { bindKnowledgeEditorProductRefClick } from '../../views/knowledge-base/knowledgeEditorProductRef';
+import { bindKnowledgeEditorDocumentRefClick } from '../../views/knowledge-base/knowledgeEditorDocumentRef';
 import KnowledgeImagePreviewOverlay from '../../views/knowledge-base/KnowledgeImagePreviewOverlay';
 import KnowledgeDocOutline from '../../views/knowledge-base/KnowledgeDocOutline';
 import PlanProductDetail from '../../views/plan-order-list/PlanProductDetail';
@@ -23,6 +24,8 @@ export interface KnowledgeDocPickerModalProps {
   onClose: () => void;
   onSelect: (ref: KnowledgeFieldRef) => void;
   selectedId?: string | null;
+  /** 排除不可选的文档（如当前正在编辑的文档） */
+  excludeDocumentId?: string | null;
   stackZClass?: string;
 }
 
@@ -89,11 +92,16 @@ export const KnowledgeDocPickerModal: React.FC<KnowledgeDocPickerModalProps> = (
   onClose,
   onSelect,
   selectedId = null,
+  excludeDocumentId = null,
   stackZClass = 'z-[11300]',
 }) => {
   const { data, isLoading, isError } = useKnowledgeBaseTree();
   const folders = useMemo(() => data?.folders ?? [], [data]);
-  const documents = useMemo(() => data?.documents ?? [], [data]);
+  const documents = useMemo(() => {
+    const list = data?.documents ?? [];
+    if (!excludeDocumentId) return list;
+    return list.filter(d => d.id !== excludeDocumentId);
+  }, [data, excludeDocumentId]);
   const tree = useMemo(() => buildKnowledgeTree(folders, documents), [folders, documents]);
 
   const [search, setSearch] = useState('');
@@ -120,16 +128,24 @@ export const KnowledgeDocPickerModal: React.FC<KnowledgeDocPickerModalProps> = (
   const { data: serverSearchResults = [], isFetching: searchLoading } = useKnowledgeDocumentSearch(q);
   const searchResults = useMemo(() => {
     if (!q) return [];
-    return serverSearchResults.slice(0, 50);
-  }, [q, serverSearchResults]);
+    return serverSearchResults
+      .filter(d => !excludeDocumentId || d.id !== excludeDocumentId)
+      .slice(0, 50);
+  }, [q, serverSearchResults, excludeDocumentId]);
 
-  const pickedDoc = pendingId ? documents.find(d => d.id === pendingId) : undefined;
+  const pickedDoc = pendingId
+    ? documents.find(d => d.id === pendingId) || searchResults.find(d => d.id === pendingId)
+    : undefined;
 
   if (!isOpen) return null;
 
   const confirm = () => {
     if (!pendingId) return;
-    const doc = documents.find(d => d.id === pendingId);
+    if (excludeDocumentId && pendingId === excludeDocumentId) {
+      toast.error('不能关联当前文档');
+      return;
+    }
+    const doc = documents.find(d => d.id === pendingId) || searchResults.find(d => d.id === pendingId);
     onSelect({ id: pendingId, title: doc?.title?.trim() || '无标题' });
     onClose();
   };
@@ -251,6 +267,7 @@ export const KnowledgeDocPreviewModal: React.FC<KnowledgeDocPreviewModalProps> =
   const previewScrollRef = useRef<HTMLDivElement>(null);
   const [imagePreviewSrc, setImagePreviewSrc] = useState<string | null>(null);
   const [viewProductId, setViewProductId] = useState<string | null>(null);
+  const [viewDocId, setViewDocId] = useState<string | null>(null);
   const [filePreview, setFilePreview] = useState<{ url: string; type: 'image' | 'pdf' } | null>(null);
   const [outlineItems, setOutlineItems] = useState<KnowledgeOutlineItem[]>([]);
   const [outlineActiveId, setOutlineActiveId] = useState<string | null>(null);
@@ -258,6 +275,7 @@ export const KnowledgeDocPreviewModal: React.FC<KnowledgeDocPreviewModalProps> =
   useEffect(() => {
     if (!isOpen) {
       setViewProductId(null);
+      setViewDocId(null);
       setFilePreview(null);
     }
   }, [isOpen]);
@@ -278,6 +296,9 @@ export const KnowledgeDocPreviewModal: React.FC<KnowledgeDocPreviewModalProps> =
       }
       setViewProductId(productId);
     });
+    const unbindDocument = bindKnowledgeEditorDocumentRefClick(root, (nextDocId) => {
+      setViewDocId(nextDocId);
+    });
     const items = collectKnowledgeOutlineFromHtmlRoot(root);
     setOutlineItems(items);
     setOutlineActiveId(items[0]?.id ?? null);
@@ -285,6 +306,7 @@ export const KnowledgeDocPreviewModal: React.FC<KnowledgeDocPreviewModalProps> =
       unbindLink();
       unbindImage();
       unbindProduct();
+      unbindDocument();
     };
   }, [doc?.content, products]);
 
@@ -346,6 +368,12 @@ export const KnowledgeDocPreviewModal: React.FC<KnowledgeDocPreviewModalProps> =
           stackZClass="z-[12000]"
         />
       )}
+      <KnowledgeDocPreviewModal
+        docId={viewDocId}
+        isOpen={Boolean(viewDocId)}
+        onClose={() => setViewDocId(null)}
+        stackZClass="z-[12200]"
+      />
       {filePreview && (
         <div
           className="fixed inset-0 z-[12100] flex items-center justify-center p-8 bg-slate-900/80 backdrop-blur-sm"

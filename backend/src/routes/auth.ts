@@ -24,6 +24,8 @@ const registerSchema = z.object({
 const loginSchema = z.object({
   username: z.string(),
   password: z.string(),
+  /** 登录客户端：web | miniprogram（可选，用于平台用量统计） */
+  client: z.enum(['web', 'miniprogram']).optional(),
 });
 
 const refreshSchema = z.object({

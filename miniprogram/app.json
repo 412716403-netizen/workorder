@@ -120,7 +120,14 @@
         "settings-archive-edit/settings-archive-edit",
         "knowledge-base/knowledge-base",
         "knowledge-doc-detail/knowledge-doc-detail",
-        "knowledge-product-detail/knowledge-product-detail"
+        "knowledge-product-detail/knowledge-product-detail",
+        "development-styles/development-styles",
+        "development-style-detail/development-style-detail",
+        "development-style-edit/development-style-edit",
+        "development-stage-register/development-stage-register",
+        "development-bom-edit/development-bom-edit",
+        "development-stage-templates/development-stage-templates",
+        "development-stage-template-edit/development-stage-template-edit"
       ]
     },
     {

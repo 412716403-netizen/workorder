@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   formatFileSize,
   formatUnpreviewableMessage,
+  normalizeAttachmentDisplayMode,
   resolveAttachmentKind,
   resolveUploadMimeType,
 } from './knowledgeAttachment';
@@ -34,6 +35,24 @@ describe('resolveAttachmentKind', () => {
 
   it('returns other for unknown types', () => {
     expect(resolveAttachmentKind('application/octet-stream', 'part.dwg')).toBe('other');
+  });
+
+  it('detects video by mime or extension', () => {
+    expect(resolveAttachmentKind('video/mp4', 'a.mp4')).toBe('video');
+    expect(resolveAttachmentKind('', 'clip.webm')).toBe('video');
+    expect(resolveAttachmentKind('video/quicktime', 'take.mov')).toBe('video');
+  });
+});
+
+describe('normalizeAttachmentDisplayMode', () => {
+  it('defaults video to tag', () => {
+    expect(normalizeAttachmentDisplayMode(undefined, 'video/mp4', 'a.mp4')).toBe('tag');
+    expect(normalizeAttachmentDisplayMode('tag', 'video/mp4', 'a.mp4')).toBe('tag');
+  });
+
+  it('accepts player for video only', () => {
+    expect(normalizeAttachmentDisplayMode('player', 'video/mp4', 'a.mp4')).toBe('player');
+    expect(normalizeAttachmentDisplayMode('player', 'application/pdf', 'a.pdf')).toBe('tag');
   });
 });
 

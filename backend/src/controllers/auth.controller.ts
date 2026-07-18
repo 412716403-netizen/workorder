@@ -10,8 +10,8 @@ export const register = asyncHandler(async (req, res) => {
 });
 
 export const login = asyncHandler(async (req, res) => {
-  const { username, password } = req.body;
-  const result = await authService.login(username, password);
+  const { username, password, client } = req.body;
+  const result = await authService.login(username, password, authService.normalizeAuthClient(client));
   setAuthCookies(res, result.accessToken, result.refreshToken);
   res.json(result);
 });

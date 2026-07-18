@@ -48,7 +48,8 @@ export const auth = {
 
   async login(username: string, password: string) {
     const result = await request<LoginResult>('/auth/login', {
-      method: 'POST', body: JSON.stringify({ username, password }),
+      method: 'POST',
+      body: JSON.stringify({ username, password, client: 'web' }),
     });
     if (result.accessToken) persistAccessToken(result.accessToken);
     return result;
@@ -184,12 +185,171 @@ export type AdminTenantUpdateResponse = {
   presetSkippedReason?: string;
 };
 
+export type TenantHealth = 'active' | 'low' | 'silent' | 'expired';
+
+export type AdminTenantUsageRow = {
+  tenantId: string;
+  name: string;
+  status: string;
+  expiresAt: string | null;
+  memberCount: number;
+  mau: number;
+  dau: number;
+  loginClientWeb: number;
+  loginClientMiniprogram: number;
+  loginClientUnknown: number;
+  planOrderCount: number;
+  productionOrderCount: number;
+  reportCount: number;
+  reportCountRecent: number;
+  opRecordCount: number;
+  opRecordByType: Record<string, number>;
+  psiRecordCount: number;
+  financeRecordCount: number;
+  productCount: number;
+  partnerCount: number;
+  itemCodeCount: number;
+  itemCodeCountRecent: number;
+  virtualBatchCount: number;
+  virtualBatchCountRecent: number;
+  knowledgeDocumentCount: number;
+  knowledgeFolderCount: number;
+  knowledgeAssetCount: number;
+  knowledgeAssetBytes: number;
+  knowledgeContentBytes: number;
+  knowledgeDocUpdatedRecent: number;
+  productWithImageCount: number;
+  productImageBytes: number;
+  devStyleCount: number;
+  devAttachmentCount: number;
+  devAttachmentBytes: number;
+  storageBytesTotal: number;
+  lastActivityAt: string | null;
+  health: TenantHealth;
+  modules: {
+    production: boolean;
+    psi: boolean;
+    finance: boolean;
+    knowledge: boolean;
+    development: boolean;
+  };
+};
+
+export type AdminUsageTopItem = {
+  tenantId: string;
+  name: string;
+  value: number;
+};
+
+export type AdminUsageAlert = {
+  kind: string;
+  tenantId: string;
+  tenantName: string;
+  value: number;
+  threshold: number;
+  message: string;
+};
+
+/** 单企业用量详情（指标按时间窗；存储为当前快照） */
+export type AdminTenantUsageDetail = {
+  windowDays: number;
+  tenantId: string;
+  name: string;
+  status: string;
+  expiresAt: string | null;
+  health: TenantHealth;
+  lastActivityAt: string | null;
+  mau: number;
+  dau: number;
+  loginClientWeb: number;
+  loginClientMiniprogram: number;
+  loginClientUnknown: number;
+  planOrderCount: number;
+  productionOrderCount: number;
+  reportCount: number;
+  psiRecordCount: number;
+  financeRecordCount: number;
+  productCount: number;
+  partnerCount: number;
+  devStyleCount: number;
+  itemCodeCount: number;
+  virtualBatchCount: number;
+  opRecordCount: number;
+  knowledgeDocUpdated: number;
+  knowledgeDocumentCount: number;
+  knowledgeAssetCount: number;
+  knowledgeAssetBytes: number;
+  knowledgeContentBytes: number;
+  productWithImageCount: number;
+  productImageBytes: number;
+  devAttachmentCount: number;
+  devAttachmentBytes: number;
+  storageBytesTotal: number;
+};
+
+export type AdminTenantUsageResponse = {
+  windowDays: number;
+  overview: {
+    windowDays: number;
+    tenantTotal: number;
+    pendingCount: number;
+    expiredCount: number;
+    activeRecentReportTenants: number;
+    newTenantsThisWeek: number;
+    platformMau: number;
+    platformDau: number;
+    loginClientWeb: number;
+    loginClientMiniprogram: number;
+    loginClientUnknown: number;
+    itemCodeTotal: number;
+    itemCodeRecent7d: number;
+    knowledgeAssetBytesTotal: number;
+    knowledgeDocumentTotal: number;
+    productImageBytesTotal: number;
+    storageBytesTotal: number;
+    refreshTokenTotal: number;
+    refreshTokenExpired: number;
+    topByItemCode: AdminUsageTopItem[];
+    topByReports: AdminUsageTopItem[];
+    topByKnowledgeBytes: AdminUsageTopItem[];
+    topByStorage: AdminUsageTopItem[];
+    expiringSoon: Array<{
+      tenantId: string;
+      name: string;
+      expiresAt: string;
+      daysLeft: number;
+    }>;
+    alerts: AdminUsageAlert[];
+  };
+  tenants: AdminTenantUsageRow[];
+};
+
+export type PlatformAuditLogRow = {
+  id: string;
+  actorUserId: string;
+  actorUsername: string | null;
+  actorDisplayName: string | null;
+  action: string;
+  targetType: string;
+  targetId: string;
+  detail: unknown;
+  createdAt: string;
+};
+
 export const adminTenants = {
   list: (params?: { status?: string }) => {
     const p: Record<string, string> = { all: 'true' };
     if (params?.status) p.status = params.status;
     return request<AdminTenantRow[]>(`/admin/tenants?${new URLSearchParams(p).toString()}`);
   },
+  usage: (days = 30) =>
+    request<AdminTenantUsageResponse>(`/admin/tenants/usage?${new URLSearchParams({ days: String(days) }).toString()}`),
+  usageDetail: (tenantId: string, days = 30) =>
+    request<AdminTenantUsageDetail>(
+      `/admin/tenants/${tenantId}/usage?${new URLSearchParams({ days: String(days) }).toString()}`,
+    ),
+  auditLogs: (limit = 50) =>
+    request<PlatformAuditLogRow[]>(`/admin/audit-logs?${new URLSearchParams({ limit: String(limit) }).toString()}`),
   update: (
     id: string,
     data: {

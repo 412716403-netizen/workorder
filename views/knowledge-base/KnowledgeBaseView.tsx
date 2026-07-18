@@ -124,6 +124,7 @@ const KnowledgeBaseView: React.FC = () => {
       fileName: res.fileName ?? file.name,
       mimeType: res.mimeType,
       sizeBytes: res.sizeBytes,
+      displayMode: 'tag',
     };
   };
 

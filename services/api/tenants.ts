@@ -38,7 +38,10 @@ export const tenants = {
       industryKind?: string;
       accessToken: string;
       refreshToken: string;
-    }>(`/tenants/${id}/select`, { method: 'POST' });
+    }>(`/tenants/${id}/select`, {
+      method: 'POST',
+      body: JSON.stringify({ client: 'web' }),
+    });
     if (result.accessToken) persistAccessToken(result.accessToken);
     return result;
   },

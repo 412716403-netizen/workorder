@@ -1,0 +1,168 @@
+<view class="plan-shell">
+  <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-header__title">开发管理</text>
+      <view class="plan-header__back plan-header__back--placeholder"></view>
+    </view>
+
+    <view class="plan-header__tools">
+      <view class="plan-search">
+        <input
+          class="plan-search__input"
+          value="{{searchKeyword}}"
+          bindinput="onSearchInput"
+          placeholder="搜索款号、品名、客户…"
+          confirm-type="search"
+          placeholder-class="plan-search__ph"
+        />
+        <view wx:if="{{searchKeyword}}" class="plan-search__clear" bindtap="onSearchClear">×</view>
+      </view>
+      <view
+        class="plan-tool-btn {{filterActive ? 'plan-tool-btn--active' : ''}}"
+        bindtap="onFilterTap"
+      >
+        <image class="plan-tool-btn__icon" src="/assets/icons/list-filter.png" mode="aspectFit" />
+      </view>
+      <view wx:if="{{canCreate}}" class="plan-tool-btn" bindtap="onCreateTap">
+        <image class="plan-tool-btn__icon" src="/assets/icons/file-plus.png" mode="aspectFit" />
+      </view>
+    </view>
+
+    <view wx:if="{{showFilterPanel}}" class="plan-filter-panel plan-filter-panel--header-dropdown">
+      <view class="plan-filter-panel__section">
+        <text class="plan-filter-panel__label">排序</text>
+        <view class="plan-filter-chips">
+          <view
+            class="plan-filter-chip {{draftSortMode === 'time' ? 'plan-filter-chip--active' : ''}}"
+            data-mode="time"
+            bindtap="onDraftSortTap"
+          >按时间</view>
+          <view
+            wx:if="{{showCustomerSort}}"
+            class="plan-filter-chip {{draftSortMode === 'customer' ? 'plan-filter-chip--active' : ''}}"
+            data-mode="customer"
+            bindtap="onDraftSortTap"
+          >按客户</view>
+        </view>
+      </view>
+
+      <view wx:if="{{activeTab === 'developing'}}" class="plan-filter-panel__section">
+        <text class="plan-filter-panel__label">当前进度节点</text>
+        <view class="plan-filter-chips">
+          <view
+            class="plan-filter-chip {{draftStageName === 'all' ? 'plan-filter-chip--active' : ''}}"
+            data-name="all"
+            bindtap="onDraftStageTap"
+          >全部</view>
+          <view
+            wx:for="{{stageFilterOptions}}"
+            wx:key="*this"
+            class="plan-filter-chip {{draftStageName === item ? 'plan-filter-chip--active' : ''}}"
+            data-name="{{item}}"
+            bindtap="onDraftStageTap"
+          >{{item}}</view>
+        </view>
+      </view>
+
+      <view wx:else class="plan-filter-panel__section">
+        <text class="plan-filter-panel__label">同步状态</text>
+        <view class="plan-filter-chips">
+          <view
+            class="plan-filter-chip {{draftSyncStatus === 'all' ? 'plan-filter-chip--active' : ''}}"
+            data-sync="all"
+            bindtap="onDraftSyncTap"
+          >全部</view>
+          <view
+            class="plan-filter-chip {{draftSyncStatus === 'synced' ? 'plan-filter-chip--active' : ''}}"
+            data-sync="synced"
+            bindtap="onDraftSyncTap"
+          >已同步大货</view>
+          <view
+            class="plan-filter-chip {{draftSyncStatus === 'unsynced' ? 'plan-filter-chip--active' : ''}}"
+            data-sync="unsynced"
+            bindtap="onDraftSyncTap"
+          >未同步</view>
+        </view>
+      </view>
+
+      <view
+        wx:if="{{canViewTemplates}}"
+        class="plan-filter-panel__row"
+        bindtap="onTemplatesTap"
+      >
+        <text class="plan-filter-panel__label">开发节点库</text>
+        <text class="dev-styles-filter-link">管理 ›</text>
+      </view>
+
+      <view class="plan-filter-panel__foot">
+        <view class="plan-filter-reset" bindtap="onFilterReset">重置</view>
+        <view class="plan-filter-apply" bindtap="onFilterApply">确定</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <view class="dev-styles-tabs">
+    <view
+      class="dev-styles-tab {{activeTab === 'developing' ? 'dev-styles-tab--active' : ''}}"
+      data-tab="developing"
+      bindtap="onTabTap"
+    >开发中</view>
+    <view
+      class="dev-styles-tab {{activeTab === 'archived' ? 'dev-styles-tab--active' : ''}}"
+      data-tab="archived"
+      bindtap="onTabTap"
+    >已归档</view>
+  </view>
+
+  <view class="dev-styles-page">
+    <empty-state wx:if="{{loading && !rows.length}}" loading="{{true}}" text="加载中…" />
+    <empty-state wx:elif="{{!loading && !rows.length}}" text="{{emptyText}}" />
+
+    <view wx:elif="{{rows.length}}">
+      <view
+        wx:for="{{rows}}"
+        wx:key="id"
+        class="dev-styles-row"
+        data-id="{{item.id}}"
+        bindtap="onRowTap"
+      >
+        <view class="report-history-row__thumb">
+          <image
+            wx:if="{{item.showProductImage}}"
+            class="report-history-row__img"
+            src="{{item.productImageUrl}}"
+            mode="aspectFill"
+            data-id="{{item.id}}"
+            binderror="onImageError"
+          />
+          <view wx:else class="report-history-row__img report-history-row__img--placeholder">
+            <image class="report-history-row__placeholder-icon" src="{{item.placeholderIconSrc}}" mode="aspectFit" />
+          </view>
+        </view>
+
+        <view class="dev-styles-row__content">
+          <view class="dev-styles-row__head">
+            <view class="dev-styles-row__title-wrap">
+              <text class="report-history-row__product-name">{{item.productName}}</text>
+              <text wx:if="{{item.showProductSku}}" class="report-history-row__sku">{{item.productSku}}</text>
+              <text wx:if="{{item.showPublishedBadge}}" class="dev-styles-badge">已发布</text>
+              <text wx:elif="{{item.statusLabel}}" class="dev-styles-badge dev-styles-badge--muted">{{item.statusLabel}}</text>
+            </view>
+          </view>
+          <view wx:if="{{item.showCustomer}}" class="dev-styles-row__meta">{{item.customerName}}</view>
+          <view wx:if="{{item.progressParts.length}}" class="dev-styles-progress">
+            <text
+              wx:for="{{item.progressParts}}"
+              wx:for-item="p"
+              wx:key="sampleId"
+              class="dev-styles-progress__chip dev-styles-progress__chip--{{p.kind}}"
+            >{{p.sampleName}} · {{p.label}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

@@ -134,6 +134,8 @@ function buildTodoBubbles(todos) {
       tagTone: done ? 'muted' : 'warning',
       sourceLabel,
       sourceDocNo: t.sourceDocNo || '',
+      href: t.href || '',
+      sourceType: t.sourceType || '',
       timeText: formatChatTime(t.updatedAt || t.createdAt),
       at: new Date(t.updatedAt || t.createdAt).getTime() || 0,
       preview: `${done ? '[已完成] ' : ''}${title}`,

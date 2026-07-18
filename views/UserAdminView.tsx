@@ -19,8 +19,10 @@ import {
   Check,
   X,
   Search,
+  BarChart3,
 } from 'lucide-react';
 import { adminUsers, adminTenants, type AdminUserRow, type AdminTenantRow } from '../services/api';
+import TenantUsageView from './admin/TenantUsageView';
 import {
   TENANT_INDUSTRY_KINDS,
   TENANT_INDUSTRY_KIND_LABELS,
@@ -68,7 +70,7 @@ function isExpiredAt(iso: string | null) {
 }
 
 export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
-  const [tab, setTab] = useState<'users' | 'tenants'>('users');
+  const [tab, setTab] = useState<'users' | 'tenants' | 'usage'>('users');
   const setScrollSegment = useSetMainScrollSegment();
   useLayoutEffect(() => {
     setScrollSegment?.(tab);
@@ -335,7 +337,9 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
             </div>
             <div className="min-w-0">
               <h1 className={pageTitleClass}>平台管理</h1>
-              <p className={pageSubtitleClass}>管理平台用户与企业租户</p>
+              <p className={pageSubtitleClass}>
+                {tab === 'usage' ? '查看各企业业务用量与系统负担' : '管理平台用户与企业租户'}
+              </p>
             </div>
           </div>
         </div>
@@ -351,6 +355,7 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
         {([
           { key: 'users' as const, label: '用户管理', icon: Users, badge: 0 },
           { key: 'tenants' as const, label: '企业管理', icon: Building2, badge: pendingCount },
+          { key: 'usage' as const, label: '使用情况', icon: BarChart3, badge: 0 },
         ]).map(t => (
           <button key={t.key} type="button" onClick={() => setTab(t.key)}
             className={`px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${tab === t.key ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
@@ -363,6 +368,8 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
           </button>
         ))}
       </div>
+
+      {tab === 'usage' && <TenantUsageView />}
 
       {tab === 'tenants' && (
         <div className="space-y-4">

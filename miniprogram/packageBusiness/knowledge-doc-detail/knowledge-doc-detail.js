@@ -10,6 +10,7 @@ const {
 } = require('../utils/knowledgeApi.js');
 const {
   extractImageAssetIdsFromHtml,
+  extractPlayerVideoAssetIdsFromHtml,
   buildKnowledgeDocBlocks,
   applyImageBlockLayout,
 } = require('../utils/knowledgeHtmlForMini.js');
@@ -121,6 +122,17 @@ Page({
     });
   },
 
+  onDocumentTap(e) {
+    const documentId = e.currentTarget.dataset.id;
+    if (!documentId) {
+      wx.showToast({ title: '文档信息无效', icon: 'none' });
+      return;
+    }
+    wx.navigateTo({
+      url: `/packageBusiness/knowledge-doc-detail/knowledge-doc-detail?id=${encodeURIComponent(documentId)}`,
+    });
+  },
+
   async onFileTap(e) {
     const ds = e.currentTarget.dataset || {};
     const assetId = ds.assetId;
@@ -138,6 +150,37 @@ Page({
         wx.previewImage({ current: path, urls: [path] });
       } catch (err) {
         wx.showToast({ title: (err && err.message) || '预览失败', icon: 'none' });
+      }
+      return;
+    }
+
+    if (kind === 'video') {
+      wx.showLoading({ title: '打开中…', mask: true });
+      try {
+        const path = await this.ensureFileTempPath(assetId, fileName, mimeType);
+        if (typeof wx.previewMedia === 'function') {
+          await new Promise((resolve, reject) => {
+            wx.previewMedia({
+              sources: [{ url: path, type: 'video' }],
+              current: 0,
+              success: resolve,
+              fail: reject,
+            });
+          });
+        } else {
+          wx.showModal({
+            title: '无法播放',
+            content: '当前微信版本过低，请升级后重试，或在电脑端播放。',
+            showCancel: false,
+          });
+        }
+      } catch (err) {
+        wx.showToast({
+          title: (err && err.errMsg) || (err && err.message) || '播放失败',
+          icon: 'none',
+        });
+      } finally {
+        wx.hideLoading();
       }
       return;
     }
@@ -207,10 +250,13 @@ Page({
       }
       this._loaded = true;
       const content = String(doc.content || '');
-      // 仅预拉正文图片；附件按点击再下载（避免大 PDF/Excel 拖慢首屏）
-      const assetIds = extractImageAssetIdsFromHtml(content);
+      // 预拉正文图片 + 内嵌播放视频；标签式附件仍按点击再下载
+      const imageIds = extractImageAssetIdsFromHtml(content);
+      const playerVideoIds = extractPlayerVideoAssetIdsFromHtml(content);
+      const assetIds = Array.from(new Set(imageIds.concat(playerVideoIds)));
       const urlById = {};
       const tempPaths = [];
+      this._fileTempByAssetId = {};
 
       await Promise.all(
         assetIds.map(async (assetId) => {
@@ -220,8 +266,9 @@ Page({
             const filePath = await writeKnowledgeAssetTempFile(assetId, buffer, mimeType);
             urlById[assetId] = filePath;
             tempPaths.push(filePath);
+            this._fileTempByAssetId[assetId] = filePath;
           } catch {
-            // 单张失败不阻断正文
+            // 单资源失败不阻断正文
           }
         }),
       );

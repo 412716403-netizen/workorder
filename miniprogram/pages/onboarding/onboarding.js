@@ -232,7 +232,7 @@ Page({
       const approved = list.find((a) => a.status === 'APPROVED');
       if (approved) {
         this.clearPoll();
-        return request({ path: `/tenants/${approved.tenantId}/select`, method: 'POST', data: {} }).then(
+        return request({ path: `/tenants/${approved.tenantId}/select`, method: 'POST', data: { client: 'miniprogram' } }).then(
           (d) => {
             this.applySelectAndEnter(d);
           }

@@ -29,16 +29,23 @@
       <view class="sps__picker-bar">
         <text class="sps__picker-cancel" bindtap="onClose">取消</text>
         <text class="sps__picker-title">{{pickerTitle}}</text>
-        <text class="sps__picker-action cssp__confirm-link" bindtap="onPickerConfirm">确定</text>
+        <text class="sps__picker-action cssp__confirm-link" bindtap="onPickerConfirm">{{confirmLabel}}</text>
       </view>
 
       <view class="cssp__selected-wrap">
-        <text class="cssp__selected-title">已选{{pickerKind === 'color' ? '颜色' : '尺码'}}</text>
+        <view class="cssp__selected-head">
+          <text class="cssp__selected-title">已选 {{selectedCount}}</text>
+          <text
+            wx:if="{{selectedCount}}"
+            class="cssp__selected-clear"
+            bindtap="onClearSelected"
+          >清空</text>
+        </view>
         <view wx:if="{{pickerSelectedLabels.length}}" class="cssp__selected-chips">
           <view
             wx:for="{{pickerSelectedLabels}}"
             wx:key="id"
-            class="cssp__chip"
+            class="cssp__chip cssp__chip--on"
             data-id="{{item.id}}"
             bindtap="onSelectedChipTap"
           >
@@ -47,34 +54,37 @@
             <text class="cssp__chip-remove">×</text>
           </view>
         </view>
-        <text wx:else class="cssp__selected-empty">暂未选择</text>
+        <text wx:else class="cssp__selected-empty">点选下方选项，可多选</text>
       </view>
 
-      <view class="sps__search-wrap">
-        <image class="sps__search-icon" src="/assets/icons/search.png" mode="aspectFit" />
-        <input
-          class="sps__search-input"
-          value="{{search}}"
-          bindinput="onSearchInput"
-          placeholder="{{searchPlaceholder}}"
-          confirm-type="search"
-        />
+      <view class="sps__search-row">
+        <view class="sps__search-wrap">
+          <image class="sps__search-icon" src="/assets/icons/search.png" mode="aspectFit" />
+          <input
+            class="sps__search-input"
+            value="{{search}}"
+            bindinput="onSearchInput"
+            placeholder="{{searchPlaceholder}}"
+            confirm-type="search"
+            placeholder-class="plan-form-cell__ph"
+          />
+        </view>
       </view>
 
-      <scroll-view class="sps__list" scroll-y enhanced show-scrollbar="{{true}}">
+      <scroll-view class="sps__list cssp__list" scroll-y enhanced show-scrollbar="{{false}}">
         <view wx:if="{{!filteredItems.length}}" class="sps__empty">{{emptyHint}}</view>
-        <view
-          wx:for="{{filteredItems}}"
-          wx:key="id"
-          class="sps__row {{item.selected ? 'sps__row--active' : ''}}"
-          data-id="{{item.id}}"
-          bindtap="onItemTap"
-        >
-          <view class="sps__row-main cssp__row-main">
+        <view wx:else class="cssp__pool">
+          <view
+            wx:for="{{filteredItems}}"
+            wx:key="id"
+            class="cssp__opt {{item.selected ? 'cssp__opt--on' : ''}}"
+            data-id="{{item.id}}"
+            bindtap="onItemTap"
+          >
             <view wx:if="{{pickerKind === 'color'}}" class="cssp__dot" style="background-color: {{item.value}};"></view>
-            <text class="sps__row-name">{{item.name}}</text>
+            <text class="cssp__opt-name">{{item.name}}</text>
+            <text wx:if="{{item.selected}}" class="cssp__opt-check">✓</text>
           </view>
-          <text wx:if="{{item.selected}}" class="sps__row-contact">✓</text>
         </view>
       </scroll-view>
 
@@ -86,6 +96,7 @@
           bindinput="onQuickAddInput"
           placeholder="输入新名称"
           focus="{{showQuickAdd}}"
+          placeholder-class="plan-form-cell__ph"
         />
         <view class="cssp__quick-btn" bindtap="onQuickAddSubmit">添加</view>
       </view>

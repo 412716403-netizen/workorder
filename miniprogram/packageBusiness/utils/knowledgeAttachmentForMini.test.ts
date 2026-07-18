@@ -5,8 +5,10 @@ const require = createRequire(import.meta.url);
 const {
   formatFileSize,
   resolveAttachmentKind,
+  normalizeAttachmentDisplayMode,
   resolveOpenDocumentFileType,
   formatUnpreviewableMessage,
+  resolveAttachmentKindLabel,
 } = require('./knowledgeAttachmentForMini.js');
 
 describe('knowledgeAttachmentForMini', () => {
@@ -24,7 +26,14 @@ describe('knowledgeAttachmentForMini', () => {
       ),
     ).toBe('excel');
     expect(resolveAttachmentKind('image/png', 'a.png')).toBe('image');
+    expect(resolveAttachmentKind('video/mp4', 'a.mp4')).toBe('video');
     expect(resolveAttachmentKind('application/octet-stream', 'a.dwg')).toBe('other');
+  });
+
+  it('normalizes display mode for video', () => {
+    expect(normalizeAttachmentDisplayMode('player', 'video/mp4', 'a.mp4')).toBe('player');
+    expect(normalizeAttachmentDisplayMode('player', 'application/pdf', 'a.pdf')).toBe('tag');
+    expect(resolveAttachmentKindLabel('video')).toBe('VID');
   });
 
   it('resolves openDocument fileType', () => {

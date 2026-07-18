@@ -1,0 +1,250 @@
+<view class="plan-create-shell">
+  <view class="plan-create-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-create-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-create-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-create-header__title">{{pageTitle}}</text>
+      <view class="plan-create-header__back plan-create-header__back--placeholder"></view>
+    </view>
+  </view>
+
+  <view class="plan-create-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view class="plan-create-scroll" scroll-y style="height: {{scrollHeight}}px;" show-scrollbar="{{false}}">
+    <view wx:if="{{loading}}" class="plan-create-muted">加载中…</view>
+
+    <view wx:else class="plan-create-page dev-style-edit-page">
+      <view class="plan-form-card">
+        <view class="dev-section-head">
+          <text class="dev-section-head__title">商品信息</text>
+          <text class="dev-section-head__hint">与产品档案字段一致</text>
+        </view>
+
+        <view class="plan-form-cell plan-form-cell--input">
+          <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>产品分类</text>
+          <picker mode="selector" range="{{categoryNames}}" value="{{categoryPickerIndex}}" bindchange="onCategoryChange">
+            <view class="plan-form-cell__value {{!categoryName ? 'plan-form-cell__value--ph' : ''}}">{{categoryName || '请选择'}}</view>
+          </picker>
+        </view>
+
+        <view class="plan-form-cell plan-form-cell--input">
+          <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>品名</text>
+          <input
+            class="plan-form-cell__input"
+            value="{{form.name}}"
+            bindinput="onNameInput"
+            placeholder="请填写品名"
+            placeholder-class="plan-form-cell__ph"
+          />
+        </view>
+
+        <view class="plan-form-cell plan-form-cell--input">
+          <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>款号</text>
+          <input
+            class="plan-form-cell__input"
+            value="{{form.code}}"
+            bindinput="onCodeInput"
+            placeholder="请填写款号"
+            placeholder-class="plan-form-cell__ph"
+          />
+        </view>
+
+        <unit-select
+          units="{{dictionaries.units}}"
+          value-id="{{form.unitId}}"
+          value-name="{{unitName}}"
+          can-quick-add="{{canQuickAddUnit}}"
+          placeholder="请选择单位"
+          bind:change="onUnitChange"
+          bind:unitsupdated="onUnitsUpdated"
+          bind:sheetopen="onPickerSheetOpen"
+          bind:sheetclose="onPickerSheetClose"
+        />
+
+        <view class="plan-form-cell plan-form-cell--image">
+          <text class="plan-form-cell__label">主图</text>
+          <view class="dev-edit-image" bindtap="onPickImage">
+            <image wx:if="{{form.imageUrl}}" class="dev-edit-image__img" src="{{form.imageUrl}}" mode="aspectFill" />
+            <view wx:else class="dev-edit-image__ph">
+              <text class="dev-edit-image__ph-plus">＋</text>
+              <text>上传图片</text>
+            </view>
+          </view>
+        </view>
+
+        <view wx:if="{{showSalesPrice}}" class="plan-form-cell plan-form-cell--input">
+          <text class="plan-form-cell__label">销售价</text>
+          <input
+            class="plan-form-cell__input"
+            type="digit"
+            value="{{form.salesPriceText}}"
+            bindinput="onSalesPriceInput"
+            placeholder="0"
+            placeholder-class="plan-form-cell__ph"
+          />
+        </view>
+        <view wx:if="{{showPurchasePrice}}" class="plan-form-cell plan-form-cell--input">
+          <text class="plan-form-cell__label">采购价</text>
+          <input
+            class="plan-form-cell__input"
+            type="digit"
+            value="{{form.purchasePriceText}}"
+            bindinput="onPurchasePriceInput"
+            placeholder="0"
+            placeholder-class="plan-form-cell__ph"
+          />
+        </view>
+
+        <searchable-partner-select
+          wx:if="{{showSupplier}}"
+          cell="{{true}}"
+          label="首选供应商"
+          partners="{{partners}}"
+          categories="{{partnerCategories}}"
+          value="{{supplierName}}"
+          placeholder="请选择"
+          bind:change="onSupplierChange"
+          bind:created="onPartnerCreated"
+          bind:sheetopen="onPickerSheetOpen"
+          bind:sheetclose="onPickerSheetClose"
+        />
+
+        <block wx:for="{{customFields}}" wx:key="id">
+          <view wx:if="{{item.type === 'select'}}" class="plan-form-cell plan-form-cell--input">
+            <text class="plan-form-cell__label">{{item.label}}</text>
+            <picker mode="selector" range="{{item.options}}" value="{{item.pickerIndex}}" data-id="{{item.id}}" bindchange="onCustomSelectChange">
+              <view class="plan-form-cell__value {{!item.value ? 'plan-form-cell__value--ph' : ''}}">{{item.value || '请选择'}}</view>
+            </picker>
+          </view>
+          <view wx:elif="{{!item.desktopOnly}}" class="plan-form-cell plan-form-cell--input">
+            <text class="plan-form-cell__label">{{item.label}}</text>
+            <input
+              class="plan-form-cell__input"
+              value="{{item.value}}"
+              data-id="{{item.id}}"
+              bindinput="onCustomFieldInput"
+              placeholder="请填写"
+              placeholder-class="plan-form-cell__ph"
+            />
+          </view>
+        </block>
+
+        <block wx:if="{{showColorSize}}">
+          <view class="dev-subsection">
+            <text class="dev-subsection__title">颜色尺码</text>
+          </view>
+          <color-size-spec-picker
+            color-ids="{{form.colorIds}}"
+            size-ids="{{form.sizeIds}}"
+            colors="{{dictionaries.colors}}"
+            sizes="{{dictionaries.sizes}}"
+            can-quick-add="{{canQuickAddDict}}"
+            bind:change="onColorSizeChange"
+            bind:quickadd="onColorSizeQuickAdd"
+          />
+        </block>
+      </view>
+
+      <view class="plan-form-card">
+        <view class="dev-section-head">
+          <view class="dev-section-head__left">
+            <text class="dev-section-head__title"><text class="plan-form-cell__req">*</text>开发流程</text>
+            <text class="dev-section-head__count">已选 {{stageSelectedCount}}</text>
+          </view>
+          <text wx:if="{{canManageTemplates}}" class="dev-edit-link" bindtap="onOpenTemplates">节点库</text>
+        </view>
+        <text class="dev-section-head__desc">点选节点组成打样流程，可在下方调整顺序</text>
+
+        <view wx:if="{{!stageOptions.length}}" class="dev-empty-tip">暂无节点模板，请先到节点库添加</view>
+        <view wx:else class="dev-chip-pool">
+          <view
+            wx:for="{{stageOptions}}"
+            wx:key="id"
+            class="dev-chip {{item.selected ? 'dev-chip--on' : ''}}"
+            data-name="{{item.name}}"
+            bindtap="onStageToggle"
+          >{{item.name}}</view>
+        </view>
+
+        <view wx:if="{{selectedStageRows.length}}" class="dev-selected-block">
+          <text class="dev-selected-block__title">已选顺序</text>
+          <view
+            wx:for="{{selectedStageRows}}"
+            wx:key="name"
+            class="dev-order-row"
+          >
+            <text class="dev-order-row__idx">{{item.orderLabel}}</text>
+            <text class="dev-order-row__name">{{item.name}}</text>
+            <view class="dev-order-row__moves">
+              <text
+                wx:if="{{item.canMoveUp}}"
+                class="dev-order-row__btn"
+                data-name="{{item.name}}"
+                catchtap="onStageMoveUp"
+              >上移</text>
+              <text
+                wx:if="{{item.canMoveDown}}"
+                class="dev-order-row__btn"
+                data-name="{{item.name}}"
+                catchtap="onStageMoveDown"
+              >下移</text>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view class="plan-form-card">
+        <view class="dev-section-head">
+          <view class="dev-section-head__left">
+            <text class="dev-section-head__title">大货工序</text>
+            <text class="dev-section-head__count">已选 {{nodeSelectedCount}}</text>
+          </view>
+        </view>
+        <text class="dev-section-head__desc">发布大货后的报工路线，可选；点选后可调序</text>
+
+        <view wx:if="{{!nodeOptions.length}}" class="dev-empty-tip">暂无工序节点，请在系统设置中维护</view>
+        <view wx:else class="dev-chip-pool">
+          <view
+            wx:for="{{nodeOptions}}"
+            wx:key="id"
+            class="dev-chip {{item.selected ? 'dev-chip--on' : ''}}"
+            data-id="{{item.id}}"
+            bindtap="onNodeToggle"
+          >{{item.name}}</view>
+        </view>
+
+        <view wx:if="{{selectedNodeRows.length}}" class="dev-selected-block">
+          <text class="dev-selected-block__title">工序顺序</text>
+          <view
+            wx:for="{{selectedNodeRows}}"
+            wx:key="id"
+            class="dev-order-row"
+          >
+            <text class="dev-order-row__idx">{{item.orderLabel}}</text>
+            <text class="dev-order-row__name">{{item.name}}</text>
+            <view class="dev-order-row__moves">
+              <text
+                wx:if="{{item.canMoveUp}}"
+                class="dev-order-row__btn"
+                data-id="{{item.id}}"
+                catchtap="onNodeMoveUp"
+              >上移</text>
+              <text
+                wx:if="{{item.canMoveDown}}"
+                class="dev-order-row__btn"
+                data-id="{{item.id}}"
+                catchtap="onNodeMoveDown"
+              >下移</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </scroll-view>
+
+  <view wx:if="{{!loading && !pickerSheetOpen}}" class="report-batch-footer">
+    <view
+      class="report-batch-footer__btn report-batch-footer__btn--primary {{submitting ? 'report-batch-footer__btn--disabled' : ''}}"
+      bindtap="onSaveTap"
+    >{{submitting ? '保存中…' : (isEdit ? '保存修改' : '保存款式')}}</view>
+  </view>
+</view>

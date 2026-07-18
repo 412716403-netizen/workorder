@@ -950,7 +950,7 @@ npm run miniprogram:icons
 | 页面 | 路径 | 职责 |
 |------|------|------|
 | 树 / 搜索 | [`packageBusiness/knowledge-base/`](../miniprogram/packageBusiness/knowledge-base/) | 文件夹面包屑、当前层列表、标题/正文搜索、进入文档 |
-| 文档详情 | [`packageBusiness/knowledge-doc-detail/`](../miniprogram/packageBusiness/knowledge-doc-detail/) | 标题 + 更新时间 + 消毒后 HTML（块渲染）；鉴权图片；按文档宽度展示图片；表格可横向滚动；**附件卡片**（PDF/Excel/Office 点按 `wx.openDocument`，图片点按预览，其它类型提示无法预览） |
+| 文档详情 | [`packageBusiness/knowledge-doc-detail/`](../miniprogram/packageBusiness/knowledge-doc-detail/) | 标题 + 更新时间 + 消毒后 HTML（块渲染）；鉴权图片；按文档宽度展示图片；表格可横向滚动；**附件卡片**（PDF/Excel/Office 点按 `wx.openDocument`，图片点按预览，视频标签点按 `wx.previewMedia` 播放、`data-display-mode=player` 时内嵌 `<video>`，其它类型提示无法预览）；**关联产品** / **关联文档** 芯片可点跳转 |
 | 产品快览 | [`packageBusiness/knowledge-product-detail/`](../miniprogram/packageBusiness/knowledge-product-detail/) + [`components/product-quick-detail/`](../miniprogram/packageBusiness/components/product-quick-detail/) | 只读商品信息共用组件：基本信息、分类扩展属性、标准生产路线、工艺 BOM；入口含资料库关联产品、生产计划详情点产品名；无编辑/删除；大图不进 `setData` |
 
 | 工具 | 作用 |
@@ -960,11 +960,36 @@ npm run miniprogram:icons
 | [`utils/knowledgeHtmlForMini.js`](../miniprogram/packageBusiness/utils/knowledgeHtmlForMini.js) | 拆成 html/image/product/file/callout/table 渲染块；表格行内边框；鉴权图片 URL；附件节点 `div[data-type=file-attachment]` |
 | [`utils/knowledgeAttachmentForMini.js`](../miniprogram/packageBusiness/utils/knowledgeAttachmentForMini.js) | 附件类型判定、体积文案、`openDocument` 支持的扩展名 |
 
-**权限 / 插件**：入口需插件 `knowledge_base` 开启；页内校验 `knowledge_base:folders:view`（树）+ `knowledge_base:documents:view`（正文/图片/附件）。图片资源不可裸链，须 Bearer 下载后**写入本地临时文件**再引用路径（禁止 base64 塞进 `setData`，避免超大传输与渲染层错误）；正文内图片点按 `wx.previewImage`（按文档设定宽度展示，最大不超过页面宽）；关联产品芯片跳转只读产品快览（需 `basic:products:view`）。附件卡片点击后鉴权下载到临时文件：PDF/Excel/Word/PPT 用 `wx.openDocument({ showMenu: true })` 系统预览；附件为图片时用 `previewImage`；CAD 等不支持类型弹窗提示「无法预览，请在电脑端打开」。首屏只预拉正文图片资源，附件按点击再下载。
+**权限 / 插件**：入口需插件 `knowledge_base` 开启；页内校验 `knowledge_base:folders:view`（树）+ `knowledge_base:documents:view`（正文/图片/附件）。图片资源不可裸链，须 Bearer 下载后**写入本地临时文件**再引用路径（禁止 base64 塞进 `setData`，避免超大传输与渲染层错误）；正文内图片点按 `wx.previewImage`（按文档设定宽度展示，最大不超过页面宽）；关联产品芯片跳转只读产品快览（需 `basic:products:view`）。关联文档芯片跳转另一篇资料库文档详情。附件卡片点击后鉴权下载到临时文件：PDF/Excel/Word/PPT 用 `wx.openDocument({ showMenu: true })` 系统预览；附件为图片时用 `previewImage`；视频标签用 `previewMedia`；CAD 等不支持类型弹窗提示「无法预览，请在电脑端打开」。首屏预拉正文图片与内嵌播放视频，标签式附件按点击再下载。
 
 **留 Web**：新建/编辑/上传；业务表单里 knowledge 类自定义字段仍「请在电脑端填写」。
 
 入口：[`menus.js`](../miniprogram/config/menus.js) `knowledge-base` → `/packageBusiness/knowledge-base/knowledge-base`。
+
+## 开发管理
+
+对齐 Web [`views/development/`](../views/development/) 全功能（移动端改为「列表 Hub → 详情 → 子页」）：
+
+| 页面 | 路径 | 职责 |
+|------|------|------|
+| 款式列表 | [`packageBusiness/development-styles/`](../miniprogram/packageBusiness/development-styles/) | 开发中 / 已归档 Tab、搜索、进度节点或同步状态筛选、按时间/客户排序、录入新产品、节点库入口 |
+| 款式详情 | [`development-style-detail/`](../miniprogram/packageBusiness/development-style-detail/) | 基本信息、归档/还原/发布大货/删除、样品 Tab、节点时间线、加删样品、版本日志、深链 `styleId` + `devStageId` / `devSampleId` |
+| 创建/编辑 | [`development-style-edit/`](../miniprogram/packageBusiness/development-style-edit/) | 分类商品字段、开发流程节点、大货工序；保存回列表 |
+| 节点登记 | [`development-stage-register/`](../miniprogram/packageBusiness/development-stage-register/) | 四态 + 模板自定义字段；`todo_reminder` 开启时可加待办 |
+| BOM 录入 | [`development-bom-edit/`](../miniprogram/packageBusiness/development-bom-edit/) | **格子下钻**（变体×工序 → 物料行），非 Web 整表矩阵；同数据源 `dev_boms` + `syncVariantNodeBoms` |
+| 节点库 | [`development-stage-templates/`](../miniprogram/packageBusiness/development-stage-templates/) + [`development-stage-template-edit/`](../miniprogram/packageBusiness/development-stage-template-edit/) | 模板 CRUD、排序、字段配置 |
+
+| 工具 | 作用 |
+|------|------|
+| [`utils/developmentApi.js`](../miniprogram/packageBusiness/utils/developmentApi.js) | `/dev/styles*` · `/dev/styles/boms*` · `/dev/stage-templates*` |
+| [`utils/devStyleListFilter.js`](../miniprogram/packageBusiness/utils/devStyleListFilter.js) 等 | 列表筛选/展示/表单/登记/BOM view-model |
+| [`utils/devTodoNavigate.js`](../miniprogram/utils/devTodoNavigate.js) | 消息待办 Web href → 小程序详情深链 |
+
+**权限 / 插件**：插件 `development`；款式 `development:styles:*`；节点库 `development:templates:*`。保存后导航：`LIST_ROUTES.DEVELOPMENT_STYLES`。
+
+**与 Web 差异**：BOM 为格子下钻编辑；待办加注使用简易备注弹窗（完整提醒时间仍建议 Web）。
+
+入口：[`menus.js`](../miniprogram/config/menus.js) `development` → `/packageBusiness/development-styles/development-styles`。
 
 ## 分包与上传体积
 

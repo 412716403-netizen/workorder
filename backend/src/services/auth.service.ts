@@ -41,6 +41,31 @@ function parseExpiry(expr: string): Date {
   return new Date(Date.now() + val * ms);
 }
 
+export type AuthClient = 'web' | 'miniprogram' | 'unknown';
+
+export function normalizeAuthClient(v: unknown): AuthClient {
+  if (v === 'web' || v === 'miniprogram') return v;
+  return 'unknown';
+}
+
+/** 记录用户登录与租户成员活跃（平台用量 MAU） */
+async function recordLoginActivity(
+  userId: string,
+  opts: { tenantId?: string | null; client: AuthClient },
+): Promise<void> {
+  const now = new Date();
+  await prisma.user.update({
+    where: { id: userId },
+    data: { lastLoginAt: now, lastLoginClient: opts.client },
+  });
+  if (opts.tenantId) {
+    await prisma.tenantMembership.updateMany({
+      where: { userId, tenantId: opts.tenantId },
+      data: { lastActiveAt: now },
+    });
+  }
+}
+
 const CN_PHONE_RE = /^1[3-9]\d{9}$/;
 
 function resolveMemberPermissions(membership: {
@@ -299,7 +324,7 @@ export async function registerByPhone(phone: string, password: string, displayNa
   };
 }
 
-export async function login(username: string, password: string) {
+export async function login(username: string, password: string, client: AuthClient = 'unknown') {
   const trimmed = username.trim();
   const user = await prisma.user.findFirst({
     where: { OR: [{ username: trimmed }, { phone: trimmed }] },
@@ -327,10 +352,11 @@ export async function login(username: string, password: string) {
   };
   const tokens = generateTokens(payload);
 
-  console.warn(`[auth:login] user=${user.id} (${user.username}) tenantId=${tenantInfo.tenantId ?? 'none'}`);
+  console.warn(`[auth:login] user=${user.id} (${user.username}) tenantId=${tenantInfo.tenantId ?? 'none'} client=${client}`);
   await prisma.refreshToken.create({
     data: { userId: user.id, token: hashToken(tokens.refreshToken), expiresAt: parseExpiry(env.JWT_REFRESH_EXPIRES_IN) },
   });
+  await recordLoginActivity(user.id, { tenantId: tenantInfo.tenantId, client });
 
   return {
     user: {
@@ -351,7 +377,7 @@ export async function login(username: string, password: string) {
   };
 }
 
-export async function selectTenant(userId: string, tenantId: string) {
+export async function selectTenant(userId: string, tenantId: string, client: AuthClient = 'unknown') {
   const membership = await prisma.tenantMembership.findUnique({
     where: { userId_tenantId: { userId, tenantId } },
     include: {
@@ -383,6 +409,7 @@ export async function selectTenant(userId: string, tenantId: string) {
   await prisma.refreshToken.create({
     data: { userId: user.id, token: hashToken(tokens.refreshToken), expiresAt: parseExpiry(env.JWT_REFRESH_EXPIRES_IN) },
   });
+  await recordLoginActivity(userId, { tenantId, client });
 
   return {
     tenantId: membership.tenantId,

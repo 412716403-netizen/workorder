@@ -54,6 +54,7 @@ const LIST_ROUTES = {
   BASIC_PARTNERS: '/packageBusiness/basic-partners/basic-partners',
   BASIC_MEMBERS: '/packageBusiness/basic-members/basic-members',
   BASIC_DICTIONARIES: '/packageBusiness/basic-dictionaries/basic-dictionaries',
+  DEVELOPMENT_STYLES: '/packageBusiness/development-styles/development-styles',
   SETTINGS_CATEGORIES: '/packageBusiness/settings-archive-list/settings-archive-list?id=categories',
   SETTINGS_PARTNER_CATEGORIES:
     '/packageBusiness/settings-archive-list/settings-archive-list?id=partner_categories',
@@ -81,6 +82,7 @@ const MODULE_HUB_ROUTES = {
   basicPartners: LIST_ROUTES.BASIC_PARTNERS,
   basicMembers: LIST_ROUTES.BASIC_MEMBERS,
   basicDictionaries: LIST_ROUTES.BASIC_DICTIONARIES,
+  developmentStyles: LIST_ROUTES.DEVELOPMENT_STYLES,
 };
 
 function buildReportHistoryListUrl(params) {

@@ -9,6 +9,7 @@ import {
   type TenantIndustryKind,
 } from '../../../shared/types.js';
 import * as settingsService from './settings.service.js';
+import { writePlatformAudit } from './platformAudit.service.js';
 import { tenantHasProductionActivity } from '../utils/tenantProductionActivity.js';
 
 export type AdminTenantUpdateBody = {
@@ -39,6 +40,7 @@ export async function getTenantProductionLinkModeLocked(tenantId: string): Promi
 export async function updatePlatformTenant(
   tenantId: string,
   body: AdminTenantUpdateBody,
+  actorUserId?: string,
 ): Promise<AdminTenantUpdateResult> {
   const existing = await prisma.tenant.findUnique({ where: { id: tenantId } });
   if (!existing) throw new AppError(404, '企业不存在');
@@ -144,6 +146,23 @@ export async function updatePlatformTenant(
   }
 
   const productionLinkModeLocked = await tenantHasProductionActivity(tenantId);
+
+  if (actorUserId) {
+    await writePlatformAudit({
+      actorUserId,
+      action: 'tenant.update',
+      targetType: 'tenant',
+      targetId: tenantId,
+      detail: {
+        name: t.name,
+        status: body.status ?? null,
+        expiresAt: body.expiresAt ?? null,
+        equipmentModuleEnabled: body.equipmentModuleEnabled ?? null,
+        industryKind: body.industryKind ?? null,
+        productionLinkMode: body.productionLinkMode ?? null,
+      },
+    });
+  }
 
   return {
     id: t.id,

@@ -1,5 +1,9 @@
 import { Node, mergeAttributes } from '@tiptap/core';
 import { ReactNodeViewRenderer } from '@tiptap/react';
+import {
+  normalizeAttachmentDisplayMode,
+  type KnowledgeAttachmentDisplayMode,
+} from '../../utils/knowledgeAttachment';
 import KnowledgeFileAttachmentCard from './KnowledgeFileAttachmentCard';
 
 /** 附件节点承载的资产信息（同时用于预览壳入参） */
@@ -8,6 +12,8 @@ export interface KnowledgeAttachmentInfo {
   fileName: string;
   mimeType: string;
   sizeBytes: number;
+  /** 视频：tag 标签卡片 / player 内嵌播放；其它类型忽略 */
+  displayMode?: KnowledgeAttachmentDisplayMode;
 }
 
 export interface KnowledgeFileAttachmentOptions {
@@ -23,7 +29,7 @@ declare module '@tiptap/core' {
   }
 }
 
-/** 资料库正文「附件」块：卡片展示 + 全屏预览 + 下载（飞书式） */
+/** 资料库正文「附件」块：卡片/视频窗口 + 全屏预览 + 下载 */
 export const KnowledgeFileAttachment = Node.create<KnowledgeFileAttachmentOptions>({
   name: 'fileAttachment',
   group: 'block',
@@ -73,6 +79,31 @@ export const KnowledgeFileAttachment = Node.create<KnowledgeFileAttachmentOption
           return { 'data-size-bytes': String(attributes.sizeBytes) };
         },
       },
+      displayMode: {
+        default: 'tag',
+        parseHTML: (element: HTMLElement) => {
+          const mime = element.getAttribute('data-mime-type') || '';
+          const name = element.getAttribute('data-file-name') || '';
+          return normalizeAttachmentDisplayMode(
+            element.getAttribute('data-display-mode'),
+            mime,
+            name,
+          );
+        },
+        renderHTML: (attributes: {
+          displayMode?: string;
+          mimeType?: string;
+          fileName?: string;
+        }) => {
+          const mode = normalizeAttachmentDisplayMode(
+            attributes.displayMode,
+            attributes.mimeType || '',
+            attributes.fileName,
+          );
+          if (mode === 'tag') return {};
+          return { 'data-display-mode': mode };
+        },
+      },
     };
   },
 
@@ -98,9 +129,17 @@ export const KnowledgeFileAttachment = Node.create<KnowledgeFileAttachmentOption
     return {
       insertFileAttachment: (attrs: KnowledgeAttachmentInfo) => ({ chain }) => {
         if (!attrs.assetUrl?.trim()) return false;
+        const displayMode = normalizeAttachmentDisplayMode(
+          attrs.displayMode,
+          attrs.mimeType,
+          attrs.fileName,
+        );
         return chain()
           .focus()
-          .insertContent({ type: this.name, attrs })
+          .insertContent({
+            type: this.name,
+            attrs: { ...attrs, displayMode },
+          })
           .run();
       },
     };

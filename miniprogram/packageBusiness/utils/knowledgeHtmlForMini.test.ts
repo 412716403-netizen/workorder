@@ -64,6 +64,15 @@ describe('knowledgeHtmlForMini', () => {
     expect(previewUrls).toEqual(['data:image/jpeg;base64,BBB']);
   });
 
+  it('builds document ref blocks', () => {
+    const html =
+      '<p>见 <span data-type="document-ref" data-document-id="d1" data-label="工艺说明">x</span></p>';
+    const { blocks } = buildKnowledgeDocBlocks(html, {});
+    expect(
+      blocks.some((b) => b.type === 'document' && b.documentId === 'd1' && b.label === '工艺说明'),
+    ).toBe(true);
+  });
+
   it('builds native table blocks', () => {
     const html = '<p>x</p><table><tr><td>1</td><td>2</td></tr></table><p>y</p>';
     const { blocks } = buildKnowledgeDocBlocks(html, {});
@@ -176,5 +185,23 @@ describe('knowledgeHtmlForMini', () => {
     const html =
       '<div data-type="file-attachment" data-asset-url="/api/knowledge-base/assets/ka-pdf" data-file-name="a.pdf" data-mime-type="application/pdf" data-size-bytes="1"></div><img src="/api/knowledge-base/assets/ka-img" />';
     expect(extractImageAssetIdsFromHtml(html)).toEqual(['ka-img']);
+  });
+
+  it('builds video attachment with player localSrc and extracts player ids', () => {
+    const {
+      extractPlayerVideoAssetIdsFromHtml,
+    } = require('./knowledgeHtmlForMini.js');
+    const html =
+      '<div data-type="file-attachment" data-asset-url="/api/knowledge-base/assets/ka-v1" data-file-name="a.mp4" data-mime-type="video/mp4" data-size-bytes="1024" data-display-mode="player"></div>' +
+      '<div data-type="file-attachment" data-asset-url="/api/knowledge-base/assets/ka-v2" data-file-name="b.mp4" data-mime-type="video/mp4" data-size-bytes="2048"></div>';
+    expect(extractPlayerVideoAssetIdsFromHtml(html)).toEqual(['ka-v1']);
+    const { blocks } = buildKnowledgeDocBlocks(html, { 'ka-v1': 'wxfile://video1' });
+    const player = blocks.find((b) => b.type === 'file' && b.assetId === 'ka-v1');
+    const tag = blocks.find((b) => b.type === 'file' && b.assetId === 'ka-v2');
+    expect(player.kind).toBe('video');
+    expect(player.displayMode).toBe('player');
+    expect(player.localSrc).toBe('wxfile://video1');
+    expect(tag.displayMode).toBe('tag');
+    expect(tag.localSrc).toBe('');
   });
 });

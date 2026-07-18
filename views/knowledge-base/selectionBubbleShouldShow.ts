@@ -16,5 +16,6 @@ export function shouldShowKnowledgeSelectionBubbleMenu(
   if (editor.isActive('codeBlock')) return false;
   if (editor.isActive('image')) return false;
   if (editor.isActive('productRef')) return false;
+  if (editor.isActive('documentRef')) return false;
   return true;
 }

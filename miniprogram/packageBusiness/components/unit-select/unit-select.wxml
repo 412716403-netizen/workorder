@@ -24,35 +24,38 @@
         <text class="sps__picker-action"></text>
       </view>
 
-      <view class="sps__search-wrap">
-        <image class="sps__search-icon" src="/assets/icons/search.png" mode="aspectFit" />
-        <input
-          class="sps__search-input"
-          value="{{search}}"
-          bindinput="onSearchInput"
-          placeholder="搜索单位名称"
-          confirm-type="search"
-        />
+      <view class="sps__search-row">
+        <view class="sps__search-wrap">
+          <image class="sps__search-icon" src="/assets/icons/search.png" mode="aspectFit" />
+          <input
+            class="sps__search-input"
+            value="{{search}}"
+            bindinput="onSearchInput"
+            placeholder="搜索单位名称"
+            confirm-type="search"
+            placeholder-class="plan-form-cell__ph"
+          />
+        </view>
       </view>
 
-      <scroll-view class="sps__list" scroll-y enhanced show-scrollbar="{{true}}">
+      <scroll-view class="sps__list unit-select__list" scroll-y enhanced show-scrollbar="{{false}}">
         <view wx:if="{{!filteredUnits.length}}" class="sps__empty">暂无单位，可点击下方新增</view>
-        <view
-          wx:for="{{filteredUnits}}"
-          wx:key="id"
-          class="sps__row {{item.selected ? 'sps__row--active' : ''}}"
-          data-id="{{item.id}}"
-          data-name="{{item.name}}"
-          bindtap="onSelect"
-        >
-          <view class="sps__row-main">
-            <text class="sps__row-name">{{item.name}}</text>
+        <view wx:else class="unit-select__pool">
+          <view
+            wx:for="{{filteredUnits}}"
+            wx:key="id"
+            class="unit-select__chip {{item.selected ? 'unit-select__chip--on' : ''}}"
+            data-id="{{item.id}}"
+            data-name="{{item.name}}"
+            bindtap="onSelect"
+          >
+            <text class="unit-select__chip-name">{{item.name}}</text>
+            <text wx:if="{{item.selected}}" class="unit-select__chip-check">✓</text>
           </view>
-          <text wx:if="{{item.selected}}" class="sps__row-contact">✓</text>
         </view>
       </scroll-view>
 
-      <view wx:if="{{canQuickAdd && !showQuickAdd}}" class="unit-select__add-row" bindtap="onToggleQuickAdd">+ 新增单位</view>
+      <view wx:if="{{canQuickAdd && !showQuickAdd}}" class="unit-select__add-row" bindtap="onToggleQuickAdd">＋ 新增单位</view>
       <view wx:if="{{canQuickAdd && showQuickAdd}}" class="unit-select__quick">
         <input
           class="unit-select__quick-input"
@@ -60,6 +63,7 @@
           bindinput="onQuickAddInput"
           placeholder="输入新单位名称"
           focus="{{showQuickAdd}}"
+          placeholder-class="plan-form-cell__ph"
         />
         <view class="unit-select__quick-btn" bindtap="onQuickAddSubmit">添加</view>
       </view>

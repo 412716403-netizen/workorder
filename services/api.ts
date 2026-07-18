@@ -31,7 +31,17 @@ export {
 } from './api/_client';
 
 export { auth, adminUsers, adminTenants } from './api/auth';
-export type { TenantInfo, LoginResult, MeUser, AdminUserRow, AdminTenantRow } from './api/auth';
+export type {
+  TenantInfo,
+  LoginResult,
+  MeUser,
+  AdminUserRow,
+  AdminTenantRow,
+  AdminTenantUsageRow,
+  AdminTenantUsageResponse,
+  AdminTenantUsageDetail,
+  TenantHealth,
+} from './api/auth';
 
 export { settings } from './api/settings';
 

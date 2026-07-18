@@ -32,11 +32,18 @@ import {
   bindKnowledgeEditorProductRefClick,
   formatKnowledgeProductRefLabel,
 } from './knowledgeEditorProductRef';
+import {
+  bindKnowledgeEditorDocumentRefClick,
+  formatKnowledgeDocumentRefLabel,
+} from './knowledgeEditorDocumentRef';
 import KnowledgeImagePreviewOverlay from './KnowledgeImagePreviewOverlay';
 import KnowledgeFilePreviewOverlay from './KnowledgeFilePreviewOverlay';
 import { buildKnowledgeImageInsertAttrs } from './knowledgeTableImage';
 import { KnowledgeProductRef } from './knowledgeProductRefExtension';
+import { KnowledgeDocumentRef } from './knowledgeDocumentRefExtension';
 import { KnowledgeFileAttachment, type KnowledgeAttachmentInfo } from './knowledgeFileAttachmentExtension';
+import { KnowledgeDocPickerModal, KnowledgeDocPreviewModal } from '../../components/knowledge/KnowledgeDocPickerModal';
+import type { KnowledgeFieldRef } from '../../utils/knowledgeFieldValue';
 import { tableDeleteShortcut } from './tableDeleteShortcut';
 import { KnowledgeTextAlign } from './knowledgeTextAlignExtension';
 import { focusDocumentTail, isClickBelowEditorContent } from './focusDocumentTail';
@@ -98,7 +105,9 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [linkDialogInitialText, setLinkDialogInitialText] = useState('');
   const [productDialogOpen, setProductDialogOpen] = useState(false);
+  const [documentDialogOpen, setDocumentDialogOpen] = useState(false);
   const [viewProductId, setViewProductId] = useState<string | null>(null);
+  const [viewDocId, setViewDocId] = useState<string | null>(null);
   const [filePreview, setFilePreview] = useState<{ url: string; type: 'image' | 'pdf' } | null>(null);
   const [imagePreviewSrc, setImagePreviewSrc] = useState<string | null>(null);
   const [attachmentPreview, setAttachmentPreview] = useState<KnowledgeAttachmentInfo | null>(null);
@@ -193,6 +202,7 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
       KnowledgeTableHeader,
       KnowledgeTableCell,
       KnowledgeProductRef,
+      KnowledgeDocumentRef,
       KnowledgeFileAttachment.configure({
         onPreview: (info) => setAttachmentPreview(info),
       }),
@@ -368,6 +378,14 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
     });
   }, [editor, products]);
 
+  useEffect(() => {
+    const root = editor?.view.dom;
+    if (!root) return;
+    return bindKnowledgeEditorDocumentRefClick(root, (docId) => {
+      setViewDocId(docId);
+    });
+  }, [editor]);
+
   const openLinkDialog = useCallback(() => {
     if (!editor) return;
     const { from, to, empty } = editor.state.selection;
@@ -378,6 +396,10 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
 
   const openProductDialog = useCallback(() => {
     setProductDialogOpen(true);
+  }, []);
+
+  const openDocumentDialog = useCallback(() => {
+    setDocumentDialogOpen(true);
   }, []);
 
   const handleLinkConfirm = useCallback((text: string, href: string) => {
@@ -393,6 +415,17 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
     editor.commands.insertProductRef({ productId, label });
     scheduleSaveRef.current(documentIdRef.current, editor);
   }, [editor, products]);
+
+  const handleDocumentConfirm = useCallback((ref: KnowledgeFieldRef) => {
+    if (!editor) return;
+    if (ref.id === documentIdRef.current) {
+      toast.error('不能关联当前文档');
+      return;
+    }
+    const label = formatKnowledgeDocumentRefLabel(ref.title);
+    editor.commands.insertDocumentRef({ documentId: ref.id, label });
+    scheduleSaveRef.current(documentIdRef.current, editor);
+  }, [editor]);
 
   const handleEditorShellMouseDown = (e: React.MouseEvent) => {
     if (!editor || !editable || e.button !== 0) return;
@@ -467,6 +500,7 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
             onPickImage={() => fileInputRef.current?.click()}
             onOpenLinkDialog={openLinkDialog}
             onOpenProductDialog={openProductDialog}
+            onOpenDocumentDialog={openDocumentDialog}
             onPickFile={() => attachmentInputRef.current?.click()}
           />
           <div className="kb-editor">
@@ -499,6 +533,21 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
         open={productDialogOpen}
         onClose={() => setProductDialogOpen(false)}
         onConfirm={handleProductConfirm}
+      />
+
+      <KnowledgeDocPickerModal
+        isOpen={documentDialogOpen}
+        onClose={() => setDocumentDialogOpen(false)}
+        onSelect={handleDocumentConfirm}
+        excludeDocumentId={documentId}
+        stackZClass="z-[11300]"
+      />
+
+      <KnowledgeDocPreviewModal
+        docId={viewDocId}
+        isOpen={Boolean(viewDocId)}
+        onClose={() => setViewDocId(null)}
+        stackZClass="z-[12100]"
       />
 
       {viewProductId && (

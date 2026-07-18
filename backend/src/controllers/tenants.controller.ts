@@ -16,7 +16,8 @@ export const listTenants = asyncHandler(async (req, res) => {
 });
 
 export const selectTenant = asyncHandler(async (req, res) => {
-  const result = await authService.selectTenant(req.user!.userId, str(req.params.id));
+  const client = authService.normalizeAuthClient(req.body?.client);
+  const result = await authService.selectTenant(req.user!.userId, str(req.params.id), client);
   const { setAuthCookies } = await import('../utils/cookies.js');
   setAuthCookies(res, result.accessToken, result.refreshToken);
   res.json(result);

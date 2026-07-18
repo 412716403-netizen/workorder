@@ -103,7 +103,7 @@ Page({
     if (this.data.loadingId) return;
 
     this.setData({ loadingId: id });
-    request({ path: `/tenants/${id}/select`, method: 'POST', data: {} }).
+    request({ path: `/tenants/${id}/select`, method: 'POST', data: { client: 'miniprogram' } }).
     then((d) => {var _d$expiresAt;
       if (d.accessToken) wx.setStorageSync('accessToken', d.accessToken);
       if (d.refreshToken) wx.setStorageSync('refreshToken', d.refreshToken);

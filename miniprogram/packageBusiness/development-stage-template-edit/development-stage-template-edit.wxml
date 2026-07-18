@@ -1,0 +1,161 @@
+<view class="plan-create-shell">
+  <view class="plan-create-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-create-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-create-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-create-header__title">{{pageTitle}}</text>
+      <view class="plan-create-header__back plan-create-header__back--placeholder"></view>
+    </view>
+  </view>
+  <view class="plan-create-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view class="plan-create-scroll" scroll-y style="height: {{scrollHeight}}px;" show-scrollbar="{{false}}">
+    <view wx:if="{{loading}}" class="plan-create-muted">加载中…</view>
+
+    <view wx:else class="plan-create-page dev-tpl-edit-page">
+      <view class="plan-form-card">
+        <view class="dev-section-head">
+          <text class="dev-section-head__title">基本信息</text>
+          <text class="dev-section-head__hint">打样流程中的节点名</text>
+        </view>
+        <view class="plan-form-cell plan-form-cell--input">
+          <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>节点名称</text>
+          <input
+            class="plan-form-cell__input"
+            value="{{name}}"
+            bindinput="onNameInput"
+            placeholder="如：打样、齐色、产前会"
+            placeholder-class="plan-form-cell__ph"
+          />
+        </view>
+      </view>
+
+      <view class="plan-form-card">
+        <view class="dev-section-head">
+          <view class="dev-section-head__left">
+            <text class="dev-section-head__title">登记字段</text>
+            <text class="dev-section-head__count">{{fieldCount}} 个</text>
+          </view>
+          <text class="dev-edit-link" bindtap="onAddField">＋ 添加</text>
+        </view>
+        <text class="dev-section-head__desc">节点登记时可填写的扩展项，可调整顺序</text>
+
+        <view wx:if="{{!fields.length}}" class="dev-empty-tip">
+          暂无字段，可点右上角添加；也可先只保存名称
+        </view>
+
+        <view
+          wx:for="{{fields}}"
+          wx:key="id"
+          class="dev-field-card"
+        >
+          <view class="dev-field-card__head">
+            <text class="dev-field-card__idx">{{item.orderLabel}}</text>
+            <text class="dev-field-card__title">字段 {{item.orderLabel}}</text>
+            <view class="dev-field-card__moves">
+              <text
+                wx:if="{{item.canMoveUp}}"
+                class="dev-field-card__btn"
+                data-id="{{item.id}}"
+                catchtap="onFieldMoveUp"
+              >上移</text>
+              <text
+                wx:if="{{item.canMoveDown}}"
+                class="dev-field-card__btn"
+                data-id="{{item.id}}"
+                catchtap="onFieldMoveDown"
+              >下移</text>
+              <text
+                class="dev-field-card__btn dev-field-card__btn--danger"
+                data-id="{{item.id}}"
+                catchtap="onRemoveField"
+              >删除</text>
+            </view>
+          </view>
+
+          <view class="plan-form-cell plan-form-cell--input">
+            <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>标签</text>
+            <input
+              class="plan-form-cell__input"
+              value="{{item.label}}"
+              data-id="{{item.id}}"
+              bindinput="onFieldLabel"
+              placeholder="如：样衣编号"
+              placeholder-class="plan-form-cell__ph"
+            />
+          </view>
+
+          <view class="dev-field-type">
+            <text class="dev-field-type__label">类型</text>
+            <view class="dev-chip-pool">
+              <view
+                wx:for="{{fieldTypeOptions}}"
+                wx:for-item="opt"
+                wx:key="id"
+                class="dev-chip {{item.type === opt.id ? 'dev-chip--on' : ''}}"
+                data-id="{{item.id}}"
+                data-type="{{opt.id}}"
+                catchtap="onFieldTypeChip"
+              >{{opt.label}}</view>
+            </view>
+          </view>
+
+          <view class="dev-toggle-row">
+            <text class="dev-toggle-row__label">必填</text>
+            <switch
+              checked="{{item.required}}"
+              color="#2f6bff"
+              data-id="{{item.id}}"
+              bindchange="onFieldRequiredSwitch"
+            />
+          </view>
+
+          <view wx:if="{{item.type === 'select'}}" class="plan-form-cell plan-form-cell--input">
+            <text class="plan-form-cell__label">选项</text>
+            <input
+              class="plan-form-cell__input"
+              value="{{item.optionsText}}"
+              data-id="{{item.id}}"
+              bindinput="onFieldOptions"
+              placeholder="用逗号分隔，如：合格,返修"
+              placeholder-class="plan-form-cell__ph"
+            />
+          </view>
+
+          <block wx:if="{{item.type === 'date'}}">
+            <view class="dev-toggle-row">
+              <view class="dev-toggle-row__text">
+                <text class="dev-toggle-row__label">含时分</text>
+                <text class="dev-toggle-row__hint">登记时可选到小时分钟</text>
+              </view>
+              <switch
+                checked="{{item.dateWithTime}}"
+                color="#2f6bff"
+                data-id="{{item.id}}"
+                bindchange="onFieldDateWithTimeSwitch"
+              />
+            </view>
+            <view class="dev-toggle-row">
+              <view class="dev-toggle-row__text">
+                <text class="dev-toggle-row__label">自动填入当前</text>
+                <text class="dev-toggle-row__hint">打开登记时默认填入此刻</text>
+              </view>
+              <switch
+                checked="{{item.dateAutoFill}}"
+                color="#2f6bff"
+                data-id="{{item.id}}"
+                bindchange="onFieldDateAutoFillSwitch"
+              />
+            </view>
+          </block>
+        </view>
+      </view>
+    </view>
+  </scroll-view>
+
+  <view wx:if="{{!loading}}" class="report-batch-footer">
+    <view
+      class="report-batch-footer__btn report-batch-footer__btn--primary {{submitting ? 'report-batch-footer__btn--disabled' : ''}}"
+      bindtap="onSaveTap"
+    >{{submitting ? '保存中…' : (isEdit ? '保存修改' : '保存节点')}}</view>
+  </view>
+</view>

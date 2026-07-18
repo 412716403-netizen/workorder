@@ -1,0 +1,247 @@
+<view class="plan-detail-shell">
+  <view class="plan-detail-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-detail-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-detail-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-detail-header__title">款式详情</text>
+      <view class="plan-detail-header__back plan-detail-header__back--placeholder"></view>
+    </view>
+  </view>
+
+  <view class="plan-detail-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view
+    class="plan-detail-scroll"
+    scroll-y
+    show-scrollbar="{{false}}"
+    style="height: {{scrollHeight}}px;"
+  >
+    <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
+
+    <view wx:elif="{{detail}}" class="plan-detail-page dev-detail-page">
+      <view class="dev-detail-hero">
+        <view class="dev-detail-hero__top">
+          <view class="dev-detail-hero__media">
+            <image
+              wx:if="{{detail.showProductImage}}"
+              class="dev-detail-hero__img"
+              src="{{detail.productImageUrl}}"
+              mode="aspectFill"
+              binderror="onImageError"
+            />
+            <view wx:else class="dev-detail-hero__img dev-detail-hero__img--ph">
+              <image class="dev-detail-hero__ph-icon" src="{{detail.placeholderIconSrc}}" mode="aspectFit" />
+            </view>
+          </view>
+
+          <view class="dev-detail-hero__main">
+            <view class="dev-detail-hero__title-row">
+              <text class="dev-detail-hero__name">{{detail.productName}}</text>
+              <text wx:if="{{detail.showProductSku}}" class="dev-detail-hero__sku">{{detail.productSku}}</text>
+            </view>
+            <view class="dev-detail-hero__badges">
+              <text class="dev-status-badge dev-status-badge--{{detail.statusTone}}">{{detail.statusLabel}}</text>
+              <text wx:if="{{detail.showCategory}}" class="dev-meta-pill">{{detail.categoryName}}</text>
+            </view>
+            <view wx:if="{{detail.showCustomer}}" class="dev-detail-hero__customer">
+              客户 · {{detail.customerName}}
+            </view>
+          </view>
+
+          <view wx:if="{{detail.hasProductActions}}" class="dev-hero-actions">
+            <text
+              wx:if="{{detail.actions.showEdit}}"
+              class="dev-hero-actions__link"
+              bindtap="onEditTap"
+            >编辑</text>
+            <text
+              wx:if="{{detail.actions.showArchive}}"
+              class="dev-hero-actions__link"
+              bindtap="onArchiveTap"
+            >归档</text>
+            <text
+              wx:if="{{detail.actions.showRestore}}"
+              class="dev-hero-actions__link"
+              bindtap="onRestoreTap"
+            >还原</text>
+            <text
+              wx:if="{{detail.actions.showPublish}}"
+              class="dev-hero-actions__link"
+              bindtap="onPublishTap"
+            >发布</text>
+            <text
+              wx:if="{{detail.actions.showDelete}}"
+              class="dev-hero-actions__link dev-hero-actions__link--danger"
+              bindtap="onDeleteTap"
+            >删除</text>
+          </view>
+        </view>
+
+        <view class="dev-detail-stats">
+          <view class="dev-detail-stats__item">
+            <text class="dev-detail-stats__num">{{detail.sampleCount}}</text>
+            <text class="dev-detail-stats__label">样品</text>
+          </view>
+          <view class="dev-detail-stats__divider"></view>
+          <view class="dev-detail-stats__item">
+            <text class="dev-detail-stats__num">{{detail.colorChips.length}}</text>
+            <text class="dev-detail-stats__label">颜色</text>
+          </view>
+          <view class="dev-detail-stats__divider"></view>
+          <view class="dev-detail-stats__item">
+            <text class="dev-detail-stats__num">{{detail.sizeChips.length}}</text>
+            <text class="dev-detail-stats__label">尺码</text>
+          </view>
+          <view class="dev-detail-stats__divider"></view>
+          <view class="dev-detail-stats__item">
+            <text class="dev-detail-stats__num">{{detail.processSteps.length}}</text>
+            <text class="dev-detail-stats__label">工序</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="dev-section-card">
+        <view class="dev-section-card__head">
+          <text class="dev-section-card__title">商品信息</text>
+          <text class="dev-section-card__hint">{{detail.createdAtLabel}}</text>
+        </view>
+
+        <view wx:if="{{detail.colorChips.length}}" class="dev-info-block">
+          <text class="dev-info-block__label">颜色</text>
+          <view class="dev-chip-row">
+            <text wx:for="{{detail.colorChips}}" wx:key="*this" class="dev-info-chip">{{item}}</text>
+          </view>
+        </view>
+        <view wx:if="{{detail.sizeChips.length}}" class="dev-info-block">
+          <text class="dev-info-block__label">尺码</text>
+          <view class="dev-chip-row">
+            <text wx:for="{{detail.sizeChips}}" wx:key="*this" class="dev-info-chip">{{item}}</text>
+          </view>
+        </view>
+        <view wx:if="{{detail.processSteps.length}}" class="dev-info-block">
+          <text class="dev-info-block__label">大货工序</text>
+          <view class="dev-process-row">
+            <block wx:for="{{detail.processSteps}}" wx:key="*this">
+              <text class="dev-process-step">{{item}}</text>
+              <text wx:if="{{index < detail.processSteps.length - 1}}" class="dev-process-arrow">›</text>
+            </block>
+          </view>
+        </view>
+
+        <view class="dev-kv-grid">
+          <view wx:if="{{detail.showUnit}}" class="dev-kv-grid__item">
+            <text class="dev-kv-grid__k">单位</text>
+            <text class="dev-kv-grid__v">{{detail.unitName}}</text>
+          </view>
+          <view wx:if="{{detail.salesPriceText}}" class="dev-kv-grid__item">
+            <text class="dev-kv-grid__k">销售价</text>
+            <text class="dev-kv-grid__v">{{detail.salesPriceText}}</text>
+          </view>
+          <view wx:if="{{detail.purchasePriceText}}" class="dev-kv-grid__item">
+            <text class="dev-kv-grid__k">采购价</text>
+            <text class="dev-kv-grid__v">{{detail.purchasePriceText}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="dev-section-card">
+        <view class="dev-section-card__head">
+          <text class="dev-section-card__title">样品开发记录</text>
+          <view class="dev-detail-section-actions">
+            <text wx:if="{{detail.actions.showAddSample}}" class="dev-detail-link" bindtap="onAddSampleOpen">＋ 样品</text>
+            <text wx:if="{{activeSample}}" class="dev-detail-link" bindtap="onLogsTap">日志</text>
+            <text wx:if="{{detail.actions.showBom && activeSample}}" class="dev-detail-link" bindtap="onBomTap">BOM</text>
+          </view>
+        </view>
+
+        <scroll-view wx:if="{{detail.samples.length}}" class="dev-sample-tabs" scroll-x enhanced show-scrollbar="{{false}}">
+          <view class="dev-sample-tabs__inner">
+            <view
+              wx:for="{{detail.samples}}"
+              wx:key="id"
+              class="dev-sample-tab {{activeSampleId === item.id ? 'dev-sample-tab--active' : ''}}"
+              data-id="{{item.id}}"
+              bindtap="onSampleTabTap"
+            >{{item.name}}</view>
+          </view>
+        </scroll-view>
+
+        <view wx:if="{{!detail.samples.length}}" class="dev-empty-block">
+          <text class="dev-empty-block__text">暂无样品轮次</text>
+          <text class="dev-empty-block__hint">创建头样后即可登记开发节点</text>
+          <view
+            wx:if="{{detail.actions.showAddSample}}"
+            class="dev-empty-block__cta"
+            bindtap="onAddSampleOpen"
+          >＋ 创建头样</view>
+        </view>
+
+        <block wx:elif="{{activeSample}}">
+          <view class="dev-sample-meta">
+            <text wx:if="{{activeSample.variantLabel}}" class="dev-sample-meta__spec">规格 · {{activeSample.variantLabel}}</text>
+            <text wx:else class="dev-sample-meta__spec">开发节点进度</text>
+            <text
+              wx:if="{{detail.actions.showAddSample}}"
+              class="dev-detail-link dev-detail-link--danger"
+              bindtap="onDeleteSampleTap"
+            >删除</text>
+          </view>
+
+          <view class="dev-timeline">
+            <view
+              wx:for="{{activeSample.stageRows}}"
+              wx:key="id"
+              class="dev-timeline__item {{item.statusClass}}"
+              data-id="{{item.id}}"
+              bindtap="onStageTap"
+            >
+              <view class="dev-timeline__rail">
+                <view class="dev-timeline__dot">{{item.orderLabel}}</view>
+                <view wx:if="{{!item.isLast}}" class="dev-timeline__line"></view>
+              </view>
+              <view class="dev-timeline__card">
+                <view class="dev-timeline__head">
+                  <text class="dev-timeline__name">{{item.name}}</text>
+                  <text class="dev-timeline__status">{{item.statusLabel}}</text>
+                </view>
+                <view wx:if="{{item.fieldPreview}}" class="dev-timeline__preview">{{item.fieldPreview}}</view>
+                <view class="dev-timeline__foot">
+                  <text>{{item.updatedAtLabel}}</text>
+                  <text class="dev-timeline__cta">点按登记 ›</text>
+                </view>
+              </view>
+            </view>
+          </view>
+        </block>
+      </view>
+    </view>
+  </scroll-view>
+
+  <view wx:if="{{addSampleOpen}}" class="dev-styles-sheet-mask" bindtap="onAddSampleClose">
+    <view class="dev-styles-sheet" catchtap="">
+      <view class="dev-styles-sheet__handle"></view>
+      <view class="dev-styles-sheet__title">新增样品轮次</view>
+      <view class="dev-styles-sheet__label">名称</view>
+      <input class="dev-sample-input" value="{{sampleName}}" bindinput="onSampleNameInput" placeholder="如：头样" />
+      <block wx:if="{{detail.hasVariants}}">
+        <view class="dev-styles-sheet__label">颜色 × 尺码</view>
+        <picker mode="selector" range="{{sampleVariantLabels}}" value="{{sampleVariantIndex}}" bindchange="onSampleVariantChange">
+          <view class="dev-sample-picker">{{sampleVariantLabels[sampleVariantIndex] || '请选择'}}</view>
+        </picker>
+      </block>
+      <view class="dev-sample-confirm" bindtap="onAddSampleConfirm">确定</view>
+    </view>
+  </view>
+
+  <view wx:if="{{logSheetOpen}}" class="dev-styles-sheet-mask" bindtap="onLogsClose">
+    <view class="dev-styles-sheet" catchtap="">
+      <view class="dev-styles-sheet__handle"></view>
+      <view class="dev-styles-sheet__title">版本日志</view>
+      <view wx:if="{{!logRows.length}}" class="plan-detail-muted">暂无日志</view>
+      <view wx:for="{{logRows}}" wx:key="id" class="dev-log-row">
+        <view class="dev-log-row__action">{{item.action}}</view>
+        <view class="dev-log-row__detail">{{item.detail}}</view>
+        <view class="dev-log-row__meta">{{item.user}} · {{item.time}}</view>
+      </view>
+    </view>
+  </view>
+</view>

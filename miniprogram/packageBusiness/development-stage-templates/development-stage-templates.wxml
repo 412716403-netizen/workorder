@@ -1,0 +1,104 @@
+<view class="plan-shell">
+  <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-header__title">开发节点库</text>
+      <view class="plan-header__back plan-header__back--placeholder"></view>
+    </view>
+
+    <view class="plan-header__tools">
+      <view class="plan-search">
+        <input
+          class="plan-search__input"
+          value="{{searchKeyword}}"
+          bindinput="onSearchInput"
+          placeholder="搜索节点名称、字段…"
+          confirm-type="search"
+          placeholder-class="plan-search__ph"
+        />
+        <view wx:if="{{searchKeyword}}" class="plan-search__clear" bindtap="onSearchClear">×</view>
+      </view>
+      <view wx:if="{{canCreate}}" class="plan-tool-btn" bindtap="onCreateTap">
+        <image class="plan-tool-btn__icon" src="/assets/icons/file-plus.png" mode="aspectFit" />
+      </view>
+    </view>
+  </view>
+
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <view class="dev-tpl-page">
+    <view wx:if="{{!loading && !searchKeyword}}" class="dev-tpl-hint">
+      用于配置打样流程节点及登记字段；顺序会影响录入新产品时的默认流程
+    </view>
+
+    <empty-state wx:if="{{loading && !rows.length}}" loading="{{true}}" text="加载中…" />
+
+    <view wx:elif="{{rows.length}}">
+      <view
+        wx:for="{{rows}}"
+        wx:key="id"
+        class="dev-tpl-card"
+      >
+        <view
+          class="dev-tpl-card__main"
+          data-id="{{item.id}}"
+          bindtap="onRowTap"
+        >
+          <text class="dev-tpl-card__idx">{{item.orderLabel}}</text>
+          <view class="dev-tpl-card__body">
+            <view class="dev-tpl-card__title-row">
+              <text class="dev-tpl-card__name">{{item.name}}</text>
+              <text class="dev-tpl-card__chevron" wx:if="{{canEdit}}">›</text>
+            </view>
+            <text class="dev-tpl-card__meta">{{item.metaText}}</text>
+            <view wx:if="{{item.fieldLabels.length}}" class="dev-tpl-card__fields">
+              <text
+                wx:for="{{item.fieldLabels}}"
+                wx:for-item="fl"
+                wx:key="*this"
+                class="dev-tpl-card__field-chip"
+              >{{fl}}</text>
+              <text wx:if="{{item.fieldMore}}" class="dev-tpl-card__field-more">+{{item.fieldMore}}</text>
+            </view>
+          </view>
+        </view>
+
+        <view wx:if="{{canEdit || canDelete}}" class="dev-tpl-card__actions">
+          <text
+            wx:if="{{canEdit && item.canMoveUp}}"
+            class="dev-tpl-card__btn"
+            data-id="{{item.id}}"
+            data-dir="up"
+            catchtap="onMove"
+          >上移</text>
+          <text
+            wx:if="{{canEdit && item.canMoveDown}}"
+            class="dev-tpl-card__btn"
+            data-id="{{item.id}}"
+            data-dir="down"
+            catchtap="onMove"
+          >下移</text>
+          <text
+            wx:if="{{canDelete}}"
+            class="dev-tpl-card__btn dev-tpl-card__btn--danger"
+            data-id="{{item.id}}"
+            catchtap="onDeleteTap"
+          >删除</text>
+        </view>
+      </view>
+
+      <view class="plan-list-footer">
+        {{searchKeyword ? '筛选 ' + rows.length + ' / 共 ' + totalCount + ' 个节点' : '共 ' + totalCount + ' 个节点'}}
+      </view>
+    </view>
+
+    <view wx:else class="dev-tpl-empty">
+      <empty-state text="{{searchKeyword ? '无匹配节点' : '暂无节点模板'}}" />
+      <view
+        wx:if="{{canCreate && !searchKeyword}}"
+        class="dev-tpl-empty__cta"
+        bindtap="onCreateTap"
+      >＋ 新建节点</view>
+    </view>
+  </view>
+</view>

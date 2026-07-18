@@ -47,7 +47,10 @@ Component({
     searchPlaceholder: '',
     emptyHint: '',
     quickAddLabel: '',
+    confirmLabel: '确定',
+    selectedCount: 0,
     selectedMap: {},
+    selectedOrder: [],
     filteredItems: [],
     pickerSelectedLabels: [],
     showQuickAdd: false,
@@ -80,19 +83,28 @@ Component({
       });
     },
 
-    _buildSelectedMap(ids) {
+    _buildSelectedState(ids) {
+      const selectedOrder = [...(ids || [])];
       const selectedMap = {};
-      (ids || []).forEach((id) => { selectedMap[id] = true; });
-      return selectedMap;
+      selectedOrder.forEach((id) => {
+        selectedMap[id] = true;
+      });
+      return { selectedMap, selectedOrder };
     },
 
     _syncPickerFromProps() {
       const kind = this.data.pickerKind;
       if (!kind) return;
       const propIds = kind === 'color' ? (this.properties.colorIds || []) : (this.properties.sizeIds || []);
+      const selectedOrder = [...(this.data.selectedOrder || [])];
       const selectedMap = { ...(this.data.selectedMap || {}) };
-      propIds.forEach((id) => { selectedMap[id] = true; });
-      this.setData({ selectedMap });
+      propIds.forEach((id) => {
+        if (!selectedMap[id]) {
+          selectedMap[id] = true;
+          selectedOrder.push(id);
+        }
+      });
+      this.setData({ selectedMap, selectedOrder });
       this._refreshPickerList();
     },
 
@@ -100,23 +112,29 @@ Component({
       const kind = this.data.pickerKind;
       const items = kind === 'color' ? (this.properties.colors || []) : (this.properties.sizes || []);
       const selectedMap = this.data.selectedMap || {};
+      const selectedOrder = (this.data.selectedOrder || []).filter((id) => selectedMap[id]);
       const filteredItems = filterItems(items, this.data.search).map((it) => ({
         id: it.id,
         name: it.name,
         value: it.value,
         selected: !!selectedMap[it.id],
       }));
-      const pickerSelectedLabels = Object.keys(selectedMap)
-        .filter((id) => selectedMap[id])
-        .map((id) => {
-          const it = items.find((x) => x.id === id);
-          return {
-            id,
-            name: (it && it.name) || '（未命名）',
-            value: (it && it.value) || '#ccc',
-          };
-        });
-      this.setData({ filteredItems, pickerSelectedLabels });
+      const pickerSelectedLabels = selectedOrder.map((id) => {
+        const it = items.find((x) => x.id === id);
+        return {
+          id,
+          name: (it && it.name) || '（未命名）',
+          value: (it && it.value) || '#ccc',
+        };
+      });
+      const selectedCount = selectedOrder.length;
+      this.setData({
+        filteredItems,
+        pickerSelectedLabels,
+        selectedCount,
+        selectedOrder,
+        confirmLabel: selectedCount > 0 ? `确定(${selectedCount})` : '确定',
+      });
     },
 
     noop() {},
@@ -128,7 +146,7 @@ Component({
         '选择颜色',
         '搜索颜色名称',
         '暂无颜色，可点击下方新增',
-        '+ 新增颜色',
+        '＋ 新增颜色',
         this.properties.colorIds || [],
       );
     },
@@ -140,12 +158,13 @@ Component({
         '选择尺码',
         '搜索尺码名称',
         '暂无尺码，可点击下方新增',
-        '+ 新增尺码',
+        '＋ 新增尺码',
         this.properties.sizeIds || [],
       );
     },
 
     _openPicker(kind, title, searchPlaceholder, emptyHint, quickAddLabel, selectedIds) {
+      const selected = this._buildSelectedState(selectedIds);
       this.setData({
         pickerKind: kind,
         pickerTitle: title,
@@ -155,7 +174,8 @@ Component({
         search: '',
         showQuickAdd: false,
         quickAddName: '',
-        selectedMap: this._buildSelectedMap(selectedIds),
+        selectedMap: selected.selectedMap,
+        selectedOrder: selected.selectedOrder,
       });
       this._refreshPickerList();
       openBottomSheet(this, {}, { picker: true });
@@ -167,6 +187,8 @@ Component({
         search: '',
         showQuickAdd: false,
         quickAddName: '',
+        selectedCount: 0,
+        confirmLabel: '确定',
       });
     },
 
@@ -179,9 +201,15 @@ Component({
       const id = e.currentTarget.dataset.id;
       if (!id) return;
       const selectedMap = { ...(this.data.selectedMap || {}) };
-      if (selectedMap[id]) delete selectedMap[id];
-      else selectedMap[id] = true;
-      this.setData({ selectedMap });
+      let selectedOrder = [...(this.data.selectedOrder || [])];
+      if (selectedMap[id]) {
+        delete selectedMap[id];
+        selectedOrder = selectedOrder.filter((x) => x !== id);
+      } else {
+        selectedMap[id] = true;
+        selectedOrder.push(id);
+      }
+      this.setData({ selectedMap, selectedOrder });
       this._refreshPickerList();
     },
 
@@ -190,12 +218,18 @@ Component({
       if (!id) return;
       const selectedMap = { ...(this.data.selectedMap || {}) };
       delete selectedMap[id];
-      this.setData({ selectedMap });
+      const selectedOrder = (this.data.selectedOrder || []).filter((x) => x !== id);
+      this.setData({ selectedMap, selectedOrder });
+      this._refreshPickerList();
+    },
+
+    onClearSelected() {
+      this.setData({ selectedMap: {}, selectedOrder: [] });
       this._refreshPickerList();
     },
 
     onPickerConfirm() {
-      const ids = Object.keys(this.data.selectedMap || {}).filter((k) => this.data.selectedMap[k]);
+      const ids = (this.data.selectedOrder || []).filter((id) => this.data.selectedMap[id]);
       this.triggerEvent('change', { kind: this.data.pickerKind, ids });
       this.onClose();
     },
@@ -219,8 +253,13 @@ Component({
         : (this.properties.sizes || []);
       const existing = items.find((it) => it.name === name);
       if (existing) {
-        const selectedMap = { ...(this.data.selectedMap || {}), [existing.id]: true };
-        this.setData({ selectedMap, showQuickAdd: false, quickAddName: '' });
+        const selectedMap = { ...(this.data.selectedMap || {}) };
+        let selectedOrder = [...(this.data.selectedOrder || [])];
+        if (!selectedMap[existing.id]) {
+          selectedMap[existing.id] = true;
+          selectedOrder.push(existing.id);
+        }
+        this.setData({ selectedMap, selectedOrder, showQuickAdd: false, quickAddName: '' });
         this._refreshPickerList();
         return;
       }
@@ -228,7 +267,7 @@ Component({
         wx.showToast({ title: '无新增权限', icon: 'none' });
         return;
       }
-      const pendingIds = Object.keys(this.data.selectedMap || {}).filter((k) => this.data.selectedMap[k]);
+      const pendingIds = (this.data.selectedOrder || []).filter((id) => this.data.selectedMap[id]);
       this.triggerEvent('quickadd', { kind: this.data.pickerKind, name, pendingIds });
       this.setData({ showQuickAdd: false, quickAddName: '' });
     },

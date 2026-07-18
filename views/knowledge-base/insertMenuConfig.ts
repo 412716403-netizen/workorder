@@ -3,7 +3,7 @@ import type { LucideIcon } from 'lucide-react';
 import {
   Heading1, Heading2, Heading3,
   List, ListOrdered, Table as TableIcon,
-  Minus, Image as ImageIcon, Highlighter, Link2, Package, Paperclip,
+  Minus, Image as ImageIcon, Highlighter, Link2, Package, Paperclip, FileText,
 } from 'lucide-react';
 
 export type InsertMenuIconTone = 'slate' | 'blue' | 'amber' | 'green' | 'violet' | 'rose' | 'sky' | 'orange';
@@ -33,6 +33,7 @@ export function buildInsertMenuItems(
   onOpenLinkDialog?: () => void,
   onOpenProductDialog?: () => void,
   onPickFile?: () => void,
+  onOpenDocumentDialog?: () => void,
 ): {
   basic: InsertBasicItem[];
   common: InsertCommonItem[];
@@ -84,7 +85,7 @@ export function buildInsertMenuItems(
     {
       kind: 'common',
       id: 'file',
-      label: '附件',
+      label: '文件或视频',
       icon: Paperclip,
       tone: 'sky',
       run: ed => {
@@ -101,6 +102,17 @@ export function buildInsertMenuItems(
       run: ed => {
         ed.chain().focus().run();
         onOpenProductDialog?.();
+      },
+    },
+    {
+      kind: 'common',
+      id: 'document',
+      label: '关联文档',
+      icon: FileText,
+      tone: 'violet',
+      run: ed => {
+        ed.chain().focus().run();
+        onOpenDocumentDialog?.();
       },
     },
     {

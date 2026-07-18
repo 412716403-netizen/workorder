@@ -1,0 +1,219 @@
+@import "/styles/plan-create-form.wxss";
+
+.dev-tpl-edit-page {
+  padding-bottom: calc(160rpx + env(safe-area-inset-bottom));
+}
+
+.dev-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 28rpx 28rpx 8rpx;
+}
+
+.dev-section-head__left {
+  display: flex;
+  align-items: baseline;
+  gap: 12rpx;
+  min-width: 0;
+}
+
+.dev-section-head__title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--color-text-primary, #1f2329);
+}
+
+.dev-section-head__hint,
+.dev-section-head__count {
+  font-size: 22rpx;
+  color: var(--color-text-tertiary, #8f959e);
+  font-weight: 500;
+}
+
+.dev-section-head__desc {
+  display: block;
+  padding: 0 28rpx 20rpx;
+  font-size: 22rpx;
+  color: var(--color-text-tertiary, #8f959e);
+  line-height: 1.4;
+}
+
+.dev-edit-link {
+  flex-shrink: 0;
+  font-size: 24rpx;
+  color: var(--color-primary, #2f6bff);
+  font-weight: 600;
+  padding: 8rpx 0;
+}
+
+.dev-empty-tip {
+  margin: 0 28rpx 24rpx;
+  padding: 24rpx;
+  font-size: 24rpx;
+  color: var(--color-text-tertiary, #8f959e);
+  background: #f8fafc;
+  border-radius: 12rpx;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.dev-field-card {
+  margin: 0 20rpx 20rpx;
+  padding: 8rpx 0 4rpx;
+  background: #f8fafc;
+  border-radius: 16rpx;
+  overflow: hidden;
+}
+
+.dev-field-card__head {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 16rpx 20rpx 8rpx;
+}
+
+.dev-field-card__idx {
+  width: 40rpx;
+  height: 40rpx;
+  line-height: 40rpx;
+  text-align: center;
+  font-size: 22rpx;
+  font-weight: 700;
+  color: var(--color-primary, #2f6bff);
+  background: rgba(47, 107, 255, 0.1);
+  border-radius: 10rpx;
+  flex-shrink: 0;
+}
+
+.dev-field-card__title {
+  flex: 1;
+  min-width: 0;
+  font-size: 26rpx;
+  font-weight: 700;
+  color: var(--color-text-primary, #1f2329);
+}
+
+.dev-field-card__moves {
+  display: flex;
+  gap: 8rpx;
+  flex-shrink: 0;
+}
+
+.dev-field-card__btn {
+  padding: 8rpx 14rpx;
+  font-size: 22rpx;
+  font-weight: 600;
+  color: var(--color-primary, #2f6bff);
+  background: #fff;
+  border-radius: 8rpx;
+  border: 1rpx solid rgba(47, 107, 255, 0.2);
+}
+
+.dev-field-card__btn--danger {
+  color: #d92d20;
+  border-color: rgba(217, 45, 32, 0.25);
+}
+
+.dev-field-card .plan-form-cell {
+  background: transparent;
+}
+
+.dev-field-type {
+  padding: 8rpx 20rpx 16rpx;
+}
+
+.dev-field-type__label {
+  display: block;
+  margin-bottom: 12rpx;
+  font-size: 26rpx;
+  font-weight: 500;
+  color: var(--color-text-secondary, #646a73);
+}
+
+.dev-chip-pool {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+
+.dev-chip {
+  padding: 12rpx 24rpx;
+  font-size: 24rpx;
+  font-weight: 600;
+  color: var(--color-text-secondary, #646a73);
+  background: #fff;
+  border: 1rpx solid #e5e7eb;
+  border-radius: 999rpx;
+}
+
+.dev-chip--on {
+  color: #fff;
+  background: var(--color-primary, #2f6bff);
+  border-color: var(--color-primary, #2f6bff);
+}
+
+.dev-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  min-height: 88rpx;
+  padding: 12rpx 20rpx;
+  border-top: 1rpx solid #eef0f3;
+  box-sizing: border-box;
+}
+
+.dev-toggle-row__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.dev-toggle-row__label {
+  font-size: 28rpx;
+  font-weight: 500;
+  color: var(--color-text-primary, #1f2329);
+}
+
+.dev-toggle-row__hint {
+  font-size: 22rpx;
+  color: var(--color-text-tertiary, #8f959e);
+  line-height: 1.3;
+}
+
+.report-batch-footer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  display: flex;
+  gap: 16rpx;
+  padding: 16rpx 32rpx calc(16rpx + env(safe-area-inset-bottom));
+  background: #fff;
+  border-top: 1rpx solid #f3f4f6;
+  box-shadow: 0 -4rpx 24rpx rgba(15, 23, 42, 0.06);
+}
+
+.report-batch-footer__btn {
+  flex: 1;
+  height: 80rpx;
+  line-height: 80rpx;
+  text-align: center;
+  font-size: 28rpx;
+  font-weight: 600;
+  border-radius: 16rpx;
+}
+
+.report-batch-footer__btn--primary {
+  color: #fff;
+  background: var(--color-primary, #2f6bff);
+}
+
+.report-batch-footer__btn--disabled {
+  opacity: 0.55;
+}

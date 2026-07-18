@@ -140,6 +140,18 @@ Page({
       return;
     }
     if (kind === 'todo') {
+      const bubble = (this.data.bubbles || []).find((b) => b.id === id);
+      const href = (bubble && bubble.href) || '';
+      try {
+        const { resolveDevTodoMiniPath } = require('../../utils/devTodoNavigate.js');
+        const miniPath = resolveDevTodoMiniPath(href);
+        if (miniPath) {
+          wx.navigateTo({ url: miniPath });
+          return;
+        }
+      } catch {
+        // ignore
+      }
       wx.showModal({
         title: title || '待办详情',
         content: body || '暂无内容',

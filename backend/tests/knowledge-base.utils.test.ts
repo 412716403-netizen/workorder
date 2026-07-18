@@ -36,6 +36,15 @@ describe('sanitizeKnowledgeHtml', () => {
     expect(out).toContain('data-product-id="p1"');
     expect(out).toContain('上衣（A01）');
   });
+
+  it('keeps document ref chips', () => {
+    const out = sanitizeKnowledgeHtml(
+      '<p><span data-type="document-ref" data-document-id="d1" data-label="工艺说明" class="kb-document-ref">工艺说明</span></p>',
+    );
+    expect(out).toContain('data-type="document-ref"');
+    expect(out).toContain('data-document-id="d1"');
+    expect(out).toContain('工艺说明');
+  });
 });
 
 describe('knowledgeDocReferences helpers', () => {

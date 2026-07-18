@@ -1,6 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Download, File, FileSpreadsheet, FileText, Image as ImageIcon, Loader2, X } from 'lucide-react';
+import {
+  Download,
+  File,
+  FileSpreadsheet,
+  FileText,
+  Film,
+  Image as ImageIcon,
+  Loader2,
+  X,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { downloadKnowledgeAsset } from '../../services/api/knowledgeBase';
 import { formatFileSize, formatUnpreviewableMessage, resolveAttachmentKind } from '../../utils/knowledgeAttachment';
@@ -16,6 +25,7 @@ const HEADER_ICON = {
   excel: { Icon: FileSpreadsheet, className: 'text-emerald-600' },
   pdf: { Icon: FileText, className: 'text-rose-600' },
   image: { Icon: ImageIcon, className: 'text-amber-600' },
+  video: { Icon: Film, className: 'text-sky-600' },
   other: { Icon: File, className: 'text-slate-500' },
 } as const;
 
@@ -81,6 +91,18 @@ const KnowledgeFilePreviewOverlay: React.FC<KnowledgeFilePreviewOverlayProps> = 
         {kind === 'image' && (
           <div className="kb-file-preview-image-wrap">
             <img src={assetUrl} alt={displayName} className="kb-file-preview-image" />
+          </div>
+        )}
+        {kind === 'video' && (
+          <div className="kb-file-preview-video-wrap">
+            <video
+              className="kb-file-preview-video"
+              src={assetUrl}
+              controls
+              autoPlay
+              preload="metadata"
+              playsInline
+            />
           </div>
         )}
         {kind === 'excel' && <KnowledgeExcelPreview assetUrl={assetUrl} />}

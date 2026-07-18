@@ -1,6 +1,9 @@
 /** 资料库附件：类型判定与展示格式化（纯函数，供卡片与预览壳共用） */
 
-export type KnowledgeAttachmentKind = 'excel' | 'pdf' | 'image' | 'other';
+export type KnowledgeAttachmentKind = 'excel' | 'pdf' | 'image' | 'video' | 'other';
+
+/** 视频在正文中的展示方式：标签卡片 / 内嵌播放器 */
+export type KnowledgeAttachmentDisplayMode = 'tag' | 'player';
 
 const EXCEL_MIME = new Set([
   'application/vnd.ms-excel',
@@ -15,6 +18,16 @@ const PREVIEWABLE_IMAGE_MIME = new Set([
   'image/webp',
 ]);
 
+/** 浏览器可直接播放的常见视频 MIME */
+const PREVIEWABLE_VIDEO_MIME = new Set([
+  'video/mp4',
+  'video/webm',
+  'video/ogg',
+  'video/quicktime',
+]);
+
+const VIDEO_EXTS = new Set(['mp4', 'webm', 'ogg', 'ogv', 'mov', 'm4v']);
+
 const EXT_TO_MIME: Record<string, string> = {
   pdf: 'application/pdf',
   xls: 'application/vnd.ms-excel',
@@ -24,6 +37,12 @@ const EXT_TO_MIME: Record<string, string> = {
   jpeg: 'image/jpeg',
   gif: 'image/gif',
   webp: 'image/webp',
+  mp4: 'video/mp4',
+  webm: 'video/webm',
+  ogg: 'video/ogg',
+  ogv: 'video/ogg',
+  mov: 'video/quicktime',
+  m4v: 'video/mp4',
   doc: 'application/msword',
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   ppt: 'application/vnd.ms-powerpoint',
@@ -49,12 +68,24 @@ export function resolveAttachmentKind(mimeType: string, fileName?: string): Know
   if (mime === 'application/pdf') return 'pdf';
   if (EXCEL_MIME.has(mime)) return 'excel';
   if (PREVIEWABLE_IMAGE_MIME.has(mime)) return 'image';
+  if (PREVIEWABLE_VIDEO_MIME.has(mime) || mime.startsWith('video/')) return 'video';
 
   const ext = getFileExtension(fileName);
   if (ext === 'pdf') return 'pdf';
   if (ext === 'xlsx' || ext === 'xls') return 'excel';
   if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)) return 'image';
+  if (VIDEO_EXTS.has(ext)) return 'video';
   return 'other';
+}
+
+/** 规范化展示模式；非视频强制 tag */
+export function normalizeAttachmentDisplayMode(
+  mode: unknown,
+  mimeType: string,
+  fileName?: string,
+): KnowledgeAttachmentDisplayMode {
+  if (resolveAttachmentKind(mimeType, fileName) !== 'video') return 'tag';
+  return mode === 'player' ? 'player' : 'tag';
 }
 
 /**
