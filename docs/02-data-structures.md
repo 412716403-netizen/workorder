@@ -155,7 +155,7 @@
 | `knowledge_documents` | `tenant_id` | 文档标题 + Tiptap HTML 正文 `content` |
 | `knowledge_assets` | `tenant_id` | 图片/附件二进制 `data`（BYTEA），`mime_type` + `file_name`（附件原名，用于卡片展示与下载）+ `size_bytes`；文档正文引用 `/api/knowledge-base/assets/:id`；正文更新/删文档时 diff 清理无引用 asset（引用检测按正文中的 `/assets/:id` 匹配，图片 `img[src]` 与附件卡片 `data-asset-url` 均命中） |
 
-DTO 见 `shared/types.ts`（`KnowledgeFolderDto`、`KnowledgeDocumentSummaryDto`、`KnowledgeDocumentDto`）。`GET /knowledge-base/tree` 与 `GET /knowledge-base/documents`（列表/搜索）仅返回摘要（无 `content`）；单篇正文走 `GET /knowledge-base/documents/:id`。更新文档可传 `expectedUpdatedAt`（乐观锁，冲突 409）。删除前 `GET /documents/:id/references` 检查产品/开发款引用。图片不支持 SVG（≤10MB）；附件允许任意文件类型（≤30MB），其中 PDF、Excel（`.xls/.xlsx`）可在线预览，视频（mp4/webm/ogg/mov 等）可播放，其余类型仅提供下载；可预览 MIME 列表见 `shared/types.ts` 的 `KNOWLEDGE_ASSET_FILE_MIME_TYPES`（**非上传白名单**），体积上限见 `KNOWLEDGE_ASSET_*_MAX_BYTES`；`POST /assets` 接受 `{ data, mimeType, fileName }`（缺省 MIME 为 `application/octet-stream`），`GET /assets/:id` 返回二进制，带 `?download=1` 时附 `Content-Disposition`（RFC 5987 中文名）。正文保存时 HTML 白名单消毒（含表格图片属性、`span[data-type=product-ref]` 关联产品芯片的 `data-product-id` / `data-label`、`span[data-type=document-ref]` 关联文档芯片的 `data-document-id` / `data-label`、`div[data-type=file-attachment]` 附件卡片的 `data-asset-url` / `data-file-name` / `data-mime-type` / `data-size-bytes` / `data-display-mode`）。API 见 `/api/knowledge-base/*`。
+DTO 见 `shared/types.ts`（`KnowledgeFolderDto`、`KnowledgeDocumentSummaryDto`、`KnowledgeDocumentDto`）。`GET /knowledge-base/tree` 与 `GET /knowledge-base/documents`（列表/搜索）仅返回摘要（无 `content`）；单篇正文走 `GET /knowledge-base/documents/:id`。更新文档可传 `expectedUpdatedAt`（乐观锁，冲突 409）。删除前 `GET /documents/:id/references` 检查产品/开发款引用。图片不支持 SVG（≤10MB）；附件允许任意文件类型（≤30MB），其中 PDF、Excel（`.xls/.xlsx`）、Word（`.docx` 在线预览，旧版 `.doc` 仅下载）可预览，视频（mp4/webm/ogg/mov 等）可播放，其余类型仅提供下载；可预览 MIME 列表见 `shared/types.ts` 的 `KNOWLEDGE_ASSET_FILE_MIME_TYPES`（**非上传白名单**），体积上限见 `KNOWLEDGE_ASSET_*_MAX_BYTES`；`POST /assets` 接受 `{ data, mimeType, fileName }`（缺省 MIME 为 `application/octet-stream`），`GET /assets/:id` 返回二进制，带 `?download=1` 时附 `Content-Disposition`（RFC 5987 中文名）。正文保存时 HTML 白名单消毒（含表格图片属性、`span[data-type=product-ref]` 关联产品芯片的 `data-product-id` / `data-label`、`span[data-type=document-ref]` 关联文档芯片的 `data-document-id` / `data-label`、`div[data-type=file-attachment]` 附件卡片的 `data-asset-url` / `data-file-name` / `data-mime-type` / `data-size-bytes` / `data-display-mode`）。API 见 `/api/knowledge-base/*`。
 
 ---
 
@@ -293,7 +293,7 @@ interface BOM {
 
 `DevStyleVariant.nodeBoms` 与 `ProductVariant.nodeBoms` 同形。发布大货时拷贝为 `Bom`，并重新生成 `bom-*` id 写入产品变体 `nodeBoms`。
 
-`DevStyle.defaultStageNames`（Json 字符串数组）：款式创建时配置的默认开发流程节点名。创建款式不再自动建头样；新增首个样品（头样）时带出这套默认节点。开发域 `DevStyle` / `DevSample` / `DevBom` / `DevStageTemplate` / `DevLog` 均有 `createdByUserId`（创建时后端写入，本阶段仅关联，见 `docs/01` §5.6.2）。
+`DevStyle.defaultStageNames`（Json 字符串数组）：款式创建时配置的默认开发流程节点名。创建款式不再自动建头样；新增首个样品（头样）时带出这套默认节点。开发域 `DevStyle` / `DevSample` / `DevBom` / `DevStageTemplate` / `DevLog` 均有 `createdByUserId`（创建时后端写入，本阶段仅关联，见 `docs/01` §5.6.2）。`DevStyle.imageThumb`：列表缩略图（由 `imageUrl` 生成）；`GET /dev/styles` 列表 omit 原图与节点附件/文件字段二进制，详情 `GET /dev/styles/:id` 返回完整数据。
 
 `DevSample` 增加可选 `colorId` / `sizeId`：开发样品（头样与新增样品轮次）绑定**单一**「颜色×尺码」组合，取自款式 `DevStyleVariant`。款式配置了颜色尺码（存在 variants）时为必填，且组合须命中某条 variant；款式无颜色尺码时为空。
 

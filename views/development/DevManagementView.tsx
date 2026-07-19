@@ -72,6 +72,9 @@ const DevManagementView: React.FC = () => {
     addSample,
     removeSample,
     refresh,
+    selectedDetail,
+    detailLoading,
+    loadStyleDetail,
   } = useDevStyles();
 
   const confirm = useConfirm();
@@ -115,11 +118,17 @@ const DevManagementView: React.FC = () => {
     [styles, activeTab, searchQuery, listFilters, partners],
   );
 
-  const selected = useMemo(
+  const selectedSummary = useMemo(
     () => visibleStyles.find((s) => s.id === selectedId) ?? null,
     [visibleStyles, selectedId],
   );
+  /** 主区用详情（含原图）；未加载完时回退列表摘要 */
+  const selected = selectedDetail?.id === selectedId ? selectedDetail : selectedSummary;
   const readOnly = selected?.status === DevStyleStatus.PUBLISHED;
+
+  useEffect(() => {
+    void loadStyleDetail(selectedId);
+  }, [selectedId, loadStyleDetail]);
 
   const customerSortEnabled = useMemo(
     () => categories.some((c) => c.linkPartner),
@@ -308,6 +317,9 @@ const DevManagementView: React.FC = () => {
         {selected ? (
           <DevStyleMainContent
             style={selected}
+            detailLoading={Boolean(
+              selectedId && (detailLoading || selectedDetail?.id !== selectedId),
+            )}
             products={products}
             partners={partners}
             dictionaries={dictionaries}
@@ -325,9 +337,17 @@ const DevManagementView: React.FC = () => {
             onUpdateTemplate={updateTemplate}
             onDeleteTemplate={deleteTemplate}
             onMoveTemplate={moveTemplate}
-            onEditProduct={() =>
-              setProductModal({ open: true, style: JSON.parse(JSON.stringify(selected)) as DevStyleDto, isEdit: true })
-            }
+            onEditProduct={() => {
+              const src =
+                selectedDetail?.id === selectedId
+                  ? selectedDetail
+                  : selected;
+              setProductModal({
+                open: true,
+                style: JSON.parse(JSON.stringify(src)) as DevStyleDto,
+                isEdit: true,
+              });
+            }}
             onPublish={() => void handlePublish()}
             onDelete={() => void handleDelete()}
             onToggleArchive={() => void handleToggleArchive()}

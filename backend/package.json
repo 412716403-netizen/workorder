@@ -15,6 +15,7 @@
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "db:backfill-product-thumbs": "tsx scripts/backfill-product-thumbs.ts",
+    "db:backfill-dev-style-thumbs": "tsx scripts/backfill-dev-style-thumbs.ts",
     "db:studio": "prisma studio",
     "postinstall": "prisma generate"
   },

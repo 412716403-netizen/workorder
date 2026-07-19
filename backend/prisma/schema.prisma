@@ -1113,6 +1113,8 @@ model DevStyle {
   name               String   @db.VarChar(200)
   customerName       String?  @map("customer_name") @db.VarChar(200)
   imageUrl           String?  @map("image_url") @db.Text
+  /** 列表用缩略图（约 256px JPEG data URL；http(s) 外链时与 imageUrl 同值） */
+  imageThumb         String?  @map("image_thumb") @db.Text
   categoryId         String?  @map("category_id") @db.VarChar(50)
   categoryCustomData Json     @default("{}") @map("category_custom_data")
   colorIds           Json     @default("[]") @map("color_ids")

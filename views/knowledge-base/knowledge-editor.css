@@ -1582,3 +1582,60 @@
   color: #1456f0;
   font-weight: 600;
 }
+
+/* ── Word 预览（docx-preview 分页渲染） ── */
+
+.kb-word-preview {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: #e8eaed;
+  border-radius: 10px;
+}
+
+.kb-word-preview-status {
+  position: absolute;
+  inset: 0;
+}
+
+.kb-word-preview {
+  position: relative;
+}
+
+.kb-word-preview-body {
+  width: 100%;
+  padding: 1.25rem 1rem 2rem;
+}
+
+.kb-word-preview-body.is-hidden {
+  visibility: hidden;
+  height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* docx-preview 默认 className 前缀为 kb-docx */
+.kb-word-preview .kb-docx-wrapper {
+  background: transparent;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.kb-word-preview .kb-docx {
+  background: #fff;
+  color: #1f2329;
+  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.12);
+  margin: 0 auto;
+}
+
+.kb-word-preview .kb-docx img,
+.kb-word-preview .kb-docx image {
+  max-width: 100%;
+}

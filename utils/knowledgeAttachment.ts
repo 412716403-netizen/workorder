@@ -1,6 +1,6 @@
 /** 资料库附件：类型判定与展示格式化（纯函数，供卡片与预览壳共用） */
 
-export type KnowledgeAttachmentKind = 'excel' | 'pdf' | 'image' | 'video' | 'other';
+export type KnowledgeAttachmentKind = 'excel' | 'pdf' | 'image' | 'video' | 'word' | 'other';
 
 /** 视频在正文中的展示方式：标签卡片 / 内嵌播放器 */
 export type KnowledgeAttachmentDisplayMode = 'tag' | 'player';
@@ -8,6 +8,11 @@ export type KnowledgeAttachmentDisplayMode = 'tag' | 'player';
 const EXCEL_MIME = new Set([
   'application/vnd.ms-excel',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+]);
+
+const WORD_MIME = new Set([
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 ]);
 
 /** 可在线预览的图片 MIME（不含 SVG，避免作为 img 渲染带来 XSS 风险） */
@@ -67,15 +72,30 @@ export function resolveAttachmentKind(mimeType: string, fileName?: string): Know
   const mime = (mimeType || '').toLowerCase();
   if (mime === 'application/pdf') return 'pdf';
   if (EXCEL_MIME.has(mime)) return 'excel';
+  if (WORD_MIME.has(mime) || mime.includes('wordprocessingml')) return 'word';
   if (PREVIEWABLE_IMAGE_MIME.has(mime)) return 'image';
   if (PREVIEWABLE_VIDEO_MIME.has(mime) || mime.startsWith('video/')) return 'video';
 
   const ext = getFileExtension(fileName);
   if (ext === 'pdf') return 'pdf';
   if (ext === 'xlsx' || ext === 'xls') return 'excel';
+  if (ext === 'docx' || ext === 'doc') return 'word';
   if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)) return 'image';
   if (VIDEO_EXTS.has(ext)) return 'video';
   return 'other';
+}
+
+/**
+ * 是否可用浏览器在线预览：仅 .docx（OOXML）。
+ * 旧版 .doc 二进制格式浏览器端无法可靠解析。
+ */
+export function isDocxOnlinePreviewable(mimeType: string, fileName?: string): boolean {
+  if (resolveAttachmentKind(mimeType, fileName) !== 'word') return false;
+  const ext = getFileExtension(fileName);
+  if (ext === 'docx') return true;
+  if (ext === 'doc') return false;
+  const mime = (mimeType || '').toLowerCase();
+  return mime.includes('wordprocessingml');
 }
 
 /** 规范化展示模式；非视频强制 tag */

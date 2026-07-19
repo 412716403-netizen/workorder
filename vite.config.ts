@@ -71,6 +71,10 @@ export default defineConfig(({ mode }) => {
           '@': path.resolve(__dirname, '.'),
         }
       },
+      /** docx-preview 含 .mjs 导出，预构建避免动态 import 404 */
+      optimizeDeps: {
+        include: ['docx-preview', 'jszip'],
+      },
       /**
        * Phase 1.5：vendor chunk 切分 + 体积监控 + 生产环境 drop console。
        *

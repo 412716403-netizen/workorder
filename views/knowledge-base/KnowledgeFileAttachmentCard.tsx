@@ -27,6 +27,7 @@ const KIND_ICON = {
   pdf: { Icon: FileText, className: 'text-rose-600 bg-rose-50' },
   image: { Icon: ImageIcon, className: 'text-amber-600 bg-amber-50' },
   video: { Icon: Film, className: 'text-sky-600 bg-sky-50' },
+  word: { Icon: FileText, className: 'text-blue-600 bg-blue-50' },
   other: { Icon: File, className: 'text-slate-500 bg-slate-100' },
 } as const;
 

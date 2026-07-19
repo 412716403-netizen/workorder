@@ -16,6 +16,7 @@ import {
   type DevStyleListFilters,
 } from '../../utils/devStyleListFilter';
 import { getDevSampleSidebarProgress, resolveDevStyleCustomerName } from '../../utils/devStyleDisplay';
+import { devStyleThumbSrc } from '../../utils/devStyleImageSrc';
 import {
   formStandardCategoryPillClass,
   formStandardControlClass,
@@ -73,8 +74,8 @@ function StyleListCard({
       )}
       <div className="flex gap-4">
         <div className="w-16 h-16 bg-slate-100 rounded-xl overflow-hidden shrink-0 flex items-center justify-center">
-          {style.imageUrl ? (
-            <img src={style.imageUrl} alt="" className="w-full h-full object-cover" />
+          {devStyleThumbSrc(style) ? (
+            <img src={devStyleThumbSrc(style)} alt="" className="w-full h-full object-cover" />
           ) : (
             <ImageIcon className="w-6 h-6 text-slate-300" />
           )}

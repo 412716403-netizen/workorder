@@ -25,12 +25,13 @@ function dec(v: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-export function mapDevStyleRow(row: {
+type DevStyleRow = {
   id: string;
   code: string;
   name: string;
   customerName: string | null;
-  imageUrl: string | null;
+  imageUrl?: string | null;
+  imageThumb?: string | null;
   categoryId: string | null;
   categoryCustomData: unknown;
   colorIds: unknown;
@@ -64,18 +65,26 @@ export function mapDevStyleRow(row: {
       status: string;
       order: number;
       updatedAt?: Date;
-      fields?: Array<{ id: string; label: string; value: string; type: string }>;
-      attachments?: Array<{ id: string; fileName: string; fileUrl: string; fileType: string | null }>;
+      fields?: Array<{ id: string; label: string; value?: string; type: string }>;
+      attachments?: Array<{
+        id: string;
+        fileName: string;
+        fileUrl?: string;
+        fileType: string | null;
+      }>;
     }>;
     logs?: Array<{ id: string; user: string; action: string; detail: string; time: Date }>;
   }>;
-}) {
+};
+
+export function mapDevStyleRow(row: DevStyleRow) {
   return {
     id: row.id,
     code: row.code,
     name: row.name,
     customerName: row.customerName ?? undefined,
     imageUrl: row.imageUrl ?? undefined,
+    imageThumb: row.imageThumb ?? undefined,
     categoryId: row.categoryId ?? undefined,
     categoryCustomData: asRecord(row.categoryCustomData),
     colorIds: asStringArray(row.colorIds),
@@ -114,13 +123,13 @@ export function mapDevStyleRow(row: {
           fields: (st.fields ?? []).map((f) => ({
             id: f.id,
             label: f.label,
-            value: f.value,
+            value: f.value ?? '',
             type: f.type,
           })),
           attachments: (st.attachments ?? []).map((a) => ({
             id: a.id,
             fileName: a.fileName,
-            fileUrl: a.fileUrl,
+            fileUrl: a.fileUrl ?? '',
             fileType: a.fileType ?? undefined,
           })),
         })),
@@ -137,6 +146,7 @@ export function mapDevStyleRow(row: {
   };
 }
 
+/** 详情：含样品节点字段值与附件二进制 */
 export const devStyleInclude = {
   variants: { orderBy: { id: 'asc' as const } },
   samples: {
@@ -145,6 +155,27 @@ export const devStyleInclude = {
       stages: {
         orderBy: { order: 'asc' as const },
         include: { fields: true, attachments: true },
+      },
+      logs: { orderBy: { time: 'desc' as const } },
+    },
+  },
+} as const;
+
+/**
+ * 列表：不拉款式原图、不拉字段/附件 data URL（体积大）；
+ * 进度仍可见（阶段状态、附件条数用 id/fileName）。
+ */
+export const devStyleListInclude = {
+  variants: { orderBy: { id: 'asc' as const } },
+  samples: {
+    orderBy: { createdAt: 'asc' as const },
+    include: {
+      stages: {
+        orderBy: { order: 'asc' as const },
+        include: {
+          fields: { select: { id: true, label: true, type: true } },
+          attachments: { select: { id: true, fileName: true, fileType: true } },
+        },
       },
       logs: { orderBy: { time: 'desc' as const } },
     },

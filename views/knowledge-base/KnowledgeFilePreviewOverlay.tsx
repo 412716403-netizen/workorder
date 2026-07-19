@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { downloadKnowledgeAsset } from '../../services/api/knowledgeBase';
 import { formatFileSize, formatUnpreviewableMessage, resolveAttachmentKind } from '../../utils/knowledgeAttachment';
 import KnowledgeExcelPreview from './KnowledgeExcelPreview';
+import KnowledgeWordPreview from './KnowledgeWordPreview';
 import type { KnowledgeAttachmentInfo } from './knowledgeFileAttachmentExtension';
 
 interface KnowledgeFilePreviewOverlayProps {
@@ -26,6 +27,7 @@ const HEADER_ICON = {
   pdf: { Icon: FileText, className: 'text-rose-600' },
   image: { Icon: ImageIcon, className: 'text-amber-600' },
   video: { Icon: Film, className: 'text-sky-600' },
+  word: { Icon: FileText, className: 'text-blue-600' },
   other: { Icon: File, className: 'text-slate-500' },
 } as const;
 
@@ -106,6 +108,13 @@ const KnowledgeFilePreviewOverlay: React.FC<KnowledgeFilePreviewOverlayProps> = 
           </div>
         )}
         {kind === 'excel' && <KnowledgeExcelPreview assetUrl={assetUrl} />}
+        {kind === 'word' && (
+          <KnowledgeWordPreview
+            assetUrl={assetUrl}
+            mimeType={attachment.mimeType}
+            fileName={displayName}
+          />
+        )}
         {kind === 'other' && (
           <div className="kb-file-preview-hint kb-file-preview-fallback">
             <File className="h-12 w-12 text-slate-300" strokeWidth={1.4} />

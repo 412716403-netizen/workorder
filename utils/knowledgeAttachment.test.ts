@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   formatFileSize,
   formatUnpreviewableMessage,
+  isDocxOnlinePreviewable,
   normalizeAttachmentDisplayMode,
   resolveAttachmentKind,
   resolveUploadMimeType,
@@ -41,6 +42,25 @@ describe('resolveAttachmentKind', () => {
     expect(resolveAttachmentKind('video/mp4', 'a.mp4')).toBe('video');
     expect(resolveAttachmentKind('', 'clip.webm')).toBe('video');
     expect(resolveAttachmentKind('video/quicktime', 'take.mov')).toBe('video');
+  });
+
+  it('detects word by mime or extension', () => {
+    expect(
+      resolveAttachmentKind(
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'a.docx',
+      ),
+    ).toBe('word');
+    expect(resolveAttachmentKind('application/msword', 'a.doc')).toBe('word');
+    expect(resolveAttachmentKind('', '说明.docx')).toBe('word');
+  });
+});
+
+describe('isDocxOnlinePreviewable', () => {
+  it('allows docx only', () => {
+    expect(isDocxOnlinePreviewable('application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'a.docx')).toBe(true);
+    expect(isDocxOnlinePreviewable('application/msword', 'a.doc')).toBe(false);
+    expect(isDocxOnlinePreviewable('application/pdf', 'a.pdf')).toBe(false);
   });
 });
 

@@ -563,6 +563,8 @@ export interface DevStyleDto {
   name: string;
   customerName?: string;
   imageUrl?: string;
+  /** 列表缩略图；由服务端根据 imageUrl 生成，客户端只读 */
+  imageThumb?: string;
   categoryId?: string;
   categoryCustomData?: Record<string, unknown>;
   colorIds: string[];
@@ -658,13 +660,15 @@ export const KNOWLEDGE_ASSET_IMAGE_MIME_TYPES = [
 ] as const;
 
 /**
- * 附件可在线预览的 MIME（PDF / Excel）。
+ * 附件可在线预览的 MIME（PDF / Excel / Word .docx）。
  * 上传不限此名单：任意文件均可作为附件上传（≤30MB），不可预览类型仅提供下载。
  */
 export const KNOWLEDGE_ASSET_FILE_MIME_TYPES = [
   'application/pdf',
   'application/vnd.ms-excel',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 ] as const;
 
 /** 图片资产体积上限（10MB） */

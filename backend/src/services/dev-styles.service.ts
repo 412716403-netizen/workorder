@@ -3,12 +3,64 @@ import { AppError } from '../middleware/errorHandler.js';
 import { genId } from '../utils/genId.js';
 import { sanitizeCreate, sanitizeItems, sanitizeUpdate } from '../utils/request.js';
 import { DevStageStatus, DevStyleStatus } from '../../../shared/types.js';
-import { devStyleInclude, mapDevStyleRow } from './dev-styles.mapper.js';
+import { buildImageThumb } from '../lib/imageThumb.js';
+import { devStyleInclude, devStyleListInclude, mapDevStyleRow } from './dev-styles.mapper.js';
 import { publishDevStyleToProduct } from './dev-publish.service.js';
 
 const STYLE_JSON_FIELDS = [
   'categoryCustomData', 'colorIds', 'sizeIds', 'milestoneNodeIds', 'defaultStageNames',
 ] as const;
+
+/** Prisma DevStyle 可写标量；避免前端整包 DTO（samples/logs 等）灌进 update/create */
+const DEV_STYLE_WRITABLE_KEYS = new Set([
+  'id',
+  'code',
+  'name',
+  'customerName',
+  'imageUrl',
+  'imageThumb',
+  'categoryId',
+  'categoryCustomData',
+  'colorIds',
+  'sizeIds',
+  'milestoneNodeIds',
+  'defaultStageNames',
+  'salesPrice',
+  'purchasePrice',
+  'unitId',
+  'supplierId',
+  'status',
+  'publishedProductId',
+  'createdByUserId',
+]);
+
+function pickDevStyleWritable(
+  data: Record<string, unknown>,
+  opts?: { includeId?: boolean },
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(data)) {
+    if (!DEV_STYLE_WRITABLE_KEYS.has(k)) continue;
+    if (k === 'id' && !opts?.includeId) continue;
+    out[k] = v;
+  }
+  return out;
+}
+
+/** 客户端不得直写 imageThumb；由服务端根据 imageUrl 生成 */
+function stripClientImageThumb(data: Record<string, unknown>): void {
+  delete data.imageThumb;
+}
+
+async function applyImageThumbFromUrl(data: Record<string, unknown>): Promise<void> {
+  if (!('imageUrl' in data)) return;
+  const url = data.imageUrl;
+  if (url == null || url === '') {
+    data.imageThumb = null;
+    return;
+  }
+  data.imageThumb = await buildImageThumb(typeof url === 'string' ? url : String(url));
+}
 
 function coerceStyleJson(data: Record<string, unknown>): void {
   for (const key of STYLE_JSON_FIELDS) {
@@ -100,7 +152,8 @@ export async function listDevStyles(
   const rows = await db.devStyle.findMany({
     where,
     orderBy: [{ updatedAt: 'desc' }, { code: 'asc' }],
-    include: devStyleInclude,
+    omit: { imageUrl: true },
+    include: devStyleListInclude,
   });
   return rows.map(mapDevStyleRow);
 }
@@ -168,6 +221,8 @@ export async function createDevStyle(
 
   await assertNoProductCatalogConflict(db, code, name);
   await syncDevStyleCustomerNameFromSupplier(db, data);
+  stripClientImageThumb(data);
+  await applyImageThumbFromUrl(data);
 
   const cleanVariants = Array.isArray(variants)
     ? (variants as Record<string, unknown>[]).map((v) => ({
@@ -188,9 +243,11 @@ export async function createDevStyle(
     data.defaultStageNames = normalizeStageNames(data.defaultStageNames);
   }
 
+  const createData = pickDevStyleWritable(data, { includeId: true });
+
   await db.devStyle.create({
     data: {
-      ...data,
+      ...createData,
       tenantId,
       variants: cleanVariants.length ? { create: cleanVariants } : undefined,
     },
@@ -244,9 +301,12 @@ export async function updateDevStyle(
   if ('categoryId' in data) data.categoryId = await assertCategory(db, data.categoryId);
   coerceStyleJson(data);
   await syncDevStyleCustomerNameFromSupplier(db, data);
+  stripClientImageThumb(data);
+  await applyImageThumbFromUrl(data);
+  const updateData = pickDevStyleWritable(data);
 
   await db.$transaction(async (tx) => {
-    await tx.devStyle.update({ where: { id: styleId }, data });
+    await tx.devStyle.update({ where: { id: styleId }, data: updateData });
     if (Array.isArray(variants)) {
       await tx.devStyleVariant.deleteMany({ where: { styleId } });
       if (variants.length > 0) {

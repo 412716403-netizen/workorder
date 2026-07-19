@@ -29,6 +29,7 @@ import {
   resolveSizeNames,
   resolveDevStyleCustomerName,
 } from '../../utils/devStyleDisplay';
+import { devStyleHasImage, devStyleOriginalSrc, devStyleThumbSrc } from '../../utils/devStyleImageSrc';
 import { resolveDevStyleWithPublishedProduct } from '../../utils/productInfoDevStyleBridge';
 import { colorSizeLabel } from '../../utils/devStyleVariants';
 import { devTemplateFieldsToReportFields } from '../../utils/devStageTemplateFields';
@@ -81,6 +82,8 @@ const StageAttachmentItem: React.FC<{ file: DevAttachmentDto }> = ({ file }) => 
 
 interface DevStyleMainContentProps {
   style: DevStyleDto;
+  /** 详情原图/附件仍在拉取 */
+  detailLoading?: boolean;
   products: Product[];
   partners: Partner[];
   dictionaries: AppDictionaries;
@@ -118,6 +121,7 @@ interface DevStyleMainContentProps {
 
 const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
   style,
+  detailLoading,
   products,
   partners,
   dictionaries,
@@ -217,9 +221,13 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
     void onDeleteSample(sampleId);
   };
 
+  const thumbSrc = devStyleThumbSrc(style);
+  const originalSrc = devStyleOriginalSrc(style);
+  const hasImage = devStyleHasImage(style);
+
   return (
     <main className="flex-1 flex flex-col bg-white overflow-y-auto min-w-0">
-      {showFullImage && style.imageUrl && (
+      {showFullImage && originalSrc && (
         <ModalPortal>
         <div
           className="fixed inset-0 z-[500] bg-slate-900/90 flex items-center justify-center p-4 sm:p-6"
@@ -229,7 +237,7 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
           <button type="button" className="absolute top-10 right-10 p-4 text-white" onClick={() => setShowFullImage(false)}>
             <X className="w-8 h-8" />
           </button>
-          <img src={style.imageUrl} alt="" className="relative z-10 max-w-full max-h-full object-contain rounded-2xl" onClick={(e) => e.stopPropagation()} />
+          <img src={originalSrc} alt="" className="relative z-10 max-w-full max-h-full object-contain rounded-2xl" onClick={(e) => e.stopPropagation()} />
         </div>
         </ModalPortal>
       )}
@@ -237,17 +245,22 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
       <div className="p-8 lg:p-10 flex flex-col lg:flex-row gap-8 border-b border-slate-100">
         <div
           className={`w-full lg:w-56 h-56 bg-slate-50 rounded-[32px] overflow-hidden relative shadow-lg shrink-0 flex items-center justify-center ${
-            style.imageUrl ? 'cursor-zoom-in' : ''
+            hasImage ? 'cursor-zoom-in' : ''
           }`}
-          onClick={() => style.imageUrl && setShowFullImage(true)}
+          onClick={() => hasImage && setShowFullImage(true)}
           onKeyDown={() => {}}
-          role={style.imageUrl ? 'button' : undefined}
-          tabIndex={style.imageUrl ? 0 : undefined}
+          role={hasImage ? 'button' : undefined}
+          tabIndex={hasImage ? 0 : undefined}
         >
-          {style.imageUrl ? (
-            <img src={style.imageUrl} alt="" className="w-full h-full object-cover" />
+          {thumbSrc ? (
+            <img src={thumbSrc} alt="" className="w-full h-full object-cover" />
           ) : (
             <ImageIcon className="w-16 h-16 text-slate-300 opacity-30" />
+          )}
+          {detailLoading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-white/40 text-xs font-medium text-slate-500">
+              加载原图…
+            </div>
           )}
           {canEdit && !readOnly && (
             <div className="absolute top-3 right-3 flex gap-2" onClick={(e) => e.stopPropagation()}>
