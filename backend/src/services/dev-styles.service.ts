@@ -227,10 +227,10 @@ export async function createDevStyle(
   const cleanVariants = Array.isArray(variants)
     ? (variants as Record<string, unknown>[]).map((v) => ({
         id: String(v.id ?? genId('dvar')),
-        colorId: v.colorId ?? null,
-        sizeId: v.sizeId ?? null,
-        skuSuffix: v.skuSuffix ?? null,
-        nodeBoms: v.nodeBoms ?? v.nodeBOMs ?? {},
+        colorId: typeof v.colorId === 'string' ? v.colorId : null,
+        sizeId: typeof v.sizeId === 'string' ? v.sizeId : null,
+        skuSuffix: typeof v.skuSuffix === 'string' ? v.skuSuffix : null,
+        nodeBoms: (v.nodeBoms ?? v.nodeBOMs ?? {}) as object,
       }))
     : [];
 
@@ -245,12 +245,13 @@ export async function createDevStyle(
 
   const createData = pickDevStyleWritable(data, { includeId: true });
 
+  // pickDevStyleWritable 返回 Record，Prisma Exact 无法从展开推断 id/code/name；与 settings.service 同口径放宽
   await db.devStyle.create({
     data: {
       ...createData,
       tenantId,
       variants: cleanVariants.length ? { create: cleanVariants } : undefined,
-    },
+    } as Parameters<typeof db.devStyle.create>[0]['data'],
   });
 
   return getDevStyle(db, data.id as string);
