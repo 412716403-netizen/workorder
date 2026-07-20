@@ -403,6 +403,8 @@
 
 判定：前端内存过滤 `ProductionOrder.dispatchStatus === COMPLETED`（`undefined` 视为进行中）。三模块开关相互独立，不与工单中心 `orderFormSettings.listDisplay.onlyShowNotCompleted` 联动。
 
+**外协待发清单（关联工单模式）**：行来自工单自身 `milestones`（建单快照，不随产品档案改 `milestoneNodeIds` 而增删过滤）；某工序能否出现在待发清单，只看系统设置工序节点当前 `allowOutsource`。产品模式仍按产品当前标准路线中已开「可外协」的工序聚合。
+
 ### 3.10 派发完成状态徽章（关联工单模式专属）
 
 仅在「关联工单模式」(`productionLinkMode === 'order'`) 的工单中心与计划单列表展示。

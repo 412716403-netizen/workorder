@@ -519,6 +519,8 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
      * 工单模式待发清单：父/子工单都要遍历。
      * 子工单（parentOrderId 非空）也是独立 ProductionOrder，有自己的 productId / items / milestones，
      * 若过滤掉子工单，工单中心里子工单上「可外协」工序的产品就进不了待发清单（历史 bug）。
+     * 工序列表以工单 milestones 为准（建单快照），不随产品档案改路线而过滤；
+     * 能否外协只看系统设置工序节点 allowOutsource。
      * 聚合 key 是 orderId|nodeId，父子 orderId 不同，无双计风险。
      */
     orders.forEach(order => {
@@ -528,7 +530,6 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
       order.milestones.forEach(ms => {
         const node = idx.nodesById.get(ms.templateId);
         if (!node?.allowOutsource) return;
-        if (product && !(product.milestoneNodeIds || []).includes(ms.templateId)) return;
         let baseQty = rawOrderTotalQty;
         if (isProcessSequential(processSequenceMode ?? 'sequential', ms.templateId, outOfSequenceTemplateIds)) {
           const msIdx = order.milestones.findIndex(m => m.id === ms.id);

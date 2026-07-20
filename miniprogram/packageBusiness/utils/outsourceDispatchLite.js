@@ -206,10 +206,10 @@ function buildOutsourceDispatchRows(params) {
     const hasMatrix = productHasColorSizeMatrix(product, category);
     const templateIds = (order.milestones || []).map((m) => m.templateId);
 
+    // 工序列表以工单 milestones 为准（建单快照），不随产品档案改路线过滤；能否外协只看节点 allowOutsource
     (order.milestones || []).forEach((ms, idx) => {
       const node = nodesById.get(ms.templateId);
       if (!node || !node.allowOutsource) return;
-      if (product && !(product.milestoneNodeIds || []).includes(ms.templateId)) return;
 
       let baseQty = rawOrderTotalQty;
       if (isProcessSequential(processSequenceMode, ms.templateId, outOfSequenceTemplateIds)) {
