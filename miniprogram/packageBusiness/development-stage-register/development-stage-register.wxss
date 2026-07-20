@@ -1,5 +1,46 @@
 @import "/styles/plan-create-form.wxss";
 
+.plan-create-page {
+  padding-bottom: calc(160rpx + env(safe-area-inset-bottom));
+}
+
+.plan-form-cell--status {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 16rpx;
+}
+
+.dev-status-btns {
+  display: flex;
+  gap: 12rpx;
+  width: 100%;
+}
+
+.dev-status-btn {
+  flex: 1;
+  min-width: 0;
+  padding: 14rpx 4rpx;
+  text-align: center;
+  font-size: 22rpx;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #475569;
+  background: #fff;
+  border: 1rpx solid #cbd5e1;
+  border-radius: 12rpx;
+  box-sizing: border-box;
+}
+
+.dev-status-btn--active {
+  color: #fff;
+  background: #2f6bff;
+  border-color: #2f6bff;
+}
+
+.dev-status-btn:active {
+  opacity: 0.85;
+}
+
 .dev-file-btn {
   margin-top: 12rpx;
   padding: 20rpx 24rpx;
@@ -10,4 +51,46 @@
   font-weight: 600;
 }
 
+.plan-form-cell--file {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12rpx;
+}
 
+.dev-file-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+}
+
+.dev-file-thumb-item {
+  position: relative;
+  width: 120rpx;
+  height: 120rpx;
+}
+
+.dev-file-thumb {
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 12rpx;
+  background: #e2e8f0;
+  display: block;
+}
+
+.dev-file-thumb-del {
+  position: absolute;
+  top: -10rpx;
+  right: -10rpx;
+  width: 36rpx;
+  height: 36rpx;
+  line-height: 32rpx;
+  text-align: center;
+  font-size: 28rpx;
+  color: #fff;
+  background: #334155;
+  border-radius: 999rpx;
+}
+
+.dev-file-btn--on {
+  margin-top: 0;
+}

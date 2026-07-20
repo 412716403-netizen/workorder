@@ -1,4 +1,5 @@
 const { DEV_STAGE_STATUS_LABEL, DevStageStatus } = require('./devStyleConstants.js');
+const { isDevStageFileValueFilled } = require('./devStageFileValue.js');
 
 const STAGE_STATUS_OPTIONS = [
   { id: DevStageStatus.PENDING, label: DEV_STAGE_STATUS_LABEL.pending },
@@ -58,7 +59,14 @@ function buildStageRegisterFields(stage, templates) {
 
 function validateStageRegisterFields(fields) {
   for (const f of fields || []) {
-    if (f.required && !String(f.value || '').trim()) {
+    if (!f.required) continue;
+    if (f.type === 'file') {
+      if (!isDevStageFileValueFilled(f.value)) {
+        return `请填写「${f.label}」`;
+      }
+      continue;
+    }
+    if (!String(f.value || '').trim()) {
       return `请填写「${f.label}」`;
     }
   }

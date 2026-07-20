@@ -7,8 +7,8 @@
 
   <view class="login-card">
     <view class="login-card__head">
-      <text class="login-card__title">账号登录</text>
-      <text class="login-card__desc">请使用手机号或用户名与密码登录</text>
+      <text class="login-card__title">{{bindMode ? '绑定微信' : '账号登录'}}</text>
+      <text class="login-card__desc">{{bindMode ? '首次使用需用系统账号密码完成绑定，之后可一键登录' : '请使用手机号或用户名与密码登录'}}</text>
     </view>
 
     <view class="login-field">
@@ -39,7 +39,45 @@
       </view>
     </view>
 
-    <button class="login-submit" loading="{{loading}}" disabled="{{loading}}" bindtap="onLogin">登 录</button>
+    <button
+      class="login-submit"
+      loading="{{loading}}"
+      disabled="{{loading || wechatLoading}}"
+      bindtap="onLogin"
+    >{{bindMode ? '绑定并登录' : '登 录'}}</button>
+
+    <block wx:if="{{!bindMode}}">
+      <view class="login-divider">
+        <view class="login-divider__line"></view>
+        <text class="login-divider__text">或</text>
+        <view class="login-divider__line"></view>
+      </view>
+
+      <view class="login-wechat-wrap">
+        <button
+          class="login-wechat {{wechatLoading ? 'login-wechat--loading' : ''}}"
+          loading="{{wechatLoading}}"
+          disabled="{{loading || wechatLoading}}"
+          bindtap="onWechatLogin"
+          aria-label="微信登录"
+          hover-class="login-wechat--hover"
+        >
+          <image
+            wx:if="{{!wechatLoading}}"
+            class="login-wechat__icon"
+            src="/assets/icons/wechat.png"
+            mode="aspectFit"
+          />
+        </button>
+      </view>
+    </block>
+
+    <button
+      wx:else
+      class="login-cancel-bind"
+      disabled="{{loading}}"
+      bindtap="onCancelBind"
+    >取消，返回登录</button>
   </view>
 
   <view class="login-footer">

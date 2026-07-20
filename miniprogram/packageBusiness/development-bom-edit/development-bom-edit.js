@@ -25,7 +25,6 @@ const {
   buildBomItemsUi,
   itemsFromUi,
 } = require('../utils/devBomEdit.js');
-const { promptCreateTodo } = require('../utils/devTodoCreate.js');
 
 function computeScrollHeight(nav) {
   const win = readWindowMetrics();
@@ -47,7 +46,6 @@ Page({
     products: [],
     categories: [],
     pickerSheetOpen: false,
-    showTodoBtn: false,
     statusBarHeight: 20,
     navBarHeight: 44,
     headerBlockHeight: 88,
@@ -89,7 +87,6 @@ Page({
         setTimeout(() => wx.navigateBack(), 800);
         return;
       }
-      this.setData({ showTodoBtn: isPluginEnabled(plugins, 'todo_reminder') });
       if (this.data.mode === 'cells') this.bootstrap();
     });
   },
@@ -177,15 +174,6 @@ Page({
     const value = e.detail.value || '';
     const itemRows = (this.data.itemRows || []).map((r) =>
       r.rowKey === key ? { ...r, quantityText: value } : r,
-    );
-    this.setData({ itemRows });
-  },
-
-  onNoteInput(e) {
-    const key = e.currentTarget.dataset.key;
-    const value = e.detail.value || '';
-    const itemRows = (this.data.itemRows || []).map((r) =>
-      r.rowKey === key ? { ...r, note: value } : r,
     );
     this.setData({ itemRows });
   },
@@ -288,19 +276,5 @@ Page({
       wx.showToast({ title: (err && err.message) || '保存失败', icon: 'none' });
       this.setData({ submitting: false });
     }
-  },
-
-  onAddTodoTap() {
-    if (!this.data.showTodoBtn || !this._style) return;
-    const sampleQs = this._sampleId
-      ? `&devSampleId=${encodeURIComponent(this._sampleId)}`
-      : '';
-    promptCreateTodo({
-      sourceType: 'dev_bom',
-      sourceId: this._style.id,
-      sourceDocNo: '开发管理',
-      sourceTitle: `${this._style.name || this._style.code || ''} · BOM 录入`,
-      href: `/development?styleId=${encodeURIComponent(this._style.id)}${sampleQs}`,
-    });
   },
 });

@@ -145,8 +145,8 @@
 
 | 模块 | 当前状态 | 说明 | 剩余收口 |
 |------|------|------|------|
-| 登录 / 选企业 / 会话 | 已落地 | JWT + `tenantCtx` 本地缓存；`utils/request.js` 带 Bearer、401 刷新 | 与 Web 会话语义对齐文档 |
-| 首页 / 应用中心 / 我的 | 部分落地 | 菜单对齐 Web `WORKBENCH_SHORTCUT_CATALOG`；权限过滤；生产计划、**工单中心**、**外协管理**、**返工管理**已深链 | — |
+| 登录 / 选企业 / 会话 | 已落地 | JWT + `tenantCtx` 本地缓存；`utils/request.js` 带 Bearer、401 刷新；**微信一键登录**（绑定已有账号，见 `docs/07` §4.5.2） | Web 扫码 / unionid 跨端未做 |
+| 首页 / 应用中心 / 我的 | 部分落地 | 菜单对齐 Web `WORKBENCH_SHORTCUT_CATALOG`；权限过滤；生产计划、**工单中心**、**外协管理**、**返工管理**已深链；我的页可绑定/解绑微信 | — |
 | **生产计划** | **部分落地（P2）** | 列表（搜索/状态/分页/采购进度）+ 详情只读 + 简化新建 + 下达工单；`packageBusiness/production-plans` / `production-plan-detail` / `production-plan-create` | BOM/PO/追溯/打印/删除留 Web |
 | **工单中心** | **部分落地（P2+）** | 列表（搜索/仅未完成/分组/工序卡）+ 详情 + 手输报工 + 编辑 + 报工流水 + 待入库 + 领料；`packageBusiness/production-orders` 及子页 | 删除/打印/表单配置/矩阵报工留 Web |
 | **外协管理** | **部分落地（P2+）** | Hub 主列表 + 待发/待收回/流水 + 发出/收回录入 + 往来明细 + 物料外发/退回（复用 stock-out-confirm）；`packageBusiness/production-outsource` 及子页 | 表单配置/流水编辑删除/打印/色码矩阵/协作同步留 Web |

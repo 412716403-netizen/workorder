@@ -62,8 +62,33 @@ const phoneCompleteSchema = z.object({
   code: z.string().min(4).max(8),
 });
 
+const wechatCodeSchema = z.object({
+  code: z.string().min(1).max(128),
+  client: z.enum(['web', 'miniprogram']).optional(),
+});
+
+const wechatBindLoginSchema = z.object({
+  code: z.string().min(1).max(128),
+  username: z.string().min(1),
+  password: z.string().min(1),
+  client: z.enum(['web', 'miniprogram']).optional(),
+});
+
+const wechatBindSchema = z.object({
+  code: z.string().min(1).max(128),
+});
+
 router.post('/register', loginRegisterLimiter, validate(registerSchema), authCtrl.register);
 router.post('/login', loginRegisterLimiter, validate(loginSchema), authCtrl.login);
+router.post('/wechat/miniprogram', loginRegisterLimiter, validate(wechatCodeSchema), authCtrl.wechatMiniLogin);
+router.post(
+  '/wechat/bind-and-login',
+  loginRegisterLimiter,
+  validate(wechatBindLoginSchema),
+  authCtrl.wechatMiniBindAndLogin,
+);
+router.post('/wechat/bind', authMiddleware, validate(wechatBindSchema), authCtrl.wechatMiniBind);
+router.post('/wechat/unbind', authMiddleware, authCtrl.wechatMiniUnbind);
 router.post('/refresh', authCtrl.refresh);
 router.post('/logout', authCtrl.logout);
 router.get('/me', authMiddleware, authCtrl.getMe);

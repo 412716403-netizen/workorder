@@ -61,6 +61,8 @@ SmartTrack Pro 微信小程序采用 **企业蓝 + 卡片化 + 底部 Tab** 的 
 
 ### B. 流程页壳（登录 / 选企业 / 入驻）
 
+登录页支持**账号密码**与**微信一键登录**（需服务端配置 `WX_MINI_APPID` / `WX_MINI_SECRET`）。未绑定微信时进入「绑定并登录」；「我的」可绑定/解绑。会话写入与选企业逻辑见 `utils/authLogin.js`（与 Web 一致）。详情见 [`07-auth-tenant-session.md`](./07-auth-tenant-session.md) §4.5.2。
+
 - `navigationStyle: custom`
 - 顶部 `page-header`（可选 `showBack`）
 - `st-page st-page--flow`

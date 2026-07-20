@@ -26,6 +26,10 @@ model User {
   lastLoginAt      DateTime? @map("last_login_at") @db.Timestamptz()
   /** 最近登录客户端：web | miniprogram | unknown */
   lastLoginClient  String?   @map("last_login_client") @db.VarChar(20)
+  /** 微信小程序 openid（一键登录绑定；同一 openid 仅可绑一个系统账号） */
+  wxMiniOpenId     String?   @unique @map("wx_mini_openid") @db.VarChar(64)
+  /** 微信开放平台 unionid（跨端打通预留，可空） */
+  wxUnionId        String?   @map("wx_unionid") @db.VarChar(64)
   createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
 
@@ -35,6 +39,7 @@ model User {
   todoItems        TodoItem[]
 
   @@index([lastLoginAt])
+  @@index([wxUnionId])
   @@map("users")
 }
 

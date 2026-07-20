@@ -6,6 +6,7 @@ import { effectiveCustomDocFieldType } from '../../utils/reportCustomDocField';
 import { getFileExtFromDataUrl } from '../../utils/fileHelpers';
 import { formatLocalDateTimeZh } from '../../utils/localDateTime';
 import { getStageRegisteredDisplayFields } from '../../utils/devStageDisplay';
+import { listDevStageImageUrls, parseDevStageFileUrls } from '../../utils/devStageFileValue';
 import { ModalPortal } from '../../components/ModalPortal';
 import { formStandardLabelClass } from '../../styles/uiDensity';
 
@@ -40,30 +41,32 @@ function DevStageFieldValue({
   label: string;
   dateWithTime?: boolean;
 }) {
-  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const str = value.trim();
   if (!str) return null;
 
-  if (type === 'file' && str.startsWith('data:image/')) {
-    const ext = getFileExtFromDataUrl(str);
+  const imageUrls = listDevStageImageUrls(str);
+  if (imageUrls.length > 0 || (type === 'file' && str.startsWith('data:image/'))) {
+    const urls = imageUrls.length > 0 ? imageUrls : [str];
+    const ext = getFileExtFromDataUrl(urls[0]);
     return (
       <>
-        {previewOpen && (
+        {previewUrl && (
           <ModalPortal>
           <div
             className="fixed inset-0 z-[500] flex items-center justify-center bg-slate-900/90 p-4 sm:p-6 backdrop-blur-xl"
-            onClick={() => setPreviewOpen(false)}
+            onClick={() => setPreviewUrl(null)}
             role="presentation"
           >
             <button
               type="button"
               className="absolute right-10 top-10 rounded-full bg-white/10 p-4 text-white hover:bg-white/20"
-              onClick={() => setPreviewOpen(false)}
+              onClick={() => setPreviewUrl(null)}
             >
               <X className="h-8 w-8" />
             </button>
             <img
-              src={str}
+              src={previewUrl}
               alt=""
               className="relative z-10 max-h-full max-w-full rounded-2xl object-contain shadow-2xl"
               onClick={(e) => e.stopPropagation()}
@@ -71,39 +74,48 @@ function DevStageFieldValue({
           </div>
           </ModalPortal>
         )}
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setPreviewOpen(true)}
-            className="h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-transform hover:scale-[1.02]"
-            title="点击查看"
-          >
-            <img src={str} alt="" className="h-full w-full object-cover" />
-          </button>
-          <a
-            href={str}
-            download={`${label}.${ext}`}
-            className="text-xs font-bold text-indigo-600 hover:text-indigo-700"
-          >
-            下载
-          </a>
+        <div className="flex flex-wrap items-center gap-3">
+          {urls.map((url, idx) => (
+            <button
+              key={`${idx}-${url.slice(0, 24)}`}
+              type="button"
+              onClick={() => setPreviewUrl(url)}
+              className="h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-transform hover:scale-[1.02]"
+              title="点击查看"
+            >
+              <img src={url} alt="" className="h-full w-full object-cover" />
+            </button>
+          ))}
+          {urls.length === 1 && (
+            <a
+              href={urls[0]}
+              download={`${label}.${ext}`}
+              className="text-xs font-bold text-indigo-600 hover:text-indigo-700"
+            >
+              下载
+            </a>
+          )}
         </div>
       </>
     );
   }
 
   if (type === 'file' && str.startsWith('data:')) {
-    const ext = getFileExtFromDataUrl(str);
-    const isPdf = str.startsWith('data:application/pdf');
+    const urls = parseDevStageFileUrls(str);
+    const first = urls[0] || str;
+    const ext = getFileExtFromDataUrl(first);
+    const isPdf = first.startsWith('data:application/pdf');
     return (
       <div className="flex items-center gap-3">
         <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white shadow-sm">
           <FileText className={`h-6 w-6 ${isPdf ? 'text-red-400' : 'text-indigo-500'}`} />
         </div>
         <div className="flex min-w-0 flex-col gap-1">
-          <span className="text-xs font-medium text-slate-400">{isPdf ? 'PDF 文档' : '附件'}</span>
+          <span className="text-xs font-medium text-slate-400">
+            {urls.length > 1 ? `${urls.length} 个附件` : isPdf ? 'PDF 文档' : '附件'}
+          </span>
           <a
-            href={str}
+            href={first}
             download={`${label}.${ext}`}
             className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-700"
           >

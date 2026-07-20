@@ -5,6 +5,8 @@ export class AppError extends Error {
   constructor(
     public statusCode: number,
     message: string,
+    /** 可选机器可读码（如 WECHAT_NOT_BOUND），前端可按 code 分支 */
+    public code?: string,
   ) {
     super(message);
     this.name = 'AppError';
@@ -13,7 +15,9 @@ export class AppError extends Error {
 
 export function errorHandler(err: Error, req: Request, res: Response, _next: NextFunction) {
   if (err instanceof AppError) {
-    res.status(err.statusCode).json({ error: err.message });
+    const body: { error: string; code?: string } = { error: err.message };
+    if (err.code) body.code = err.code;
+    res.status(err.statusCode).json(body);
     return;
   }
 
@@ -79,9 +83,21 @@ export function errorHandler(err: Error, req: Request, res: Response, _next: Nex
           error: '提交字段超长或格式不符合数据库约束，请检查单号、批号、备注等后重试',
         });
         return;
-      case 'P2002':
+      case 'P2002': {
+        const pe = err as Prisma.PrismaClientKnownRequestError;
+        const targets = Array.isArray(pe.meta?.target) ? (pe.meta!.target as string[]) : [];
+        const hit = (key: string) => targets.some((t) => String(t).toLowerCase().includes(key));
+        if (hit('sku') || hit('code')) {
+          res.status(409).json({ error: '编号已存在，请更换后再试' });
+          return;
+        }
+        if (hit('name')) {
+          res.status(409).json({ error: '名称已存在，请更换后再试' });
+          return;
+        }
         res.status(409).json({ error: '数据重复，违反唯一约束' });
         return;
+      }
       case 'P2003':
         res.status(409).json({ error: '无法操作，存在关联数据' });
         return;

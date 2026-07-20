@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Plus, History, ClipboardCheck } from 'lucide-react';
 import type { DevStyleDto, DevSampleDto, DevStageDto } from '../../types';
-import { DEV_STAGE_STATUS_LABEL, DevStageStatus } from '../../types';
+import { DEV_STAGE_STATUS_LABEL, DevStageStatus, DevStyleStatus } from '../../types';
 import DevStageRegisterModal from './DevStageRegisterModal';
 import DevAddSampleModal from './DevAddSampleModal';
 import { devTemplateFieldsToReportFields } from '../../utils/devStageTemplateFields';
@@ -60,7 +60,7 @@ const DevStyleSamplesPanel: React.FC<DevStyleSamplesPanelProps> = ({
             {s.name}
           </button>
         ))}
-        {!readOnly && (
+        {!readOnly && style.status === DevStyleStatus.DEVELOPING && (
           <button
             type="button"
             onClick={() => setAddSampleOpen(true)}

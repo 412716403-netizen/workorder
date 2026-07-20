@@ -16,15 +16,10 @@
       <view
         wx:for="{{cells}}"
         wx:key="key"
-        class="dev-bom-cell {{index === 0 && showTodoBtn ? 'plan-form-card--todo' : ''}}"
+        class="dev-bom-cell"
         data-key="{{item.key}}"
         bindtap="onCellTap"
       >
-        <view
-          wx:if="{{index === 0 && showTodoBtn}}"
-          class="todo-entry-btn todo-entry-btn--corner"
-          catchtap="onAddTodoTap"
-        >待办</view>
         <view class="dev-bom-cell__title">{{item.variantLabel}} · {{item.nodeName}}</view>
         <view class="dev-bom-cell__status {{item.configured ? 'dev-bom-cell__status--on' : ''}}">
           {{item.configured ? '已配置' : '未配置'}}
@@ -33,12 +28,7 @@
     </view>
 
     <view wx:elif="{{mode === 'items'}}" class="plan-create-page">
-      <view class="plan-form-card {{showTodoBtn ? 'plan-form-card--todo' : ''}}">
-        <view
-          wx:if="{{showTodoBtn}}"
-          class="todo-entry-btn todo-entry-btn--corner"
-          bindtap="onAddTodoTap"
-        >待办</view>
+      <view class="plan-form-card">
         <view class="plan-form-cell">
           <text class="plan-form-cell__label">规格 / 工序</text>
           <text class="plan-form-cell__value">{{activeCell.variantLabel}} · {{activeCell.nodeName}}</text>
@@ -50,37 +40,46 @@
         wx:key="rowKey"
         class="plan-form-card"
       >
-        <searchable-product-select
-          cell="{{true}}"
-          label="物料"
-          products="{{products}}"
-          categories="{{categories}}"
-          value-id="{{item.productId}}"
-          value-name="{{item.productName}}"
-          data-key="{{item.rowKey}}"
-          bind:change="onProductChange"
-          bind:sheetopen="onPickerSheetOpen"
-          bind:sheetclose="onPickerSheetClose"
-        />
+        <view class="dev-bom-material-row">
+          <view class="dev-bom-material-row__select">
+            <searchable-product-select
+              cell="{{true}}"
+              label="物料"
+              products="{{products}}"
+              categories="{{categories}}"
+              value-id="{{item.productId}}"
+              value-name="{{item.productName}}"
+              data-key="{{item.rowKey}}"
+              bind:change="onProductChange"
+              bind:sheetopen="onPickerSheetOpen"
+              bind:sheetclose="onPickerSheetClose"
+            />
+          </view>
+          <view
+            class="dev-bom-remove-icon"
+            data-key="{{item.rowKey}}"
+            bindtap="onRemoveItem"
+            aria-label="删除物料"
+          >
+            <image class="dev-bom-remove-icon__img" src="/assets/icons/trash-2.png" mode="aspectFit" />
+          </view>
+        </view>
         <view class="plan-form-cell plan-form-cell--input">
           <text class="plan-form-cell__label">用量</text>
           <input class="plan-form-cell__input" type="digit" value="{{item.quantityText}}" data-key="{{item.rowKey}}" bindinput="onQtyInput" />
         </view>
-        <view class="plan-form-cell plan-form-cell--input">
-          <text class="plan-form-cell__label">备注</text>
-          <input class="plan-form-cell__input" value="{{item.note}}" data-key="{{item.rowKey}}" bindinput="onNoteInput" />
-        </view>
-        <view class="dev-bom-remove" data-key="{{item.rowKey}}" bindtap="onRemoveItem">删除此行</view>
       </view>
 
       <view class="dev-bom-add" bindtap="onAddItemRow">+ 添加物料</view>
     </view>
   </scroll-view>
 
-  <view wx:if="{{mode === 'items' && !loading && !pickerSheetOpen}}" class="report-batch-footer">
-    <view
-      class="report-batch-footer__btn report-batch-footer__btn--primary {{submitting ? 'report-batch-footer__btn--disabled' : ''}}"
+  <view wx:if="{{mode === 'items' && !loading && !pickerSheetOpen}}" class="plan-create-footer">
+    <button
+      class="plan-create-submit"
+      loading="{{submitting}}"
+      disabled="{{submitting}}"
       bindtap="onSaveItems"
-    >{{submitting ? '保存中…' : '保存 BOM'}}</view>
+    >{{submitting ? '保存中…' : '保存 BOM'}}</button>
   </view>
 </view>

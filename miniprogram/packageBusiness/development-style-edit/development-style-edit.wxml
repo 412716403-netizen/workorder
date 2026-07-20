@@ -19,11 +19,18 @@
           <text class="dev-section-head__hint">与产品档案字段一致</text>
         </view>
 
-        <view class="plan-form-cell plan-form-cell--input">
-          <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>产品分类</text>
-          <picker mode="selector" range="{{categoryNames}}" value="{{categoryPickerIndex}}" bindchange="onCategoryChange">
-            <view class="plan-form-cell__value {{!categoryName ? 'plan-form-cell__value--ph' : ''}}">{{categoryName || '请选择'}}</view>
-          </picker>
+        <view class="category-select">
+          <text class="category-select__label"><text class="plan-form-cell__req">*</text>产品分类</text>
+          <view wx:if="{{categoryOptions.length}}" class="category-select__pills">
+            <view
+              wx:for="{{categoryOptions}}"
+              wx:key="id"
+              class="category-select__pill {{item.selected ? 'category-select__pill--on' : ''}}"
+              data-id="{{item.id}}"
+              bindtap="onCategoryTap"
+            >{{item.name}}</view>
+          </view>
+          <view wx:else class="category-select__empty">暂无产品分类，请先在系统设置中添加</view>
         </view>
 
         <view class="plan-form-cell plan-form-cell--input">
@@ -242,6 +249,11 @@
   </scroll-view>
 
   <view wx:if="{{!loading && !pickerSheetOpen}}" class="report-batch-footer">
+    <view
+      wx:if="{{canDelete}}"
+      class="report-batch-footer__btn report-batch-footer__btn--ghost {{submitting ? 'report-batch-footer__btn--disabled' : ''}}"
+      bindtap="onDeleteTap"
+    >删除</view>
     <view
       class="report-batch-footer__btn report-batch-footer__btn--primary {{submitting ? 'report-batch-footer__btn--disabled' : ''}}"
       bindtap="onSaveTap"

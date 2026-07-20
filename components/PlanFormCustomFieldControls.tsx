@@ -1,7 +1,11 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { BookOpen, X } from 'lucide-react';
 import type { PlanFormFieldConfig } from '../types';
-import { getFileExtFromDataUrl } from '../utils/fileHelpers';
+import {
+  DEV_STAGE_FILE_MAX_COUNT,
+  parseDevStageFileUrls,
+  serializeDevStageFileUrls,
+} from '../utils/devStageFileValue';
 import { effectivePlanFormFieldType } from '../utils/planFormCustomField';
 import {
   parseKnowledgeFieldValue,
@@ -114,6 +118,8 @@ export interface PlanFormCustomFieldInputProps {
   /** 文本 / 日期 / 下拉 */
   controlClassName: string;
   onFilePreview?: (url: string, type: 'image' | 'pdf') => void;
+  /** 开发节点登记等多图场景：文件字段可追加多张（默认单文件） */
+  multipleFiles?: boolean;
 }
 
 export const PlanFormCustomFieldInput: React.FC<PlanFormCustomFieldInputProps> = ({
@@ -122,6 +128,7 @@ export const PlanFormCustomFieldInput: React.FC<PlanFormCustomFieldInputProps> =
   onChange,
   controlClassName,
   onFilePreview,
+  multipleFiles = false,
 }) => {
   const t = effectivePlanFormFieldType(cf);
   const strVal = value === undefined || value === null ? '' : String(value);
@@ -145,11 +152,83 @@ export const PlanFormCustomFieldInput: React.FC<PlanFormCustomFieldInputProps> =
     return <PlanFormKnowledgeInput value={value} onChange={onChange} />;
   }
   if (t === 'file') {
-    const dataStr = typeof value === 'string' ? value : '';
     const openPreview = (url: string, kind: 'image' | 'pdf') => {
       if (onFilePreview) onFilePreview(url, kind);
       else window.open(url, '_blank', 'noopener,noreferrer');
     };
+
+    if (multipleFiles) {
+      const urls = parseDevStageFileUrls(value);
+      const canAdd = urls.length < DEV_STAGE_FILE_MAX_COUNT;
+      return (
+        <div className="space-y-2">
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            disabled={!canAdd}
+            className="w-full text-xs text-slate-600 file:mr-2 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-indigo-700 disabled:opacity-50"
+            onChange={e => {
+              const files = Array.from(e.target.files ?? []);
+              e.target.value = '';
+              if (!files.length) return;
+              const room = DEV_STAGE_FILE_MAX_COUNT - urls.length;
+              const slice = files.slice(0, room);
+              Promise.all(
+                slice.map(
+                  (file) =>
+                    new Promise<string>((resolve, reject) => {
+                      const reader = new FileReader();
+                      reader.onload = () => resolve(String(reader.result ?? ''));
+                      reader.onerror = () => reject(reader.error ?? new Error('read failed'));
+                      reader.readAsDataURL(file);
+                    }),
+                ),
+              ).then((added) => {
+                const next = [...urls, ...added.filter((u) => u.startsWith('data:'))];
+                onChange(serializeDevStageFileUrls(next));
+              });
+            }}
+          />
+          <p className="text-[11px] text-slate-400">
+            最多 {DEV_STAGE_FILE_MAX_COUNT} 张，已选 {urls.length} 张
+            {!canAdd ? '（已满）' : '，可继续添加'}
+          </p>
+          {urls.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {urls.map((url, idx) => (
+                <div key={`${idx}-${url.slice(0, 32)}`} className="relative">
+                  {url.startsWith('data:image/') ? (
+                    <button
+                      type="button"
+                      onClick={() => openPreview(url, 'image')}
+                      className="block h-20 w-20 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+                      title="查看大图"
+                    >
+                      <img src={url} alt="" className="h-full w-full object-cover" />
+                    </button>
+                  ) : (
+                    <div className="flex h-20 w-20 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-[10px] text-slate-500">
+                      附件
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    aria-label="删除"
+                    onClick={() => onChange(serializeDevStageFileUrls(urls.filter((_, i) => i !== idx)))}
+                    className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-white shadow"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    const dataStr = typeof value === 'string' ? value : '';
     const onThumbClick = () => {
       if (!dataStr.startsWith('data:')) return;
       if (dataStr.startsWith('data:image/')) openPreview(dataStr, 'image');

@@ -31,13 +31,15 @@ function buildBomCells(style, globalNodes, dictionaries, opts) {
       : '单规格';
     nodeIds.forEach((nodeId) => {
       const node = (globalNodes || []).find((n) => n.id === nodeId);
+      // 与 Web DevBomConfigSection 一致：未开启「启用 BOM 依赖」的工序不进入录入列表
+      if (!node || !node.hasBOM) return;
       const bomId = (variant.nodeBoms && variant.nodeBoms[nodeId]) || '';
       cells.push({
         key: `${variant.id || 'sku'}__${nodeId}`,
         variantId: variant.id || '',
         nodeId,
         variantLabel,
-        nodeName: node ? node.name || nodeId : nodeId,
+        nodeName: node.name || nodeId,
         bomId,
         configured: !!bomId,
       });

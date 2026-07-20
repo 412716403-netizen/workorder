@@ -34,4 +34,14 @@ export const env = {
     const n = parseInt(process.env.API_RATE_LIMIT_MAX || '1000', 10);
     return Number.isFinite(n) && n > 0 ? n : 1000;
   },
+  /** 微信小程序 AppID（未配置时微信登录接口返回 503，不影响账号密码登录） */
+  get WX_MINI_APPID(): string | undefined {
+    const v = process.env.WX_MINI_APPID?.trim();
+    return v || undefined;
+  },
+  /** 微信小程序 AppSecret（仅服务端；勿写入小程序包） */
+  get WX_MINI_SECRET(): string | undefined {
+    const v = process.env.WX_MINI_SECRET?.trim();
+    return v || undefined;
+  },
 };

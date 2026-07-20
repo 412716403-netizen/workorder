@@ -8,6 +8,11 @@ import { toast } from 'sonner';
 import ReportCustomFieldsEditor from '../../components/ReportCustomFieldsEditor';
 import { effectiveCustomDocFieldType } from '../../utils/reportCustomDocField';
 import {
+  isDevStageFileValueFilled,
+  serializeDevStageFileUrls,
+  parseDevStageFileUrls,
+} from '../../utils/devStageFileValue';
+import {
   formStandardControlClass,
   outlineAccentToolbarButtonClass,
   outlineToolbarButtonClass,
@@ -17,7 +22,6 @@ import {
 } from '../../styles/uiDensity';
 import DevCreateSectionCard from './DevCreateSectionCard';
 import DevStageTemplateModal, { type DevTemplatePerms } from './DevStageTemplateModal';
-import AddTodoButton from '../../components/AddTodoButton';
 
 const STATUS_OPTIONS: DevStageStatus[] = [
   DevStageStatus.PENDING,
@@ -43,10 +47,6 @@ interface DevStageRegisterModalProps {
   stage: DevStageDto;
   open: boolean;
   onClose: () => void;
-  /** 所属款式 id（用于待办「前往单据」深链） */
-  styleId?: string;
-  /** 所属款式名称（用于待办快照上下文） */
-  styleName?: string;
   onSave: (payload: {
     status?: string;
     fields?: Array<{ label: string; value: string; type?: string }>;
@@ -78,7 +78,7 @@ function buildTemplateValues(
 function isTemplateFieldValueEmpty(field: ReportFieldDefinition, raw: unknown): boolean {
   const t = effectiveCustomDocFieldType(field);
   if (t === 'file') {
-    return typeof raw !== 'string' || !raw.trim();
+    return !isDevStageFileValueFilled(raw);
   }
   return raw === undefined || raw === null || String(raw).trim() === '';
 }
@@ -88,8 +88,6 @@ const DevStageRegisterModal: React.FC<DevStageRegisterModalProps> = ({
   open,
   onClose,
   onSave,
-  styleId,
-  styleName,
   templateFields = [],
   templates = [],
   canManageTemplates = false,
@@ -157,11 +155,19 @@ const DevStageRegisterModal: React.FC<DevStageRegisterModalProps> = ({
         user: userName,
       };
       if (templateFields.length > 0) {
-        payload.fields = templateFields.map((tf) => ({
-          label: tf.label,
-          value: String(templateValues[tf.id] ?? ''),
-          type: effectiveCustomDocFieldType(tf),
-        }));
+        payload.fields = templateFields.map((tf) => {
+          const type = effectiveCustomDocFieldType(tf);
+          const raw = templateValues[tf.id];
+          const value =
+            type === 'file'
+              ? serializeDevStageFileUrls(parseDevStageFileUrls(raw))
+              : String(raw ?? '');
+          return {
+            label: tf.label,
+            value,
+            type,
+          };
+        });
       }
       await onSave(payload);
       toast.success('节点登记已保存');
@@ -203,16 +209,6 @@ const DevStageRegisterModal: React.FC<DevStageRegisterModalProps> = ({
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
-            <AddTodoButton
-              modalZIndexClass="z-[400]"
-              seed={{
-                sourceType: 'dev_stage',
-                sourceId: stage.id,
-                sourceDocNo: '开发管理',
-                sourceTitle: `${styleName ? `${styleName} · ` : ''}节点登记 · ${stage.name}`,
-                href: `/development?styleId=${encodeURIComponent(styleId ?? '')}&devStageId=${encodeURIComponent(stage.id)}`,
-              }}
-            />
             {templateSettingsBtn}
             <button
               type="button"
@@ -265,6 +261,7 @@ const DevStageRegisterModal: React.FC<DevStageRegisterModalProps> = ({
                 }
                 inputClassName={formStandardControlClass}
                 variant="stack"
+                allowMultipleFiles
               />
             </DevCreateSectionCard>
           )}

@@ -68,6 +68,9 @@ const APP_ICON_NAMES = [
   'history',
   'arrow-down-to-line',
   'arrow-left-right',
+  'trash-2',
+  'archive',
+  'archive-restore',
 ];
 
 /** @type {Record<string, { icon: string; active?: boolean }[]>} */

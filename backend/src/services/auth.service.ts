@@ -14,6 +14,7 @@ import {
   redisSetNxEx,
   redisTtl,
 } from '../lib/redis.js';
+import { code2Session } from '../lib/wechat.js';
 
 async function assertTenantActive(tenantId: string) {
   const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { status: true, expiresAt: true } });
@@ -324,16 +325,23 @@ export async function registerByPhone(phone: string, password: string, displayNa
   };
 }
 
-export async function login(username: string, password: string, client: AuthClient = 'unknown') {
-  const trimmed = username.trim();
-  const user = await prisma.user.findFirst({
-    where: { OR: [{ username: trimmed }, { phone: trimmed }] },
-  });
-  if (!user) throw new AppError(401, '账号或密码错误');
-  if (user.status !== 'active') throw new AppError(403, '账号已被禁用');
+type DbUser = {
+  id: string;
+  username: string;
+  phone: string | null;
+  email: string | null;
+  displayName: string | null;
+  role: string;
+  status: string;
+  isEnterprise: boolean;
+  accountExpiresAt: Date | null;
+  passwordHash: string;
+  wxMiniOpenId: string | null;
+  wxUnionId: string | null;
+};
 
-  const valid = await bcrypt.compare(password, user.passwordHash);
-  if (!valid) throw new AppError(401, '账号或密码错误');
+async function issueLoginForUser(user: DbUser, client: AuthClient, logTag: string) {
+  if (user.status !== 'active') throw new AppError(403, '账号已被禁用');
 
   const tenantInfo = await buildTenantPayload(user.id);
 
@@ -352,9 +360,15 @@ export async function login(username: string, password: string, client: AuthClie
   };
   const tokens = generateTokens(payload);
 
-  console.warn(`[auth:login] user=${user.id} (${user.username}) tenantId=${tenantInfo.tenantId ?? 'none'} client=${client}`);
+  console.warn(
+    `[auth:${logTag}] user=${user.id} (${user.username}) tenantId=${tenantInfo.tenantId ?? 'none'} client=${client}`,
+  );
   await prisma.refreshToken.create({
-    data: { userId: user.id, token: hashToken(tokens.refreshToken), expiresAt: parseExpiry(env.JWT_REFRESH_EXPIRES_IN) },
+    data: {
+      userId: user.id,
+      token: hashToken(tokens.refreshToken),
+      expiresAt: parseExpiry(env.JWT_REFRESH_EXPIRES_IN),
+    },
   });
   await recordLoginActivity(user.id, { tenantId: tenantInfo.tenantId, client });
 
@@ -368,12 +382,139 @@ export async function login(username: string, password: string, client: AuthClie
       role: user.role,
       isEnterprise: user.isEnterprise,
       accountExpiresAt: user.accountExpiresAt?.toISOString() ?? null,
+      wechatBound: Boolean(user.wxMiniOpenId),
     },
     isEnterprise: user.isEnterprise,
     tenants: tenantInfo.tenants,
     tenantId: tenantInfo.tenantId ?? null,
     permissions: tenantInfo.permissions ?? [],
     ...tokens,
+  };
+}
+
+async function findUserByUsernameOrPhone(username: string): Promise<DbUser | null> {
+  const trimmed = username.trim();
+  return prisma.user.findFirst({
+    where: { OR: [{ username: trimmed }, { phone: trimmed }] },
+  });
+}
+
+export async function login(username: string, password: string, client: AuthClient = 'unknown') {
+  const user = await findUserByUsernameOrPhone(username);
+  if (!user) throw new AppError(401, '账号或密码错误');
+
+  const valid = await bcrypt.compare(password, user.passwordHash);
+  if (!valid) throw new AppError(401, '账号或密码错误');
+
+  return issueLoginForUser(user, client, 'login');
+}
+
+/** 小程序 wx.login code → 已绑定则发会话；未绑定返回 WECHAT_NOT_BOUND */
+export async function loginWithWechatMini(code: string, client: AuthClient = 'miniprogram') {
+  const session = await code2Session(code);
+  const user = await prisma.user.findUnique({ where: { wxMiniOpenId: session.openid } });
+  if (!user) {
+    throw new AppError(409, '该微信尚未绑定系统账号，请先用账号密码绑定', 'WECHAT_NOT_BOUND');
+  }
+  return issueLoginForUser(user, client, 'wechat-login');
+}
+
+/**
+ * 用账号密码校验后绑定当前微信 openid，并直接登录。
+ * 用于小程序「首次绑定」：一键登录发现未绑定 → 填账号密码 → 本接口。
+ */
+export async function bindWechatMiniAndLogin(
+  code: string,
+  username: string,
+  password: string,
+  client: AuthClient = 'miniprogram',
+) {
+  const session = await code2Session(code);
+  const user = await findUserByUsernameOrPhone(username);
+  if (!user) throw new AppError(401, '账号或密码错误');
+  if (user.status !== 'active') throw new AppError(403, '账号已被禁用');
+
+  const valid = await bcrypt.compare(password, user.passwordHash);
+  if (!valid) throw new AppError(401, '账号或密码错误');
+
+  if (user.wxMiniOpenId && user.wxMiniOpenId !== session.openid) {
+    throw new AppError(409, '该账号已绑定其他微信，请先在「我的」中解绑', 'WECHAT_ALREADY_BOUND');
+  }
+
+  const conflict = await prisma.user.findUnique({
+    where: { wxMiniOpenId: session.openid },
+    select: { id: true },
+  });
+  if (conflict && conflict.id !== user.id) {
+    throw new AppError(409, '该微信已绑定其他系统账号', 'WECHAT_OPENID_TAKEN');
+  }
+
+  const updated = await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      wxMiniOpenId: session.openid,
+      ...(session.unionid ? { wxUnionId: session.unionid } : {}),
+    },
+  });
+
+  return issueLoginForUser(updated, client, 'wechat-bind-login');
+}
+
+/** 已登录用户绑定微信（设置页） */
+export async function bindWechatMini(userId: string, code: string) {
+  const session = await code2Session(code);
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new AppError(404, '用户不存在');
+  if (user.status !== 'active') throw new AppError(403, '账号已被禁用');
+
+  if (user.wxMiniOpenId && user.wxMiniOpenId !== session.openid) {
+    throw new AppError(409, '已绑定其他微信，请先解绑后再绑定', 'WECHAT_ALREADY_BOUND');
+  }
+
+  const conflict = await prisma.user.findUnique({
+    where: { wxMiniOpenId: session.openid },
+    select: { id: true },
+  });
+  if (conflict && conflict.id !== userId) {
+    throw new AppError(409, '该微信已绑定其他系统账号', 'WECHAT_OPENID_TAKEN');
+  }
+
+  const updated = await prisma.user.update({
+    where: { id: userId },
+    data: {
+      wxMiniOpenId: session.openid,
+      ...(session.unionid ? { wxUnionId: session.unionid } : {}),
+    },
+  });
+
+  return {
+    wechatBound: true,
+    user: {
+      ...mePayload(updated),
+      wechatBound: true,
+    },
+  };
+}
+
+/** 已登录用户解绑微信 */
+export async function unbindWechatMini(userId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new AppError(404, '用户不存在');
+  if (!user.wxMiniOpenId) {
+    return { wechatBound: false, user: { ...mePayload(user), wechatBound: false } };
+  }
+
+  const updated = await prisma.user.update({
+    where: { id: userId },
+    data: { wxMiniOpenId: null },
+  });
+
+  return {
+    wechatBound: false,
+    user: {
+      ...mePayload(updated),
+      wechatBound: false,
+    },
   };
 }
 
@@ -498,6 +639,7 @@ export async function getMe(userId: string) {
     status: user.status,
     isEnterprise: user.isEnterprise,
     accountExpiresAt: user.accountExpiresAt?.toISOString() ?? null,
+    wechatBound: Boolean(user.wxMiniOpenId),
     tenants: memberships.map(m => ({
       id: m.tenant.id,
       name: m.tenant.name,
@@ -521,6 +663,7 @@ function mePayload(user: {
   status: string;
   isEnterprise: boolean;
   accountExpiresAt: Date | null;
+  wxMiniOpenId?: string | null;
 }) {
   return {
     id: user.id,
@@ -532,6 +675,7 @@ function mePayload(user: {
     status: user.status,
     isEnterprise: user.isEnterprise,
     accountExpiresAt: user.accountExpiresAt?.toISOString() ?? null,
+    wechatBound: Boolean(user.wxMiniOpenId),
   };
 }
 

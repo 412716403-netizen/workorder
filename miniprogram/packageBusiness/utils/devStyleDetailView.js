@@ -10,6 +10,7 @@ const {
   getDevSampleDeleteBlockReason,
 } = require('./devStyleDisplay.js');
 const { DevStyleStatus } = require('./devStyleConstants.js');
+const { listDevStageImageUrls, parseDevStageFileUrls } = require('./devStageFileValue.js');
 
 function resolveDictName(items, id) {
   if (!id) return '';
@@ -34,25 +35,60 @@ function buildSampleVariantLabel(sample, dictionaries) {
   );
 }
 
+function isImageFieldValue(value) {
+  return typeof value === 'string' && value.indexOf('data:image/') === 0;
+}
+
+function formatStageFieldPreviewText(field) {
+  const value = String((field && field.value) || '').trim();
+  if (!value) return '';
+  const images = listDevStageImageUrls(value);
+  if (images.length > 0) return '';
+  const files = parseDevStageFileUrls(value);
+  if (files.length > 0 || field.type === 'file') {
+    return files.length > 1 ? `${field.label}: ${files.length} 个附件` : `${field.label}: 附件`;
+  }
+  if (value.indexOf('data:') === 0) {
+    return `${field.label}: 附件`;
+  }
+  return `${field.label}: ${value}`;
+}
+
 function buildStageRows(sample) {
   const stages = ((sample && sample.stages) || [])
     .slice()
     .sort((a, b) => (a.order || 0) - (b.order || 0));
-  return stages.map((st, idx) => ({
-    id: st.id,
-    name: st.name,
-    status: st.status,
-    statusLabel: stageStatusLabel(st.status),
-    statusClass: `dev-stage--${st.status}`,
-    orderLabel: String(idx + 1),
-    isLast: idx === stages.length - 1,
-    updatedAtLabel: formatDevStyleCreatedAt(st.updatedAt),
-    fieldPreview: (st.fields || [])
-      .filter((f) => String((f && f.value) || '').trim())
-      .map((f) => `${f.label}: ${f.value}`)
+  return stages.map((st, idx) => {
+    const filled = (st.fields || []).filter((f) => String((f && f.value) || '').trim());
+    const fieldThumbs = [];
+    filled.forEach((f) => {
+      listDevStageImageUrls(f.value).forEach((src, i) => {
+        if (fieldThumbs.length >= 8) return;
+        fieldThumbs.push({
+          id: `${f.id || f.label}-${i}`,
+          label: f.label || '图片',
+          src,
+        });
+      });
+    });
+    const fieldPreview = filled
+      .map(formatStageFieldPreviewText)
+      .filter(Boolean)
       .slice(0, 3)
-      .join(' · '),
-  }));
+      .join(' · ');
+    return {
+      id: st.id,
+      name: st.name,
+      status: st.status,
+      statusLabel: stageStatusLabel(st.status),
+      statusClass: `dev-stage--${st.status}`,
+      orderLabel: String(idx + 1),
+      isLast: idx === stages.length - 1,
+      updatedAtLabel: formatDevStyleCreatedAt(st.updatedAt),
+      fieldThumbs,
+      fieldPreview,
+    };
+  });
 }
 
 function buildStyleDetailView(style, ctx) {
@@ -116,8 +152,6 @@ function buildStyleDetailView(style, ctx) {
     statusLabel: styleStatusLabel(status),
     customerName,
     showCustomer: !!customerName,
-    categoryName: category ? category.name : '',
-    showCategory: !!(category && category.name),
     unitName,
     showUnit: !!unitName,
     salesPriceText:
@@ -150,19 +184,14 @@ function buildStyleDetailView(style, ctx) {
       showArchive: canEdit && !readOnly && status === DevStyleStatus.DEVELOPING,
       showRestore: canEdit && !readOnly && status === DevStyleStatus.ARCHIVED,
       showPublish: canEdit && !readOnly && status === DevStyleStatus.ARCHIVED,
-      showAddSample: canEdit && !readOnly,
+      showAddSample: canEdit && !readOnly && status === DevStyleStatus.DEVELOPING,
+      showDeleteSample: canEdit && !readOnly,
       showBom: canEdit && !readOnly,
     },
   };
 
   const a = view.actions;
-  view.hasProductActions = !!(
-    a.showEdit ||
-    a.showArchive ||
-    a.showRestore ||
-    a.showPublish ||
-    a.showDelete
-  );
+  view.hasProductActions = !!(a.showArchive || a.showRestore || a.showPublish);
   return view;
 }
 

@@ -8,7 +8,7 @@ import {
   devStyleVariantLabel,
   stageNamesFromFirstDevSample,
 } from '../../utils/devStyleVariants';
-import { formStandardControlClass, formStandardLabelClass, primaryToolbarButtonClass, sectionTitleClass } from '../../styles/uiDensity';
+import { formStandardCategoryPillClass, formStandardControlClass, formStandardLabelClass, primaryToolbarButtonClass, sectionTitleClass } from '../../styles/uiDensity';
 
 interface DevAddSampleModalProps {
   open: boolean;
@@ -102,23 +102,30 @@ const DevAddSampleModal: React.FC<DevAddSampleModalProps> = ({
           <input value={name} onChange={(e) => setName(e.target.value)} className={`mt-1 w-full ${formStandardControlClass}`} />
         </label>
         {hasColorSize && (
-          <label className="block">
+          <div>
             <span className={formStandardLabelClass}>
               颜色尺码 <span className="text-rose-500">*</span>
             </span>
-            <select
-              value={variantKeyValue}
-              onChange={(e) => setVariantKeyValue(e.target.value)}
-              className={`mt-1 w-full ${formStandardControlClass}`}
-            >
-              <option value="">请选择该样品对应的颜色尺码</option>
-              {variants.map((v) => (
-                <option key={variantKey(v.colorId, v.sizeId)} value={variantKey(v.colorId, v.sizeId)}>
-                  {dictionaries ? devStyleVariantLabel(v, dictionaries) : (v.skuSuffix || `${v.colorId}-${v.sizeId}`)}
-                </option>
-              ))}
-            </select>
-          </label>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {variants.map((v) => {
+                const key = variantKey(v.colorId, v.sizeId);
+                const active = variantKeyValue === key;
+                const label = dictionaries
+                  ? devStyleVariantLabel(v, dictionaries)
+                  : (v.skuSuffix || `${v.colorId}-${v.sizeId}`);
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setVariantKeyValue(key)}
+                    className={formStandardCategoryPillClass(active)}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         )}
         <div>
           <span className={formStandardLabelClass}>开发节点（{stageNames.length} 个）</span>

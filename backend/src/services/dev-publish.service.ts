@@ -37,11 +37,17 @@ export async function publishDevStyleToProduct(
     throw new AppError(409, '该款式已发布为大货产品');
   }
   if (style.status !== DevStyleStatus.ARCHIVED) {
-    throw new AppError(409, '请先归档产品后再生成大货商品信息');
+    throw new AppError(409, '请先归档产品后再生成商品');
   }
   if (!style.categoryId) throw new AppError(400, '发布前请选择产品分类');
   if (!style.code?.trim()) throw new AppError(400, '款号不能为空');
   if (!style.name?.trim()) throw new AppError(400, '品名不能为空');
+
+  // 提前校验产品档案冲突，避免事务失败后只抛含糊的 500
+  const dupSku = await db.product.findFirst({ where: { sku: style.code.trim() } });
+  if (dupSku) throw new AppError(409, '产品编号（款号）已存在，请更换款号后再生成商品');
+  const dupName = await db.product.findFirst({ where: { name: style.name.trim() } });
+  if (dupName) throw new AppError(409, '产品名称（品名）已存在，请更换品名后再生成商品');
 
   const productId = genId('prod');
   const variantIdMap = new Map<string, string>();
@@ -130,14 +136,18 @@ export async function publishDevStyleToProduct(
         sortOrder: item.sortOrder ?? idx,
       }));
 
-      await productsService.createBom(txDb, {
-        id: target.newBomId,
-        parentProductId: productId,
-        variantId: target.productVariantId,
-        nodeId: target.devBom.nodeId ?? undefined,
-        name: target.devBom.name ?? undefined,
-        items,
-      });
+      await productsService.createBom(
+        txDb,
+        {
+          id: target.newBomId,
+          parentProductId: productId,
+          variantId: target.productVariantId,
+          nodeId: target.devBom.nodeId ?? undefined,
+          name: target.devBom.name ?? undefined,
+          items,
+        },
+        tenantId,
+      );
     }
 
     await tx.devStyle.update({

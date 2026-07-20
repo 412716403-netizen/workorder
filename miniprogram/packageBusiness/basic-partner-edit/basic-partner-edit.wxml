@@ -18,11 +18,18 @@
           <text class="plan-form-cell__label">单位基础档案</text>
         </view>
 
-        <view class="plan-form-cell plan-form-cell--input">
-          <text class="plan-form-cell__label"><text wx:if="{{!isPersisted}}" class="plan-form-cell__req">*</text>单位分类</text>
-          <picker mode="selector" range="{{categoryNames}}" value="{{categoryPickerIndex}}" bindchange="onCategoryChange">
-            <view class="plan-form-cell__value">{{categoryName || '请选择'}}</view>
-          </picker>
+        <view class="category-select">
+          <text class="category-select__label"><text wx:if="{{!isPersisted}}" class="plan-form-cell__req">*</text>单位分类</text>
+          <view wx:if="{{categoryOptions.length}}" class="category-select__pills">
+            <view
+              wx:for="{{categoryOptions}}"
+              wx:key="id"
+              class="category-select__pill {{item.selected ? 'category-select__pill--on' : ''}}"
+              data-id="{{item.id}}"
+              bindtap="onCategoryTap"
+            >{{item.name}}</view>
+          </view>
+          <view wx:else class="category-select__empty">暂无单位分类，请先在系统设置中添加</view>
         </view>
 
         <view class="plan-form-cell plan-form-cell--input">

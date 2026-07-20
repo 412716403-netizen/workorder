@@ -129,6 +129,83 @@
   opacity: 0.45;
 }
 
+.login-divider {
+  display: flex;
+  align-items: center;
+  margin: 28rpx 0 8rpx;
+  gap: 16rpx;
+}
+
+.login-divider__line {
+  flex: 1;
+  height: 1rpx;
+  background: #e5e7eb;
+}
+
+.login-divider__text {
+  font-size: 22rpx;
+  color: var(--color-text-tertiary);
+}
+
+.login-wechat-wrap {
+  display: flex;
+  justify-content: center;
+  margin-top: 20rpx;
+}
+
+.login-wechat {
+  width: 72rpx !important;
+  height: 72rpx;
+  margin: 0;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  overflow: visible;
+}
+
+.login-wechat::after {
+  border: none;
+}
+
+.login-wechat__icon {
+  width: 72rpx;
+  height: 72rpx;
+  display: block;
+}
+
+.login-wechat--hover {
+  opacity: 0.88;
+}
+
+.login-wechat[disabled],
+.login-wechat--loading {
+  opacity: 0.45;
+}
+
+.login-cancel-bind {
+  width: 100%;
+  margin: 20rpx 0 0;
+  padding: 24rpx 32rpx;
+  border-radius: 16rpx;
+  font-size: var(--font-small);
+  font-weight: 500;
+  line-height: 1.25;
+  background: transparent;
+  color: var(--color-text-secondary);
+  border: none;
+  box-sizing: border-box;
+}
+
+.login-cancel-bind::after {
+  border: none;
+}
+
 .login-footer {
   flex: 1;
   display: flex;

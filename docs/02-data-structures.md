@@ -24,6 +24,8 @@
 | 款式开发 | DevStyle, DevStyleVariant, DevBom, DevBomItem, DevSample, DevStage, DevStageField, DevAttachment, DevStageTemplate, DevLog |
 | 资料库 | KnowledgeFolder, KnowledgeDocument, KnowledgeAsset |
 
+`User`（`users`）含微信小程序绑定字段：`wx_mini_openid`（唯一可空）、`wx_unionid`（可空）；微信登录仅绑定已有账号，见 [`07-auth-tenant-session.md`](./07-auth-tenant-session.md) §4.5.2。
+
 ### 1.2 客户端会话 / 租户缓存
 
 以下数据当前仍会保存在浏览器 `localStorage`，主要用于登录态恢复和租户上下文切换，不应视为业务主数据真源：
@@ -472,7 +474,7 @@ interface ProductMilestoneProgress {
 |------|------|------|
 | `id` | uuid | 主键 |
 | `tenantId` / `userId` | uuid | 租户 + 归属人（FK `tenants` / `users`，级联删除） |
-| `sourceType` | varchar(40) | `standalone` / `production_order` / `plan` / `product` / `outsource` / `rework` / `purchase_order` / `purchase_bill` / `sales_order` / `sales_bill` / `dev_stage` / `dev_bom` |
+| `sourceType` | varchar(40) | `standalone` / `production_order` / `plan` / `product` / `outsource` / `rework` / `purchase_order` / `purchase_bill` / `sales_order` / `sales_bill` / `dev_stage` / `dev_bom` / `dev_style` |
 | `sourceId` | varchar(50)? | 关联单据 id；`standalone` 为空 |
 | `sourceDocNo` / `sourceTitle` | varchar? | 单号 / 标题快照（列表展示，免跨表） |
 | `href` | text? | 跳转路径快照（消息中心/列表跳单据） |

@@ -2,6 +2,7 @@ const { API_BASE } = require('../../config.js');
 const { request } = require('../../utils/request.js');
 const { clearSession, readTenantCtx } = require('../../utils/session.js');
 const { syncCurrentCustomTabBar } = require('../../utils/tabAccess.js');
+const { wxLoginCode } = require('../../utils/authLogin.js');
 
 function roleLabel(role) {
   if (role === 'owner') return '创建者';
@@ -13,6 +14,8 @@ Page({
     loading: true,
     displayName: '用户',
     user: null,
+    wechatBound: false,
+    wechatBusy: false,
     tenantName: '',
     tenantRole: '',
     tenantRoleLabel: '',
@@ -47,6 +50,7 @@ Page({
         const display = user.displayName || user.username || '用户';
         this.setData({
           user,
+          wechatBound: Boolean(user.wechatBound),
           displayName: display,
           tenantCount: tenants.length,
           avatarText: display.slice(0, 1),
@@ -69,6 +73,13 @@ Page({
       items.push({ key: 'switch', label: '切换企业', desc: '', icon: icon('switch'), arrow: true });
     }
     items.push(
+      {
+        key: 'wechat',
+        label: '微信登录',
+        desc: this.data.wechatBound ? '已绑定 · 点击解绑' : '未绑定 · 点击绑定',
+        icon: icon('security'),
+        arrow: true,
+      },
       { key: 'security', label: '账号与安全', desc: '', icon: icon('security'), arrow: true },
       { key: 'notify', label: '通知设置', desc: '', icon: icon('notify'), arrow: true },
       { key: 'help', label: '帮助与反馈', desc: '', icon: icon('help'), arrow: true },
@@ -96,6 +107,10 @@ Page({
       });
       return;
     }
+    if (key === 'wechat') {
+      this.onWechatTap();
+      return;
+    }
     if (key === 'about') {
       wx.showModal({
         title: '关于',
@@ -105,6 +120,68 @@ Page({
       return;
     }
     wx.showToast({ title: '功能开发中', icon: 'none' });
+  },
+
+  onWechatTap() {
+    if (this.data.wechatBusy) return;
+    if (this.data.wechatBound) {
+      wx.showModal({
+        title: '解绑微信',
+        content: '解绑后需使用账号密码登录，确认解绑？',
+        success: (res) => {
+          if (res.confirm) this.unbindWechat();
+        },
+      });
+      return;
+    }
+    wx.showModal({
+      title: '绑定微信',
+      content: '绑定后可在登录页使用「微信一键登录」',
+      confirmText: '立即绑定',
+      success: (res) => {
+        if (res.confirm) this.bindWechat();
+      },
+    });
+  },
+
+  async bindWechat() {
+    this.setData({ wechatBusy: true });
+    try {
+      const code = await wxLoginCode();
+      const result = await request({
+        path: '/auth/wechat/bind',
+        method: 'POST',
+        data: { code },
+      });
+      const bound = result && result.wechatBound;
+      this.setData({ wechatBound: Boolean(bound) });
+      this.buildMenu(readTenantCtx() || {});
+      wx.showToast({ title: '绑定成功', icon: 'success' });
+    } catch (e) {
+      const msg = (e && e.message) || '绑定失败';
+      wx.showToast({ title: String(msg).slice(0, 40), icon: 'none' });
+    } finally {
+      this.setData({ wechatBusy: false });
+    }
+  },
+
+  async unbindWechat() {
+    this.setData({ wechatBusy: true });
+    try {
+      await request({
+        path: '/auth/wechat/unbind',
+        method: 'POST',
+        data: {},
+      });
+      this.setData({ wechatBound: false });
+      this.buildMenu(readTenantCtx() || {});
+      wx.showToast({ title: '已解绑', icon: 'success' });
+    } catch (e) {
+      const msg = (e && e.message) || '解绑失败';
+      wx.showToast({ title: String(msg).slice(0, 40), icon: 'none' });
+    } finally {
+      this.setData({ wechatBusy: false });
+    }
   },
 
   onSwitchTenant() {

@@ -275,7 +275,7 @@ export async function updateDevStyle(
   if ('status' in data) {
     const nextStatus = data.status;
     if (nextStatus === DevStyleStatus.PUBLISHED) {
-      throw new AppError(400, '请通过「生成大货」发布，不能直接将款式标记为已发布');
+      throw new AppError(400, '请通过「生成商品」发布，不能直接将款式标记为已发布');
     }
     if (nextStatus !== DevStyleStatus.DEVELOPING && nextStatus !== DevStyleStatus.ARCHIVED) {
       throw new AppError(400, '非法的款式状态');

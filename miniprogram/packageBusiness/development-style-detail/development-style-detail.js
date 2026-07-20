@@ -6,7 +6,6 @@ const {
   readWindowMetrics,
   computePlanCreateHeaderHeight,
 } = require('../../utils/windowMetrics.js');
-const { afterSaveReturnToList, LIST_ROUTES } = require('../../utils/saveNavigation.js');
 const {
   fetchPartnersAll,
   fetchCategoriesAll,
@@ -17,13 +16,13 @@ const { request } = require('../../utils/request.js');
 const {
   getDevStyle,
   updateDevStyle,
-  deleteDevStyle,
   publishDevStyle,
   addDevSample,
   deleteDevSample,
 } = require('../utils/developmentApi.js');
 const { buildStyleDetailView, findSampleById } = require('../utils/devStyleDetailView.js');
 const { DevStyleStatus } = require('../utils/devStyleConstants.js');
+const { promptCreateTodo } = require('../utils/devTodoCreate.js');
 
 function computeScrollHeight(nav) {
   const win = readWindowMetrics();
@@ -53,8 +52,9 @@ Page({
     addSampleOpen: false,
     sampleName: '',
     sampleVariantIndex: -1,
-    sampleVariantLabels: [],
+    sampleVariantOptions: [],
     saving: false,
+    showTodoBtn: false,
     statusBarHeight: 20,
     navBarHeight: 44,
     headerBlockHeight: 88,
@@ -101,6 +101,7 @@ Page({
       }
       this._canEdit = hasPermission(perms, 'development:styles:edit');
       this._canDelete = hasPermission(perms, 'development:styles:delete');
+      this.setData({ showTodoBtn: isPluginEnabled(plugins, 'todo_reminder') });
       this.bootstrap();
     });
   },
@@ -108,6 +109,8 @@ Page({
   onHeaderBack() {
     wx.navigateBack();
   },
+
+  noop() {},
 
   async bootstrap() {
     const styleId = this.data.styleId;
@@ -161,7 +164,6 @@ Page({
       detail,
       activeSampleId,
       activeSample,
-      sampleVariantLabels: (detail.variantOptions || []).map((v) => v.label),
     });
   },
 
@@ -214,6 +216,24 @@ Page({
     });
   },
 
+  onProductTap() {
+    this.onEditTap();
+  },
+
+  onAddTodoTap() {
+    if (!this.data.showTodoBtn || !this._style) return;
+    const style = this._style;
+    const name = style.name || style.code || '';
+    const code = style.code && style.name && style.code !== style.name ? ` · ${style.code}` : '';
+    promptCreateTodo({
+      sourceType: 'dev_style',
+      sourceId: style.id,
+      sourceDocNo: '开发管理',
+      sourceTitle: `${name}${code}`,
+      href: `/development?styleId=${encodeURIComponent(style.id)}`,
+    });
+  },
+
   onArchiveTap() {
     this.toggleArchive(DevStyleStatus.ARCHIVED);
   },
@@ -257,7 +277,7 @@ Page({
     if (!this._style || this.data.saving) return;
     const ok = await new Promise((resolve) => {
       wx.showModal({
-        title: '生成大货商品信息',
+        title: '生成商品',
         content: '将把已归档产品的分类、工序、变体与 BOM 写入产品档案，并标记为已发布。是否继续？',
         success: (res) => resolve(!!res.confirm),
       });
@@ -270,32 +290,15 @@ Page({
       this._style = saved;
       this.applyStyle(saved);
       notifyHubChanged.call(this);
-      wx.showToast({ title: '已发布大货', icon: 'success' });
+      wx.showToast({ title: '已生成商品', icon: 'success' });
     } catch (err) {
-      wx.showToast({ title: (err && err.message) || '发布失败', icon: 'none' });
+      const msg = (err && err.message) || '发布失败';
+      if (String(msg).length > 20) {
+        wx.showModal({ title: '生成商品失败', content: String(msg), showCancel: false });
+      } else {
+        wx.showToast({ title: msg, icon: 'none' });
+      }
     } finally {
-      this.setData({ saving: false });
-    }
-  },
-
-  async onDeleteTap() {
-    if (!this._style || !this.data.detail.actions.showDelete || this.data.saving) return;
-    const ok = await new Promise((resolve) => {
-      wx.showModal({
-        title: '删除款式',
-        content: `确定删除「${this._style.code}」？仅当所有节点均为待开始时可删除。`,
-        success: (res) => resolve(!!res.confirm),
-      });
-    });
-    if (!ok) return;
-    this.setData({ saving: true });
-    try {
-      await deleteDevStyle(this._style.id);
-      notifyHubChanged.call(this);
-      wx.showToast({ title: '已删除', icon: 'success' });
-      afterSaveReturnToList(LIST_ROUTES.DEVELOPMENT_STYLES);
-    } catch (err) {
-      wx.showToast({ title: (err && err.message) || '删除失败', icon: 'none' });
       this.setData({ saving: false });
     }
   },
@@ -304,10 +307,18 @@ Page({
     if (!this.data.detail || !this.data.detail.actions.showAddSample) return;
     const samples = this._style.samples || [];
     const defaultName = samples.length === 0 ? '头样' : `样品 ${samples.length}`;
+    const sampleVariantOptions = (this.data.detail.variantOptions || []).map((v, idx) => ({
+      key: `${v.colorId || ''}__${v.sizeId || ''}__${idx}`,
+      label: v.label,
+      colorId: v.colorId,
+      sizeId: v.sizeId,
+      selected: false,
+    }));
     this.setData({
       addSampleOpen: true,
       sampleName: defaultName,
-      sampleVariantIndex: this.data.detail.hasVariants ? 0 : -1,
+      sampleVariantIndex: -1,
+      sampleVariantOptions,
     });
   },
 
@@ -319,8 +330,14 @@ Page({
     this.setData({ sampleName: e.detail.value || '' });
   },
 
-  onSampleVariantChange(e) {
-    this.setData({ sampleVariantIndex: Number(e.detail.value) });
+  onSampleVariantTap(e) {
+    const idx = Number(e.currentTarget.dataset.index);
+    if (Number.isNaN(idx) || idx < 0) return;
+    const sampleVariantOptions = (this.data.sampleVariantOptions || []).map((v, i) => ({
+      ...v,
+      selected: i === idx,
+    }));
+    this.setData({ sampleVariantIndex: idx, sampleVariantOptions });
   },
 
   async onAddSampleConfirm() {
@@ -361,7 +378,8 @@ Page({
 
   async onDeleteSampleTap() {
     const sample = this.data.activeSample;
-    if (!sample || !this._canEdit) return;
+    const actions = this.data.detail && this.data.detail.actions;
+    if (!sample || !this._canEdit || !(actions && actions.showDeleteSample)) return;
     if (!sample.canDelete) {
       wx.showToast({ title: sample.deleteBlockReason || '无法删除', icon: 'none' });
       return;
@@ -387,6 +405,22 @@ Page({
     } finally {
       this.setData({ saving: false });
     }
+  },
+
+  onThumbPreview(e) {
+    const src = e.currentTarget.dataset.src;
+    if (!src) return;
+    const sample = this.data.activeSample;
+    const urls = [];
+    ((sample && sample.stageRows) || []).forEach((row) => {
+      (row.fieldThumbs || []).forEach((t) => {
+        if (t && t.src) urls.push(t.src);
+      });
+    });
+    wx.previewImage({
+      current: src,
+      urls: urls.length ? urls : [src],
+    });
   },
 
   onStageTap(e) {

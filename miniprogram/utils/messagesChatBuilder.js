@@ -33,7 +33,8 @@ const TODO_SOURCE_LABELS = {
   sales_order: '销售订单',
   sales_bill: '销售出库',
   dev_stage: '开发阶段',
-  dev_bom: '开发BOM'
+  dev_bom: '开发BOM',
+  dev_style: '开发款式'
 };
 
 function pad(n) {

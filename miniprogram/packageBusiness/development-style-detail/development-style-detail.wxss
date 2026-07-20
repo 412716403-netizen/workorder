@@ -1,5 +1,6 @@
 @import "/styles/plan-detail-page.wxss";
 @import "/styles/list.wxss";
+@import "/styles/category-select-pills.wxss";
 
 .dev-detail-page {
   padding-bottom: calc(48rpx + env(safe-area-inset-bottom));
@@ -17,7 +18,19 @@
 .dev-detail-hero__top {
   display: flex;
   align-items: flex-start;
+  gap: 16rpx;
+}
+
+.dev-detail-hero__product {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
   gap: 20rpx;
+}
+
+.dev-detail-hero__product--tappable:active {
+  opacity: 0.72;
 }
 
 .dev-detail-hero__media {
@@ -76,6 +89,7 @@
   align-items: center;
   gap: 10rpx;
   margin-top: 14rpx;
+  width: 100%;
 }
 
 .dev-detail-hero__customer {
@@ -88,22 +102,29 @@
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  gap: 14rpx;
-  padding-top: 6rpx;
-  min-width: 72rpx;
+  align-items: stretch;
+  gap: 10rpx;
+  padding-top: 4rpx;
+  min-width: 140rpx;
 }
 
-.dev-hero-actions__link {
-  font-size: 26rpx;
+.dev-hero-outline-btn {
+  padding: 8rpx 16rpx;
+  font-size: 22rpx;
   font-weight: 600;
-  color: var(--color-primary, #2f6bff);
   line-height: 1.2;
-  padding: 2rpx 0;
+  text-align: center;
+  color: var(--color-primary, #2f6bff);
+  background: #fff;
+  border: 1rpx solid var(--color-primary, #2f6bff);
+  border-radius: 10rpx;
+  box-sizing: border-box;
+  white-space: nowrap;
 }
 
-.dev-hero-actions__link--danger {
-  color: #d92d20;
+.dev-hero-outline-btn:active {
+  opacity: 0.75;
+  background: rgba(47, 107, 255, 0.06);
 }
 
 .dev-status-badge {
@@ -127,16 +148,6 @@
 .dev-status-badge--published {
   color: #039855;
   background: rgba(3, 152, 85, 0.12);
-}
-
-.dev-meta-pill {
-  display: inline-block;
-  padding: 6rpx 14rpx;
-  font-size: 22rpx;
-  font-weight: 600;
-  color: #64748b;
-  background: #f1f5f9;
-  border-radius: 8rpx;
 }
 
 .dev-detail-stats {
@@ -285,8 +296,9 @@
 
 .dev-detail-section-actions {
   display: flex;
-  gap: 20rpx;
+  gap: 12rpx;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .dev-detail-link {
@@ -300,9 +312,12 @@
 }
 
 /* —— 样品 Tab —— */
+.dev-sample-tabs-row {
+  margin: 0 0 20rpx;
+}
+
 .dev-sample-tabs {
   white-space: nowrap;
-  margin: 0 0 20rpx;
 }
 
 .dev-sample-tabs__inner {
@@ -328,6 +343,19 @@
   box-shadow: 0 2rpx 10rpx rgba(15, 23, 42, 0.06);
 }
 
+.dev-sample-tab--add {
+  min-width: 56rpx;
+  padding-left: 20rpx;
+  padding-right: 20rpx;
+  text-align: center;
+  color: var(--color-primary, #2f6bff);
+  font-size: 28rpx;
+}
+
+.dev-sample-tab--add:active {
+  background: rgba(47, 107, 255, 0.1);
+}
+
 .dev-sample-meta {
   display: flex;
   justify-content: space-between;
@@ -342,6 +370,26 @@
   min-width: 0;
   font-size: 24rpx;
   color: #8f959e;
+}
+
+.dev-sample-delete {
+  flex-shrink: 0;
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 14rpx;
+  background: rgba(239, 68, 68, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dev-sample-delete:active {
+  opacity: 0.75;
+}
+
+.dev-sample-delete__icon {
+  width: 32rpx;
+  height: 32rpx;
 }
 
 .dev-empty-block {
@@ -502,6 +550,37 @@
   line-height: 1.45;
 }
 
+.dev-timeline__thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-top: 12rpx;
+}
+
+.dev-timeline__thumb-wrap {
+  width: 112rpx;
+}
+
+.dev-timeline__thumb {
+  width: 112rpx;
+  height: 112rpx;
+  border-radius: 12rpx;
+  background: #e2e8f0;
+  display: block;
+  border: 1rpx solid #eef2f7;
+}
+
+.dev-timeline__thumb-label {
+  display: block;
+  margin-top: 6rpx;
+  font-size: 18rpx;
+  color: #8f959e;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
+
 .dev-timeline__foot {
   display: flex;
   justify-content: space-between;
@@ -556,8 +635,21 @@
   margin: 16rpx 0 8rpx;
 }
 
-.dev-sample-input,
-.dev-sample-picker {
+.dev-styles-sheet__req {
+  color: #ef4444;
+  margin-left: 4rpx;
+}
+
+.category-select--inset {
+  padding: 0;
+  border-bottom: none;
+}
+
+.category-select--inset .category-select__pills {
+  padding-bottom: 0;
+}
+
+.dev-sample-input {
   padding: 22rpx 24rpx;
   background: #f8fafc;
   border-radius: 14rpx;

@@ -20,125 +20,58 @@
     <view wx:elif="{{detail}}" class="plan-detail-page dev-detail-page">
       <view class="dev-detail-hero">
         <view class="dev-detail-hero__top">
-          <view class="dev-detail-hero__media">
-            <image
-              wx:if="{{detail.showProductImage}}"
-              class="dev-detail-hero__img"
-              src="{{detail.productImageUrl}}"
-              mode="aspectFill"
-              binderror="onImageError"
-            />
-            <view wx:else class="dev-detail-hero__img dev-detail-hero__img--ph">
-              <image class="dev-detail-hero__ph-icon" src="{{detail.placeholderIconSrc}}" mode="aspectFit" />
+          <view
+            class="dev-detail-hero__product {{detail.actions.showEdit ? 'dev-detail-hero__product--tappable' : ''}}"
+            bindtap="onProductTap"
+          >
+            <view class="dev-detail-hero__media">
+              <image
+                wx:if="{{detail.showProductImage}}"
+                class="dev-detail-hero__img"
+                src="{{detail.productImageUrl}}"
+                mode="aspectFill"
+                binderror="onImageError"
+              />
+              <view wx:else class="dev-detail-hero__img dev-detail-hero__img--ph">
+                <image class="dev-detail-hero__ph-icon" src="{{detail.placeholderIconSrc}}" mode="aspectFit" />
+              </view>
+            </view>
+
+            <view class="dev-detail-hero__main">
+              <view class="dev-detail-hero__title-row">
+                <text class="dev-detail-hero__name">{{detail.productName}}</text>
+                <text wx:if="{{detail.showProductSku}}" class="dev-detail-hero__sku">{{detail.productSku}}</text>
+              </view>
+              <view class="dev-detail-hero__badges">
+                <text class="dev-status-badge dev-status-badge--{{detail.statusTone}}">{{detail.statusLabel}}</text>
+              </view>
+              <view wx:if="{{detail.showCustomer}}" class="dev-detail-hero__customer">
+                客户 · {{detail.customerName}}
+              </view>
             </view>
           </view>
 
-          <view class="dev-detail-hero__main">
-            <view class="dev-detail-hero__title-row">
-              <text class="dev-detail-hero__name">{{detail.productName}}</text>
-              <text wx:if="{{detail.showProductSku}}" class="dev-detail-hero__sku">{{detail.productSku}}</text>
-            </view>
-            <view class="dev-detail-hero__badges">
-              <text class="dev-status-badge dev-status-badge--{{detail.statusTone}}">{{detail.statusLabel}}</text>
-              <text wx:if="{{detail.showCategory}}" class="dev-meta-pill">{{detail.categoryName}}</text>
-            </view>
-            <view wx:if="{{detail.showCustomer}}" class="dev-detail-hero__customer">
-              客户 · {{detail.customerName}}
-            </view>
-          </view>
-
-          <view wx:if="{{detail.hasProductActions}}" class="dev-hero-actions">
-            <text
-              wx:if="{{detail.actions.showEdit}}"
-              class="dev-hero-actions__link"
-              bindtap="onEditTap"
-            >编辑</text>
-            <text
+          <view wx:if="{{detail.hasProductActions || showTodoBtn}}" class="dev-hero-actions">
+            <view
+              wx:if="{{showTodoBtn}}"
+              class="dev-hero-outline-btn"
+              catchtap="onAddTodoTap"
+            >待办</view>
+            <view
               wx:if="{{detail.actions.showArchive}}"
-              class="dev-hero-actions__link"
+              class="dev-hero-outline-btn"
               bindtap="onArchiveTap"
-            >归档</text>
-            <text
+            >归档</view>
+            <view
               wx:if="{{detail.actions.showRestore}}"
-              class="dev-hero-actions__link"
+              class="dev-hero-outline-btn"
               bindtap="onRestoreTap"
-            >还原</text>
-            <text
+            >返回开发</view>
+            <view
               wx:if="{{detail.actions.showPublish}}"
-              class="dev-hero-actions__link"
+              class="dev-hero-outline-btn"
               bindtap="onPublishTap"
-            >发布</text>
-            <text
-              wx:if="{{detail.actions.showDelete}}"
-              class="dev-hero-actions__link dev-hero-actions__link--danger"
-              bindtap="onDeleteTap"
-            >删除</text>
-          </view>
-        </view>
-
-        <view class="dev-detail-stats">
-          <view class="dev-detail-stats__item">
-            <text class="dev-detail-stats__num">{{detail.sampleCount}}</text>
-            <text class="dev-detail-stats__label">样品</text>
-          </view>
-          <view class="dev-detail-stats__divider"></view>
-          <view class="dev-detail-stats__item">
-            <text class="dev-detail-stats__num">{{detail.colorChips.length}}</text>
-            <text class="dev-detail-stats__label">颜色</text>
-          </view>
-          <view class="dev-detail-stats__divider"></view>
-          <view class="dev-detail-stats__item">
-            <text class="dev-detail-stats__num">{{detail.sizeChips.length}}</text>
-            <text class="dev-detail-stats__label">尺码</text>
-          </view>
-          <view class="dev-detail-stats__divider"></view>
-          <view class="dev-detail-stats__item">
-            <text class="dev-detail-stats__num">{{detail.processSteps.length}}</text>
-            <text class="dev-detail-stats__label">工序</text>
-          </view>
-        </view>
-      </view>
-
-      <view class="dev-section-card">
-        <view class="dev-section-card__head">
-          <text class="dev-section-card__title">商品信息</text>
-          <text class="dev-section-card__hint">{{detail.createdAtLabel}}</text>
-        </view>
-
-        <view wx:if="{{detail.colorChips.length}}" class="dev-info-block">
-          <text class="dev-info-block__label">颜色</text>
-          <view class="dev-chip-row">
-            <text wx:for="{{detail.colorChips}}" wx:key="*this" class="dev-info-chip">{{item}}</text>
-          </view>
-        </view>
-        <view wx:if="{{detail.sizeChips.length}}" class="dev-info-block">
-          <text class="dev-info-block__label">尺码</text>
-          <view class="dev-chip-row">
-            <text wx:for="{{detail.sizeChips}}" wx:key="*this" class="dev-info-chip">{{item}}</text>
-          </view>
-        </view>
-        <view wx:if="{{detail.processSteps.length}}" class="dev-info-block">
-          <text class="dev-info-block__label">大货工序</text>
-          <view class="dev-process-row">
-            <block wx:for="{{detail.processSteps}}" wx:key="*this">
-              <text class="dev-process-step">{{item}}</text>
-              <text wx:if="{{index < detail.processSteps.length - 1}}" class="dev-process-arrow">›</text>
-            </block>
-          </view>
-        </view>
-
-        <view class="dev-kv-grid">
-          <view wx:if="{{detail.showUnit}}" class="dev-kv-grid__item">
-            <text class="dev-kv-grid__k">单位</text>
-            <text class="dev-kv-grid__v">{{detail.unitName}}</text>
-          </view>
-          <view wx:if="{{detail.salesPriceText}}" class="dev-kv-grid__item">
-            <text class="dev-kv-grid__k">销售价</text>
-            <text class="dev-kv-grid__v">{{detail.salesPriceText}}</text>
-          </view>
-          <view wx:if="{{detail.purchasePriceText}}" class="dev-kv-grid__item">
-            <text class="dev-kv-grid__k">采购价</text>
-            <text class="dev-kv-grid__v">{{detail.purchasePriceText}}</text>
+            >生成商品</view>
           </view>
         </view>
       </view>
@@ -147,23 +80,37 @@
         <view class="dev-section-card__head">
           <text class="dev-section-card__title">样品开发记录</text>
           <view class="dev-detail-section-actions">
-            <text wx:if="{{detail.actions.showAddSample}}" class="dev-detail-link" bindtap="onAddSampleOpen">＋ 样品</text>
-            <text wx:if="{{activeSample}}" class="dev-detail-link" bindtap="onLogsTap">日志</text>
-            <text wx:if="{{detail.actions.showBom && activeSample}}" class="dev-detail-link" bindtap="onBomTap">BOM</text>
+            <view
+              wx:if="{{activeSample}}"
+              class="dev-hero-outline-btn"
+              bindtap="onLogsTap"
+            >日志</view>
+            <view
+              wx:if="{{detail.actions.showBom && activeSample}}"
+              class="dev-hero-outline-btn"
+              bindtap="onBomTap"
+            >BOM</view>
           </view>
         </view>
 
-        <scroll-view wx:if="{{detail.samples.length}}" class="dev-sample-tabs" scroll-x enhanced show-scrollbar="{{false}}">
-          <view class="dev-sample-tabs__inner">
-            <view
-              wx:for="{{detail.samples}}"
-              wx:key="id"
-              class="dev-sample-tab {{activeSampleId === item.id ? 'dev-sample-tab--active' : ''}}"
-              data-id="{{item.id}}"
-              bindtap="onSampleTabTap"
-            >{{item.name}}</view>
-          </view>
-        </scroll-view>
+        <view wx:if="{{detail.samples.length}}" class="dev-sample-tabs-row">
+          <scroll-view class="dev-sample-tabs" scroll-x enhanced show-scrollbar="{{false}}">
+            <view class="dev-sample-tabs__inner">
+              <view
+                wx:for="{{detail.samples}}"
+                wx:key="id"
+                class="dev-sample-tab {{activeSampleId === item.id ? 'dev-sample-tab--active' : ''}}"
+                data-id="{{item.id}}"
+                bindtap="onSampleTabTap"
+              >{{item.name}}</view>
+              <view
+                wx:if="{{detail.actions.showAddSample}}"
+                class="dev-sample-tab dev-sample-tab--add"
+                bindtap="onAddSampleOpen"
+              >＋</view>
+            </view>
+          </scroll-view>
+        </view>
 
         <view wx:if="{{!detail.samples.length}}" class="dev-empty-block">
           <text class="dev-empty-block__text">暂无样品轮次</text>
@@ -179,11 +126,14 @@
           <view class="dev-sample-meta">
             <text wx:if="{{activeSample.variantLabel}}" class="dev-sample-meta__spec">规格 · {{activeSample.variantLabel}}</text>
             <text wx:else class="dev-sample-meta__spec">开发节点进度</text>
-            <text
-              wx:if="{{detail.actions.showAddSample}}"
-              class="dev-detail-link dev-detail-link--danger"
+            <view
+              wx:if="{{detail.actions.showDeleteSample}}"
+              class="dev-sample-delete"
               bindtap="onDeleteSampleTap"
-            >删除</text>
+              aria-label="删除样品"
+            >
+              <image class="dev-sample-delete__icon" src="/assets/icons/trash-2.png" mode="aspectFit" />
+            </view>
           </view>
 
           <view class="dev-timeline">
@@ -203,6 +153,23 @@
                   <text class="dev-timeline__name">{{item.name}}</text>
                   <text class="dev-timeline__status">{{item.statusLabel}}</text>
                 </view>
+                <view wx:if="{{item.fieldThumbs.length}}" class="dev-timeline__thumbs">
+                  <view
+                    wx:for="{{item.fieldThumbs}}"
+                    wx:for-item="thumb"
+                    wx:key="id"
+                    class="dev-timeline__thumb-wrap"
+                  >
+                    <image
+                      class="dev-timeline__thumb"
+                      src="{{thumb.src}}"
+                      mode="aspectFill"
+                      data-src="{{thumb.src}}"
+                      catchtap="onThumbPreview"
+                    />
+                    <text class="dev-timeline__thumb-label">{{thumb.label}}</text>
+                  </view>
+                </view>
                 <view wx:if="{{item.fieldPreview}}" class="dev-timeline__preview">{{item.fieldPreview}}</view>
                 <view class="dev-timeline__foot">
                   <text>{{item.updatedAtLabel}}</text>
@@ -216,24 +183,33 @@
     </view>
   </scroll-view>
 
-  <view wx:if="{{addSampleOpen}}" class="dev-styles-sheet-mask" bindtap="onAddSampleClose">
-    <view class="dev-styles-sheet" catchtap="">
+  <view wx:if="{{addSampleOpen}}" class="dev-styles-sheet-mask" bindtap="onAddSampleClose" catchtouchmove="noop">
+    <view class="dev-styles-sheet" catchtap="noop" catchtouchmove="noop">
       <view class="dev-styles-sheet__handle"></view>
       <view class="dev-styles-sheet__title">新增样品轮次</view>
       <view class="dev-styles-sheet__label">名称</view>
       <input class="dev-sample-input" value="{{sampleName}}" bindinput="onSampleNameInput" placeholder="如：头样" />
       <block wx:if="{{detail.hasVariants}}">
-        <view class="dev-styles-sheet__label">颜色 × 尺码</view>
-        <picker mode="selector" range="{{sampleVariantLabels}}" value="{{sampleVariantIndex}}" bindchange="onSampleVariantChange">
-          <view class="dev-sample-picker">{{sampleVariantLabels[sampleVariantIndex] || '请选择'}}</view>
-        </picker>
+        <view class="dev-styles-sheet__label">颜色 × 尺码 <text class="dev-styles-sheet__req">*</text></view>
+        <view class="category-select category-select--inset">
+          <view wx:if="{{sampleVariantOptions.length}}" class="category-select__pills">
+            <view
+              wx:for="{{sampleVariantOptions}}"
+              wx:key="key"
+              class="category-select__pill {{item.selected ? 'category-select__pill--on' : ''}}"
+              data-index="{{index}}"
+              catchtap="onSampleVariantTap"
+            >{{item.label}}</view>
+          </view>
+          <view wx:else class="category-select__empty">暂无可选颜色尺码</view>
+        </view>
       </block>
-      <view class="dev-sample-confirm" bindtap="onAddSampleConfirm">确定</view>
+      <view class="dev-sample-confirm" catchtap="onAddSampleConfirm">确定</view>
     </view>
   </view>
 
-  <view wx:if="{{logSheetOpen}}" class="dev-styles-sheet-mask" bindtap="onLogsClose">
-    <view class="dev-styles-sheet" catchtap="">
+  <view wx:if="{{logSheetOpen}}" class="dev-styles-sheet-mask" bindtap="onLogsClose" catchtouchmove="noop">
+    <view class="dev-styles-sheet" catchtap="noop" catchtouchmove="noop">
       <view class="dev-styles-sheet__handle"></view>
       <view class="dev-styles-sheet__title">版本日志</view>
       <view wx:if="{{!logRows.length}}" class="plan-detail-muted">暂无日志</view>

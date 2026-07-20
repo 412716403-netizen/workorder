@@ -26,6 +26,7 @@ const {
   getDevStyle,
   createDevStyle,
   updateDevStyle,
+  deleteDevStyle,
   listDevStageTemplates,
 } = require('../utils/developmentApi.js');
 const {
@@ -34,7 +35,7 @@ const {
   validateDevStyleForSave,
   buildDevStyleSavePayload,
 } = require('../utils/devStyleForm.js');
-const { resolveDevStyleCustomerName } = require('../utils/devStyleDisplay.js');
+const { resolveDevStyleCustomerName, canDeleteDevStyle } = require('../utils/devStyleDisplay.js');
 
 function computeScrollHeight(nav) {
   const win = readWindowMetrics();
@@ -56,10 +57,9 @@ Page({
     submitting: false,
     pageTitle: '录入新产品',
     isEdit: false,
+    canDelete: false,
     form: {},
-    categoryNames: [],
-    categoryPickerIndex: 0,
-    categoryName: '',
+    categoryOptions: [],
     unitName: '',
     supplierName: '',
     customFields: [],
@@ -119,6 +119,7 @@ Page({
         setTimeout(() => wx.navigateBack(), 800);
         return;
       }
+      this._canDelete = hasPermission(perms, 'development:styles:delete');
       this.setData({
         canManageTemplates: hasPermission(perms, 'development:templates:view'),
         canQuickAddUnit: hasPermission(perms, 'basic:dictionaries:create'),
@@ -195,11 +196,11 @@ Page({
     this._working = syncDevStyleVariants(style, category, this._dictionaries);
     const s = this._working;
 
-    const categoryNames = (this._categories || []).map((c) => c.name);
-    const categoryPickerIndex = Math.max(
-      0,
-      (this._categories || []).findIndex((c) => c.id === s.categoryId),
-    );
+    const categoryOptions = (this._categories || []).map((c) => ({
+      id: c.id,
+      name: c.name,
+      selected: c.id === s.categoryId,
+    }));
     const units = (this._dictionaries && this._dictionaries.units) || [];
     const unit = units.find((u) => u.id === s.unitId);
 
@@ -262,6 +263,7 @@ Page({
     this.setData({
       loading: false,
       isEdit: !!this._styleId,
+      canDelete: !!(this._styleId && this._canDelete && canDeleteDevStyle(s)),
       pageTitle: this._styleId ? '编辑款式' : '录入新产品',
       form: {
         name: s.name || '',
@@ -273,9 +275,7 @@ Page({
         purchasePriceText: s.purchasePrice != null ? String(s.purchasePrice) : '',
         unitId: s.unitId || '',
       },
-      categoryNames,
-      categoryPickerIndex,
-      categoryName: category ? category.name : '',
+      categoryOptions,
       unitName: unit ? unit.name : '',
       supplierName: findPartnerName(this._partners, s.supplierId),
       customFields,
@@ -295,10 +295,10 @@ Page({
     });
   },
 
-  onCategoryChange(e) {
-    const idx = Number(e.detail.value) || 0;
-    const cat = (this._categories || [])[idx];
-    if (!cat) return;
+  onCategoryTap(e) {
+    const id = e.currentTarget.dataset.id;
+    const cat = (this._categories || []).find((c) => c.id === id);
+    if (!cat || cat.id === this._working.categoryId) return;
     this._working = {
       ...this._working,
       categoryId: cat.id,
@@ -532,6 +532,34 @@ Page({
       afterSaveReturnToList(LIST_ROUTES.DEVELOPMENT_STYLES);
     } catch (e) {
       wx.showToast({ title: (e && e.message) || '保存失败', icon: 'none' });
+      this.setData({ submitting: false });
+    }
+  },
+
+  async onDeleteTap() {
+    if (!this._styleId || !this.data.canDelete || this.data.submitting) return;
+    const code = (this._working && this._working.code) || '';
+    const ok = await new Promise((resolve) => {
+      wx.showModal({
+        title: '删除款式',
+        content: `确定删除「${code}」？仅当所有节点均为待开始时可删除。`,
+        success: (res) => resolve(!!res.confirm),
+      });
+    });
+    if (!ok) return;
+    this.setData({ submitting: true });
+    try {
+      await deleteDevStyle(this._styleId);
+      try {
+        const ec = this.getOpenerEventChannel && this.getOpenerEventChannel();
+        if (ec && ec.emit) ec.emit('hubListChanged');
+      } catch {
+        // ignore
+      }
+      wx.showToast({ title: '已删除', icon: 'success' });
+      afterSaveReturnToList(LIST_ROUTES.DEVELOPMENT_STYLES);
+    } catch (e) {
+      wx.showToast({ title: (e && e.message) || '删除失败', icon: 'none' });
       this.setData({ submitting: false });
     }
   },

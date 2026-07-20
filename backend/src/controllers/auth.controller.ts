@@ -72,3 +72,32 @@ export const phoneChangeComplete = asyncHandler(async (req, res) => {
   setAuthCookies(res, result.accessToken, result.refreshToken);
   res.json(result);
 });
+
+export const wechatMiniLogin = asyncHandler(async (req, res) => {
+  const { code, client } = req.body;
+  const result = await authService.loginWithWechatMini(code, authService.normalizeAuthClient(client ?? 'miniprogram'));
+  setAuthCookies(res, result.accessToken, result.refreshToken);
+  res.json(result);
+});
+
+export const wechatMiniBindAndLogin = asyncHandler(async (req, res) => {
+  const { code, username, password, client } = req.body;
+  const result = await authService.bindWechatMiniAndLogin(
+    code,
+    username,
+    password,
+    authService.normalizeAuthClient(client ?? 'miniprogram'),
+  );
+  setAuthCookies(res, result.accessToken, result.refreshToken);
+  res.json(result);
+});
+
+export const wechatMiniBind = asyncHandler(async (req, res) => {
+  const result = await authService.bindWechatMini(req.user!.userId, req.body.code);
+  res.json(result);
+});
+
+export const wechatMiniUnbind = asyncHandler(async (req, res) => {
+  const result = await authService.unbindWechatMini(req.user!.userId);
+  res.json(result);
+});

@@ -11,21 +11,22 @@
   <scroll-view class="plan-create-scroll" scroll-y style="height: {{scrollHeight}}px;" show-scrollbar="{{false}}">
     <view wx:if="{{loading}}" class="plan-create-muted">加载中…</view>
     <view wx:else class="plan-create-page">
-      <view class="plan-form-card {{showTodoBtn ? 'plan-form-card--todo' : ''}}">
-        <view
-          wx:if="{{showTodoBtn}}"
-          class="todo-entry-btn todo-entry-btn--corner"
-          bindtap="onAddTodoTap"
-        >待办</view>
+      <view class="plan-form-card">
         <view class="plan-form-cell">
           <text class="plan-form-cell__label">节点</text>
           <text class="plan-form-cell__value">{{stageName}}</text>
         </view>
-        <view class="plan-form-cell plan-form-cell--input">
+        <view class="plan-form-cell plan-form-cell--status">
           <text class="plan-form-cell__label">状态</text>
-          <picker mode="selector" range="{{statusOptions}}" range-key="label" value="{{statusIndex}}" bindchange="onStatusChange">
-            <view class="plan-form-cell__value">{{statusOptions[statusIndex].label}}</view>
-          </picker>
+          <view class="dev-status-btns">
+            <view
+              wx:for="{{statusOptions}}"
+              wx:key="id"
+              class="dev-status-btn {{status === item.id ? 'dev-status-btn--active' : ''}}"
+              data-id="{{item.id}}"
+              bindtap="onStatusTap"
+            >{{item.label}}</view>
+          </view>
         </view>
       </view>
 
@@ -52,11 +53,37 @@
             bind:sheetopen="onPickerSheetOpen"
             bind:sheetclose="onPickerSheetClose"
           />
-          <view wx:elif="{{item.type === 'file'}}" class="plan-form-cell">
+          <view wx:elif="{{item.type === 'file'}}" class="plan-form-cell plan-form-cell--file">
             <text class="plan-form-cell__label">{{item.required ? '*' : ''}}{{item.label}}</text>
-            <view class="dev-file-btn" data-id="{{item.id}}" bindtap="onFilePick">
-              {{item.value ? '已上传（点按更换）' : '选择图片'}}
+            <view wx:if="{{item.previewList.length}}" class="dev-file-thumbs">
+              <view
+                wx:for="{{item.previewList}}"
+                wx:for-item="thumb"
+                wx:key="id"
+                class="dev-file-thumb-item"
+              >
+                <image
+                  class="dev-file-thumb"
+                  src="{{thumb.src}}"
+                  mode="aspectFill"
+                  data-id="{{item.id}}"
+                  data-index="{{thumb.index}}"
+                  catchtap="onFilePreview"
+                />
+                <view
+                  class="dev-file-thumb-del"
+                  data-id="{{item.id}}"
+                  data-index="{{thumb.index}}"
+                  catchtap="onFileRemove"
+                >×</view>
+              </view>
             </view>
+            <view
+              wx:if="{{item.canAddMore !== false}}"
+              class="dev-file-btn {{item.hasFile ? 'dev-file-btn--on' : ''}}"
+              data-id="{{item.id}}"
+              bindtap="onFilePick"
+            >{{item.fileLabel || '选择图片'}}</view>
           </view>
           <view wx:else class="plan-form-cell plan-form-cell--input">
             <text class="plan-form-cell__label">{{item.required ? '*' : ''}}{{item.label}}</text>
@@ -67,10 +94,12 @@
     </view>
   </scroll-view>
 
-  <view wx:if="{{!loading && !pickerSheetOpen}}" class="report-batch-footer">
-    <view
-      class="report-batch-footer__btn report-batch-footer__btn--primary {{submitting ? 'report-batch-footer__btn--disabled' : ''}}"
+  <view wx:if="{{!loading && !pickerSheetOpen}}" class="plan-create-footer">
+    <button
+      class="plan-create-submit"
+      loading="{{submitting}}"
+      disabled="{{submitting}}"
       bindtap="onSaveTap"
-    >{{submitting ? '保存中…' : '保存登记'}}</view>
+    >{{submitting ? '保存中…' : '保存登记'}}</button>
   </view>
 </view>

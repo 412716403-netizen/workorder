@@ -279,6 +279,15 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
         <div className="flex-1 min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-3">
             <h2 className={`truncate ${pageTitleClass}`}>{style.name}</h2>
+            <AddTodoButton
+              seed={{
+                sourceType: 'dev_style',
+                sourceId: style.id,
+                sourceDocNo: '开发管理',
+                sourceTitle: `${style.name}${style.code ? ` · ${style.code}` : ''}`,
+                href: `/development?styleId=${encodeURIComponent(style.id)}`,
+              }}
+            />
             {style.status === DevStyleStatus.PUBLISHED ? (
               <span className="flex items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-600">
                 <CheckCircle2 className="w-3.5 h-3.5" /> 商品信息已发布
@@ -289,7 +298,7 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
                 onClick={onPublish}
                 className={`${primaryToolbarButtonClass} bg-indigo-600 text-white hover:bg-indigo-700 flex items-center gap-2`}
               >
-                <PackageCheck className="w-3.5 h-3.5" /> 生成大货商品信息
+                <PackageCheck className="w-3.5 h-3.5" /> 生成商品
               </button>
             ) : null}
           </div>
@@ -412,7 +421,7 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
             </div>
             );
           })}
-          {canEdit && !readOnly && (
+          {canEdit && !readOnly && style.status === DevStyleStatus.DEVELOPING && (
             <button
               type="button"
               onClick={() => setAddSampleOpen(true)}
@@ -517,16 +526,6 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
                 )}
               </h3>
               <div className="flex shrink-0 items-center gap-2">
-                <AddTodoButton
-                  modalZIndexClass="z-[400]"
-                  seed={{
-                    sourceType: 'dev_bom',
-                    sourceId: activeSample.id,
-                    sourceDocNo: '开发管理',
-                    sourceTitle: `${style.name} · BOM 录入 · ${activeSample.name}`,
-                    href: `/development?styleId=${encodeURIComponent(style.id)}&devSampleId=${encodeURIComponent(activeSample.id)}`,
-                  }}
-                />
                 <button type="button" onClick={() => setBomModalOpen(false)}>
                   <X className="h-5 w-5 text-slate-400" />
                 </button>
@@ -576,8 +575,6 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
         <DevStageRegisterModal
           stage={registerStage}
           open
-          styleId={style.id}
-          styleName={style.name}
           templateFields={templateFieldsForStage}
           templates={templates}
           canManageTemplates={canManageTemplates}

@@ -183,11 +183,11 @@ const DevManagementView: React.FC = () => {
   const handlePublish = useCallback(async () => {
     if (!selected) return;
     if (selected.status !== DevStyleStatus.ARCHIVED) {
-      toast.error('请先将产品归档后再生成大货商品信息');
+      toast.error('请先将产品归档后再生成商品');
       return;
     }
     const ok = await confirm({
-      title: '生成大货商品信息',
+      title: '生成商品',
       message: '将把已归档产品的分类、工序、变体与 BOM 写入产品档案，并标记为已发布。是否继续？',
     });
     if (!ok) return;
@@ -196,7 +196,7 @@ const DevManagementView: React.FC = () => {
       await refreshProducts();
       setActiveTab('archived');
       setSelectedId(selected.id);
-      toast.success(`已生成大货商品，产品档案已同步（${productId}）`);
+      toast.success(`已生成商品，产品档案已同步（${productId}）`);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : '发布失败');
     }

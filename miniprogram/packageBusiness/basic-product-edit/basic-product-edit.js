@@ -54,9 +54,7 @@ Page({
     isPersisted: false,
     canDelete: false,
     form: {},
-    categoryNames: [],
-    categoryPickerIndex: 0,
-    categoryName: '',
+    categoryOptions: [],
     unitName: '',
     canQuickAddUnit: false,
     canQuickAddDict: false,
@@ -180,8 +178,11 @@ Page({
     const synced = syncVariantsIfNeeded(product, category, this._dictionaries);
     if (synced !== product) this._workingProduct = synced;
 
-    const categoryNames = (this._categories || []).map((c) => c.name);
-    const categoryPickerIndex = Math.max(0, (this._categories || []).findIndex((c) => c.id === product.categoryId));
+    const categoryOptions = (this._categories || []).map((c) => ({
+      id: c.id,
+      name: c.name,
+      selected: c.id === product.categoryId
+    }));
     const units = this._dictionaries && this._dictionaries.units || [];
     const unitIdx = units.findIndex((u) => u.id === product.unitId);
     const unitName = unitIdx >= 0 ? units[unitIdx].name : '';
@@ -210,9 +211,7 @@ Page({
         purchasePriceText: this._workingProduct.purchasePrice != null ? String(this._workingProduct.purchasePrice) : '',
         unitId: this._workingProduct.unitId || ''
       },
-      categoryNames,
-      categoryPickerIndex,
-      categoryName: category ? category.name : '',
+      categoryOptions,
       unitName,
       canQuickAddUnit: hasPermission(
         this._tenantCtx && this._tenantCtx.permissions || [],
@@ -238,10 +237,10 @@ Page({
     return (this._categories || []).find((c) => c.id === this._workingProduct.categoryId);
   },
 
-  onCategoryChange(e) {
-    const idx = Number(e.detail.value) || 0;
-    const cat = (this._categories || [])[idx];
-    if (!cat) return;
+  onCategoryTap(e) {
+    const id = e.currentTarget.dataset.id;
+    const cat = (this._categories || []).find((c) => c.id === id);
+    if (!cat || cat.id === this._workingProduct.categoryId) return;
     this._workingProduct = {
       ...this._workingProduct,
       categoryId: cat.id,

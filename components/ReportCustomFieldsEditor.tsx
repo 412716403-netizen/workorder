@@ -18,6 +18,8 @@ interface ReportCustomFieldsEditorProps {
   onFilePreview?: (url: string, type: 'image' | 'pdf') => void;
   /** grid：父级为 sm:grid-cols-2；file 类型占满一行 */
   variant?: 'stack' | 'grid';
+  /** 节点登记等场景：file 字段允许多图 */
+  allowMultipleFiles?: boolean;
 }
 
 function reportFieldToPlanFormField(field: ReportFieldDefinition): PlanFormFieldConfig {
@@ -52,6 +54,7 @@ const ReportCustomFieldsEditor: React.FC<ReportCustomFieldsEditorProps> = ({
   inputClassName = formStandardControlClass,
   onFilePreview,
   variant = 'stack',
+  allowMultipleFiles = false,
 }) => {
   void _namePrefix;
   void _fileHint;
@@ -75,6 +78,7 @@ const ReportCustomFieldsEditor: React.FC<ReportCustomFieldsEditorProps> = ({
               onChange={next => onChange(field.id, next)}
               controlClassName={inputClassName}
               onFilePreview={onFilePreview}
+              multipleFiles={allowMultipleFiles && isFile}
             />
           </div>
         );

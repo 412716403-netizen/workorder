@@ -159,6 +159,22 @@ refresh 依赖后端 Cookie 机制，而不是前端直接读写 refresh token�
 - 审计：`GET /api/admin/audit-logs`；平台改用户/企业时写入 `platform_audit_logs`（migration `20260718140000`）。
 - 前端入口：账号管理 **「使用情况」** Tab（`views/admin/TenantUsageView.tsx`）。
 
+### 4.5.2 微信小程序一键登录
+
+- **规则**：不自动注册系统账号；仅允许把微信 `openid` 绑定到**已有** `User`。未绑定返回 `404` + `code: WECHAT_NOT_BOUND`，引导账号密码绑定。
+- **数据**：`users.wx_mini_openid`（唯一、可空）、`users.wx_unionid`（可空，跨端预留）；migration `20260719170000_user_wechat_mini_openid`。
+- **配置**：服务端环境变量 `WX_MINI_APPID` / `WX_MINI_SECRET`（见 `backend/.env.example`）。未配置时微信相关接口返回 `503` + `WECHAT_NOT_CONFIGURED`，账号密码登录不受影响。
+- **接口**（均在 `/api/auth`，限流与 login 相同）：
+  | 方法 | 路径 | 鉴权 | 说明 |
+  |------|------|------|------|
+  | POST | `/wechat/miniprogram` | 无 | `{ code, client? }` → 已绑定则发与 `/login` 同形会话；未绑定 `409` + `WECHAT_NOT_BOUND` |
+  | POST | `/wechat/bind-and-login` | 无 | `{ code, username, password, client? }` → 校验密码后绑定并登录 |
+  | POST | `/wechat/bind` | Bearer | `{ code }` → 已登录用户绑定 |
+  | POST | `/wechat/unbind` | Bearer | 解绑当前用户微信 |
+- **`GET /auth/me`** 增加 `wechatBound: boolean`。
+- **小程序**：登录页「微信一键登录」；未绑定进入绑定模式；「我的」→「微信登录」可绑定/解绑（`miniprogram/pages/login`、`pages/mine`、`utils/authLogin.js`）。
+- **实现**：`backend/src/lib/wechat.ts`（`code2Session`）、`auth.service.ts` 微信相关函数。
+
 ### 4.6 细粒度权限：单价/金额查看（前端展示）
 
 以下 key 在**角色编辑**中配置，控制进销存、外协、协作模块的单价/金额是否在 UI / 打印 / 导出中展示。语义见 [`01-business-rules.md`](./01-business-rules.md) §5.6。

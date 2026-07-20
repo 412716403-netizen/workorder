@@ -20,8 +20,12 @@ const {
   splitIsoToDateTime,
   joinDateTimeToIso,
 } = require('../utils/devStageRegister.js');
-const { chooseProductImageAsDataUrl } = require('../utils/fileBase64.js');
-const { promptCreateTodo } = require('../utils/devTodoCreate.js');
+const { chooseProductImages } = require('../utils/fileBase64.js');
+const {
+  DEV_STAGE_FILE_MAX_COUNT,
+  parseDevStageFileUrls,
+  serializeDevStageFileUrls,
+} = require('../utils/devStageFileValue.js');
 
 function computeScrollHeight(nav) {
   const win = readWindowMetrics();
@@ -29,6 +33,30 @@ function computeScrollHeight(nav) {
   const footerPx = Math.ceil(128 * rpx) + (win.safeAreaBottom || 0);
   const headerPx = computePlanCreateHeaderHeight(nav);
   return Math.max(200, (win.windowHeight || 667) - headerPx - footerPx);
+}
+
+function enrichFileField(field, urls, previewSrcs) {
+  const list = parseDevStageFileUrls(urls);
+  const previews = (previewSrcs && previewSrcs.length ? previewSrcs : list).slice(
+    0,
+    DEV_STAGE_FILE_MAX_COUNT,
+  );
+  const hasFile = list.length > 0;
+  return {
+    ...field,
+    value: hasFile ? 'uploaded' : '',
+    hasFile,
+    fileCount: list.length,
+    fileLabel: hasFile
+      ? `已传 ${list.length} 张${list.length < DEV_STAGE_FILE_MAX_COUNT ? '（可继续添加）' : '（已满）'}`
+      : '选择图片',
+    canAddMore: list.length < DEV_STAGE_FILE_MAX_COUNT,
+    previewList: previews.map((src, idx) => ({
+      id: `${field.id}-${idx}`,
+      src,
+      index: idx,
+    })),
+  };
 }
 
 Page({
@@ -43,7 +71,6 @@ Page({
     statusIndex: 0,
     fields: [],
     pickerSheetOpen: false,
-    showTodoBtn: false,
     statusBarHeight: 20,
     navBarHeight: 44,
     headerBlockHeight: 88,
@@ -52,6 +79,9 @@ Page({
 
   onLoad(options) {
     const nav = readNavBarMetrics();
+    this._initialized = false;
+    this._fileValues = {};
+    this._filePreviews = {};
     this.setData({
       styleId: options.styleId ? decodeURIComponent(options.styleId) : '',
       stageId: options.stageId ? decodeURIComponent(options.stageId) : '',
@@ -84,8 +114,7 @@ Page({
         setTimeout(() => wx.navigateBack(), 800);
         return;
       }
-      this.setData({ showTodoBtn: isPluginEnabled(plugins, 'todo_reminder') });
-      this.bootstrap();
+      if (!this._initialized) this.bootstrap();
     });
   },
 
@@ -93,7 +122,27 @@ Page({
     wx.navigateBack();
   },
 
+  resolveFieldValue(field) {
+    if (field && field.type === 'file') {
+      const urls = this._fileValues && this._fileValues[field.id];
+      if (Array.isArray(urls)) return serializeDevStageFileUrls(urls);
+      if (typeof urls === 'string') return serializeDevStageFileUrls(parseDevStageFileUrls(urls));
+      if (field.value === 'uploaded') return '';
+    }
+    return (field && field.value) || '';
+  },
+
+  refreshFileField(fieldId) {
+    const urls = this._fileValues[fieldId] || [];
+    const previews = this._filePreviews[fieldId] || urls;
+    const fields = (this.data.fields || []).map((f) =>
+      f.id === fieldId ? enrichFileField(f, urls, previews) : f,
+    );
+    this.setData({ fields });
+  },
+
   async bootstrap() {
+    this._initialized = true;
     this.setData({ loading: true });
     try {
       const [style, templates] = await Promise.all([
@@ -108,13 +157,22 @@ Page({
       }
       this._style = style;
       this._templates = templates || [];
+      this._fileValues = {};
+      this._filePreviews = {};
       const fields = buildStageRegisterFields(found.stage, this._templates).map((f) => {
         const parts = f.type === 'date' ? splitIsoToDateTime(f.value) : { datePart: '', timePart: '' };
-        return {
+        const base = {
           ...f,
           datePart: parts.datePart,
           timePart: f.dateWithTime ? parts.timePart : parts.timePart || '00:00',
         };
+        if (f.type === 'file') {
+          const urls = parseDevStageFileUrls(f.value);
+          this._fileValues[f.id] = urls;
+          this._filePreviews[f.id] = urls.slice();
+          return enrichFileField(base, urls, urls);
+        }
+        return base;
       });
       const statusIndex = Math.max(
         0,
@@ -128,15 +186,20 @@ Page({
         fields,
       });
     } catch (err) {
+      this._initialized = false;
       wx.showToast({ title: (err && err.message) || '加载失败', icon: 'none' });
       this.setData({ loading: false });
     }
   },
 
-  onStatusChange(e) {
-    const idx = Number(e.detail.value) || 0;
-    const opt = STAGE_STATUS_OPTIONS[idx];
-    this.setData({ statusIndex: idx, status: opt ? opt.id : 'pending' });
+  onStatusTap(e) {
+    const id = e.currentTarget.dataset.id;
+    if (!id || id === this.data.status) return;
+    const idx = STAGE_STATUS_OPTIONS.findIndex((o) => o.id === id);
+    this.setData({
+      status: id,
+      statusIndex: idx >= 0 ? idx : 0,
+    });
   },
 
   onFieldInput(e) {
@@ -187,28 +250,72 @@ Page({
 
   async onFilePick(e) {
     const id = e.currentTarget.dataset.id;
-    try {
-      const dataUrl = await chooseProductImageAsDataUrl();
-      if (!dataUrl) return;
-      const fields = (this.data.fields || []).map((f) =>
-        f.id === id ? { ...f, value: dataUrl } : f,
-      );
-      this.setData({ fields });
-    } catch (err) {
-      wx.showToast({ title: (err && err.message) || '选择失败', icon: 'none' });
+    if (!id) return;
+    const existing = this._fileValues[id] || [];
+    const room = DEV_STAGE_FILE_MAX_COUNT - existing.length;
+    if (room <= 0) {
+      wx.showToast({ title: `最多 ${DEV_STAGE_FILE_MAX_COUNT} 张`, icon: 'none' });
+      return;
     }
+    try {
+      const picked = await chooseProductImages(room);
+      if (!picked || !picked.length) return;
+      const nextUrls = existing.concat(picked.map((p) => p.dataUrl)).slice(0, DEV_STAGE_FILE_MAX_COUNT);
+      const nextPreviews = (this._filePreviews[id] || [])
+        .concat(picked.map((p) => p.tempFilePath || p.dataUrl))
+        .slice(0, DEV_STAGE_FILE_MAX_COUNT);
+      this._fileValues[id] = nextUrls;
+      this._filePreviews[id] = nextPreviews;
+      this.refreshFileField(id);
+      wx.showToast({ title: `已添加 ${picked.length} 张`, icon: 'success' });
+    } catch (err) {
+      if (err && err.code === 'FILE_TOO_LARGE') {
+        wx.showToast({ title: '单张图片不能超过 4MB', icon: 'none' });
+        return;
+      }
+      wx.showToast({
+        title: (err && (err.message || err.errMsg)) || '选择失败',
+        icon: 'none',
+      });
+    }
+  },
+
+  onFileRemove(e) {
+    const id = e.currentTarget.dataset.id;
+    const index = Number(e.currentTarget.dataset.index);
+    if (!id || Number.isNaN(index)) return;
+    const urls = (this._fileValues[id] || []).filter((_, i) => i !== index);
+    const previews = (this._filePreviews[id] || []).filter((_, i) => i !== index);
+    this._fileValues[id] = urls;
+    this._filePreviews[id] = previews;
+    this.refreshFileField(id);
+  },
+
+  onFilePreview(e) {
+    const id = e.currentTarget.dataset.id;
+    const index = Number(e.currentTarget.dataset.index) || 0;
+    const urls = this._filePreviews[id] || this._fileValues[id] || [];
+    if (!urls.length) return;
+    wx.previewImage({
+      current: urls[index] || urls[0],
+      urls,
+    });
   },
 
   async onSaveTap() {
     if (this.data.submitting) return;
-    const err = validateStageRegisterFields(this.data.fields);
+    const fieldsForSave = (this.data.fields || []).map((f) => ({
+      ...f,
+      value: this.resolveFieldValue(f),
+    }));
+    const err = validateStageRegisterFields(fieldsForSave);
     if (err) {
       wx.showToast({ title: err, icon: 'none' });
       return;
     }
     const userName =
       (this._tenantCtx && (this._tenantCtx.userName || this._tenantCtx.name)) || '';
-    const payload = buildStageUpdatePayload(this.data.status, this.data.fields, userName);
+    const payload = buildStageUpdatePayload(this.data.status, fieldsForSave, userName);
     this.setData({ submitting: true });
     try {
       await updateDevStage(this.data.stageId, payload);
@@ -218,20 +325,5 @@ Page({
       wx.showToast({ title: (e && e.message) || '保存失败', icon: 'none' });
       this.setData({ submitting: false });
     }
-  },
-
-  onAddTodoTap() {
-    if (!this.data.showTodoBtn) return;
-    const style = this._style;
-    const found = findStageById(style, this.data.stageId);
-    const stageName = this.data.stageName || (found && found.stage && found.stage.name) || '';
-    const styleName = style ? style.name || style.code : '';
-    promptCreateTodo({
-      sourceType: 'dev_stage',
-      sourceId: this.data.stageId,
-      sourceDocNo: '开发管理',
-      sourceTitle: `${styleName ? `${styleName} · ` : ''}节点登记 · ${stageName}`,
-      href: `/development?styleId=${encodeURIComponent(this.data.styleId)}&devStageId=${encodeURIComponent(this.data.stageId)}`,
-    });
   },
 });

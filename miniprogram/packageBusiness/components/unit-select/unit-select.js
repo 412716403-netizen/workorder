@@ -2,6 +2,7 @@ const {
   openBottomSheet,
   closeBottomSheet,
   clearBottomSheetTimers,
+  TAG_PICKER_HEIGHT_RATIO,
 } = require('../../../utils/bottomSheetAnim.js');
 const { createDictionaryItem } = require('../../utils/dictionaryApi.js');
 
@@ -68,7 +69,7 @@ Component({
       if (this.properties.disabled) return;
       this.setData({ search: '', showQuickAdd: false, quickAddName: '' });
       this.refreshFiltered();
-      openBottomSheet(this);
+      openBottomSheet(this, null, { heightRatio: TAG_PICKER_HEIGHT_RATIO });
     },
 
     onClose() {

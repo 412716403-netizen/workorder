@@ -465,6 +465,8 @@ export async function createProduct(
   coerceProductJsonFields(data);
   omitUndefinedValues(data);
   await applyImageThumbFromUrl(data);
+  // 事务内的 tx 不会挂租户扩展，必须显式写回 tenantId（sanitizeCreate 会剥掉 body 里的 tenantId）
+  data.tenantId = tenantId;
 
   await assertProductCategoryIdForWrite(db, data, 'create');
   await assertProductColorSizeForWrite(db, data, 'create');
@@ -706,10 +708,15 @@ export async function getBom(db: TenantPrismaClient, id: string) {
   return bom;
 }
 
-export async function createBom(db: TenantPrismaClient, body: Record<string, unknown>) {
+export async function createBom(
+  db: TenantPrismaClient,
+  body: Record<string, unknown>,
+  tenantId?: string,
+) {
   const { items, ...rest } = body;
   const data = sanitizeCreate(rest);
   if (!data.id) data.id = genId('bom');
+  if (tenantId) data.tenantId = tenantId;
   const cleanItems = items
     ? sanitizeItems(items as Record<string, unknown>[], ['quantityInput', 'bomId'])
     : undefined;

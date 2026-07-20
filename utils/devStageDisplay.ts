@@ -5,9 +5,12 @@ export type StageDisplayFieldRow = {
   tplField?: DevStageTemplateFieldDto;
 };
 
-/** 节点登记字段是否有可展示的值（含文件 data URL） */
+/** 节点登记字段是否有可展示的值（含文件 data URL / 多图 JSON） */
 export function isDevStageFieldValueFilled(value: string | undefined | null): boolean {
-  return typeof value === 'string' && value.trim() !== '';
+  if (typeof value !== 'string') return false;
+  const s = value.trim();
+  if (!s || s === '[]') return false;
+  return true;
 }
 
 /** 按节点库模板顺序排列、仅含已填写的登记字段 */

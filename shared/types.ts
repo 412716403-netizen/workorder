@@ -695,6 +695,7 @@ export const TODO_SOURCE_TYPES = [
   'sales_bill',
   'dev_stage',
   'dev_bom',
+  'dev_style',
 ] as const;
 export type TodoSourceType = (typeof TODO_SOURCE_TYPES)[number];
 

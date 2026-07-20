@@ -46,37 +46,57 @@ function assertFileSize(size) {
   }
 }
 
-function chooseProductImageAsDataUrl() {
+function chooseProductImage(options) {
+  const maxCount = Math.max(1, Math.min(9, (options && options.count) || 1));
   return new Promise((resolve, reject) => {
     wx.chooseMedia({
-      count: 1,
+      count: maxCount,
       mediaType: ['image'],
       sourceType: ['album', 'camera'],
       sizeType: ['compressed'],
       success: async (res) => {
         try {
-          const file = (res.tempFiles && res.tempFiles[0]) || null;
-          if (!file || !file.tempFilePath) {
-            resolve(null);
+          const files = (res.tempFiles || []).filter((f) => f && f.tempFilePath);
+          if (!files.length) {
+            resolve(maxCount > 1 ? [] : null);
             return;
           }
-          assertFileSize(file.size);
-          const mime = guessMime(file.tempFilePath, file.fileType === 'png' ? 'png' : 'image');
-          const dataUrl = await readFileAsDataUrl(file.tempFilePath, mime);
-          resolve(dataUrl);
+          const results = [];
+          for (let i = 0; i < files.length; i += 1) {
+            const file = files[i];
+            assertFileSize(file.size);
+            const mime = guessMime(file.tempFilePath, file.fileType === 'png' ? 'png' : 'image');
+            const dataUrl = await readFileAsDataUrl(file.tempFilePath, mime);
+            results.push({
+              dataUrl,
+              tempFilePath: file.tempFilePath,
+              size: file.size,
+            });
+          }
+          resolve(maxCount > 1 ? results : results[0] || null);
         } catch (err) {
           reject(err);
         }
       },
       fail: (err) => {
         if (err && err.errMsg && err.errMsg.indexOf('cancel') >= 0) {
-          resolve(null);
+          resolve(maxCount > 1 ? [] : null);
           return;
         }
         reject(err);
       },
     });
   });
+}
+
+function chooseProductImageAsDataUrl() {
+  return chooseProductImage({ count: 1 }).then((picked) => (picked ? picked.dataUrl : null));
+}
+
+function chooseProductImages(maxCount) {
+  return chooseProductImage({ count: maxCount || 9 }).then((picked) =>
+    Array.isArray(picked) ? picked : picked ? [picked] : [],
+  );
 }
 
 function chooseMessageFileAsDataUrl() {
@@ -157,6 +177,8 @@ module.exports = {
   MAX_CUSTOM_FILE_BYTES,
   guessMime,
   readFileAsDataUrl,
+  chooseProductImage,
+  chooseProductImages,
   chooseProductImageAsDataUrl,
   chooseMessageFileAsDataUrl,
   chooseCustomFieldFileAsDataUrl,

@@ -39,9 +39,7 @@ Page({
       name: '',
       customData: {}
     },
-    categoryNames: [],
-    categoryPickerIndex: 0,
-    categoryName: '',
+    categoryOptions: [],
     customFields: [],
     listNoText: '',
     showListNo: false,
@@ -133,9 +131,11 @@ Page({
   applyUiFromWorking() {
     const partner = this._workingPartner;
     const category = this.getActiveCategory();
-    const categoryNames = (this._categories || []).map((c) => c.name);
-    const categoryIdx = (this._categories || []).findIndex((c) => c.id === partner.categoryId);
-    const categoryPickerIndex = categoryIdx >= 0 ? categoryIdx : 0;
+    const categoryOptions = (this._categories || []).map((c) => ({
+      id: c.id,
+      name: c.name,
+      selected: c.id === partner.categoryId
+    }));
     const customFields = buildPartnerCustomFieldsForForm(category);
 
     this.setData({
@@ -148,9 +148,7 @@ Page({
         { ...partner.customData } :
         {}
       },
-      categoryNames,
-      categoryPickerIndex,
-      categoryName: category ? category.name : '',
+      categoryOptions,
       customFields,
       listNoText: formatPartnerListNo(partner.partnerListNo),
       showListNo: partner.partnerListNo != null,
@@ -163,10 +161,10 @@ Page({
     this.setData({ 'form.name': this._workingPartner.name });
   },
 
-  onCategoryChange(e) {
-    const idx = Number(e.detail.value) || 0;
-    const cat = (this._categories || [])[idx];
-    if (!cat) return;
+  onCategoryTap(e) {
+    const id = e.currentTarget.dataset.id;
+    const cat = (this._categories || []).find((c) => c.id === id);
+    if (!cat || cat.id === this._workingPartner.categoryId) return;
     this._workingPartner = {
       ...this._workingPartner,
       categoryId: cat.id,
