@@ -3,6 +3,11 @@
  */
 
 const { sumOrderQty } = require('./orderProcessChips.js');
+const {
+  shouldExcludeFromProductionMaterialStats,
+  isReworkMaterialOpReason,
+  PROD_OP_REASON_FROM_REWORK,
+} = require('./productionMaterialReason.js');
 
 function roundQty(n) {
   return Math.round(Number(n) * 1000) / 1000;
@@ -159,8 +164,8 @@ function buildIssuedMapForOrder(prodRecords, orderId) {
   (prodRecords || []).forEach((r) => {
     if (r.partner) return;
     if (r.orderId !== orderId) return;
+    if (shouldExcludeFromProductionMaterialStats(r.reason)) return;
     if (r.type === 'STOCK_OUT') {
-      if (r.reason === '来自于返工') return;
       const pid = r.productId;
       issuedMap.set(pid, (issuedMap.get(pid) || 0) + (Number(r.quantity) || 0));
     } else if (r.type === 'STOCK_RETURN') {
@@ -180,8 +185,8 @@ function buildIssuedMapForProduct(prodRecords, groupOrders, sourceProductId) {
   (prodRecords || []).forEach((r) => {
     if (r.partner) return;
     if (!materialIssueHit(r)) return;
+    if (shouldExcludeFromProductionMaterialStats(r.reason)) return;
     if (r.type === 'STOCK_OUT') {
-      if (r.reason === '来自于返工') return;
       const pid = r.productId;
       issuedMap.set(pid, (issuedMap.get(pid) || 0) + (Number(r.quantity) || 0));
     } else if (r.type === 'STOCK_RETURN') {
@@ -216,7 +221,7 @@ function buildReworkIssuedMapForOrder(prodRecords, orderId) {
   (prodRecords || []).forEach((r) => {
     if (r.type !== 'STOCK_OUT') return;
     if (r.orderId !== orderId) return;
-    if (r.reason !== '来自于返工') return;
+    if (!isReworkMaterialOpReason(r.reason)) return;
     const pid = r.productId;
     issuedMap.set(pid, (issuedMap.get(pid) || 0) + (Number(r.quantity) || 0));
   });
@@ -227,7 +232,7 @@ function buildReworkIssuedMapForProduct(prodRecords, groupOrders, sourceProductI
   const familyIds = new Set((groupOrders || []).map((o) => o.id));
   const issuedMap = new Map();
   (prodRecords || []).forEach((r) => {
-    if (r.type !== 'STOCK_OUT' || r.reason !== '来自于返工') return;
+    if (r.type !== 'STOCK_OUT' || !isReworkMaterialOpReason(r.reason)) return;
     let inScope = false;
     if (sourceProductId) {
       if (r.sourceProductId === sourceProductId) inScope = true;

@@ -168,10 +168,6 @@ Page({
       } else {
         const defaultCategoryId = (categories[0] && categories[0].id) || '';
         style = buildEmptyDevStyle(defaultCategoryId);
-        const defaultStages = [...(templates || [])]
-          .sort((a, b) => (a.order || 0) - (b.order || 0))
-          .map((t) => t.name);
-        style.defaultStageNames = defaultStages;
       }
       this._working = JSON.parse(JSON.stringify(style));
       this.applyUi();

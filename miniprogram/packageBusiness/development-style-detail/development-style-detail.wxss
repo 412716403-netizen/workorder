@@ -127,6 +127,29 @@
   background: rgba(47, 107, 255, 0.06);
 }
 
+.dev-hero-outline-btn--amber {
+  color: #d97706;
+  border-color: #fcd34d;
+  background: #fffbeb;
+}
+
+.dev-hero-outline-btn--amber:active {
+  background: #fef3c7;
+}
+
+.dev-sample-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12rpx;
+  margin: 0 0 20rpx;
+}
+
+.dev-sample-toolbar .dev-hero-outline-btn {
+  min-width: 120rpx;
+  padding: 10rpx 20rpx;
+}
+
 .dev-status-badge {
   display: inline-block;
   padding: 6rpx 14rpx;
@@ -204,6 +227,7 @@
 }
 
 .dev-section-card__title {
+  flex-shrink: 0;
   font-size: 30rpx;
   font-weight: 700;
   color: #1f2329;
@@ -296,9 +320,17 @@
 
 .dev-detail-section-actions {
   display: flex;
-  gap: 12rpx;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10rpx;
   align-items: center;
-  flex-shrink: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.dev-detail-section-actions .dev-hero-outline-btn {
+  padding: 6rpx 14rpx;
+  font-size: 20rpx;
 }
 
 .dev-detail-link {
@@ -690,4 +722,33 @@
   margin-top: 8rpx;
   font-size: 22rpx;
   color: #94a3b8;
+}
+
+.dev-mat-summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 20rpx 0;
+  border-top: 1rpx solid #f8fafc;
+}
+
+.dev-mat-row__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.dev-mat-row__name {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.dev-mat-summary-net {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #4f46e5;
 }

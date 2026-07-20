@@ -6,6 +6,7 @@ import {
   requireSubPermissionOrProductionRead,
   requireSubPermissionOrFinanceRead,
   requireSubPermissionOrProductionOrFinanceRead,
+  requireSubPermissionOrProductionOrFinanceOrDevelopmentRead,
   requireTenantMemberRead,
   requireTenantConfigEdit,
   requireTenantConfigRead,
@@ -71,7 +72,7 @@ router.put('/nodes/:id',  requireSubPermission('settings:nodes:edit'),   validat
 router.delete('/nodes/:id', requireSubPermission('settings:nodes:delete'), ctrl.deleteNode);
 
 // 仓库
-router.get('/warehouses',      requireSubPermissionOrProductionOrFinanceRead('settings:warehouses:view'),   ctrl.listWarehouses);
+router.get('/warehouses',      requireSubPermissionOrProductionOrFinanceOrDevelopmentRead('settings:warehouses:view'),   ctrl.listWarehouses);
 router.get('/warehouses/usage', requireSubPermission('settings:warehouses:view'),  ctrl.getWarehouseUsage);
 router.post('/warehouses',     requireSubPermission('settings:warehouses:create'), validate(nameRequiredSchema), ctrl.createWarehouse);
 router.put('/warehouses/:id',  requireSubPermission('settings:warehouses:edit'),   validate(updateNameSchema), ctrl.updateWarehouse);

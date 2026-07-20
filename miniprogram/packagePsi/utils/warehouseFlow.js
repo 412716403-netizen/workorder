@@ -2,6 +2,8 @@
  * 仓库流水聚合（对齐 views/psi-ops/warehouseFlowHelpers.ts）
  */
 
+const PROD_OP_REASON_FROM_DEV = '来自于开发';
+
 const WAREHOUSE_FLOW_TYPES = [
 'PURCHASE_BILL',
 'SALES_BILL',
@@ -21,8 +23,38 @@ const warehouseFlowTypeLabel = {
   STOCKTAKE: '盘点',
   STOCK_IN: '生产入库',
   STOCK_RETURN: '生产退料',
-  STOCK_OUT: '领料发出'
+  STOCK_OUT: '领料发出',
+  DEV_STOCK_OUT: '开发领料',
+  DEV_STOCK_RETURN: '开发退料'
 };
+
+function isDevMaterialOpReason(reason) {
+  return reason === PROD_OP_REASON_FROM_DEV;
+}
+
+/** 对齐 Web matchesWarehouseFlowTypeFilter */
+function matchesWarehouseFlowTypeFilter(row, typeFilter) {
+  if (!typeFilter || typeFilter === 'all') return true;
+  const reason = row.record && row.record.reason;
+  const isDev = isDevMaterialOpReason(reason);
+  if (typeFilter === 'SALES_RETURN') return row.type === 'SALES_BILL' && row.quantity < 0;
+  if (typeFilter === 'SALES_BILL') return row.type === 'SALES_BILL' && row.quantity >= 0;
+  if (typeFilter === 'PURCHASE_RETURN') return row.type === 'PURCHASE_BILL' && row.quantity < 0;
+  if (typeFilter === 'PURCHASE_BILL') return row.type === 'PURCHASE_BILL' && row.quantity >= 0;
+  if (typeFilter === 'DEV_STOCK_OUT') return row.type === 'STOCK_OUT' && isDev;
+  if (typeFilter === 'DEV_STOCK_RETURN') return row.type === 'STOCK_RETURN' && isDev;
+  if (typeFilter === 'STOCK_OUT') return row.type === 'STOCK_OUT' && !isDev;
+  if (typeFilter === 'STOCK_RETURN') return row.type === 'STOCK_RETURN' && !isDev;
+  return row.type === typeFilter;
+}
+
+function resolveProdWarehouseFlowTypeLabel(type, reason) {
+  if (reason === PROD_OP_REASON_FROM_DEV) {
+    if (type === 'STOCK_OUT') return '开发领料';
+    if (type === 'STOCK_RETURN') return '开发退料';
+  }
+  return warehouseFlowTypeLabel[type] || type;
+}
 
 function formatFlowDateTime(ts) {
   if (!ts || !String(ts).trim()) return '—';
@@ -98,7 +130,7 @@ function computeWarehouseFlowRows(input) {
     };
   });
 
-  function buildProdRow(type, typeLabel, fallbackDocPrefix, isOutbound) {
+  function buildProdRow(type, fallbackDocPrefix, isOutbound) {
     return (prodRecords || []).filter((r) => r.type === type).map((r) => {var _r$quantity2;
       const product = productMap.get(r.productId);
       const order = (ordersList || []).find((o) => o.id === r.orderId);
@@ -108,7 +140,7 @@ function computeWarehouseFlowRows(input) {
       return {
         id: r.id,
         type,
-        typeLabel,
+        typeLabel: resolveProdWarehouseFlowTypeLabel(type, r.reason),
         docNumber,
         dateStr,
         displayDateTime: formatFlowDateTime(r.timestamp || ''),
@@ -127,9 +159,9 @@ function computeWarehouseFlowRows(input) {
 
   const allRows = [
   ...psiRows,
-  ...buildProdRow('STOCK_IN', '生产入库', '工单入库', false),
-  ...buildProdRow('STOCK_RETURN', '生产退料', '退料', false),
-  ...buildProdRow('STOCK_OUT', '领料发出', '领料', true)];
+  ...buildProdRow('STOCK_IN', '工单入库', false),
+  ...buildProdRow('STOCK_RETURN', '退料', false),
+  ...buildProdRow('STOCK_OUT', '领料', true)];
 
 
   const groups = new Map();
@@ -223,13 +255,7 @@ function filterWarehouseFlowRows(rows, filters) {
     result = result.filter((r) => String(r.docNumber || '').toLowerCase().includes(dn));
   }
   if (typeFilter) {
-    if (typeFilter === 'PURCHASE_RETURN') {
-      result = result.filter((r) => r.type === 'PURCHASE_BILL' && r.quantity < 0);
-    } else if (typeFilter === 'SALES_RETURN') {
-      result = result.filter((r) => r.type === 'SALES_BILL' && r.quantity < 0);
-    } else {
-      result = result.filter((r) => r.type === typeFilter && !(typeFilter === 'PURCHASE_BILL' && r.quantity < 0) && !(typeFilter === 'SALES_BILL' && r.quantity < 0));
-    }
+    result = result.filter((r) => matchesWarehouseFlowTypeFilter(r, typeFilter));
   }
   const term = String(searchKeyword || '').trim().toLowerCase();
   if (term) {

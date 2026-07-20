@@ -10,7 +10,8 @@ import {
   GlobalNodeTemplate,
   PsiRecord,
 } from '../../types';
-import { categoryUsesBatchManagement } from '../../types';
+import { categoryUsesBatchManagement, PROD_OP_REASON_FROM_REWORK } from '../../types';
+import { isReworkMaterialOpReason } from '../../utils/productionMaterialReason';
 import { toast } from 'sonner';
 import * as api from '../../services/api';
 import { clampBatchNoInput } from '../../hooks/useBatchPicker';
@@ -179,7 +180,7 @@ const ReworkMaterialIssueModal: React.FC<ReworkMaterialIssueModalProps> = ({
         status: '已完成',
         warehouseId: warehouseId || undefined,
         // docNo 留空，由后端统一分配
-        reason: '来自于返工',
+        reason: PROD_OP_REASON_FROM_REWORK,
         ...(bn ? { batchNo: bn } : {}),
       } as ProductionOpRecord;
     });
@@ -238,7 +239,7 @@ const ReworkMaterialIssueModal: React.FC<ReworkMaterialIssueModalProps> = ({
           ) : (
             (() => {
               const reworkIssuedMap = new Map<string, number>();
-              records.filter(r => r.type === 'STOCK_OUT' && r.orderId === order.id && r.reason === '来自于返工').forEach(r => { reworkIssuedMap.set(r.productId, (reworkIssuedMap.get(r.productId) ?? 0) + r.quantity); });
+              records.filter(r => r.type === 'STOCK_OUT' && r.orderId === order.id && isReworkMaterialOpReason(r.reason)).forEach(r => { reworkIssuedMap.set(r.productId, (reworkIssuedMap.get(r.productId) ?? 0) + r.quantity); });
               return (
                 <table className="w-full text-left border-collapse">
                   <thead>

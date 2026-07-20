@@ -153,6 +153,29 @@ function deleteDevStageTemplate(id) {
   });
 }
 
+function listDevMaterialRecords(styleId) {
+  return request({
+    path: `/dev/styles/${encodeURIComponent(styleId)}/material-records`,
+    method: 'GET',
+  });
+}
+
+function createDevMaterialIssueBatch(styleId, body) {
+  return request({
+    path: `/dev/styles/${encodeURIComponent(styleId)}/material-issues/batch`,
+    method: 'POST',
+    data: body,
+  });
+}
+
+function createDevMaterialReturnBatch(styleId, body) {
+  return request({
+    path: `/dev/styles/${encodeURIComponent(styleId)}/material-returns/batch`,
+    method: 'POST',
+    data: body,
+  });
+}
+
 module.exports = {
   listDevStyles,
   getDevStyle,
@@ -173,4 +196,7 @@ module.exports = {
   createDevStageTemplate,
   updateDevStageTemplate,
   deleteDevStageTemplate,
+  listDevMaterialRecords,
+  createDevMaterialIssueBatch,
+  createDevMaterialReturnBatch,
 };

@@ -28,6 +28,7 @@ const DevManagementView: React.FC = () => {
     dictionaries,
     partners,
     partnerCategories,
+    warehouses,
     refreshDictionaries,
     refreshPartners,
     refreshProducts,
@@ -59,6 +60,14 @@ const DevManagementView: React.FC = () => {
   );
   // 能否打开模板管理 UI：拥有任一写权限即可，进入后按 templatePerms 细分按钮
   const canManageTemplates = templatePerms.canCreate || templatePerms.canEdit || templatePerms.canDelete;
+  const materialPerms = useMemo(
+    () => ({
+      canViewRecords: hasDevPerm('development:material_records:view'),
+      canIssue: hasDevPerm('development:material_issue:create'),
+      canReturn: hasDevPerm('development:material_return:create'),
+    }),
+    [hasDevPerm],
+  );
 
   const {
     styles,
@@ -326,6 +335,8 @@ const DevManagementView: React.FC = () => {
             templates={templates}
             categories={categories}
             globalNodes={globalNodes}
+            warehouses={warehouses}
+            materialPerms={materialPerms}
             devBoms={devBoms}
             onSaveBom={saveDevBom}
             readOnly={readOnly}

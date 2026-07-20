@@ -1,11 +1,20 @@
-<view wx:if="{{card}}" class="wb-stat-card wb-stat-card--{{card.theme}} {{card.compact ? 'wb-stat-card--compact' : ''}}">
+<view
+  wx:if="{{card}}"
+  class="wb-stat-card wb-stat-card--{{card.theme}} {{card.compact ? 'wb-stat-card--compact' : ''}} {{card.type === 'finance_stats' && !card.loading && !card.noPermission ? 'wb-stat-card--actionable' : ''}}"
+  bindtap="onCardTap"
+  hover-class="wb-stat-card--press"
+  hover-stay-time="80"
+>
   <view class="wb-stat-card__head">
     <view class="wb-stat-card__icon">{{card.iconChar}}</view>
     <view class="wb-stat-card__titles">
       <text class="wb-stat-card__title">{{card.title}}</text>
       <text wx:if="{{card.subtitle && !card.compact}}" class="wb-stat-card__subtitle">{{card.subtitle}}</text>
     </view>
-    <text class="wb-stat-card__period">{{card.periodLabel}}</text>
+    <view class="wb-stat-card__head-right">
+      <text class="wb-stat-card__period">{{card.periodLabel}}</text>
+      <text wx:if="{{card.type === 'finance_stats' && !card.loading && !card.noPermission}}" class="wb-stat-card__more">详情 ›</text>
+    </view>
   </view>
 
   <view wx:if="{{card.loading}}" class="wb-stat-card__skeleton">

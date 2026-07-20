@@ -48,7 +48,8 @@
 - **录入**：手动创建结算单时，无变体明细行数量可填负数；「引用采购订单生成」入库路径仍仅正数。
 - **库存**：`PURCHASE_BILL` 负数量减少 `psiIn` 累计（净库存减少）；`SALES_BILL` 负数量减少 `psiOut` 累计（净库存增加）。
 - **财务对账**：`utils/partnerReconLedger.ts`、`backend/src/services/finance.service.ts` 按单据签名金额区分增减。
-- **仓库流水筛选**：虚拟类型 `PURCHASE_RETURN` / `SALES_RETURN` 仅用于 UI 筛选，存储类型仍为 `PURCHASE_BILL` / `SALES_BILL`。
+- **仓库流水筛选**：虚拟类型 `PURCHASE_RETURN` / `SALES_RETURN` / `DEV_STOCK_OUT` / `DEV_STOCK_RETURN` 仅用于 UI 筛选；存储类型仍为 `PURCHASE_BILL` / `SALES_BILL` / `STOCK_OUT` / `STOCK_RETURN`。选「领料发出/生产退料」时排除开发领退；选「开发领料/开发退料」时仅保留 `reason = 来自于开发` 的对应单据。
+- **开发领退**：生产流水 `STOCK_OUT` / `STOCK_RETURN` 且 `reason = 来自于开发` 时，仓库流水单据类型展示为「开发领料」「开发退料」（与普通「领料发出」「生产退料」区分）。
 
 ### 1.2 采购订单已入库数量 (`receivedByOrderLine`)
 
@@ -800,9 +801,19 @@
 - **发布**（`POST /api/dev/styles/:id/publish`）：须先将开发产品 **归档**（`status=archived`）；事务内创建 `Product`、`ProductVariant`、`Bom`；预生成新产品 `bom-*` id，`nodeBoms` 与 `boms` 表 id 一致重映射；单 SKU 虚拟变体 `dvar-single-*` 映射到默认 `ProductVariant`；`Bom.nodeId` **原样拷贝**，不做工序名称映射。
 - 已发布款式（`status=published`）不可再编辑；`publishedProductId` 指向产品档案。
 
+### 6.2.1 开发领料 / 开发退料
+
+- **范围**：本厂领料与退料；挂 `DevStyle`；入口仅在开发管理（Web / 小程序），不在生产物料中心。
+- **持久化**：写入既有 `ProductionOpRecord`（领料 `STOCK_OUT` / 退料 `STOCK_RETURN`），固定 `reason = 来自于开发`、`customData.devStyleId`，`orderId` / `partner` / `sourceProductId` 为空；单号仍为 `LL` / `TL`。
+- **领料**：仅 `developing` 款式可领；物料必须来自该款试制 BOM（按 `productId` 去重）；扣减仓库库存，启用批次管理时须选批号。
+- **退料**：只能退该款历史发出的「物料 + 原仓库 + 批号」净领用；归档/已发布仍可退，不可借退料改仓/改批增加库存。
+- **隔离**：生产领退料/外协/返工统计排除 `来自于开发`；生产物料「领料退料流水」亦不展示开发领退；PSI 库存聚合与仓库流水**保留**这些流水（仓库流水标注「开发领料/开发退料」）。
+- **删除**：存在开发领退流水的款式禁止物理删除（可归档）。
+- **API**：`GET /api/dev/styles/:styleId/material-records`；`POST .../material-issues/batch`；`POST .../material-returns/batch`。权限：`development:material_records:view`、`material_issue:view|create`、`material_return:view|create`。
+
 ### 6.3 安全删除
 
-- 款式：所有样品下全部 `DevStage` 均为 `pending` 方可删除。
+- 款式：所有样品下全部 `DevStage` 均为 `pending` 方可删除；**且不得存在开发领退料流水**。
 - 样品轮次：可删条件为「全部节点待开始」**或**「仅第一个节点为进行中且未录入任何资料（无附件、无填值字段），其余待开始」——即头样首节点刚进入进行中、尚未登记内容时仍可删；存在已录入资料或已推进（完成/异常/非首节点已开始）的节点则不可删。前后端（`canDeleteDevSample` / `deleteDevSample`）一致。允许删到 0 样品后再用「+」重建。
 - 创建款式时**不再自动生成头样**；款式创建时配置的开发流程节点存为 `DevStyle.defaultStageNames`（默认流程）。头样与后续轮次都在「样品开发记录」区点「+」用同一弹窗（`DevAddSampleModal`）创建。**已归档 / 已发布**款式不可新增样品（还原为开发中后方可继续添加）；网页端与小程序入口一致。
 - 开发流程节点**可在「编辑款式」弹窗重新编辑**（非新建态也展示「开发流程节点配置」，保存即更新 `DevStyle.defaultStageNames`）；编辑后**新建的样品按新的开发节点**。

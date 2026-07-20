@@ -1,4 +1,5 @@
 import type { ProductionOpRecord } from '../../types';
+import { isDevMaterialOpReason } from '../../shared/types';
 import { flowRecordsEarliestMs } from '../../utils/flowDocSort';
 import { toLocalDateYmdFromProductionTimestamp } from '../../utils/localDateTime';
 import type { StockDocDetail } from './types';
@@ -34,9 +35,14 @@ export function getStockFlowTypeLabel(rec: ProductionOpRecord): string {
   return '领料发出';
 }
 
+/** 生产物料「领料退料流水」：排除开发领退（仍进仓库流水） */
+export function isProductionMaterialFlowRecord(r: ProductionOpRecord): boolean {
+  return (r.type === 'STOCK_OUT' || r.type === 'STOCK_RETURN') && !isDevMaterialOpReason(r.reason);
+}
+
 /** 按单据号聚合：整张单按组内最早时间倒序，单内明细按 id 稳定序 */
 export function sortStockFlowRecordsByDoc(records: ProductionOpRecord[]): ProductionOpRecord[] {
-  const list = records.filter(r => r.type === 'STOCK_OUT' || r.type === 'STOCK_RETURN');
+  const list = records.filter(isProductionMaterialFlowRecord);
   const byDoc = new Map<string, ProductionOpRecord[]>();
   for (const r of list) {
     const k = r.docNo && String(r.docNo).trim() ? String(r.docNo) : r.id;

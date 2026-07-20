@@ -7,6 +7,7 @@ const { formatStockInTime, resolveWarehouseName } = require('./stockInFlow.js');
 const { getProductUnitName } = require('../../utils/planFormCustomField.js');
 const { BATCH_NO_UNTAGGED } = require('../../utils/materialStockConfirm.js');
 const { categoryUsesBatchManagement } = require('../../utils/materialIssueBatch.js');
+const { isDevMaterialOpReason } = require('./productionMaterialReason.js');
 
 const TYPE_LABELS = {
   STOCK_OUT: '领料发出',
@@ -67,7 +68,10 @@ function buildMaterialFlowListRows(records, opts) {
   const productMap = (opts && opts.productMap) || new Map();
   const warehouseMap = (opts && opts.warehouseMap) || new Map();
   const dictionaries = (opts && opts.dictionaries) || {};
-  const list = (records || []).map(normalizeMaterialRecord);
+  // 开发领退不进生产物料流水（对齐 Web isProductionMaterialFlowRecord）
+  const list = (records || [])
+    .filter((r) => !isDevMaterialOpReason(r && r.reason))
+    .map(normalizeMaterialRecord);
 
   const byDoc = new Map();
   list.forEach((row) => {

@@ -55,6 +55,7 @@ const _require0 = require('../../utils/materialStatsLite.js'),INTERNAL_PARTNER_K
 const _require1 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require1.readNavBarMetrics,readWindowMetrics = _require1.readWindowMetrics;
 const _require10 = require('../../utils/saveNavigation.js'),LIST_ROUTES = _require10.LIST_ROUTES,afterSaveReturnToList = _require10.afterSaveReturnToList;
 const { defaultEntryDate, defaultEntryTimeHm, entryDateAndTimeToIso } = require('../../utils/docEntryTime.js');
+const { PROD_OP_REASON_FROM_REWORK } = require('../utils/productionMaterialReason.js');
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
@@ -963,7 +964,7 @@ Page({
       warehouse,
       operator: readOperatorDisplayName(),
       timestamp: entryDateAndTimeToIso(this.data.entryDate, this.data.entryTime),
-      reason: this._isRework ? '来自于返工' : undefined,
+      reason: this._isRework ? PROD_OP_REASON_FROM_REWORK : undefined,
       partner: (() => {
         if (this._isOutsource && this._partnerKey) return this._partnerKey;
         if (this._isMaterialCenter && this._partnerKey && this._partnerKey !== INTERNAL_PARTNER_KEY) {

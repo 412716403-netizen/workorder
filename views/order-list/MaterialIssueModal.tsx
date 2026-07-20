@@ -13,6 +13,7 @@ import {
   GlobalNodeTemplate,
   PsiRecord,
 } from '../../types';
+import { shouldExcludeFromProductionMaterialStats } from '../../utils/productionMaterialReason';
 import { categoryUsesBatchManagement } from '../../types';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
@@ -302,10 +303,10 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
     bomMaterials = bomMaterials.filter(m => !removedMaterialIds.has(m.productId));
     /** 领料进度 = 本厂生产领料 − 本厂生产退料（与工单中心物料表「净领用」一致；不含外协 partner、不含返工领料） */
     const issuedMap = new Map<string, number>();
-    prodRecords.filter(r => r.type === 'STOCK_OUT' && !r.partner && r.orderId === order.id && r.reason !== '来自于返工').forEach(r => {
+    prodRecords.filter(r => r.type === 'STOCK_OUT' && !r.partner && r.orderId === order.id && !shouldExcludeFromProductionMaterialStats(r.reason)).forEach(r => {
       issuedMap.set(r.productId, (issuedMap.get(r.productId) ?? 0) + r.quantity);
     });
-    prodRecords.filter(r => r.type === 'STOCK_RETURN' && !r.partner && r.orderId === order.id).forEach(r => {
+    prodRecords.filter(r => r.type === 'STOCK_RETURN' && !r.partner && r.orderId === order.id && !shouldExcludeFromProductionMaterialStats(r.reason)).forEach(r => {
       issuedMap.set(r.productId, (issuedMap.get(r.productId) ?? 0) - r.quantity);
     });
     const showOrderBatchCol = bomMaterials.some(m => {
@@ -646,12 +647,12 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
       (!r.sourceProductId && r.orderId != null && familyIds.has(r.orderId));
     const issuedMap = new Map<string, number>();
     prodRecords
-      .filter(r => r.type === 'STOCK_OUT' && !r.partner && r.reason !== '来自于返工')
+      .filter(r => r.type === 'STOCK_OUT' && !r.partner && !shouldExcludeFromProductionMaterialStats(r.reason))
       .forEach(r => {
         if (materialIssueHit(r)) issuedMap.set(r.productId, (issuedMap.get(r.productId) ?? 0) + r.quantity);
       });
     prodRecords
-      .filter(r => r.type === 'STOCK_RETURN' && !r.partner)
+      .filter(r => r.type === 'STOCK_RETURN' && !r.partner && !shouldExcludeFromProductionMaterialStats(r.reason))
       .forEach(r => {
         if (materialIssueHit(r)) issuedMap.set(r.productId, (issuedMap.get(r.productId) ?? 0) - r.quantity);
       });

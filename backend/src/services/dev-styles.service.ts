@@ -6,6 +6,7 @@ import { DevStageStatus, DevStyleStatus } from '../../../shared/types.js';
 import { buildImageThumb } from '../lib/imageThumb.js';
 import { devStyleInclude, devStyleListInclude, mapDevStyleRow } from './dev-styles.mapper.js';
 import { publishDevStyleToProduct } from './dev-publish.service.js';
+import { countDevMaterialRecords } from './dev-material.service.js';
 
 const STYLE_JSON_FIELDS = [
   'categoryCustomData', 'colorIds', 'sizeIds', 'milestoneNodeIds', 'defaultStageNames',
@@ -342,6 +343,10 @@ export async function deleteDevStyle(db: TenantPrismaClient, styleId: string) {
   );
   if (hasProgress) {
     throw new AppError(409, '存在已开始的开发节点，无法删除款式');
+  }
+  const materialCount = await countDevMaterialRecords(db, styleId);
+  if (materialCount > 0) {
+    throw new AppError(409, '该款式存在开发领退料记录，无法删除');
   }
   await db.devStyle.delete({ where: { id: styleId } });
   return { message: '已删除' };

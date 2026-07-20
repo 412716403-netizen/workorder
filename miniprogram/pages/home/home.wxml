@@ -103,7 +103,12 @@
           </view>
         </view>
 
-        <workbench-stat-card wx:for="{{statCards}}" wx:key="id" card="{{item}}" />
+        <workbench-stat-card
+          wx:for="{{statCards}}"
+          wx:key="id"
+          card="{{item}}"
+          bind:detailtap="onStatCardDetailTap"
+        />
 
         <empty-state
           wx:if="{{!statCards.length}}"

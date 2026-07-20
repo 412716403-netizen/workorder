@@ -17,8 +17,9 @@ import {
   Download,
   FileText,
   FileArchive as FileArchiveIcon,
+  Package,
 } from 'lucide-react';
-import type { AppDictionaries, DevAttachmentDto, DevBomDto, DevSampleDto, DevStageDto, DevStageTemplateDto, DevStyleDto, GlobalNodeTemplate, Partner, Product, ProductCategory } from '../../types';
+import type { AppDictionaries, DevAttachmentDto, DevBomDto, DevSampleDto, DevStageDto, DevStageTemplateDto, DevStyleDto, GlobalNodeTemplate, Partner, Product, ProductCategory, Warehouse } from '../../types';
 import { DevStyleStatus, DEV_STAGE_STATUS_LABEL, DevStageStatus } from '../../types';
 import { toast } from 'sonner';
 import {
@@ -39,6 +40,8 @@ import DevStageRegisteredContent from './DevStageRegisteredContent';
 import DevAddSampleModal from './DevAddSampleModal';
 import DevStyleLogModal from './DevStyleLogModal';
 import DevBomConfigSection from './DevBomConfigSection';
+import DevMaterialSection, { type DevMaterialPerms } from './DevMaterialSection';
+import { useDevMaterials } from '../../hooks/useDevMaterials';
 import AddTodoButton from '../../components/AddTodoButton';
 import { ModalPortal } from '../../components/ModalPortal';
 import { devSingleSkuVariantId } from '../../utils/devBomHelpers';
@@ -90,6 +93,8 @@ interface DevStyleMainContentProps {
   templates: DevStageTemplateDto[];
   categories: ProductCategory[];
   globalNodes: GlobalNodeTemplate[];
+  warehouses?: Warehouse[];
+  materialPerms?: DevMaterialPerms;
   devBoms?: DevBomDto[];
   onSaveBom?: (bom: DevBomDto, exists: boolean) => Promise<DevBomDto | void>;
   readOnly?: boolean;
@@ -128,6 +133,8 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
   templates,
   categories,
   globalNodes,
+  warehouses = [],
+  materialPerms,
   devBoms,
   onSaveBom,
   readOnly,
@@ -155,7 +162,17 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
   const [logOpen, setLogOpen] = useState(false);
   const [addSampleOpen, setAddSampleOpen] = useState(false);
   const [bomModalOpen, setBomModalOpen] = useState(false);
+  const [materialModalOpen, setMaterialModalOpen] = useState(false);
   const [showFullImage, setShowFullImage] = useState(false);
+
+  const materialEnabled = Boolean(
+    materialPerms && (materialPerms.canViewRecords || materialPerms.canIssue || materialPerms.canReturn),
+  );
+  const {
+    data: materialData,
+    isLoading: materialLoading,
+    refresh: refreshMaterials,
+  } = useDevMaterials(style.id, materialEnabled);
 
   useEffect(() => {
     if (style.samples.length && !style.samples.some((s) => s.id === activeSampleId)) {
@@ -431,15 +448,26 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
             </button>
           )}
           </div>
-          {activeSample && canEdit && !readOnly && (
-            <button
-              type="button"
-              onClick={() => setBomModalOpen(true)}
-              className={`mt-3 flex shrink-0 items-center gap-2 ${outlineToolbarButtonClass} border-amber-200 bg-amber-50 text-amber-600 hover:bg-amber-100`}
-            >
-              <Boxes className="h-4 w-4" /> BOM
-            </button>
-          )}
+          <div className="mt-3 flex shrink-0 items-center gap-2">
+            {materialEnabled && (
+              <button
+                type="button"
+                onClick={() => setMaterialModalOpen(true)}
+                className={`flex items-center gap-2 ${outlineToolbarButtonClass}`}
+              >
+                <Package className="h-4 w-4" /> 开发物料
+              </button>
+            )}
+            {activeSample && canEdit && !readOnly && (
+              <button
+                type="button"
+                onClick={() => setBomModalOpen(true)}
+                className={`flex items-center gap-2 ${outlineToolbarButtonClass} border-amber-200 bg-amber-50 text-amber-600 hover:bg-amber-100`}
+              >
+                <Boxes className="h-4 w-4" /> BOM
+              </button>
+            )}
+          </div>
         </div>
 
         {activeSample && (
@@ -510,6 +538,41 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
         )}
 
       </div>
+
+      {materialModalOpen && materialPerms && (
+        <ModalPortal>
+          <div className="fixed inset-0 z-[280] flex items-center justify-center p-4 sm:p-6">
+            <div className="absolute inset-0 bg-slate-900/40" onClick={() => setMaterialModalOpen(false)} role="presentation" />
+            <div className="relative z-10 flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
+              <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-6 py-4">
+                <h3 className={`${sectionTitleClass} flex items-center gap-2`}>
+                  <Package className="h-4 w-4 text-indigo-500" />
+                  开发物料
+                </h3>
+                <button type="button" onClick={() => setMaterialModalOpen(false)} aria-label="关闭">
+                  <X className="h-5 w-5 text-slate-400" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto px-6 py-5">
+                <DevMaterialSection
+                  embedded
+                  styleId={style.id}
+                  styleCode={style.code}
+                  styleName={style.name}
+                  data={materialData}
+                  loading={materialLoading}
+                  products={products}
+                  categories={categories}
+                  warehouses={warehouses}
+                  perms={materialPerms}
+                  styleAllowsIssue={style.status === DevStyleStatus.DEVELOPING}
+                  onRefresh={refreshMaterials}
+                />
+              </div>
+            </div>
+          </div>
+        </ModalPortal>
+      )}
 
       {bomModalOpen && activeSample && (
         <ModalPortal>

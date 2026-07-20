@@ -15,6 +15,7 @@ import type {
   PsiRecord,
 } from '../../types';
 import { DEFAULT_MATERIAL_FORM_SETTINGS, categoryUsesBatchManagement } from '../../types';
+import { shouldExcludeFromProductionMaterialStats } from '../../utils/productionMaterialReason';
 import * as api from '../../services/api';
 import { clampBatchNoInput } from '../../hooks/useBatchPicker';
 import { MaterialIssueBatchSelect } from '../../components/MaterialIssueBatchSelect';
@@ -408,7 +409,7 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
             r.type === 'STOCK_OUT' &&
             r.partner === dispatchPartner &&
             r.orderId === targetOrder.id &&
-            r.reason !== '来自于返工',
+            !shouldExcludeFromProductionMaterialStats(r.reason),
         )
         .forEach(r => {
           issuedMap.set(r.productId, (issuedMap.get(r.productId) ?? 0) + r.quantity);

@@ -126,6 +126,8 @@
         "development-style-edit/development-style-edit",
         "development-stage-register/development-stage-register",
         "development-bom-edit/development-bom-edit",
+        "development-material-operation/development-material-operation",
+        "development-material-records/development-material-records",
         "development-stage-templates/development-stage-templates",
         "development-stage-template-edit/development-stage-template-edit",
         "todos/todos",
@@ -183,6 +185,7 @@
         "finance-receipt-edit/finance-receipt-edit",
         "finance-receipt-flow/finance-receipt-flow",
         "finance-receipts/finance-receipts",
+        "finance-workbench-stats-detail/finance-workbench-stats-detail",
         "finance-recon-work-detail/finance-recon-work-detail",
         "finance-reconciliation/finance-reconciliation"
       ]

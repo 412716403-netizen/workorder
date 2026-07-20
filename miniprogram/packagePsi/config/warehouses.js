@@ -23,6 +23,8 @@ const WAREHOUSE_FLOW_TYPE_OPTIONS = [
   { value: 'STOCK_IN', label: '生产入库' },
   { value: 'STOCK_RETURN', label: '生产退料' },
   { value: 'STOCK_OUT', label: '领料发出' },
+  { value: 'DEV_STOCK_OUT', label: '开发领料' },
+  { value: 'DEV_STOCK_RETURN', label: '开发退料' },
 ];
 
 const WAREHOUSE_SHORTCUTS = [

@@ -139,6 +139,14 @@ export function requirePsiOrProductionRead(): RequestHandler {
 }
 
 /**
+ * 在 {@link requirePsiOrProductionRead} 基础上纳入 development：
+ * 开发领退料表单依赖库存快照与批次，细粒度开发角色通常没有 psi/production 写权限。
+ */
+export function requirePsiOrProductionOrDevelopmentRead(): RequestHandler {
+  return guardAny(perms => hasAnyPermUnder(perms, ['psi', 'production', 'development']));
+}
+
+/**
  * 通用 `/psi/records*` 写端点（create / edit / delete）的权限判断。
  *
  * 背景：所有 PSI 单据（采购订单 / 采购入库 / 销售订单 / 销售单 / 调拨 / 盘点）以及订单待入库
@@ -328,6 +336,30 @@ export function canReadWithProductionOrFinance(perms: string[], required: string
 
 export function requireSubPermissionOrProductionOrFinanceRead(required: string): RequestHandler {
   return guardAny(perms => canReadWithProductionOrFinance(perms, required));
+}
+
+/** 生产报工 / 财务 / 进销存 / 开发表单共用的主数据只读（产品、产品分类、合作单位、仓库等） */
+export function canReadWithProductionOrFinanceOrDevelopment(perms: string[], required: string): boolean {
+  return (
+    canReadWithProductionOrFinance(perms, required) ||
+    hasAnyPermUnder(perms, ['development'])
+  );
+}
+
+export function requireSubPermissionOrProductionOrFinanceOrDevelopmentRead(required: string): RequestHandler {
+  return guardAny(perms => canReadWithProductionOrFinanceOrDevelopment(perms, required));
+}
+
+/**
+ * 开发物料汇总/流水只读：持有流水 view，或领料/退料 view（create 会隐式要求 view）任一即可。
+ * 避免「仅有领料 create」时无法拉取 BOM/可退汇总。
+ */
+export function requireDevMaterialRead(): RequestHandler {
+  return guardAny(perms =>
+    hasSubPermission(perms, 'development:material_records:view') ||
+    hasSubPermission(perms, 'development:material_issue:view') ||
+    hasSubPermission(perms, 'development:material_return:view'),
+  );
 }
 
 /**

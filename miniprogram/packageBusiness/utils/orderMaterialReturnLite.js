@@ -4,6 +4,7 @@
 
 const { roundQty, formatQtyDisplay } = require('./orderMaterialLite.js');
 const { BATCH_NO_UNTAGGED, buildReturnDispatchedBatchesByProduct } = require('../../utils/materialStockConfirm.js');
+const { shouldExcludeFromProductionMaterialStats } = require('./productionMaterialReason.js');
 
 function computeConsumedByPartnerMat(params) {
   const {
@@ -142,7 +143,7 @@ function computeOutsourceReturnMaterials(params) {
   );
 
   const accumDispatch = (r) => {
-    if (r.reason === '来自于返工') return;
+    if (shouldExcludeFromProductionMaterialStats(r.reason)) return;
     const key = r.productId;
     if (!key) return;
     dispatchedByMat.set(key, (dispatchedByMat.get(key) || 0) + (Number(r.quantity) || 0));

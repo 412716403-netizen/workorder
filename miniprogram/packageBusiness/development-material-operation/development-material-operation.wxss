@@ -1,0 +1,78 @@
+@import "/styles/plan-detail-page.wxss";
+@import "/styles/list.wxss";
+@import "../development-style-detail/development-style-detail.wxss";
+
+.dev-mat-form-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid #f1f5f9;
+}
+
+.dev-mat-form-label {
+  font-size: 24rpx;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.dev-mat-form-value {
+  font-size: 26rpx;
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.dev-mat-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16rpx;
+  padding: 24rpx 0;
+  border-bottom: 1rpx solid #f1f5f9;
+}
+
+.dev-mat-row__main {
+  flex: 1 1 240rpx;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.dev-mat-row__name {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.dev-mat-row__meta {
+  font-size: 22rpx;
+  color: #94a3b8;
+}
+
+.dev-mat-row__batch {
+  flex: 1 1 200rpx;
+}
+
+.dev-mat-row__qty {
+  width: 160rpx;
+  height: 72rpx;
+  border: 1rpx solid #e2e8f0;
+  border-radius: 16rpx;
+  text-align: center;
+  font-size: 26rpx;
+  font-weight: 600;
+  background: #fff;
+}
+
+.dev-mat-submit-wrap {
+  padding: 32rpx 0 64rpx;
+}
+
+.dev-mat-submit {
+  background: #4f46e5;
+  color: #fff;
+  border-radius: 20rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+}

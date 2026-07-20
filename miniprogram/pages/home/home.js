@@ -392,6 +392,13 @@ Page({
     navigateMenuPath(path);
   },
 
+  onStatCardDetailTap(e) {
+    if (!e.detail || e.detail.type !== 'finance_stats') return;
+    wx.navigateTo({
+      url: '/packageFinance/finance-workbench-stats-detail/finance-workbench-stats-detail',
+    });
+  },
+
   refreshMessagesBadge(ctx) {
     if (!this._deps) return Promise.resolve();
 

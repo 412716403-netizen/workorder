@@ -1,0 +1,78 @@
+<view class="plan-detail-shell">
+  <view class="plan-detail-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-detail-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-detail-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-detail-header__title">开发物料</text>
+      <view class="plan-detail-header__back plan-detail-header__back--placeholder"></view>
+    </view>
+  </view>
+
+  <view class="plan-detail-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view class="plan-detail-scroll" scroll-y show-scrollbar="{{false}}" style="height: {{scrollHeight}}px;">
+    <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
+
+    <view wx:else class="plan-detail-page">
+      <view class="dev-section-card">
+        <view class="dev-section-card__head">
+          <text class="dev-section-card__title">{{styleName}}</text>
+          <text wx:if="{{styleCode}}" class="dev-section-card__hint">{{styleCode}}</text>
+        </view>
+        <view wx:if="{{canMaterialIssue || canMaterialReturn}}" class="dev-sample-toolbar">
+          <view
+            wx:if="{{canMaterialIssue}}"
+            class="dev-hero-outline-btn {{issueDisabled ? 'dev-hero-outline-btn--disabled' : ''}}"
+            bindtap="onMaterialIssueTap"
+          >开发领料</view>
+          <view
+            wx:if="{{canMaterialReturn}}"
+            class="dev-hero-outline-btn {{returnDisabled ? 'dev-hero-outline-btn--disabled' : ''}}"
+            bindtap="onMaterialReturnTap"
+          >开发退料</view>
+        </view>
+      </view>
+
+      <view class="dev-section-card">
+        <view class="dev-section-card__head">
+          <text class="dev-section-card__title">物料汇总</text>
+        </view>
+        <view wx:if="{{!materialSummary.length}}" class="dev-empty-block">
+          <text class="dev-empty-block__text">{{materialEmptyHint}}</text>
+        </view>
+        <view wx:for="{{materialSummary}}" wx:key="productId" class="dev-mat-summary-row">
+          <view class="dev-mat-row__main">
+            <text class="dev-mat-row__name">{{item.productName}}</text>
+            <text wx:if="{{item.showProductSku}}" class="list-product-sku">{{item.productSku}}</text>
+          </view>
+          <text class="dev-mat-summary-net">净 {{item.netQty}}</text>
+        </view>
+      </view>
+
+      <view wx:if="{{canMaterialRecords}}" class="dev-section-card">
+        <view class="dev-section-card__head">
+          <text class="dev-section-card__title">领退流水</text>
+        </view>
+        <view wx:if="{{!docs.length}}" class="dev-empty-block">
+          <text class="dev-empty-block__text">暂无流水</text>
+        </view>
+        <view wx:for="{{docs}}" wx:key="docNo" class="dev-mat-doc-block">
+          <view class="dev-mat-doc-head">
+            <view class="dev-mat-doc-head__left">
+              <text class="dev-mat-doc-badge">{{item.typeLabel}}</text>
+              <text class="dev-mat-doc-no">{{item.docNo}}</text>
+            </view>
+            <text class="dev-mat-doc-time">{{item.timeText}}{{item.operator ? ' · ' + item.operator : ''}}</text>
+          </view>
+          <view wx:for="{{item.lines}}" wx:for-item="line" wx:key="id" class="dev-mat-doc-line">
+            <view class="dev-mat-doc-line__main">
+              <text class="dev-mat-row__name">{{line.productName}}</text>
+              <text wx:if="{{line.showProductSku}}" class="list-product-sku">{{line.productSku}}</text>
+              <text class="dev-mat-row__meta">{{line.warehouseName}} · {{line.batchText}}</text>
+            </view>
+            <text class="dev-mat-doc-qty">{{line.quantity}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </scroll-view>
+</view>

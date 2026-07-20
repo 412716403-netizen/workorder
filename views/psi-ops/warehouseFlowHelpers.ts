@@ -7,6 +7,7 @@
  * - 类型/标签/日期辅助函数同步抽出，便于单测覆盖。
  */
 import type { Product, Warehouse } from '../../types';
+import { isDevMaterialOpReason } from '../../shared/types';
 
 export const WAREHOUSE_FLOW_TYPES = [
   'PURCHASE_BILL',
@@ -28,7 +29,44 @@ export const warehouseFlowTypeLabel: Record<string, string> = {
   STOCK_IN: '生产入库',
   STOCK_RETURN: '生产退料',
   STOCK_OUT: '领料发出',
+  DEV_STOCK_OUT: '开发领料',
+  DEV_STOCK_RETURN: '开发退料',
 };
+
+/** 生产领退料在仓库流水中的单据类型文案（开发领退与生产领退区分） */
+export function resolveProdWarehouseFlowTypeLabel(
+  type: 'STOCK_IN' | 'STOCK_OUT' | 'STOCK_RETURN',
+  reason?: string | null,
+): string {
+  if (isDevMaterialOpReason(reason)) {
+    if (type === 'STOCK_OUT') return '开发领料';
+    if (type === 'STOCK_RETURN') return '开发退料';
+  }
+  return warehouseFlowTypeLabel[type] || type;
+}
+
+/**
+ * 仓库流水类型筛选（含虚拟类型）。
+ * `DEV_STOCK_*` / `PURCHASE_RETURN` / `SALES_RETURN` 仅用于 UI，存储类型不变。
+ * 选「领料发出/生产退料」时排除开发领退；选开发虚拟类型时仅保留对应开发单据。
+ */
+export function matchesWarehouseFlowTypeFilter(
+  row: { type: string; quantity: number; record?: { reason?: string | null } | null },
+  flowType: string,
+): boolean {
+  if (!flowType || flowType === 'all') return true;
+  const reason = row.record?.reason;
+  const isDev = isDevMaterialOpReason(reason);
+  if (flowType === 'SALES_RETURN') return row.type === 'SALES_BILL' && row.quantity < 0;
+  if (flowType === 'SALES_BILL') return row.type === 'SALES_BILL' && row.quantity >= 0;
+  if (flowType === 'PURCHASE_RETURN') return row.type === 'PURCHASE_BILL' && row.quantity < 0;
+  if (flowType === 'PURCHASE_BILL') return row.type === 'PURCHASE_BILL' && row.quantity >= 0;
+  if (flowType === 'DEV_STOCK_OUT') return row.type === 'STOCK_OUT' && isDev;
+  if (flowType === 'DEV_STOCK_RETURN') return row.type === 'STOCK_RETURN' && isDev;
+  if (flowType === 'STOCK_OUT') return row.type === 'STOCK_OUT' && !isDev;
+  if (flowType === 'STOCK_RETURN') return row.type === 'STOCK_RETURN' && !isDev;
+  return row.type === flowType;
+}
 
 export function formatFlowDateTime(ts: string): string {
   if (!ts || !ts.toString().trim()) return '—';
@@ -137,7 +175,6 @@ export function computeWarehouseFlowRows(input: ComputeWarehouseFlowRowsInput): 
 
   const buildProdRow = (
     type: 'STOCK_IN' | 'STOCK_RETURN' | 'STOCK_OUT',
-    typeLabel: string,
     fallbackDocPrefix: string,
     isOutbound: boolean,
   ): WarehouseFlowRow[] => {
@@ -154,7 +191,7 @@ export function computeWarehouseFlowRows(input: ComputeWarehouseFlowRowsInput): 
       return {
         id: r.id,
         type,
-        typeLabel,
+        typeLabel: resolveProdWarehouseFlowTypeLabel(type, r.reason),
         docNumber,
         dateStr: displayDate,
         displayDateTime: formatFlowDateTime(r.timestamp || ''),
@@ -171,9 +208,9 @@ export function computeWarehouseFlowRows(input: ComputeWarehouseFlowRowsInput): 
     });
   };
 
-  const stockInRows = buildProdRow('STOCK_IN', '生产入库', '工单入库', false);
-  const stockReturnRows = buildProdRow('STOCK_RETURN', '生产退料', '退料', false);
-  const stockOutRows = buildProdRow('STOCK_OUT', '领料发出', '领料', true);
+  const stockInRows = buildProdRow('STOCK_IN', '工单入库', false);
+  const stockReturnRows = buildProdRow('STOCK_RETURN', '退料', false);
+  const stockOutRows = buildProdRow('STOCK_OUT', '领料', true);
 
   const allRows = [...psiRows, ...stockInRows, ...stockReturnRows, ...stockOutRows];
   const groups = new Map<string, WarehouseFlowRow[]>();

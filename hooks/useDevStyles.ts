@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import * as api from '../services/api';
 import type { DevBomDto, DevStyleDto } from '../types';
 import { toast } from 'sonner';
+import { DEV_MATERIAL_QK_BASE, devMaterialQueryKey } from './useDevMaterials';
 
 export function useDevStyles() {
+  const queryClient = useQueryClient();
   const [styles, setStyles] = useState<DevStyleDto[]>([]);
   const [devBoms, setDevBoms] = useState<DevBomDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -91,20 +94,32 @@ export function useDevStyles() {
     return result;
   }, [refresh, refreshSelectedDetail]);
 
+  const invalidateDevMaterials = useCallback(async (styleId?: string | null) => {
+    if (styleId) {
+      await queryClient.invalidateQueries({ queryKey: devMaterialQueryKey(styleId) });
+    } else {
+      await queryClient.invalidateQueries({ queryKey: DEV_MATERIAL_QK_BASE });
+    }
+  }, [queryClient]);
+
   const saveDevBom = useCallback(async (bom: DevBomDto, exists: boolean) => {
     const saved = exists
       ? await api.devBoms.update(bom.id, bom)
       : await api.devBoms.create(bom);
     await refresh();
     await refreshSelectedDetail(bom.parentStyleId);
+    // 开发领料依赖 BOM 物料列表；保存后立即刷新，避免按钮仍禁用需整页刷新
+    await invalidateDevMaterials(bom.parentStyleId);
     return saved as DevBomDto;
-  }, [refresh, refreshSelectedDetail]);
+  }, [refresh, refreshSelectedDetail, invalidateDevMaterials]);
 
   const deleteDevBom = useCallback(async (id: string) => {
+    const target = devBoms.find((b) => b.id === id);
     await api.devBoms.delete(id);
     await refresh();
     await refreshSelectedDetail();
-  }, [refresh, refreshSelectedDetail]);
+    await invalidateDevMaterials(target?.parentStyleId);
+  }, [devBoms, refresh, refreshSelectedDetail, invalidateDevMaterials]);
 
   const updateStage = useCallback(async (
     stageId: string,

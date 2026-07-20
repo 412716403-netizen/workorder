@@ -167,6 +167,24 @@ export type ProdOpType =
   | 'REWORK'
   | 'REWORK_REPORT'
   | 'SCRAP';
+
+/**
+ * 生产流水 `reason`：开发管理本厂领退料。
+ * 与返工「来自于返工」同级，用于生产物料统计隔离与开发款式追溯。
+ */
+export const PROD_OP_REASON_FROM_DEV = '来自于开发' as const;
+
+/** 生产流水 `reason`：返工领料（既有字面量收口，避免散落硬编码） */
+export const PROD_OP_REASON_FROM_REWORK = '来自于返工' as const;
+
+export function isDevMaterialOpReason(reason?: string | null): boolean {
+  return reason === PROD_OP_REASON_FROM_DEV;
+}
+
+export function isReworkMaterialOpReason(reason?: string | null): boolean {
+  return reason === PROD_OP_REASON_FROM_REWORK;
+}
+
 export type FinanceOpType = 'RECEIPT' | 'PAYMENT' | 'RECONCILIATION' | 'SETTLEMENT';
 
 export const FINANCE_DOC_NO_PREFIX: Record<FinanceOpType, string> = {
@@ -602,6 +620,77 @@ export interface DevStageTemplateDto {
   name: string;
   order: number;
   fields: DevStageTemplateFieldDto[];
+}
+
+/** 开发领料 / 退料提交行（客户端只传这些字段，type/reason/devStyleId 由服务端强制写入） */
+export interface DevMaterialLineInput {
+  productId: string;
+  quantity: number;
+  warehouseId: string;
+  /** 启用批次管理时必填；退料时须与原领料批次一致（含「无批号」哨兵） */
+  batchNo?: string | null;
+}
+
+export interface DevMaterialBatchRequest {
+  lines: DevMaterialLineInput[];
+  operator?: string;
+  /** ISO 或本地可解析时间；缺省为服务端当前时间 */
+  timestamp?: string;
+}
+
+export interface DevMaterialSummaryRow {
+  productId: string;
+  productName: string;
+  productSku: string;
+  issuedQty: number;
+  returnedQty: number;
+  netQty: number;
+}
+
+export interface DevMaterialReturnableRow {
+  productId: string;
+  productName: string;
+  productSku: string;
+  warehouseId: string;
+  /** 展示用批号；无批号时为 {@link BATCH_NO_UNTAGGED} */
+  batchNo: string;
+  returnableQty: number;
+}
+
+export interface DevMaterialRecordLine {
+  id: string;
+  productId: string;
+  productName: string;
+  productSku: string;
+  quantity: number;
+  warehouseId: string | null;
+  batchNo: string | null;
+}
+
+export interface DevMaterialDocGroup {
+  docNo: string;
+  type: 'STOCK_OUT' | 'STOCK_RETURN';
+  timestamp: string;
+  operator: string | null;
+  lines: DevMaterialRecordLine[];
+}
+
+export interface DevMaterialRecordsResponse {
+  summary: DevMaterialSummaryRow[];
+  returnable: DevMaterialReturnableRow[];
+  docs: DevMaterialDocGroup[];
+  /** 试制 BOM 去重后的物料 id，供领料选料 */
+  bomProductIds: string[];
+  /** 当前款式是否允许继续领料（仅 developing） */
+  canIssue: boolean;
+  /** 是否存在可退净领用 */
+  canReturn: boolean;
+}
+
+export interface DevMaterialBatchResult {
+  docNo: string;
+  type: 'STOCK_OUT' | 'STOCK_RETURN';
+  recordIds: string[];
 }
 
 /** 资料库文件夹 */

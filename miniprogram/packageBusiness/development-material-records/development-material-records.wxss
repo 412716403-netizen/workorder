@@ -1,0 +1,72 @@
+@import "/styles/plan-detail-page.wxss";
+@import "/styles/list.wxss";
+@import "../development-style-detail/development-style-detail.wxss";
+@import "../development-material-operation/development-material-operation.wxss";
+
+.dev-hero-outline-btn--disabled {
+  opacity: 0.4;
+}
+
+.dev-mat-doc-block + .dev-mat-doc-block {
+  margin-top: 24rpx;
+  padding-top: 8rpx;
+  border-top: 1rpx solid #f1f5f9;
+}
+
+.dev-mat-doc-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+  margin-bottom: 16rpx;
+}
+
+.dev-mat-doc-head__left {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.dev-mat-doc-badge {
+  background: #eef2ff;
+  color: #4f46e5;
+  font-size: 20rpx;
+  font-weight: 600;
+  padding: 4rpx 12rpx;
+  border-radius: 8rpx;
+}
+
+.dev-mat-doc-no {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.dev-mat-doc-time {
+  font-size: 20rpx;
+  color: #94a3b8;
+}
+
+.dev-mat-doc-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 16rpx 0;
+  border-top: 1rpx solid #f8fafc;
+}
+
+.dev-mat-doc-line__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.dev-mat-doc-qty {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #0f172a;
+}

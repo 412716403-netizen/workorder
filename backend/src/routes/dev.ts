@@ -2,7 +2,8 @@ import { Router } from 'express';
 import { z } from 'zod';
 import * as stylesCtrl from '../controllers/dev-styles.controller.js';
 import * as tplCtrl from '../controllers/dev-stage-templates.controller.js';
-import { requireSubPermission } from '../middleware/tenant.js';
+import * as materialCtrl from '../controllers/dev-material.controller.js';
+import { requireSubPermission, requireDevMaterialRead } from '../middleware/tenant.js';
 import { validate } from '../middleware/validate.js';
 
 const router = Router();
@@ -31,6 +32,19 @@ const updateStageSchema = z.object({
 const createBomSchema = z.object({
   parentStyleId: z.string().min(1),
 }).passthrough();
+
+const materialLineSchema = z.object({
+  productId: z.string().min(1, '物料不能为空'),
+  quantity: z.coerce.number().positive('数量须大于 0'),
+  warehouseId: z.string().min(1, '仓库不能为空'),
+  batchNo: z.string().nullable().optional(),
+});
+
+const materialBatchSchema = z.object({
+  lines: z.array(materialLineSchema).min(1, '至少需要一条物料明细'),
+  operator: z.string().optional(),
+  timestamp: z.string().optional(),
+});
 
 const devTemplateFieldSchema = z.object({
   id: z.string().optional(),
@@ -75,6 +89,25 @@ router.put(
   '/styles/:id/variants/:variantId/node-boms',
   requireSubPermission('development:styles:edit'),
   stylesCtrl.syncVariantNodeBoms,
+);
+
+// ── 开发物料领退（固定权限端点；type/reason/devStyleId 由服务端写入）──
+router.get(
+  '/styles/:styleId/material-records',
+  requireDevMaterialRead(),
+  materialCtrl.listMaterialRecords,
+);
+router.post(
+  '/styles/:styleId/material-issues/batch',
+  requireSubPermission('development:material_issue:create'),
+  validate(materialBatchSchema),
+  materialCtrl.createMaterialIssueBatch,
+);
+router.post(
+  '/styles/:styleId/material-returns/batch',
+  requireSubPermission('development:material_return:create'),
+  validate(materialBatchSchema),
+  materialCtrl.createMaterialReturnBatch,
 );
 
 // ── 开发流程模板 ──

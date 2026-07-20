@@ -100,7 +100,8 @@
 | 开发 BOM | 已落地 | 创建/编辑均支持工序+变体矩阵（`BomVariantMatrix`）；`node-boms` 同步；发布时 `bomId`/`nodeBoms` 重映射到产品档案 | — |
 | 开发流程模板 | 已落地 | `/api/dev/stage-templates` | 新建款式时可选模板初始化可加强 |
 | 发布大货商品 | 已落地 | `POST /api/dev/styles/:id/publish` → `products` + `variants` + `boms` | 发布后跳转产品档案入口可补 |
-| 小程序开发管理 | 已落地 | `packageBusiness/development-*`：列表/详情/创建编辑/样品/节点登记/BOM 格子下钻/节点库；菜单 `development` + 插件门控；待办深链 | BOM 非 Web 整表矩阵；待办备注为简易弹窗 |
+| 开发领料 / 退料 | 已落地 | `/api/dev/styles/:styleId/material-*`；`reason=来自于开发` + `customData.devStyleId`；Web 款式详情区块 + 小程序操作/流水页 | 生产物料中心无入口（按设计） |
+| 小程序开发管理 | 已落地 | `packageBusiness/development-*`：列表/详情/创建编辑/样品/节点登记/BOM 格子下钻/节点库/开发物料；菜单 `development` + 插件门控；待办深链 | BOM 非 Web 整表矩阵；待办备注为简易弹窗 |
 
 ---
 

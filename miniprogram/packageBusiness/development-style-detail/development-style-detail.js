@@ -55,6 +55,7 @@ Page({
     sampleVariantOptions: [],
     saving: false,
     showTodoBtn: false,
+    showMaterialSection: false,
     statusBarHeight: 20,
     navBarHeight: 44,
     headerBlockHeight: 88,
@@ -101,7 +102,13 @@ Page({
       }
       this._canEdit = hasPermission(perms, 'development:styles:edit');
       this._canDelete = hasPermission(perms, 'development:styles:delete');
-      this.setData({ showTodoBtn: isPluginEnabled(plugins, 'todo_reminder') });
+      const canMaterialIssue = hasPermission(perms, 'development:material_issue:create');
+      const canMaterialReturn = hasPermission(perms, 'development:material_return:create');
+      const canMaterialRecords = hasPermission(perms, 'development:material_records:view');
+      this.setData({
+        showTodoBtn: isPluginEnabled(plugins, 'todo_reminder'),
+        showMaterialSection: canMaterialIssue || canMaterialReturn || canMaterialRecords,
+      });
       this.bootstrap();
     });
   },
@@ -165,6 +172,23 @@ Page({
       activeSampleId,
       activeSample,
     });
+  },
+
+  openMaterialPage() {
+    const style = this._style;
+    if (!style) return;
+    const q = [
+      `styleId=${encodeURIComponent(style.id)}`,
+      `styleName=${encodeURIComponent(style.name || '')}`,
+      `styleCode=${encodeURIComponent(style.code || '')}`,
+    ];
+    wx.navigateTo({
+      url: `/packageBusiness/development-material-records/development-material-records?${q.join('&')}`,
+    });
+  },
+
+  onMaterialTap() {
+    this.openMaterialPage();
   },
 
   handleDeepLinks() {

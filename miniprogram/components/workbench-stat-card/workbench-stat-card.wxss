@@ -16,6 +16,22 @@
   margin-bottom: 20rpx;
 }
 
+.wb-stat-card--actionable {
+  cursor: pointer;
+}
+
+.wb-stat-card--press {
+  opacity: 0.86;
+  transform: scale(0.995);
+}
+
+.wb-stat-card__head-right {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  flex-shrink: 0;
+}
+
 .wb-stat-card__icon {
   width: 72rpx;
   height: 72rpx;
@@ -69,6 +85,12 @@
   background: var(--color-primary-light);
   padding: 6rpx 14rpx;
   border-radius: var(--radius-pill);
+}
+
+.wb-stat-card__more {
+  font-size: 21rpx;
+  font-weight: 600;
+  color: #4f46e5;
 }
 
 .wb-stat-card__skeleton {

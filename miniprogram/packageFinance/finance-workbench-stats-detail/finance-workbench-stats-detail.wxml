@@ -1,0 +1,71 @@
+<view class="finance-page">
+  <view class="finance-nav" style="padding-top: {{statusBarHeight}}px;">
+    <view class="finance-nav__bar" style="height: {{navBarHeight}}px;">
+      <view class="finance-nav__back" bindtap="onHeaderBack">‹</view>
+      <view class="finance-nav__title-wrap">
+        <text class="finance-nav__title">财务统计</text>
+        <text class="finance-nav__subtitle">{{periodLabel}}经营概览</text>
+      </view>
+      <view class="finance-nav__back finance-nav__back--placeholder"></view>
+    </view>
+  </view>
+  <view class="finance-nav-spacer" style="height: {{statusBarHeight + navBarHeight}}px;"></view>
+
+  <scroll-view class="finance-content" scroll-y enhanced show-scrollbar="{{false}}">
+    <view class="finance-filter">
+      <view class="finance-filter__tabs">
+        <view wx:for="{{periodTabs}}" wx:key="key" class="finance-filter__tab {{periodTab === item.key ? 'finance-filter__tab--active' : ''}}" data-key="{{item.key}}" bindtap="onPeriodTabTap">{{item.label}}</view>
+      </view>
+      <view wx:if="{{periodTab === 'custom'}}" class="finance-filter__range">
+        <picker mode="date" value="{{customStart}}" end="{{customEnd}}" bindchange="onCustomStartChange"><view class="finance-filter__date">{{customStart}}</view></picker>
+        <text class="finance-filter__range-sep">至</text>
+        <picker mode="date" value="{{customEnd}}" start="{{customStart}}" bindchange="onCustomEndChange"><view class="finance-filter__date">{{customEnd}}</view></picker>
+      </view>
+      <text wx:if="{{customRangeInvalid}}" class="finance-filter__warning">结束日期不能早于开始日期</text>
+    </view>
+
+    <empty-state wx:if="{{loading}}" loading="{{true}}" text="正在汇总财务数据…" />
+    <empty-state wx:elif="{{loadError}}" text="统计加载失败，请下拉刷新" />
+    <empty-state wx:elif="{{noPermission}}" text="无财务模块权限" />
+
+    <view wx:elif="{{overview}}" class="finance-body">
+      <view class="cash-hero cash-hero--{{overview.cashFlowTone}}">
+        <view class="cash-hero__top"><text class="cash-hero__eyebrow">{{periodLabel}}净现金流</text><text class="cash-hero__mark">￥</text></view>
+        <text class="cash-hero__value">{{overview.cashFlowText}}</text>
+        <view class="cash-hero__foot"><view class="cash-hero__pulse"></view><text>{{overview.receiptHint}}</text></view>
+      </view>
+
+      <view class="finance-section-head"><text class="finance-section-head__title">收支概览</text><text class="finance-section-head__hint">按收付款分类汇总</text></view>
+      <view class="finance-summary-grid">
+        <view class="finance-summary finance-summary--receipt">
+          <view class="finance-summary__icon">收</view>
+          <view class="finance-summary__content"><text class="finance-summary__label">{{receipt.label}}</text><text class="finance-summary__value">{{receipt.amountText}}</text><text class="finance-summary__sub">{{receipt.sub}}</text></view>
+        </view>
+        <view class="finance-summary finance-summary--payment">
+          <view class="finance-summary__icon">付</view>
+          <view class="finance-summary__content"><text class="finance-summary__label">{{payment.label}}</text><text class="finance-summary__value">{{payment.amountText}}</text><text class="finance-summary__sub">{{payment.sub}}</text></view>
+        </view>
+      </view>
+
+      <view class="finance-detail-card">
+        <view class="finance-detail-card__head"><text class="finance-detail-card__title">收款分类</text><text class="finance-detail-card__badge finance-detail-card__badge--receipt">入账</text></view>
+        <block wx:if="{{receipt.rows.length}}"><view wx:for="{{receipt.rows}}" wx:key="key" class="finance-data-row"><view class="finance-data-row__dot finance-data-row__dot--receipt"></view><text class="finance-data-row__name">{{item.name}}</text><view class="finance-data-row__right"><text class="finance-data-row__amount">{{item.amountText}}</text><text class="finance-data-row__meta">{{item.pct}} · {{item.sub}}</text></view></view></block>
+        <text wx:else class="finance-detail-card__empty">暂无收款分类数据</text>
+      </view>
+      <view class="finance-detail-card">
+        <view class="finance-detail-card__head"><text class="finance-detail-card__title">支出分类</text><text class="finance-detail-card__badge finance-detail-card__badge--payment">出账</text></view>
+        <block wx:if="{{payment.rows.length}}"><view wx:for="{{payment.rows}}" wx:key="key" class="finance-data-row"><view class="finance-data-row__dot finance-data-row__dot--payment"></view><text class="finance-data-row__name">{{item.name}}</text><view class="finance-data-row__right"><text class="finance-data-row__amount">{{item.amountText}}</text><text class="finance-data-row__meta">{{item.pct}} · {{item.sub}}</text></view></view></block>
+        <text wx:else class="finance-detail-card__empty">暂无支出分类数据</text>
+      </view>
+
+      <view class="finance-section-head finance-section-head--spaced"><text class="finance-section-head__title">往来余额</text><text class="finance-section-head__hint">合作单位应收应付</text></view>
+      <view wx:for="{{partnerSections}}" wx:key="label" class="partner-card partner-card--{{item.tone}}">
+        <view class="partner-card__head"><view><text class="partner-card__title">{{item.label}}</text><text class="partner-card__sub">{{item.sub}}</text></view><text class="partner-card__amount">{{item.amountText}}</text></view>
+        <block wx:if="{{item.rows.length}}"><view wx:for="{{item.rows}}" wx:key="key" class="partner-row"><text class="partner-row__name">{{item.name}}</text><text class="partner-row__amount">{{item.amountText}}</text><text class="partner-row__pct">{{item.pct}}</text></view></block>
+        <text wx:else class="finance-detail-card__empty">暂无合作单位数据</text>
+      </view>
+
+      <view wx:if="{{otherTypes.length}}" class="other-card"><text class="other-card__title">其他单据</text><text class="other-card__hint">同期发生额</text><view wx:for="{{otherTypes}}" wx:key="label" class="other-card__row"><text>{{item.label}}</text><text>{{item.amountText}} · {{item.countText}} 笔</text></view></view>
+    </view>
+  </scroll-view>
+</view>

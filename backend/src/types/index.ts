@@ -50,6 +50,20 @@ export {
   isTenantIndustryKind,
   normalizeTenantIndustryKind,
   type ProdOpType,
+  PROD_OP_REASON_FROM_DEV,
+  PROD_OP_REASON_FROM_REWORK,
+  isDevMaterialOpReason,
+  isReworkMaterialOpReason,
+  DevStyleStatus,
+  DevStageStatus,
+  type DevMaterialLineInput,
+  type DevMaterialBatchRequest,
+  type DevMaterialSummaryRow,
+  type DevMaterialReturnableRow,
+  type DevMaterialRecordLine,
+  type DevMaterialDocGroup,
+  type DevMaterialRecordsResponse,
+  type DevMaterialBatchResult,
   type FinanceOpType,
   type CustomDocFieldType,
   type LegacyCustomDocFieldType,
@@ -211,6 +225,9 @@ export function allBasicPermissions(): string[] {
 export const DEVELOPMENT_SUB_MODULES = {
   styles: { label: '款式开发', actions: ['view', 'create', 'edit', 'delete'] as const },
   templates: { label: '开发流程模板', actions: ['view', 'create', 'edit', 'delete'] as const },
+  material_records: { label: '开发领退流水', actions: ['view'] as const },
+  material_issue: { label: '开发领料', actions: ['view', 'create'] as const },
+  material_return: { label: '开发退料', actions: ['view', 'create'] as const },
 } as const;
 
 export function allDevelopmentPermissions(): string[] {

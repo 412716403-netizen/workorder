@@ -9,6 +9,7 @@ const {
   buildBomMaterialsForOrder,
   buildBomMaterialsForProductGroup,
 } = require('./orderMaterialLite.js');
+const { shouldExcludeFromProductionMaterialStats } = require('./productionMaterialReason.js');
 
 function partnerMatchRecord(r, partnerKey) {
   const rp = String(r.partner || '').trim();
@@ -35,9 +36,10 @@ function buildPartnerIssuedMap(records, scope, partnerKey) {
     const pid = r.productId;
     if (!pid) return;
     if (r.type === 'STOCK_OUT') {
-      if (r.reason === '来自于返工') return;
+      if (shouldExcludeFromProductionMaterialStats(r.reason)) return;
       issuedMap.set(pid, (issuedMap.get(pid) || 0) + (Number(r.quantity) || 0));
     } else if (r.type === 'STOCK_RETURN') {
+      if (shouldExcludeFromProductionMaterialStats(r.reason)) return;
       issuedMap.set(pid, (issuedMap.get(pid) || 0) - (Number(r.quantity) || 0));
     }
   });

@@ -1,5 +1,45 @@
 import { describe, it, expect } from 'vitest';
-import { computeWarehouseFlowTotals, formatWarehouseFlowQty } from './warehouseFlowHelpers';
+import {
+  computeWarehouseFlowTotals,
+  formatWarehouseFlowQty,
+  matchesWarehouseFlowTypeFilter,
+  resolveProdWarehouseFlowTypeLabel,
+} from './warehouseFlowHelpers';
+import { PROD_OP_REASON_FROM_DEV } from '../../shared/types';
+
+describe('resolveProdWarehouseFlowTypeLabel', () => {
+  it('开发领退显示开发领料/开发退料', () => {
+    expect(resolveProdWarehouseFlowTypeLabel('STOCK_OUT', PROD_OP_REASON_FROM_DEV)).toBe('开发领料');
+    expect(resolveProdWarehouseFlowTypeLabel('STOCK_RETURN', PROD_OP_REASON_FROM_DEV)).toBe('开发退料');
+  });
+
+  it('普通生产领退保持原标签', () => {
+    expect(resolveProdWarehouseFlowTypeLabel('STOCK_OUT', null)).toBe('领料发出');
+    expect(resolveProdWarehouseFlowTypeLabel('STOCK_RETURN', undefined)).toBe('生产退料');
+    expect(resolveProdWarehouseFlowTypeLabel('STOCK_IN', PROD_OP_REASON_FROM_DEV)).toBe('生产入库');
+  });
+});
+
+describe('matchesWarehouseFlowTypeFilter', () => {
+  const prodOut = { type: 'STOCK_OUT', quantity: -5, record: { reason: '生产领料' } };
+  const devOut = { type: 'STOCK_OUT', quantity: -3, record: { reason: PROD_OP_REASON_FROM_DEV } };
+  const prodReturn = { type: 'STOCK_RETURN', quantity: 2, record: {} };
+  const devReturn = { type: 'STOCK_RETURN', quantity: 1, record: { reason: PROD_OP_REASON_FROM_DEV } };
+
+  it('开发虚拟类型仅匹配开发领退', () => {
+    expect(matchesWarehouseFlowTypeFilter(devOut, 'DEV_STOCK_OUT')).toBe(true);
+    expect(matchesWarehouseFlowTypeFilter(prodOut, 'DEV_STOCK_OUT')).toBe(false);
+    expect(matchesWarehouseFlowTypeFilter(devReturn, 'DEV_STOCK_RETURN')).toBe(true);
+    expect(matchesWarehouseFlowTypeFilter(prodReturn, 'DEV_STOCK_RETURN')).toBe(false);
+  });
+
+  it('领料发出/生产退料排除开发单据', () => {
+    expect(matchesWarehouseFlowTypeFilter(prodOut, 'STOCK_OUT')).toBe(true);
+    expect(matchesWarehouseFlowTypeFilter(devOut, 'STOCK_OUT')).toBe(false);
+    expect(matchesWarehouseFlowTypeFilter(prodReturn, 'STOCK_RETURN')).toBe(true);
+    expect(matchesWarehouseFlowTypeFilter(devReturn, 'STOCK_RETURN')).toBe(false);
+  });
+});
 
 describe('computeWarehouseFlowTotals', () => {
   it('采购入库计入入库', () => {

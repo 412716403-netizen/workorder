@@ -1,5 +1,12 @@
 import { request, buildQs } from './_client';
-import type { DevStyleDto, DevBomDto, DevStageTemplateDto } from '../../types';
+import type {
+  DevStyleDto,
+  DevBomDto,
+  DevStageTemplateDto,
+  DevMaterialBatchRequest,
+  DevMaterialBatchResult,
+  DevMaterialRecordsResponse,
+} from '../../types';
 
 export const devStyles = {
   list: (params?: { categoryId?: string; search?: string; status?: string }) => {
@@ -88,4 +95,19 @@ export const devTemplates = {
     request<DevStageTemplateDto>(`/dev/stage-templates/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id: string) =>
     request<{ message: string }>(`/dev/stage-templates/${id}`, { method: 'DELETE' }),
+};
+
+export const devMaterial = {
+  listRecords: (styleId: string) =>
+    request<DevMaterialRecordsResponse>(`/dev/styles/${styleId}/material-records`),
+  issueBatch: (styleId: string, body: DevMaterialBatchRequest) =>
+    request<DevMaterialBatchResult>(`/dev/styles/${styleId}/material-issues/batch`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  returnBatch: (styleId: string, body: DevMaterialBatchRequest) =>
+    request<DevMaterialBatchResult>(`/dev/styles/${styleId}/material-returns/batch`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 };

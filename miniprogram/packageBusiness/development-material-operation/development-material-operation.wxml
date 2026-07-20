@@ -1,0 +1,84 @@
+<view class="plan-detail-shell">
+  <view class="plan-detail-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-detail-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-detail-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-detail-header__title">{{pageTitle}}</text>
+      <view class="plan-detail-header__back plan-detail-header__back--placeholder"></view>
+    </view>
+  </view>
+
+  <view class="plan-detail-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view class="plan-detail-scroll" scroll-y show-scrollbar="{{false}}" style="height: {{scrollHeight}}px;">
+    <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
+
+    <view wx:else class="plan-detail-page">
+      <view class="dev-section-card">
+        <view class="dev-section-card__head">
+          <text class="dev-section-card__title">{{styleName}}</text>
+          <text class="dev-section-card__hint">{{styleCode}}</text>
+        </view>
+
+        <view class="dev-mat-form-row">
+          <text class="dev-mat-form-label">单据日期</text>
+          <picker mode="date" value="{{entryDate}}" bindchange="onEntryDateChange">
+            <view class="dev-mat-form-value">{{entryDate}}</view>
+          </picker>
+        </view>
+        <view class="dev-mat-form-row">
+          <text class="dev-mat-form-label">单据时间</text>
+          <picker mode="time" value="{{entryTime}}" bindchange="onEntryTimeChange">
+            <view class="dev-mat-form-value">{{entryTime}}</view>
+          </picker>
+        </view>
+
+        <view wx:if="{{isIssue}}" class="dev-mat-form-row">
+          <text class="dev-mat-form-label">出库仓库</text>
+          <picker mode="selector" range="{{warehouses}}" range-key="name" value="{{warehouseIndex}}" bindchange="onWarehouseChange">
+            <view class="dev-mat-form-value">{{warehouses[warehouseIndex].name || '请选择'}}</view>
+          </picker>
+        </view>
+      </view>
+
+      <view class="dev-section-card">
+        <view class="dev-section-card__head">
+          <text class="dev-section-card__title">物料明细</text>
+        </view>
+
+        <view wx:if="{{!rows.length}}" class="dev-empty-block">
+          <text class="dev-empty-block__text">{{isIssue ? '请先配置试制 BOM' : '暂无可退物料'}}</text>
+        </view>
+
+        <view wx:for="{{rows}}" wx:key="{{isIssue ? productId : key}}" class="dev-mat-row">
+          <view class="dev-mat-row__main">
+            <text class="dev-mat-row__name">{{item.productName}}</text>
+            <text wx:if="{{item.showProductSku}}" class="list-product-sku">{{item.productSku}}</text>
+            <text wx:if="{{!isIssue}}" class="dev-mat-row__meta">{{item.warehouseName}} · {{item.batchNo}} · 可退 {{item.returnableQty}}</text>
+            <text wx:else class="dev-mat-row__meta">净领用 {{item.netQty}}</text>
+          </view>
+
+          <view wx:if="{{isIssue && item.needsBatch}}" class="dev-mat-row__batch">
+            <picker mode="selector" range="{{item.batchPickerRange}}" value="{{item.batchIndex}}" data-index="{{index}}" bindchange="onBatchChange">
+              <view class="dev-mat-form-value">{{item.batchDisplayText || item.batchPickerRange[item.batchIndex] || '选择批次'}}</view>
+            </picker>
+          </view>
+
+          <input
+            class="dev-mat-row__qty"
+            type="digit"
+            placeholder="数量"
+            value="{{isIssue ? item.issueQty : item.returnQty}}"
+            data-index="{{index}}"
+            bindinput="onQtyInput"
+          />
+        </view>
+      </view>
+
+      <view class="dev-mat-submit-wrap">
+        <button class="dev-mat-submit" loading="{{submitting}}" disabled="{{submitting}}" bindtap="onSubmit">
+          {{isIssue ? '确认领料' : '确认退料'}}
+        </button>
+      </view>
+    </view>
+  </scroll-view>
+</view>

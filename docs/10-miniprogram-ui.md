@@ -1000,19 +1000,22 @@ npm run miniprogram:icons
 | 页面 | 路径 | 职责 |
 |------|------|------|
 | 款式列表 | [`packageBusiness/development-styles/`](../miniprogram/packageBusiness/development-styles/) | 开发中 / 已归档 Tab、搜索、进度节点或同步状态筛选、按时间/客户排序、录入新产品、节点库入口 |
-| 款式详情 | [`development-style-detail/`](../miniprogram/packageBusiness/development-style-detail/) | 基本信息、归档/还原/发布大货/删除、样品 Tab、节点时间线、加删样品、版本日志、深链 `styleId` + `devStageId` / `devSampleId` |
-| 创建/编辑 | [`development-style-edit/`](../miniprogram/packageBusiness/development-style-edit/) | 分类商品字段、开发流程节点、大货工序；保存回列表 |
+| 款式详情 | [`development-style-detail/`](../miniprogram/packageBusiness/development-style-detail/) | 基本信息、归档/还原/发布大货/删除、样品区标题同行靠右入口（日志 / 开发物料 / BOM）、节点时间线、加删样品、版本日志、深链 `styleId` + `devStageId` / `devSampleId` |
+| 创建/编辑 | [`development-style-edit/`](../miniprogram/packageBusiness/development-style-edit/) | 分类商品字段、开发流程节点（新建默认不勾选，须手动选择）、大货工序；保存回列表 |
 | 节点登记 | [`development-stage-register/`](../miniprogram/packageBusiness/development-stage-register/) | 四态 + 模板自定义字段；`todo_reminder` 开启时可加待办 |
 | BOM 录入 | [`development-bom-edit/`](../miniprogram/packageBusiness/development-bom-edit/) | **格子下钻**（变体×工序 → 物料行），非 Web 整表矩阵；同数据源 `dev_boms` + `syncVariantNodeBoms` |
+| 开发领/退料 | [`development-material-operation/`](../miniprogram/packageBusiness/development-material-operation/) | `mode=issue|return`；试制 BOM / 可退行；仓库与批次；写 `/dev/styles/:id/material-issues|returns/batch` |
+| 开发物料 | [`development-material-records/`](../miniprogram/packageBusiness/development-material-records/) | 汇总 + 领料/退料入口 + 按单号流水（对齐 Web 开发物料弹窗） |
 | 节点库 | [`development-stage-templates/`](../miniprogram/packageBusiness/development-stage-templates/) + [`development-stage-template-edit/`](../miniprogram/packageBusiness/development-stage-template-edit/) | 模板 CRUD、排序、字段配置 |
 
 | 工具 | 作用 |
 |------|------|
-| [`utils/developmentApi.js`](../miniprogram/packageBusiness/utils/developmentApi.js) | `/dev/styles*` · `/dev/styles/boms*` · `/dev/stage-templates*` |
+| [`utils/developmentApi.js`](../miniprogram/packageBusiness/utils/developmentApi.js) | `/dev/styles*` · `/dev/styles/boms*` · `/dev/stage-templates*` · 开发物料 |
+| [`utils/devMaterialLite.js`](../miniprogram/packageBusiness/utils/devMaterialLite.js) | 开发领退 UI 派生 |
 | [`utils/devStyleListFilter.js`](../miniprogram/packageBusiness/utils/devStyleListFilter.js) 等 | 列表筛选/展示/表单/登记/BOM view-model |
 | [`utils/todoNavigate.js`](../miniprogram/utils/todoNavigate.js) | 消息/管理页待办 Web href → 小程序详情深链 |
 
-**权限 / 插件**：插件 `development`；款式 `development:styles:*`；节点库 `development:templates:*`。保存后导航：`LIST_ROUTES.DEVELOPMENT_STYLES`。
+**权限 / 插件**：插件 `development`；款式 `development:styles:*`；节点库 `development:templates:*`；开发物料 `development:material_issue|material_return|material_records:*`。保存后导航：`LIST_ROUTES.DEVELOPMENT_STYLES`。
 
 **与 Web 差异**：BOM 为格子下钻编辑；待办新建/编辑与 Web 同为备注 + 提醒时间（`todo-edit` 页）。
 

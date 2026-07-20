@@ -408,6 +408,8 @@ interface ProductionOpRecord {
 
 **说明**：领料出库、外协、返工、报损、生产入库通过 `orderId` 关联工单；`orderId` 为可选时表示关联产品模式，详见 [05-production-link-mode.md](./05-production-link-mode.md)。**报损 (SCRAP)**：记录不良品报损数量，工单详情各工序报工汇总中展示「报损」列。**返工 (REWORK)**：`sourceNodeId` 为不良来源工序，`nodeId`/`reworkNodeIds` 为返工目标工序（可多选）。
 
+**开发领退料**：`reason = 来自于开发`（常量 `PROD_OP_REASON_FROM_DEV`），`customData.devStyleId` 关联款式；无 `orderId`/`partner`。生产物料统计须排除该来源；库存聚合计入。返工领料 `reason = 来自于返工`（`PROD_OP_REASON_FROM_REWORK`）同级隔离。
+
 **批次**：`PsiRecord` 采购类行字段为 `batchNo`（API）；持久化与打印上下文与 `ProductionOpRecord.batchNo` 一致，用于按批结存与扣减。
 
 **按重量报工（`GlobalNodeTemplate.enableWeightOnReport`）**：
