@@ -135,6 +135,13 @@ refresh 依赖后端 Cookie 机制，而不是前端直接读写 refresh token�
 - **落点**：`backend/src/services/tenants.service.ts`（`createTenant` / `updateTenant`）应用层校验。
 - **历史数据**：库中已存在的同名企业**不强制改名**；未加库级唯一索引，部署无需清理历史重复名。
 
+### 4.3.2 登录后一律选择企业
+
+- **规则**：账号密码 / 微信登录成功后，**无论仅 1 个还是多个企业**，都不自动进入业务；须进入「选择企业」页由用户确认后再发带 `tenantId` 的会话（`POST /tenants/:id/select`）。
+- **后端**：`loadTenantPayloadFromDb` 仅在调用方**显式传入** `tenantId`（如 refresh、`/auth/me`、已选企业）时回填；登录路径 `issueLoginForUser` 不传 `tenantId`，故响应中 `tenantId` 为 `null`。
+- **网页**：`AuthContext.handleLogin` 登录后清除 `tenantCtx`，由 `AuthRouter` 进入 `TenantSelectView`。
+- **小程序**：`utils/authLogin.applyLoginSuccess` 登录后清除 `tenantCtx`，有企业则 `reLaunch` 到 `pages/tenant-select`。
+
 ### 4.4 「自动掉线」常见原因（会话层）
 
 - 业务请求使用 **Bearer access JWT**（默认约 **15 分钟** 过期，见 `backend/src/config/env.ts` 的 `JWT_EXPIRES_IN`）。过期后若 **`POST /auth/refresh`** 未成功换新 access，前端在 **401 后刷新仍失败** 时会清理 `localStorage` 并整页回到登录（`services/api.ts`）。

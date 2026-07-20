@@ -1,4 +1,3 @@
-const { resolveDefaultTabPath } = require('./tabAccess.js');
 const { clearUnsavedFormDrafts } = require('./unsavedFormDrafts.js');
 const { clearFeaturePluginsCache } = require('./featurePlugins.js');
 
@@ -19,34 +18,7 @@ function applyLoginSuccess(d) {
   const tenants = Array.isArray(d.tenants) ? d.tenants : [];
   wx.setStorageSync('userTenants', JSON.stringify(tenants));
 
-  const tenantId = d.tenantId || null;
-
-  if (tenantId && tenants.length) {
-    const matched = tenants.find((t) => t.id === tenantId);
-    if (matched && matched.status !== 'pending' && matched.status !== 'rejected') {
-      wx.setStorageSync(
-        'tenantCtx',
-        JSON.stringify({
-          tenantId: matched.id,
-          tenantName: matched.name,
-          tenantRole: matched.role,
-          permissions: matched.permissions || [],
-          status: matched.status,
-          expiresAt: matched.expiresAt != null ? matched.expiresAt : null,
-          industryKind: matched.industryKind || 'generic',
-          equipmentFeaturesEnabled: matched.equipmentFeaturesEnabled !== false,
-        }),
-      );
-      wx.switchTab({
-        url: resolveDefaultTabPath({
-          tenantRole: matched.role,
-          permissions: matched.permissions || [],
-        }),
-      });
-      return true;
-    }
-  }
-
+  // 登录后一律进入选企业页（单企业也要确认），与网页端一致。
   wx.removeStorageSync('tenantCtx');
 
   if (tenants.length > 0) {

@@ -125,11 +125,10 @@ async function loadTenantPayloadFromDb(userId: string, tenantId?: string): Promi
     industryKind: normalizeTenantIndustryKind(m.tenant.industryKind),
   }));
 
-  const activeMemberships = memberships.filter(m => m.tenant.status === 'active');
-
-  let selected = tenantId
+  // 登录不自动选企业（含仅 1 个 active）：须用户显式选择或 refresh/me 携带既有 tenantId。
+  const selected = tenantId
     ? memberships.find(m => m.tenantId === tenantId && m.tenant.status === 'active')
-    : activeMemberships.length === 1 ? activeMemberships[0] : undefined;
+    : undefined;
 
   if (selected) {
     return {

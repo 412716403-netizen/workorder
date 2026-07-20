@@ -106,26 +106,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUserTenants(loginData.tenants || []);
       localStorage.setItem('userTenants', JSON.stringify(loginData.tenants || []));
 
-      if (loginData.tenantId && loginData.tenants?.length) {
-        const matched = loginData.tenants.find(t => t.id === loginData.tenantId);
-        if (matched && matched.status !== 'pending' && matched.status !== 'rejected') {
-          const ctx: TenantContext = {
-            tenantId: matched.id,
-            tenantName: matched.name,
-            tenantRole: matched.role,
-            permissions: matched.permissions,
-            status: matched.status,
-            expiresAt: matched.expiresAt ?? null,
-            equipmentFeaturesEnabled: matched.equipmentFeaturesEnabled,
-            industryKind: matched.industryKind,
-          };
-          setTenantCtx(ctx);
-          localStorage.setItem('tenantCtx', JSON.stringify(ctx));
-        }
-      } else {
-        setTenantCtx(null);
-        localStorage.removeItem('tenantCtx');
-      }
+      // 登录后一律进入选企业页（单企业也要确认），不因响应里的 tenantId 自动进入。
+      setTenantCtx(null);
+      localStorage.removeItem('tenantCtx');
       navigate('/', { replace: true });
     },
     [navigate, clearSessionQueryCache],
