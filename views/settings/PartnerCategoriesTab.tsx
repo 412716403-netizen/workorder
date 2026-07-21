@@ -14,6 +14,7 @@ import { ReportCustomFieldsConfigTable } from '../../components/form-config/Cust
 import { formStandardControlClass } from '../../styles/uiDensity';
 import { hasSettingsNameConflict } from '../../utils/settingsNameUnique';
 import { useSettingsUsedIds } from '../../hooks/useSettingsUsedIds';
+import { useSerializedEntityUpdate } from '../../hooks/useSerializedEntityUpdate';
 
 interface PartnerCategoriesTabProps {
   partnerCategories: PartnerCategory[];
@@ -33,6 +34,11 @@ const PartnerCategoriesTab: React.FC<PartnerCategoriesTabProps> = ({
   const [partnerCatNameDraft, setPartnerCatNameDraft] = useState('');
   const addLock = useAsyncSubmitLock();
   const usedIds = useSettingsUsedIds(api.settings.partnerCategories.usage);
+
+  const serializedUpdate = useSerializedEntityUpdate<Partial<PartnerCategory>>(async (id, updates) => {
+    await api.settings.partnerCategories.update(id, updates);
+    await onRefreshPartnerCategories();
+  });
 
   const addPartnerCategory = async () => {
     if (!newPCatName.trim()) return;
@@ -59,8 +65,7 @@ const PartnerCategoriesTab: React.FC<PartnerCategoriesTabProps> = ({
 
   const updatePCategoryConfig = async (id: string, updates: Partial<PartnerCategory>) => {
     try {
-      await api.settings.partnerCategories.update(id, updates);
-      await onRefreshPartnerCategories();
+      await serializedUpdate(id, updates);
     } catch (err: any) { toast.error(err.message || '操作失败'); }
   };
 

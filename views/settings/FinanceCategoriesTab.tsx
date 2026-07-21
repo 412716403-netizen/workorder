@@ -21,6 +21,7 @@ import { ReportCustomFieldsConfigTable } from '../../components/form-config/Cust
 import { formStandardControlClass } from '../../styles/uiDensity';
 import { hasSettingsNameConflict } from '../../utils/settingsNameUnique';
 import { useSettingsUsedIds } from '../../hooks/useSettingsUsedIds';
+import { useSerializedEntityUpdate } from '../../hooks/useSerializedEntityUpdate';
 
 interface FinanceCategoriesTabProps {
   financeCategories: FinanceCategory[];
@@ -40,6 +41,11 @@ const FinanceCategoriesTab: React.FC<FinanceCategoriesTabProps> = ({
   const [financeCatNameDraft, setFinanceCatNameDraft] = useState('');
   const addLock = useAsyncSubmitLock();
   const usedIds = useSettingsUsedIds(api.settings.financeCategories.usage);
+
+  const serializedUpdate = useSerializedEntityUpdate<Partial<FinanceCategory>>(async (id, updates) => {
+    await api.settings.financeCategories.update(id, updates);
+    await onRefreshFinanceCategories();
+  });
 
   const addFinanceCategory = async () => {
     const trimmed = newFinanceCatName.trim();
@@ -70,8 +76,7 @@ const FinanceCategoriesTab: React.FC<FinanceCategoriesTabProps> = ({
 
   const updateFinanceCategoryConfig = async (id: string, updates: Partial<FinanceCategory>) => {
     try {
-      await api.settings.financeCategories.update(id, updates);
-      await onRefreshFinanceCategories();
+      await serializedUpdate(id, updates);
     } catch (err: any) { toast.error(err.message || '操作失败'); }
   };
 

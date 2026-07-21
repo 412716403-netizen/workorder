@@ -37,7 +37,7 @@ export function ProductCategorySelectOptions({
               const v = text.trim();
               if (!v) {
                 onPersist(catId, fieldId, opts.filter((_, i) => i !== idx));
-              } else if (v !== (opt || '').trim()) {
+              } else {
                 const next = [...opts];
                 next[idx] = v;
                 onPersist(catId, fieldId, next);
@@ -82,7 +82,7 @@ export function NodeReportTemplateSelectOptions({
               const v = text.trim();
               if (!v) {
                 onPersist(nodeId, fieldId, opts.filter((_, i) => i !== idx));
-              } else if (v !== (opt || '').trim()) {
+              } else {
                 const next = [...opts];
                 next[idx] = v;
                 onPersist(nodeId, fieldId, next);

@@ -42,6 +42,7 @@ import { useEquipmentFeaturesEffective } from '../../hooks/useEquipmentFeaturesE
 import { useFeaturePlugins } from '../../hooks/useFeaturePlugins';
 import { hasSettingsNameConflict } from '../../utils/settingsNameUnique';
 import { isEquipmentAssignmentEnabled, isWorkerAssignmentEnabled } from '../../utils/nodeAssignmentFlags';
+import { useSerializedEntityUpdate } from '../../hooks/useSerializedEntityUpdate';
 
 interface NodesTabProps {
   globalNodes: GlobalNodeTemplate[];
@@ -134,6 +135,11 @@ const NodesTab: React.FC<NodesTabProps> = ({
     [editingNodeId, globalNodes],
   );
 
+  const serializedUpdate = useSerializedEntityUpdate<Partial<GlobalNodeTemplate>>(async (id, updates) => {
+    await api.settings.nodes.update(id, updates);
+    await onRefreshGlobalNodes();
+  });
+
   const handleReorder = async (event: DragEndEvent) => {
     const { active, over } = event;
     if (!canEdit || reorderingRef.current || !over || active.id === over.id) return;
@@ -188,8 +194,7 @@ const NodesTab: React.FC<NodesTabProps> = ({
 
   const updateNodeConfig = async (id: string, updates: Partial<GlobalNodeTemplate>) => {
     try {
-      await api.settings.nodes.update(id, updates);
-      await onRefreshGlobalNodes();
+      await serializedUpdate(id, updates);
     } catch (err: any) { toast.error(err.message || '操作失败'); }
   };
 

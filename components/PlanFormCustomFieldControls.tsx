@@ -21,6 +21,7 @@ import {
   localTodayYmd,
   toDatetimeLocalInputValue,
 } from '../utils/localDateTime';
+import { getFileExtFromDataUrl } from '../utils/fileHelpers';
 
 const FILE_ACCEPT = 'image/*,.pdf,.doc,.docx,.xls,.xlsx';
 

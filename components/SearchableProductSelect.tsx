@@ -13,14 +13,10 @@ import { compareProductsArchiveOrder } from '../utils/productSort';
 import { productMatchesSearchQuery } from '../utils/productSearchMatch';
 import { filterSelectableProducts } from '../utils/productEnabled';
 import { lazyWithReloadOnChunkError } from '../utils/lazyWithReloadOnChunkError';
+import { getFileExtFromDataUrl } from '../utils/fileHelpers';
 
 /** 动态加载，避免与 ProductEditForm 形成静态循环依赖（否则 BOM 内 SearchableProductSelect 会整段挂掉） */
 const ProductArchiveCreateModal = lazyWithReloadOnChunkError(() => import('./ProductArchiveCreateModal'));
-
-function getFileExtFromDataUrl(dataUrl: string): string {
-  const m = dataUrl.match(/^data:[^/]+\/([^;]+)/);
-  return m?.[1]?.replace('jpeg', 'jpg') ?? 'bin';
-}
 
 /** 与 BOM 物料行、生产计划一致：Portal + fixed，避免在滚动/弹窗内被裁切 */
 export function SearchableProductSelect({
@@ -280,11 +276,13 @@ export function SearchableProductSelect({
                 )}
               </div>
               <div className="flex flex-wrap items-center gap-1">
-                <p
-                  className={`font-semibold uppercase tracking-tight leading-tight ${compact ? 'text-[9px]' : 'text-[10px]'} ${p.id === value ? 'text-indigo-400' : 'text-slate-400'}`}
-                >
-                  {p.sku}
-                </p>
+                {(p.sku ?? '').trim() ? (
+                  <p
+                    className={`font-semibold uppercase tracking-tight leading-tight ${compact ? 'text-[9px]' : 'text-[10px]'} ${p.id === value ? 'text-indigo-400' : 'text-slate-400'}`}
+                  >
+                    {(p.sku ?? '').trim()}
+                  </p>
+                ) : null}
                 {getShowInFormCategoryFields(cat).map(f => {
                   const val = p.categoryCustomData?.[f.id];
                   if (val == null || val === '') return null;
@@ -363,7 +361,8 @@ export function SearchableProductSelect({
                         return `${f.label}: ${formatReportCustomDataForList(f, v)}`;
                       })
                       .filter(Boolean);
-                  const base = `${selectedProduct.name} (${selectedProduct.sku})`;
+                  const sku = (selectedProduct.sku ?? '').trim();
+                  const base = sku ? `${selectedProduct.name} (${sku})` : selectedProduct.name;
                   return customParts.length > 0 ? `${base} ${customParts.join(' ')}` : base;
                 })()
               : placeholder || '搜索并选择产品型号...'}

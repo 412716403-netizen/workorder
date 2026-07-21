@@ -24,6 +24,7 @@ import { formStandardControlClass } from '../../styles/uiDensity';
 import { useFeaturePlugins } from '../../hooks/useFeaturePlugins';
 import { hasSettingsNameConflict } from '../../utils/settingsNameUnique';
 import { useSettingsUsedIds } from '../../hooks/useSettingsUsedIds';
+import { useSerializedEntityUpdate } from '../../hooks/useSerializedEntityUpdate';
 
 interface CategoriesTabProps {
   categories: ProductCategory[];
@@ -51,6 +52,11 @@ const CategoriesTab: React.FC<CategoriesTabProps> = ({
   const customFieldAllowedTypes: CustomDocFieldType[] = isPluginEnabled('knowledge_base')
     ? ['text', 'date', 'select', 'file', 'knowledge']
     : ['text', 'date', 'select', 'file'];
+
+  const serializedUpdate = useSerializedEntityUpdate<Partial<ProductCategory>>(async (id, updates) => {
+    await api.settings.categories.update(id, updates);
+    await onRefreshCategories();
+  });
 
   const addCategory = async () => {
     if (!newCatName.trim()) return;
@@ -91,8 +97,7 @@ const CategoriesTab: React.FC<CategoriesTabProps> = ({
       }
     }
     try {
-      await api.settings.categories.update(id, updates);
-      await onRefreshCategories();
+      await serializedUpdate(id, updates);
     } catch (err: any) { toast.error(err.message || '操作失败'); }
   };
 

@@ -1,4 +1,4 @@
-import React, { ReactNode } from 'react';
+import React, { ReactNode, useEffect, useRef, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import type { CustomDocFieldType, PlanFormFieldConfig, PlanFormCustomFieldType, ReportFieldDefinition } from '../../types';
 import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
@@ -89,8 +89,40 @@ export const CustomFieldsEditorTable: React.FC<CustomFieldsEditorTableProps> = (
   const hasCol = (c: CustomFieldEditorColumn) => columns.includes(c);
   const colTitle = (c: CustomFieldEditorColumn) => columnHints?.[c] ?? DEFAULT_COLUMN_HINTS[c];
 
+  /** 以草稿为源，避免失焦前其它操作仍读到「新选项」 */
+  const [draftFields, setDraftFields] = useState(fields);
+  const lastEmittedJsonRef = useRef(JSON.stringify(fields));
+  useEffect(() => {
+    const incoming = JSON.stringify(fields);
+    if (incoming !== lastEmittedJsonRef.current) {
+      lastEmittedJsonRef.current = incoming;
+      setDraftFields(fields);
+    }
+  }, [fields]);
+
+  const emit = (next: PlanFormFieldConfig[]) => {
+    lastEmittedJsonRef.current = JSON.stringify(next);
+    setDraftFields(next);
+    onChange(next);
+  };
+
   const patch = (id: string, mut: (cf: PlanFormFieldConfig) => PlanFormFieldConfig) => {
-    onChange(fields.map(c => (c.id === id ? mut(c) : c)));
+    setDraftFields(prev => {
+      const next = prev.map(c => (c.id === id ? mut(c) : c));
+      lastEmittedJsonRef.current = JSON.stringify(next);
+      onChange(next);
+      return next;
+    });
+  };
+
+  const patchOptionDraft = (fieldId: string, optIdx: number, text: string) => {
+    setDraftFields(prev =>
+      prev.map(c =>
+        c.id !== fieldId
+          ? c
+          : { ...c, options: (c.options ?? []).map((o, i) => (i === optIdx ? text : o)) },
+      ),
+    );
   };
 
   const handleTypeChange = (id: string, newType: PlanFormCustomFieldType) => {
@@ -131,7 +163,7 @@ export const CustomFieldsEditorTable: React.FC<CustomFieldsEditorTableProps> = (
             {headerExtra}
             <button
               type="button"
-              onClick={() => onChange([...fields, buildDefaultField(idPrefix)])}
+              onClick={() => emit([...draftFields, buildDefaultField(idPrefix)])}
               className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-700"
             >
               <Plus className="h-3.5 w-3.5" /> {addButtonLabel}
@@ -139,7 +171,7 @@ export const CustomFieldsEditorTable: React.FC<CustomFieldsEditorTableProps> = (
           </div>
         </div>
       )}
-      {fields.length === 0 ? (
+      {draftFields.length === 0 ? (
         emptyHint ? (
           <p className="rounded-2xl border-2 border-dashed border-slate-100 py-4 text-center text-sm italic text-slate-400">
             {emptyHint}
@@ -195,7 +227,7 @@ export const CustomFieldsEditorTable: React.FC<CustomFieldsEditorTableProps> = (
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {fields.map(cf => (
+              {draftFields.map(cf => (
                 <tr key={cf.id} className="hover:bg-slate-50/50">
                   {hasCol('label') && (
                     <td className="px-4 py-2">
@@ -231,6 +263,7 @@ export const CustomFieldsEditorTable: React.FC<CustomFieldsEditorTableProps> = (
                             <BlurPersistSelectOptionRow
                               key={`${cf.id}-opt-${idx}`}
                               serverValue={opt}
+                              onDraftChange={text => patchOptionDraft(cf.id, idx, text)}
                               onCommit={text => {
                                 const v = text.trim();
                                 if (!v) {
@@ -238,7 +271,7 @@ export const CustomFieldsEditorTable: React.FC<CustomFieldsEditorTableProps> = (
                                     ...c,
                                     options: (c.options ?? []).filter((_, i) => i !== idx),
                                   }));
-                                } else if (v !== (opt || '').trim()) {
+                                } else {
                                   patch(cf.id, c => ({
                                     ...c,
                                     options: (c.options ?? []).map((o, i) => (i === idx ? v : o)),
@@ -308,7 +341,7 @@ export const CustomFieldsEditorTable: React.FC<CustomFieldsEditorTableProps> = (
                     <td className="px-4 py-2">
                       <button
                         type="button"
-                        onClick={() => onChange(fields.filter(c => c.id !== cf.id))}
+                        onClick={() => emit(draftFields.filter(c => c.id !== cf.id))}
                         className="rounded-lg p-1.5 text-rose-400 hover:bg-rose-50 hover:text-rose-600"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -403,10 +436,39 @@ export const ReportCustomFieldsConfigTable: React.FC<ReportCustomFieldsConfigTab
 }) => {
   const typeOptions = (allowedTypes?.length ? allowedTypes : DEFAULT_REPORT_ALLOWED_TYPES) as CustomDocFieldType[];
 
+  const [draftFields, setDraftFields] = useState(fields);
+  const lastEmittedJsonRef = useRef(JSON.stringify(fields));
+  useEffect(() => {
+    const incoming = JSON.stringify(fields);
+    if (incoming !== lastEmittedJsonRef.current) {
+      lastEmittedJsonRef.current = incoming;
+      setDraftFields(fields);
+    }
+  }, [fields]);
+
+  const emit = (next: ReportFieldDefinition[]) => {
+    lastEmittedJsonRef.current = JSON.stringify(next);
+    setDraftFields(next);
+    onChange(next);
+  };
+
   const patch = (id: string, mut: (cf: ReportFieldDefinition) => ReportFieldDefinition) => {
-    onChange(
-      fields.map(c =>
+    setDraftFields(prev => {
+      const next = prev.map(c =>
         c.id === id ? clampReportFieldToAllowedTypes(normalizeReportFieldDefinition(mut(c)), allowedTypes) : c,
+      );
+      lastEmittedJsonRef.current = JSON.stringify(next);
+      onChange(next);
+      return next;
+    });
+  };
+
+  const patchOptionDraft = (fieldId: string, optIdx: number, text: string) => {
+    setDraftFields(prev =>
+      prev.map(c =>
+        c.id !== fieldId
+          ? c
+          : { ...c, options: (c.options ?? []).map((o, i) => (i === optIdx ? text : o)) },
       ),
     );
   };
@@ -450,8 +512,8 @@ export const ReportCustomFieldsConfigTable: React.FC<ReportCustomFieldsConfigTab
             <button
               type="button"
               onClick={() =>
-                onChange([
-                  ...fields,
+                emit([
+                  ...draftFields,
                   clampReportFieldToAllowedTypes(
                     normalizeReportFieldDefinition(buildDefaultReportField(idPrefix)),
                     allowedTypes,
@@ -465,7 +527,7 @@ export const ReportCustomFieldsConfigTable: React.FC<ReportCustomFieldsConfigTab
           </div>
         </div>
       )}
-      {fields.length === 0 ? (
+      {draftFields.length === 0 ? (
         emptyHint ? (
           <p className="rounded-2xl border-2 border-dashed border-slate-100 py-4 text-center text-sm italic text-slate-400">
             {emptyHint}
@@ -491,7 +553,7 @@ export const ReportCustomFieldsConfigTable: React.FC<ReportCustomFieldsConfigTab
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {fields.map(cf => (
+              {draftFields.map(cf => (
                 <tr key={cf.id} className="hover:bg-slate-50/50">
                   <td className="align-top px-4 py-2">
                     <BlurPersistLabelInput
@@ -527,6 +589,7 @@ export const ReportCustomFieldsConfigTable: React.FC<ReportCustomFieldsConfigTab
                           <BlurPersistSelectOptionRow
                             key={`${cf.id}-opt-${idx}`}
                             serverValue={opt}
+                            onDraftChange={text => patchOptionDraft(cf.id, idx, text)}
                             onCommit={text => {
                               const v = text.trim();
                               if (!v) {
@@ -534,7 +597,7 @@ export const ReportCustomFieldsConfigTable: React.FC<ReportCustomFieldsConfigTab
                                   ...c,
                                   options: (c.options ?? []).filter((_, i) => i !== idx),
                                 }));
-                              } else if (v !== (opt || '').trim()) {
+                              } else {
                                 patch(cf.id, c => ({
                                   ...c,
                                   options: (c.options ?? []).map((o, i) => (i === idx ? v : o)),
@@ -592,7 +655,7 @@ export const ReportCustomFieldsConfigTable: React.FC<ReportCustomFieldsConfigTab
                   <td className="align-top px-4 py-2">
                     <button
                       type="button"
-                      onClick={() => onChange(fields.filter(c => c.id !== cf.id))}
+                      onClick={() => emit(draftFields.filter(c => c.id !== cf.id))}
                       className="rounded-lg p-1.5 text-rose-400 hover:bg-rose-50 hover:text-rose-600"
                     >
                       <Trash2 className="h-4 w-4" />
