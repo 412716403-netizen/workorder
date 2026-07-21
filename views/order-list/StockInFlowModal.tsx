@@ -331,8 +331,8 @@ export const StockInFlowModal: React.FC<StockInFlowModalProps> = ({
                 </div>
               )}
               <div>
-                <label className="text-[10px] font-bold text-slate-400 block mb-1">产品名称</label>
-                <input type="text" value={sf.productName} onChange={e => setStockInFlowFilter(prev => ({ ...prev, productName: e.target.value }))} placeholder="产品名称模糊搜索" className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200" />
+                <label className="text-[10px] font-bold text-slate-400 block mb-1">产品编号</label>
+                <input type="text" value={sf.productName} onChange={e => setStockInFlowFilter(prev => ({ ...prev, productName: e.target.value }))} placeholder="产品编号模糊搜索" className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200" />
               </div>
               <div>
                 <label className="text-[10px] font-bold text-slate-400 block mb-1">入库仓库</label>

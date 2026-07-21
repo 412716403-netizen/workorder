@@ -268,7 +268,7 @@ const StockConfirmModal: React.FC<StockConfirmModalProps> = ({
                         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                           <span className="text-sm font-bold text-slate-800">{prod?.name ?? pid}</span>
                           {prod?.sku ? (
-                            <span className="text-xs font-bold text-slate-400 tabular-nums" title="产品编号">
+                            <span className="text-xs font-bold text-slate-400 tabular-nums" title="产品名称">
                               {prod.sku}
                             </span>
                           ) : null}

@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { isProductionMaterialFlowRecord, sortStockFlowRecordsByDoc, stockFlowDateRangeFromRecords } from './stockFlowListUtils';
+import {
+  buildStockDocDetailFromRecords,
+  getStockFlowBizType,
+  getStockFlowTypeLabel,
+  isProductionMaterialFlowRecord,
+  sortStockFlowRecordsByDoc,
+  stockFlowDateRangeFromRecords,
+} from './stockFlowListUtils';
 import type { ProductionOpRecord } from '../../types';
-import { PROD_OP_REASON_FROM_DEV } from '../../shared/types';
+import { PROD_OP_REASON_FROM_DEV, PROD_OP_REASON_FROM_REWORK } from '../../shared/types';
 
 describe('isProductionMaterialFlowRecord', () => {
   it('excludes 开发领退 from production material flow', () => {
@@ -24,6 +31,26 @@ describe('isProductionMaterialFlowRecord', () => {
     expect(isProductionMaterialFlowRecord({ type: 'STOCK_RETURN', reason: '来自于返工' } as ProductionOpRecord)).toBe(
       true,
     );
+  });
+});
+
+describe('getStockFlowBizType / getStockFlowTypeLabel', () => {
+  it('maps 返工领料 / 返工退料 by reason', () => {
+    const issue = { type: 'STOCK_OUT', reason: PROD_OP_REASON_FROM_REWORK } as ProductionOpRecord;
+    const ret = { type: 'STOCK_RETURN', reason: PROD_OP_REASON_FROM_REWORK } as ProductionOpRecord;
+    expect(getStockFlowBizType(issue)).toBe('ISSUE_REWORK');
+    expect(getStockFlowBizType(ret)).toBe('RETURN_REWORK');
+    expect(getStockFlowTypeLabel(issue)).toBe('返工领料');
+    expect(getStockFlowTypeLabel(ret)).toBe('返工退料');
+  });
+
+  it('keeps 外协 / 本厂 mapping for non-rework records', () => {
+    expect(getStockFlowBizType({ type: 'STOCK_OUT' } as ProductionOpRecord)).toBe('ISSUE_INTERNAL');
+    expect(getStockFlowBizType({ type: 'STOCK_OUT', partner: '外协厂' } as ProductionOpRecord)).toBe('ISSUE_OUTSOURCE');
+    expect(getStockFlowBizType({ type: 'STOCK_RETURN' } as ProductionOpRecord)).toBe('RETURN_INTERNAL');
+    expect(getStockFlowBizType({ type: 'STOCK_RETURN', partner: '外协厂' } as ProductionOpRecord)).toBe('RETURN_OUTSOURCE');
+    expect(getStockFlowTypeLabel({ type: 'STOCK_OUT' } as ProductionOpRecord)).toBe('领料发出');
+    expect(getStockFlowTypeLabel({ type: 'STOCK_RETURN', partner: '外协厂' } as ProductionOpRecord)).toBe('外协生产退料');
   });
 });
 
@@ -54,5 +81,26 @@ describe('stockFlowDateRangeFromRecords', () => {
       dateFrom: '2026-07-02',
       dateTo: '2026-07-02',
     });
+  });
+});
+
+describe('buildStockDocDetailFromRecords', () => {
+  it('copies operator from first line of the doc', () => {
+    const detail = buildStockDocDetailFromRecords('LL20260721-0007', [
+      {
+        id: '1',
+        type: 'STOCK_OUT',
+        docNo: 'LL20260721-0007',
+        productId: 'p1',
+        quantity: 11,
+        operator: '小郑',
+        timestamp: '2026-07-21T05:16:00.000Z',
+        warehouseId: 'w1',
+        orderId: 'o1',
+        status: '已完成',
+      } as ProductionOpRecord,
+    ]);
+    expect(detail?.operator).toBe('小郑');
+    expect(detail?.docNo).toBe('LL20260721-0007');
   });
 });

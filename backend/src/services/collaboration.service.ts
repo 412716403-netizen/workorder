@@ -758,7 +758,7 @@ export async function syncDispatch(tenantId: string, body: { recordIds: string[]
     });
     if (!transfer) {
       transfer = await basePrisma.interTenantSubcontractTransfer.create({
-        data: { collaborationId: collab.id, senderTenantId: tenantId, receiverTenantId: collaborationTenantId, senderProductId: productId, senderProductSku: product.sku, senderProductName: product.name, aLinkMode, ...(routeSnapshot ? { outsourceRouteSnapshot: routeSnapshot, chainStep: 0, originTenantId: tenantId } : {}) },
+        data: { collaborationId: collab.id, senderTenantId: tenantId, receiverTenantId: collaborationTenantId, senderProductId: productId, senderProductSku: product.sku ?? '', senderProductName: product.name, aLinkMode, ...(routeSnapshot ? { outsourceRouteSnapshot: routeSnapshot, chainStep: 0, originTenantId: tenantId } : {}) },
       });
     }
     const payload = buildDispatchPayload(product, recs, aLinkMode, dictById);
@@ -986,20 +986,20 @@ export async function acceptTransfer(
       if (senderName && senderName !== existingProduct.name) {
         try {
           await tx.product.update({ where: { id: finalProductId }, data: { name: senderName } });
-          productInfoChanges.push({ field: '产品名称', from: existingProduct.name, to: senderName });
+          productInfoChanges.push({ field: '产品编号', from: existingProduct.name, to: senderName });
         } catch (err: any) {
           if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-            productInfoChanges.push({ field: '产品名称', from: existingProduct.name, to: senderName, skipped: true, reason: '乙方已有同名产品' });
+            productInfoChanges.push({ field: '产品编号', from: existingProduct.name, to: senderName, skipped: true, reason: '乙方已有同名产品' });
           } else throw err;
         }
       }
-      if (senderSku && senderSku !== existingProduct.sku) {
+      if (senderSku && senderSku !== (existingProduct.sku ?? '')) {
         try {
           await tx.product.update({ where: { id: finalProductId }, data: { sku: senderSku } });
-          productInfoChanges.push({ field: 'SKU', from: existingProduct.sku, to: senderSku });
+          productInfoChanges.push({ field: 'SKU', from: existingProduct.sku ?? '', to: senderSku });
         } catch (err: any) {
           if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-            productInfoChanges.push({ field: 'SKU', from: existingProduct.sku, to: senderSku, skipped: true, reason: '乙方已有同 SKU 产品' });
+            productInfoChanges.push({ field: 'SKU', from: existingProduct.sku ?? '', to: senderSku, skipped: true, reason: '乙方已有同 SKU 产品' });
           } else throw err;
         }
       }

@@ -356,9 +356,32 @@
 - **关联工单模式**：按父工单族（含子工单）聚合；子工单详情与父工单展示同一族数据。
 - **关联产品模式**：按成品 `sourceProductId` 聚合物料，并标注「产品维度聚合（含本产品下多张工单）」。
 - 领退料数据由详情页按需窄拉 `STOCK_OUT/STOCK_RETURN`（不依赖工单中心列表的 `orderCenterProdNarrow` 类型集）；写入领退料后随 `invalidateAllProdRecords` 刷新。
-- 详情页不提供领退料操作；发料仍通过列表「物料」按钮或「生产物料」Tab。
+- 详情页不提供领退料操作；发料 / 退料通过列表「物料」按钮（见下）或「生产物料」Tab。
 - **物料流水**：「生产物料」标题旁提供「物料流水」按钮（交互对齐「报工明细流水」），打开领退料流水弹窗并预填本工单族 `orderIds`（含子工单），**不限日期**；点击单据号可查看领退料单据详情（权限 `production:material_records:view`）。产品组详情按成品 `sourceProductId` 窄拉。
 - **报工明细流水**：从详情打开时按工单族 `orderIds` / 产品 `productIds` 服务端窄拉，**不限日期**；工单中心 Tab 入口仍默认当天。
+
+### 3.10.0 工单中心列表 · 生产物料弹窗
+
+工单中心列表「物料」按钮（权限 `production:orders_material:allow`）打开「生产物料」壳弹窗（`OrderMaterialModal`，交互对齐返工物料）：
+
+- **汇总表**：列含领料(+)/退料(-)/净领用/**报工耗材**/**结余**。与工单详情「生产物料」**刻意分离**：
+  - 领退只计**工单中心本厂往来**（无 `partner`，排除开发/返工领退）；
+  - 报工耗材仍按工单报工推算（与详情同源）；
+  - 结余 = 本厂净领用 − 报工耗材。
+- **领料**：子弹窗复用原 `MaterialIssueModal`（工单模式挂 `orderId`；关联产品模式挂 `sourceProductId`）；须填写经办人（默认当前登录显示名，写入 `operator`）。
+- **退料**：须选择**入库仓库**与经办人；按物料一行，批次下拉选项为该物料历史可退批次（与发出相同组件）；服务端按「物料 + 批次」校验不超净领用。TL 单号由后端分配。
+- **流水**：复用生产物料「领料退料流水」弹窗，预填本工单族 / 成品，且限定只显示「领料发出 / 生产退料」（`onlyBizTypes: ISSUE_INTERNAL, RETURN_INTERNAL`）；点单据号进详情时传入该单流水行，详情展示经办人。
+- **工单详情**：详情页「生产物料」仍为全量工单物料统计（含外协等），**不随本弹窗口径改动**。
+
+### 3.10.1 返工物料（返工领料 / 返工退料）
+
+- **入口**：返工管理列表「物料」按钮（权限 `production:rework_material:allow`）打开「返工物料」弹窗（`ReworkMaterialModal`，交互对齐开发物料）：汇总表（物料 / 累计领料 / 累计退料 / 净领用，后端聚合）+「返工领料 / 返工退料 / 流水」三操作。关联产品模式下挂在该产品的代表工单上。「流水」不再用独立弹窗，复用生产物料「领料退料流水」（`StockFlowListModal`，与工单详情页「物料流水」同一入口，权限 `production:material_records:view`），预填本工单族 orderIds、不限日期，且限定只显示「返工领料 / 返工退料」两种类型（seed `onlyBizTypes`），可点单据号进领/退料单详情。
+- **持久化**：写入既有 `ProductionOpRecord`（领料 `STOCK_OUT` / 退料 `STOCK_RETURN`），固定 `reason = 来自于返工`（`PROD_OP_REASON_FROM_REWORK`），带 `orderId`，`partner` 为空；单号仍为 `LL` / `TL`。
+- **领料**：物料来自该工单 BOM（按变体 nodeBoms / 产品工序 BOM 解析，前端选料）；扣减仓库库存，启用批次管理时须选批号且校验批次可用量；须填写经办人（默认当前登录显示名）。
+- **退料**：须选择入库仓库与经办人；只能退该工单历史返工发出的「物料 + 批号」净领用（服务端按物料+批次校验），入库仓可与原出库仓不同。
+- **流水展示**：生产物料「领料退料流水」中类型标注「返工领料 / 返工退料」（`reason = 来自于返工` 判定，可筛选）；**仓库流水保持不变**（仍按「领料发出 / 生产退料」展示）。
+- **统计隔离**：与开发领退同级，生产物料统计排除 `来自于返工`（`shouldExcludeFromProductionMaterialStats`）；PSI 库存聚合保留。
+- **API**：`GET /api/production/orders/:orderId/rework-material-records`；`POST .../rework-material-issues/batch`；`POST .../rework-material-returns/batch`（读走 `requireProductionRead`，写走 `requireProductionWrite('write')`；前端按 `rework_material` 权限 gating）。
 
 ### 3.11 工单表单配置
 
@@ -480,7 +503,7 @@
 - **入口**：财务 → 对账 → 合作单位，在已选择合作单位并点击「查询」后，工具栏「导出 Excel」可用（数据加载中禁用）。**开始/结束日期可不填**；未填开始日期时「上期结余」为 0，明细为与该合作单位相关的全部对账单据。
 - **汇总区**（表头前几行）：对账时间范围、合作单位名称；**上期结余、本期累计增加、本期累计减少、本期应收余额**与页面上方汇总条一致，按**整次查询**（所选日期区间 + 合作单位；日期为空则视为全量）的全量对账结果计算，**不受**「在当前对账结果中搜索…」过滤影响。
 - **明细表**：导出**当前搜索过滤后**的列表——「按单据」导出 `partnerReconWithBalance`；「按产品」导出 `partnerProductReconListFiltered`。
-- **按产品模式表尾**：在明细下方追加「产品汇总（按单价）」：按「产品名称 + 单价」分组汇总数量与金额；同一产品若存在多个不同单价，各占一行。
+- **按产品模式表尾**：在明细下方追加「产品汇总（按单价）」：按「产品编号 + 单价」分组汇总数量与金额；同一产品若存在多个不同单价，各占一行。
 
 **实现锚点**：`utils/buildPartnerReconciliationExportSheet.ts`、`utils/downloadPartnerReconciliationXlsx.ts`、`utils/partnerReconProductLedger.ts`（`summarizePartnerProductRowsByProductAndPrice`）、`views/FinanceOpsView.tsx`。
 
@@ -529,7 +552,7 @@
 
 | 子模块 | 管理实体 | 规则 |
 |--------|----------|------|
-| 产品与 BOM | `products`, `boms` | 支持产品编辑、变体管理、BOM 绑定；**启用/禁用**：产品档案列表可切换 `enabled`；禁用后不在商品选择组件（`SearchableProductSelect`）中展示，已选中的禁用产品仍保留显示；**产品模式工序锁定**：当租户 `productionLinkMode='product'` 且产品已有非 `PENDING_PROCESS` 的生产工单、且 `milestoneNodeIds` 非空时，禁止再修改工序增删与顺序（`PUT /products/:id` 改 `milestoneNodeIds` 返回 409）；产品首次从 0 工序配置路线仍放行；工价、报工模板、BOM 不受锁；前端产品编辑页根据 API 返回的 `processLocked` 禁用工序 UI；**颜色尺码保存**：分类 `hasColorSize` 为真时，保存产品须至少选择 1 个颜色与 1 个尺码（前后端同口径）；**改名级联**：修改产品名称/编号时，后端事务内同步刷新工单快照字段 `ProductionOrder.productName` / `ProductionOrder.sku`，保证工单中心、报工记录及相关单据展示与产品档案一致（PSI、财务、计划单等均按 `productId` 动态取名，无需级联；跨租户协作单据的 `senderProductName` 为发出时快照，刻意不随改名变化）；**规格删除限制**：取消勾选颜色/尺码即删除对应变体，若变体已被业务数据引用（工单明细、工单/产品报工记录、产品工序进度、生产操作记录、进销存流水、计划单明细、扫码批次、单品码）则禁止删除——前端取消勾选时经 `GET /products/:id/variant-usage` 预检提示，后端保存时同口径校验 409 兜底；变体写入为 diff 式（保留的 update、新增 create、移除先校验再 delete），被删变体的变体级 BOM（配置数据）随之清理 |
+| 产品与 BOM | `products`, `boms` | 支持产品编辑、变体管理、BOM 绑定；**产品编号**（`name`）必填且租户内唯一；**产品名称**（`sku`）选填、**不自动生成**、**允许租户内重复**（空值存 NULL）；**启用/禁用**：产品档案列表可切换 `enabled`；禁用后不在商品选择组件（`SearchableProductSelect`）中展示，已选中的禁用产品仍保留显示；**产品模式工序锁定**：当租户 `productionLinkMode='product'` 且产品已有非 `PENDING_PROCESS` 的生产工单、且 `milestoneNodeIds` 非空时，禁止再修改工序增删与顺序（`PUT /products/:id` 改 `milestoneNodeIds` 返回 409）；产品首次从 0 工序配置路线仍放行；工价、报工模板、BOM 不受锁；前端产品编辑页根据 API 返回的 `processLocked` 禁用工序 UI；**颜色尺码保存**：分类 `hasColorSize` 为真时，保存产品须至少选择 1 个颜色与 1 个尺码（前后端同口径）；**改名级联**：修改产品编号/名称时，后端事务内同步刷新工单快照字段 `ProductionOrder.productName` / `ProductionOrder.sku`，保证工单中心、报工记录及相关单据展示与产品档案一致（PSI、财务、计划单等均按 `productId` 动态取名，无需级联；跨租户协作单据的 `senderProductName` 为发出时快照，刻意不随改名变化）；**规格删除限制**：取消勾选颜色/尺码即删除对应变体，若变体已被业务数据引用（工单明细、工单/产品报工记录、产品工序进度、生产操作记录、进销存流水、计划单明细、扫码批次、单品码）则禁止删除——前端取消勾选时经 `GET /products/:id/variant-usage` 预检提示，后端保存时同口径校验 409 兜底；变体写入为 diff 式（保留的 update、新增 create、移除先校验再 delete），被删变体的变体级 BOM（配置数据）随之清理 |
 | 合作单位 | `partners` | 关联 `partnerCategories`；**名称租户内唯一**（新增/编辑均校验，忽略首尾空白与大小写）；**单位编号**（`partnerListNo`）创建时按租户递增自动生成，**不可编辑**；**改名级联**：修改单位名称时，后端事务内同步更新名称快照字段 `ProductionOpRecord.partner`（外协/委外返工）、`PsiRecord.partner`（按 `partnerId` 或旧名称匹配）、`FinanceRecord.partner`，保证外协管理、外协流水及相关单据展示一致；**批量导入**：基础信息 → 合作单位 →「导入单位」，按分类下载 Excel 模板（单位名称 + 该分类 `customFields`），预览校验后调用 `POST /master/partners/import`；名称重复（库内或文件内）跳过；扩展字段（联系人、电话等）随分类模板导入，不支持附件/资料库字段；不导入协作租户关联 |
 | 工人管理 | `workers` | 支持按工序派工 |
 | 设备管理 | `equipment` | 支持按工序派工 |
@@ -625,6 +648,14 @@
 - **例外**：外协收货（[`OutsourcePanel.handleReceiveFormSubmit`](../views/production-ops/OutsourcePanel.tsx)）单品码模式采用「逐件单独落一条 qty1 记录、各挂自己的 `item_code_id`」实现同样效果，不走 `__scanItemCodeIds` 列表（见 5.4.2）。
 
 **外协主列表显示**（表单配置 → 外协管理 →「列表显示」）：`outsourceFormSettings.hideZeroPendingPartnerOnList` 为 true 时，主列表隐藏加工厂「剩余」为 0（已全部收回）的小卡；若工单/产品下加工厂均被隐藏则整行也不显示。仅影响主列表展示，不影响外协流水、待收回清单与收货业务。
+
+### 5.4.0 外协管理 · 物料弹窗
+
+外协管理主列表「物料」按钮（权限 `production:outsource_material:allow`）打开「外协物料」壳弹窗（`OutsourceMaterialModal`，交互对齐工单中心 / 返工物料）：
+
+- **汇总表**：物料 / 累计外发 / 累计退回 / 净外发 / **交货耗材** / **结余**。领退口径为带 `partner` 的 `STOCK_OUT` / `STOCK_RETURN`（排除开发/返工 reason）；交货耗材 = 外协已收回 × 工序 BOM（与退回弹窗同口径）；结余 = 净外发 − 交货耗材。工单模式按 `orderId`，关联产品模式按 `sourceProductId` + 同成品工单族。
+- **物料外发 / 物料退回**：嵌套原有 `OutsourceMaterialDispatchModal` / `OutsourceMaterialReturnModal`（工厂选择、批次特例、自定义字段不变）；本次退回数量**可超过**可退回参考值（可退回 = 已外发 − 交货耗材 − 已退回，仅作展示）；无外发记录时退回按钮禁用。
+- **流水**：复用生产物料「领料退料流水」（`StockFlowListModal`），预填本工单族 / 成品，且限定 `onlyBizTypes: ISSUE_OUTSOURCE, RETURN_OUTSOURCE`（权限 `production:material_records:view`）。
 
 **剩余数量负数显示**：加工厂小卡「发出 / 剩余」与「加工厂往来数量明细」弹窗（`OutsourcePartnerFlowDetailTable`）的「剩余数量」行口径统一为 `剩余 = 已派 − 已收`，**超收时显示负数并标红**（参考工单中心工序圈圈剩余口径，不再 clamp 到 0；计算见 `computeDispatchReceiveRemaining`）。`hideZeroPendingPartnerOnList` 仍按 `剩余 > 0` 过滤——超收（剩余 ≤ 0）小卡视为已收完，开启隐藏时不展示。
 
@@ -782,7 +813,7 @@
 
 **开发管理按客户排序**：左侧「按客户」由款式的首选供应商（`supplierId` → 合作单位名称）分组；`customerName` 在保存时自动同步，兼容历史数据。须至少一个产品分类启用 `linkPartner`。
 
-**款号 / 品名唯一性**：创建或编辑开发款式时，`code`（款号，对应产品 `sku`）与 `name`（品名）须在租户内与已有 **产品档案**（`products` 表）不重复；与产品档案新建校验口径一致。另仍校验开发款式表内 `code` 不重复。
+**款号 / 品名唯一性**：创建或编辑开发款式时，`name`（品名，对应产品编号）必填且须在租户内与已有 **产品档案** 不重复；`code`（款号，对应产品名称/`sku`）**选填、不自动生成**，**允许与产品档案中的产品名称重复**；有值时仍须与款式表内其它款号不重复。**发布大货**前须填写款号。
 
 **路由**：前端 `/development`；API `/api/dev/*`。权限 `development:styles:*`、`development:templates:*`。
 

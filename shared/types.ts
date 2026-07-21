@@ -577,6 +577,7 @@ export interface DevBomDto {
 
 export interface DevStyleDto {
   id: string;
+  /** 款号（对应产品名称）；选填，发布大货前须填写 */
   code: string;
   name: string;
   customerName?: string;
@@ -691,6 +692,25 @@ export interface DevMaterialBatchResult {
   docNo: string;
   type: 'STOCK_OUT' | 'STOCK_RETURN';
   recordIds: string[];
+}
+
+// ── 返工物料领退（挂在生产工单上，reason=来自于返工）──
+// 行/汇总/流水分组形状与开发物料一致，直接别名复用，避免两套契约漂移。
+
+export type ReworkMaterialLineInput = DevMaterialLineInput;
+export type ReworkMaterialBatchRequest = DevMaterialBatchRequest;
+export type ReworkMaterialSummaryRow = DevMaterialSummaryRow;
+export type ReworkMaterialReturnableRow = DevMaterialReturnableRow;
+export type ReworkMaterialRecordLine = DevMaterialRecordLine;
+export type ReworkMaterialDocGroup = DevMaterialDocGroup;
+export type ReworkMaterialBatchResult = DevMaterialBatchResult;
+
+export interface ReworkMaterialRecordsResponse {
+  summary: ReworkMaterialSummaryRow[];
+  returnable: ReworkMaterialReturnableRow[];
+  docs: ReworkMaterialDocGroup[];
+  /** 是否存在可退净领用 */
+  canReturn: boolean;
 }
 
 /** 资料库文件夹 */

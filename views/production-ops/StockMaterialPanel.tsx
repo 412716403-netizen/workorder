@@ -190,6 +190,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
   const [stockConfirmBatches, setStockConfirmBatches] = useState<Record<string, string>>({});
   const [stockConfirmEntryTimestamp, setStockConfirmEntryTimestamp] = useState(() => defaultEntryDatetimeLocal());
   const [stockDocDetail, setStockDocDetail] = useState<StockDocDetail | null>(null);
+  const [stockDocDetailRecords, setStockDocDetailRecords] = useState<ProductionOpRecord[]>([]);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [materialFormConfigEntryTab, setMaterialFormConfigEntryTab] = useState<'fields' | 'print' | 'list'>('fields');
   const [stockSelectPartner, setStockSelectPartner] = useState<string | null>(null);
@@ -1316,9 +1317,12 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
 
       <StockDocDetailModal
         detail={stockDocDetail}
-        onClose={() => setStockDocDetail(null)}
+        onClose={() => {
+          setStockDocDetail(null);
+          setStockDocDetailRecords([]);
+        }}
         onDetailChange={setStockDocDetail}
-        records={records}
+        records={stockDocDetailRecords.length > 0 ? stockDocDetailRecords : records}
         orders={orders}
         products={products}
         warehouses={warehouses}
@@ -1346,7 +1350,10 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
         orders={orders}
         products={products}
         productionLinkMode={productionLinkMode}
-        onOpenDocDetail={setStockDocDetail}
+        onOpenDocDetail={(detail, docRecords) => {
+          setStockDocDetail(detail);
+          setStockDocDetailRecords(docRecords ?? []);
+        }}
         userPermissions={userPermissions}
         tenantRole={tenantRole}
       />
@@ -1362,7 +1369,10 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
         materialFormSettings={materialFormSettings}
         categories={categories}
         onAddRecord={onAddRecord}
-        onAfterDocSaved={detail => setStockDocDetail(detail)}
+        onAfterDocSaved={detail => {
+          setStockDocDetail(detail);
+          setStockDocDetailRecords([]);
+        }}
       />
 
       {showConfigModal && onUpdateMaterialPanelSettings && onUpdateMaterialFormSettings && (

@@ -81,7 +81,7 @@ describe('buildPsiOrderBillFlowSummaryRows', () => {
 });
 
 describe('productLabelForLineGroup', () => {
-  it('返回单个产品名称', () => {
+  it('返回单个产品编号', () => {
     const items = [poLine({ productId: 'p1', productName: '甲', productSku: 'SKU-A' })];
     expect(productLabelForLineGroup(items)).toBe('甲（SKU-A）');
   });

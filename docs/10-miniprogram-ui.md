@@ -126,11 +126,11 @@ RBAC 字段单一事实源：[`shared/workbenchShortcuts.ts`](../shared/workbenc
 5. 登录后进入 Tab 页使用 `wx.switchTab`，勿对 Tab 页使用 `reLaunch`
 6. 验证安全区与 TabBar 遮挡（`st-page--tab` 已预留底部间距）
 7. **表单录入**（合作单位 / 产品 / 色码矩阵 / 数量键盘）遵循下方 §表单录入标准，以 [`production-plan-create`](../miniprogram/packageBusiness/production-plan-create/) 为参考实现
-8. **列表/流水/清单**展示产品名称时遵循下方 §产品名称与编号，以 [`production-order-report-history`](../miniprogram/packageBusiness/production-order-report-history/) 为参考实现
+8. **列表/流水/清单**展示产品编号时遵循下方 §产品编号与名称，以 [`production-order-report-history`](../miniprogram/packageBusiness/production-order-report-history/) 为参考实现
 
-## 产品名称与编号（列表 / 流水 / 清单 · 默认）
+## 产品编号与名称（列表 / 流水 / 清单 · 默认）
 
-凡展示**成品产品名称**的流水行、清单行、主列表卡片（含详情区产品标题），名称后须显示**产品编号（sku）**，与报工流水一致。
+凡展示**成品产品编号**的流水行、清单行、主列表卡片（含详情区产品标题），编号后须显示**产品名称（sku）**，与报工流水一致。
 
 ### 数据层
 
@@ -393,7 +393,7 @@ npm run miniprogram:icons
 | 页面 | 路径 | 职责 |
 |------|------|------|
 | 计划列表 | [`packageBusiness/production-plans/`](../miniprogram/packageBusiness/production-plans/) | 分页列表、搜索/派发状态筛选、采购到货进度条、下拉刷新 |
-| 计划详情 | [`packageBusiness/production-plan-detail/`](../miniprogram/packageBusiness/production-plan-detail/) | 对齐 Web：基础信息/数量/工序/BOM 横向表格（可左右滑动）；下达工单；点产品名称打开只读商品信息（与资料库共用 `product-quick-detail`） |
+| 计划详情 | [`packageBusiness/production-plan-detail/`](../miniprogram/packageBusiness/production-plan-detail/) | 对齐 Web：基础信息/数量/工序/BOM 横向表格（可左右滑动）；下达工单；点产品编号打开只读商品信息（与资料库共用 `product-quick-detail`） |
 | 新建计划 | [`packageBusiness/production-plan-create/`](../miniprogram/packageBusiness/production-plan-create/) | 简化新建（产品+数量+客户+交期） |
 
 | 工具 / 配置 | 作用 |

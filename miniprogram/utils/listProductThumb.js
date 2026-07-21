@@ -2,13 +2,13 @@
  * 列表/流水/详情产品缩略图（小程序列表默认带图约定）
  *
  * 无产品图时占位图标与工单中心（production-orders）一致，新增单据/流水请复用本模块。
- * 产品名称 + 编号展示约定见 listProductNameSkuFields / listProductDisplayFields。
+ * 产品编号 + 名称展示约定见 listProductNameSkuFields / listProductDisplayFields。
  */
 
 /** 与工单中心列表 `productionOrders.js` 一致 */
 const DEFAULT_PRODUCT_PLACEHOLDER_ICON = '/assets/icons/clipboard-list.png';
 
-/** 产品名称 + 编号（与 productionPlans.productNameSkuParts 口径一致） */
+/** 产品编号 + 名称（与 productionPlans.productNameSkuParts 口径一致） */
 function productNameSkuParts(product) {
   if (!product) return { name: '—', sku: '', showSku: false };
   const name = product.name || product.sku || '—';
@@ -21,7 +21,7 @@ function productNameSkuParts(product) {
 }
 
 /**
- * 产品名称 + 编号三件套（对齐报工流水 production-order-report-history）
+ * 产品编号 + 名称三件套（对齐报工流水 production-order-report-history）
  * @param {object|null} product
  * @param {{ name?: string, sku?: string, productName?: string, productSku?: string }} [fallback]
  */

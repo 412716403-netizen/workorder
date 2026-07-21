@@ -18,7 +18,7 @@ Component({
     categories: { type: Array, value: [] },
     valueId: { type: String, value: '' },
     valueName: { type: String, value: '' },
-    placeholder: { type: String, value: '搜索产品名称或 SKU' },
+    placeholder: { type: String, value: '搜索产品编号或 SKU' },
     disabled: { type: Boolean, value: false },
     embedded: { type: Boolean, value: false },
     cell: { type: Boolean, value: false },

@@ -12,7 +12,7 @@
           class="plan-search__input"
           value="{{searchKeyword}}"
           bindinput="onSearchInput"
-          placeholder="产品名称 / SKU / 分类"
+          placeholder="产品编号 / SKU / 分类"
           confirm-type="search"
           placeholder-class="plan-search__ph"
         />

@@ -27,7 +27,7 @@ import {
   pageTitleClass,
   pageSubtitleClass,
 } from '../../styles/uiDensity';
-import { PanelProps, hasOpsPerm, getOrderFamilyIds, getOrderFamilyWithDepth, ReworkPendingRow } from './types';
+import { PanelProps, hasOpsPerm, getOrderFamilyIds, getOrderFamilyWithDepth, ReworkPendingRow, type StockDocDetail } from './types';
 import { buildOutOfSequenceTemplateIds, findGatingPredecessorIndex, isProcessSequential } from '../../shared/processSequence';
 import { useDataIndexes } from './useDataIndexes';
 import { toLocalCompactYmd } from '../../utils/localDateTime';
@@ -42,7 +42,10 @@ import { shouldShowOrderInIncompleteListFilter } from '../../utils/orderDispatch
 import { latestDefectiveReportMs } from '../../utils/latestDefectiveReportMs';
 import ReworkPendingDefectiveModal from './ReworkPendingDefectiveModal';
 import ReworkOrderDetailModal from './ReworkOrderDetailModal';
-import ReworkMaterialIssueModal from './ReworkMaterialIssueModal';
+import ReworkMaterialModal from './ReworkMaterialModal';
+import StockFlowListModal from './StockFlowListModal';
+import StockDocDetailModal from './StockDocDetailModal';
+import type { StockFlowInitialSeed } from './stockFlowListUtils';
 import DefectTreatmentFlowListModal from './DefectTreatmentFlowListModal';
 import DefectTreatmentFlowDetailModal from './DefectTreatmentFlowDetailModal';
 import ReworkReportFlowListModal from './ReworkReportFlowListModal';
@@ -99,12 +102,12 @@ const ReworkPanel: React.FC<PanelProps> = ({
   plans = [],
   reworkFormSettings,
   onUpdateReworkFormSettings,
+  materialFormSettings,
   printTemplates = [],
   onUpdatePrintTemplates,
   onRefreshPrintTemplates,
   userPermissions,
   tenantRole,
-  psiRecords = [],
 }) => {
   const rfSettings = reworkFormSettings ?? DEFAULT_REWORK_FORM_SETTINGS;
   const onlyShowIncompleteOrders =
@@ -180,8 +183,14 @@ const ReworkPanel: React.FC<PanelProps> = ({
   const [reworkActionRow, setReworkActionRow] = useState<ReworkPendingRow | null>(null);
   /** 返工管理：主工单及子工单 展开/收起 */
   const [reworkExpandedParents, setReworkExpandedParents] = useState<Set<string>>(new Set());
-  /** 返工管理：物料弹窗（该工单 BOM 领料，确认后写入生产物料并在领料退料流水中备注「来自于返工」） */
+  /** 返工管理：返工物料弹窗（领料/退料/流水/汇总，写入生产流水并备注「来自于返工」） */
   const [reworkMaterialOrderId, setReworkMaterialOrderId] = useState<string | null>(null);
+  /** 返工物料「流水」：复用生产物料领料退料流水弹窗（与工单详情页物料流水同一入口） */
+  const [showStockFlowModal, setShowStockFlowModal] = useState(false);
+  const [stockFlowSeed, setStockFlowSeed] = useState<StockFlowInitialSeed | null>(null);
+  const [stockDocDetail, setStockDocDetail] = useState<StockDocDetail | null>(null);
+  const [stockDocDetailRecords, setStockDocDetailRecords] = useState<ProductionOpRecord[]>([]);
+  const canViewMaterialFlow = hasOpsPerm(tenantRole, userPermissions, 'production:material_records:view');
   const [showReworkFormConfigModal, setShowReworkFormConfigModal] = useState(false);
   const [reworkFormConfigDefaultTab, setReworkFormConfigDefaultTab] = useState<'fields' | 'print'>('fields');
   /** 返工报工弹窗：点击工序标签打开，当前工单 + 工序 */
@@ -1050,22 +1059,59 @@ const ReworkPanel: React.FC<PanelProps> = ({
         />
       )}
 
-      {reworkMaterialOrderId && onAddRecord && (
-        <ReworkMaterialIssueModal
-          reworkMaterialOrderId={reworkMaterialOrderId}
+      {reworkMaterialOrderId && (
+        <ReworkMaterialModal
+          orderId={reworkMaterialOrderId}
           orders={orders}
           products={products}
-          records={records}
           warehouses={warehouses}
           boms={boms}
           globalNodes={globalNodes}
           categories={categories}
-          psiRecords={psiRecords}
-          onAddRecord={onAddRecord}
-          onAddRecordBatch={onAddRecordBatch}
+          canViewMaterialFlow={canViewMaterialFlow}
+          onOpenMaterialFlow={(seed) => {
+            setStockFlowSeed(seed);
+            setShowStockFlowModal(true);
+          }}
           onClose={() => setReworkMaterialOrderId(null)}
         />
       )}
+
+      <StockFlowListModal
+        visible={showStockFlowModal}
+        onClose={() => { setShowStockFlowModal(false); setStockFlowSeed(null); }}
+        orders={orders}
+        products={products}
+        productionLinkMode={productionLinkMode}
+        onOpenDocDetail={(detail, docRecords) => {
+          setStockDocDetail(detail);
+          setStockDocDetailRecords(docRecords ?? []);
+        }}
+        userPermissions={userPermissions}
+        tenantRole={tenantRole}
+        initialSeed={stockFlowSeed}
+      />
+
+      <StockDocDetailModal
+        detail={stockDocDetail}
+        onClose={() => {
+          setStockDocDetail(null);
+          setStockDocDetailRecords([]);
+        }}
+        onDetailChange={setStockDocDetail}
+        records={stockDocDetailRecords.length > 0 ? stockDocDetailRecords : records}
+        orders={orders}
+        products={products}
+        warehouses={warehouses}
+        categories={categories}
+        dictionaries={dictionaries}
+        materialFormSettings={materialFormSettings}
+        printTemplates={printTemplates}
+        onUpdateRecord={onUpdateRecord}
+        onDeleteRecord={onDeleteRecord}
+        userPermissions={userPermissions}
+        tenantRole={tenantRole}
+      />
 
       {defectFlowModalOpen && (
         <DefectTreatmentFlowListModal

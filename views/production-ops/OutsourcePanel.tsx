@@ -7,7 +7,6 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   Clock,
-  Undo2,
   ClipboardList,
   Layers,
   ScrollText,
@@ -68,8 +67,7 @@ import {
   buildOutsourceReceiveLastPriceIndex,
   lookupOutsourceReceiveLastPrice,
 } from '../../utils/outsourceReceiveLastUnitPrice';
-import OutsourceMaterialDispatchModal from './OutsourceMaterialDispatchModal';
-import OutsourceMaterialReturnModal from './OutsourceMaterialReturnModal';
+import OutsourceMaterialModal from './OutsourceMaterialModal';
 import OutsourceDispatchListModal from './OutsourceDispatchListModal';
 import OutsourceDispatchQuantityModal from './OutsourceDispatchQuantityModal';
 import OutsourceReceiveListModal from './OutsourceReceiveListModal';
@@ -87,6 +85,8 @@ import OutsourcePartnerFlowDetailModal from './OutsourcePartnerFlowDetailModal';
 import OutsourceFlowDocumentDetailModal from './OutsourceFlowDocumentDetailModal';
 import { buildWeightMapForKeyedEntries, distributeWeightByQty, roundWeightKg } from '../../utils/reportBatchWeightHelpers';
 import StockDocDetailModal from './StockDocDetailModal';
+import StockFlowListModal from './StockFlowListModal';
+import type { StockFlowInitialSeed } from './stockFlowListUtils';
 import DocPhaseModal from '../../components/DocPhaseModal';
 import { OrderCenterDetailPrintBlock } from '../../components/order-print/OrderCenterDetailPrintBlock';
 import { buildOutsourceFlowPrintContext } from '../../utils/buildOutsourceFlowPrintContext';
@@ -98,11 +98,6 @@ import OutsourceCollabSyncModal, {
   type OutsourceCollabSyncConfirmPayload,
 } from './OutsourceCollabSyncModal';
 import { useAuth } from '../../contexts/AuthContext';
-import {
-  readWarehousePreference,
-  resolvePreferredSingleWarehouse,
-  WAREHOUSE_DOC_KIND,
-} from '../../utils/warehouseDocPreference';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 import DocEntryTimeField from '../../components/DocEntryTimeField';
 import { ModalPortal } from '../../components/ModalPortal';
@@ -307,20 +302,17 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
       state: Object.keys(rest).length > 0 ? rest : undefined,
     });
   }, [outsourceDeepLinkLocation.state, outsourceDeepLinkLocation.pathname, outsourceDeepLinkNavigate]);
-  const [matDispatchOrderId, setMatDispatchOrderId] = useState<string | null>(null);
-  const [matDispatchProductId, setMatDispatchProductId] = useState<string | null>(null);
-  const [matDispatchPartnerOptions, setMatDispatchPartnerOptions] = useState<string[]>([]);
-  const [matDispatchPartner, setMatDispatchPartner] = useState('');
-  const [matDispatchWarehouseId, setMatDispatchWarehouseId] = useState('');
-  const [matDispatchQty, setMatDispatchQty] = useState<Record<string, number>>({});
-  const [matReturnOrderId, setMatReturnOrderId] = useState<string | null>(null);
-  const [matReturnProductId, setMatReturnProductId] = useState<string | null>(null);
-  const [matReturnPartnerOptions, setMatReturnPartnerOptions] = useState<string[]>([]);
-  const [matReturnPartner, setMatReturnPartner] = useState('');
-  const [matReturnWarehouseId, setMatReturnWarehouseId] = useState('');
-  const [matReturnQty, setMatReturnQty] = useState<Record<string, number>>({});
+  const [outsourceMaterialScope, setOutsourceMaterialScope] = useState<{
+    orderId: string | null;
+    productId: string | null;
+    partnerOptions: string[];
+  } | null>(null);
   /** 外协物料发出/退回保存后，与「生产物料」页一致的物料单据详情 */
   const [stockDocDetail, setStockDocDetail] = useState<StockDocDetail | null>(null);
+  const [stockDocDetailRecords, setStockDocDetailRecords] = useState<ProductionOpRecord[]>([]);
+  const [showStockFlowModal, setShowStockFlowModal] = useState(false);
+  const [stockFlowSeed, setStockFlowSeed] = useState<StockFlowInitialSeed | null>(null);
+  const canViewMaterialFlow = hasOpsPerm(tenantRole, userPermissions, 'production:material_records:view');
   const [showOutsourceConfig, setShowOutsourceConfig] = useState(false);
   const [outsourceConfigDefaultTab, setOutsourceConfigDefaultTab] = useState<'fields' | 'print'>('fields');
   const [dispatchCustomValues, setDispatchCustomValues] = useState<Record<string, unknown>>({});
@@ -1491,66 +1483,23 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
                         onClick={e => {
                           e.stopPropagation();
                           const uniquePartners = [...new Set(ptnrs.map(p => p.partner))];
-                          setMatDispatchPartnerOptions(uniquePartners);
-                          // 多个外协工厂时默认不预选，由用户在弹窗内选择
-                          setMatDispatchPartner(uniquePartners.length === 1 ? (uniquePartners[0] ?? '') : '');
-                          setMatDispatchWarehouseId(
-                            resolvePreferredSingleWarehouse(
-                              warehouses,
-                              readWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.OUTSOURCE_MAT_DISPATCH),
-                              warehouses[0]?.id ?? '',
-                            ) || '',
-                          );
-                          setMatDispatchQty({});
                           if (productionLinkMode === 'product') {
-                            setMatDispatchProductId(productId);
-                            setMatDispatchOrderId(null);
+                            setOutsourceMaterialScope({
+                              orderId: null,
+                              productId: productId ?? null,
+                              partnerOptions: uniquePartners,
+                            });
                           } else {
-                            setMatDispatchOrderId(orderId ?? null);
-                            setMatDispatchProductId(null);
+                            setOutsourceMaterialScope({
+                              orderId: orderId ?? null,
+                              productId: null,
+                              partnerOptions: uniquePartners,
+                            });
                           }
                         }}
                         className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all w-full justify-center"
                       >
-                        <Package className="w-3.5 h-3.5" /> 物料外发
-                      </button>
-                      <button
-                        type="button"
-                        onClick={e => {
-                          e.stopPropagation();
-                          const outsourceDispatchPartners = [...new Set(
-                            records.filter(r => r.type === 'STOCK_OUT' && !!r.partner && (
-                              productionLinkMode === 'product'
-                                ? (r.sourceProductId === productId || (!r.orderId && !r.sourceProductId && r.productId))
-                                : r.orderId === orderId
-                            )).map(r => r.partner!)
-                          )];
-                          if (outsourceDispatchPartners.length === 0) {
-                            toast.warning('该卡片暂无外发记录，无法退回');
-                            return;
-                          }
-                          setMatReturnPartnerOptions(outsourceDispatchPartners);
-                          // 多个外协工厂时默认不预选，由用户在弹窗内选择
-                          setMatReturnPartner(outsourceDispatchPartners.length === 1 ? (outsourceDispatchPartners[0] ?? '') : '');
-                          setMatReturnWarehouseId(
-                            resolvePreferredSingleWarehouse(
-                              warehouses,
-                              readWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.OUTSOURCE_MAT_RETURN),
-                              warehouses[0]?.id ?? '',
-                            ) || '',
-                          );
-                          setMatReturnQty({});
-                          if (productionLinkMode === 'product') {
-                            setMatReturnProductId(productId);
-                            setMatReturnOrderId(null);
-                          } else {
-                            setMatReturnOrderId(orderId ?? null);
-                            setMatReturnProductId(null);
-                          }
-                        }}
-                        className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-black rounded-xl border border-amber-100 text-amber-600 bg-white hover:bg-amber-50 transition-all w-full justify-center"
-                      >
-                        <Undo2 className="w-3.5 h-3.5" /> 物料退回
+                        <Package className="w-3.5 h-3.5" /> 物料
                       </button>
                     </div>
                   )}
@@ -1570,18 +1519,12 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
         </div>
       )}
 
-      {(matDispatchOrderId || matDispatchProductId) && (
-        <OutsourceMaterialDispatchModal
+      {outsourceMaterialScope && (outsourceMaterialScope.orderId || outsourceMaterialScope.productId) && (
+        <OutsourceMaterialModal
           productionLinkMode={productionLinkMode}
-          matDispatchOrderId={matDispatchOrderId}
-          matDispatchProductId={matDispatchProductId}
-          matDispatchPartnerOptions={matDispatchPartnerOptions}
-          matDispatchPartner={matDispatchPartner}
-          setMatDispatchPartner={setMatDispatchPartner}
-          matDispatchWarehouseId={matDispatchWarehouseId}
-          setMatDispatchWarehouseId={setMatDispatchWarehouseId}
-          matDispatchQty={matDispatchQty}
-          setMatDispatchQty={setMatDispatchQty}
+          orderId={outsourceMaterialScope.orderId}
+          productId={outsourceMaterialScope.productId}
+          partnerOptions={outsourceMaterialScope.partnerOptions}
           orders={orders}
           products={products}
           boms={boms}
@@ -1590,57 +1533,45 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
           warehouses={warehouses}
           materialFormSettings={materialFormSettings}
           categories={categories}
+          psiRecords={psiRecords}
+          canViewMaterialFlow={canViewMaterialFlow}
+          onOpenMaterialFlow={seed => {
+            setStockFlowSeed(seed);
+            setShowStockFlowModal(true);
+          }}
           onAddRecord={onAddRecord}
           onAddRecordBatch={onAddRecordBatch}
-          onAfterMatDocSaved={setStockDocDetail}
-          onClose={() => {
-            setMatDispatchOrderId(null);
-            setMatDispatchProductId(null);
-            setMatDispatchQty({});
-            setMatDispatchPartner('');
+          onAfterMatDocSaved={detail => {
+            setStockDocDetail(detail);
+            setStockDocDetailRecords([]);
           }}
-          psiRecords={psiRecords}
+          onClose={() => setOutsourceMaterialScope(null)}
         />
       )}
 
-
-      {(matReturnOrderId || matReturnProductId) && (
-        <OutsourceMaterialReturnModal
-          productionLinkMode={productionLinkMode}
-          matReturnOrderId={matReturnOrderId}
-          matReturnProductId={matReturnProductId}
-          matReturnPartnerOptions={matReturnPartnerOptions}
-          matReturnPartner={matReturnPartner}
-          setMatReturnPartner={setMatReturnPartner}
-          matReturnWarehouseId={matReturnWarehouseId}
-          setMatReturnWarehouseId={setMatReturnWarehouseId}
-          matReturnQty={matReturnQty}
-          setMatReturnQty={setMatReturnQty}
-          orders={orders}
-          products={products}
-          boms={boms}
-          records={records}
-          warehouses={warehouses}
-          materialFormSettings={materialFormSettings}
-          categories={categories}
-          onAddRecord={onAddRecord}
-          onAddRecordBatch={onAddRecordBatch}
-          onAfterMatDocSaved={setStockDocDetail}
-          onClose={() => {
-            setMatReturnOrderId(null);
-            setMatReturnProductId(null);
-            setMatReturnQty({});
-            setMatReturnPartner('');
-          }}
-          psiRecords={psiRecords}
-        />
-      )}
+      <StockFlowListModal
+        visible={showStockFlowModal}
+        onClose={() => { setShowStockFlowModal(false); setStockFlowSeed(null); }}
+        orders={orders}
+        products={products}
+        productionLinkMode={productionLinkMode}
+        onOpenDocDetail={(detail, docRecords) => {
+          setStockDocDetail(detail);
+          setStockDocDetailRecords(docRecords ?? []);
+        }}
+        userPermissions={userPermissions}
+        tenantRole={tenantRole}
+        initialSeed={stockFlowSeed}
+      />
 
       <StockDocDetailModal
         detail={stockDocDetail}
-        onClose={() => setStockDocDetail(null)}
+        onClose={() => {
+          setStockDocDetail(null);
+          setStockDocDetailRecords([]);
+        }}
         onDetailChange={setStockDocDetail}
-        records={records}
+        records={stockDocDetailRecords.length > 0 ? stockDocDetailRecords : records}
         orders={orders}
         products={products}
         warehouses={warehouses}

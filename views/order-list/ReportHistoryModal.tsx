@@ -400,7 +400,7 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
                 type="text"
                 value={f.productId}
                 onChange={e => setReportHistoryFilter(prev => ({ ...prev, productId: e.target.value }))}
-                placeholder="产品名称模糊搜索"
+                placeholder="产品编号模糊搜索"
                 disabled={!!scopedProductIds}
                 className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200 disabled:bg-slate-100 disabled:text-slate-500"
               />

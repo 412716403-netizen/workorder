@@ -97,6 +97,14 @@ export {
   type DevMaterialDocGroup,
   type DevMaterialRecordsResponse,
   type DevMaterialBatchResult,
+  type ReworkMaterialLineInput,
+  type ReworkMaterialBatchRequest,
+  type ReworkMaterialSummaryRow,
+  type ReworkMaterialReturnableRow,
+  type ReworkMaterialRecordLine,
+  type ReworkMaterialDocGroup,
+  type ReworkMaterialRecordsResponse,
+  type ReworkMaterialBatchResult,
   type KnowledgeFolderDto,
   type KnowledgeDocumentSummaryDto,
   type KnowledgeDocumentDto,
@@ -617,7 +625,9 @@ export interface ProductVariant {
 
 export interface Product {
   id: string;
+  /** 产品名称；选填，可为空串 */
   sku: string;
+  /** 产品编号；必填 */
   name: string;
   description?: string;
   imageUrl?: string; // base64 data URL 或外部链接（详情/编辑按需拉取；lite 列表不返回）

@@ -45,7 +45,7 @@ interface ParsedRow {
 }
 
 function buildTemplateHeaders(category: ProductCategory): string[] {
-  const headers = ['产品名称*', '产品编号*', '产品单位', '图片文件名'];
+  const headers = ['产品编号*', '产品名称', '产品单位', '图片文件名'];
   if (category.hasSalesPrice) headers.push('销售单价');
   if (category.hasPurchasePrice) headers.push('采购单价');
   if (category.hasColorSize) {
@@ -202,8 +202,8 @@ export default function ProductImportModal({
         const colIndex = (label: string): number =>
           headers.findIndex(h => h.replace(/\*$/, '').trim() === label.replace(/\*$/, '').trim());
 
-        const iName = colIndex('产品名称');
-        const iSku = colIndex('产品编号');
+        const iName = colIndex('产品编号');
+        const iSku = colIndex('产品名称');
         const iUnit = colIndex('产品单位');
         const iImage = colIndex('图片文件名');
         const iSalesPrice = colIndex('销售单价');
@@ -217,9 +217,7 @@ export default function ProductImportModal({
           if (idx >= 0) customFieldIndices.push({ fieldDef: f, col: idx });
         }
 
-        const existingSkus = new Set(products.map(p => p.sku.toLowerCase()));
         const existingNames = new Set(products.map(p => p.name.toLowerCase()));
-        const batchSkus = new Set<string>();
         const batchNames = new Set<string>();
 
         const rows: ParsedRow[] = dataRows.map((row, idx) => {
@@ -241,15 +239,11 @@ export default function ProductImportModal({
           const issues: string[] = [];
           let status: ParsedRow['status'] = 'valid';
 
-          if (!name) { issues.push('产品名称不能为空'); status = 'error'; }
-          if (!sku) { issues.push('产品编号不能为空'); status = 'error'; }
+          if (!name) { issues.push('产品编号不能为空'); status = 'error'; }
 
-          if (sku && existingSkus.has(sku.toLowerCase())) { issues.push(`编号 "${sku}" 已存在`); status = 'error'; }
-          if (name && existingNames.has(name.toLowerCase())) { issues.push(`名称 "${name}" 已存在`); status = 'error'; }
-          if (sku && batchSkus.has(sku.toLowerCase())) { issues.push(`编号 "${sku}" 在文件中重复`); status = 'error'; }
-          if (name && batchNames.has(name.toLowerCase())) { issues.push(`名称 "${name}" 在文件中重复`); status = 'error'; }
+          if (name && existingNames.has(name.toLowerCase())) { issues.push(`产品编号 "${name}" 已存在`); status = 'error'; }
+          if (name && batchNames.has(name.toLowerCase())) { issues.push(`产品编号 "${name}" 在文件中重复`); status = 'error'; }
 
-          if (sku) batchSkus.add(sku.toLowerCase());
           if (name) batchNames.add(name.toLowerCase());
 
           // Resolve unit
@@ -826,8 +820,8 @@ export default function ProductImportModal({
                             <th className="px-3 py-2.5 text-left font-bold text-slate-500 whitespace-nowrap">行</th>
                             <th className="px-3 py-2.5 text-left font-bold text-slate-500 whitespace-nowrap">状态</th>
                             <th className="px-3 py-2.5 text-left font-bold text-slate-500 whitespace-nowrap">图片</th>
-                            <th className="px-3 py-2.5 text-left font-bold text-slate-500 whitespace-nowrap">产品名称</th>
                             <th className="px-3 py-2.5 text-left font-bold text-slate-500 whitespace-nowrap">产品编号</th>
+                            <th className="px-3 py-2.5 text-left font-bold text-slate-500 whitespace-nowrap">产品名称</th>
                             <th className="px-3 py-2.5 text-left font-bold text-slate-500 whitespace-nowrap">单位</th>
                             {selectedCategory?.hasColorSize && (
                               <>

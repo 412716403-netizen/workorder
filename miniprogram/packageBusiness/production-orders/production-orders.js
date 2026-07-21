@@ -910,7 +910,7 @@ Page({
         isProductMode,
         excludeCompleted: isProductMode ? false : !!listDisplay.onlyShowNotCompleted,
         filterActive: isProductMode ? false : !!listDisplay.onlyShowNotCompleted,
-        searchPlaceholder: isProductMode ? '产品名称 / SKU' : '工单号 / 产品 / 客户',
+        searchPlaceholder: isProductMode ? '产品编号 / SKU' : '工单号 / 产品 / 客户',
         emptyText: isProductMode ? '暂无产品' : '暂无工单',
       });
 

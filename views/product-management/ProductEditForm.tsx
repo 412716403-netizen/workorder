@@ -89,7 +89,7 @@ import { lazyWithReloadOnChunkError } from '../../utils/lazyWithReloadOnChunkErr
 
 const LazyProductArchiveCreateModal = lazyWithReloadOnChunkError(() => import('../../components/ProductArchiveCreateModal'));
 
-// 产品编号自动生成已外迁，见 utils/productSkuAutoGen.ts
+// 产品名称(sku)保存前规范化，见 utils/productSkuAutoGen.ts（选填、不自动生成）
 
 function resolveDefaultPartnerCategoryId(categories: PartnerCategory[]): string {
   return categories.find(c => c.name.includes('供应商'))?.id ?? categories[0]?.id ?? '';
@@ -964,14 +964,10 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
     const name = (p.name ?? '').trim();
     const sku = (p.sku ?? '').trim();
     if (!name) {
-      toast.error('产品全称不能为空');
-      return false;
-    }
-    // 产品编号须在调用前经 resolveProductSkuForSave 处理（留空则已生成：两字母 + 时间戳）
-    if (!sku) {
       toast.error('产品编号不能为空');
       return false;
     }
+    // 产品名称选填，不自动生成
     const catalogErr = validateProductCatalogUnique(catalog, { name, sku, excludeProductId: p.id });
     if (catalogErr) {
       toast.error(catalogErr);

@@ -731,8 +731,8 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
               type="search"
               placeholder={
                 productionLinkMode === 'order'
-                  ? '搜索计划单号、客户、产品名称/编号、状态（未下单/未完成/已完成）...'
-                  : '搜索计划单号、客户、产品名称/编号...'
+                  ? '搜索计划单号、客户、产品编号/名称、状态（未下单/未完成/已完成）...'
+                  : '搜索计划单号、客户、产品编号/名称...'
               }
               value={planSearch}
               onChange={e => setPlanSearch(e.target.value)}

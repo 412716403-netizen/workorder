@@ -279,14 +279,14 @@ async function listParentProductsWithRoute(
     if (q) {
       const hit =
         p.name.toLowerCase().includes(q)
-        || p.sku.toLowerCase().includes(q)
+        || (p.sku ?? '').toLowerCase().includes(q)
         || p.id.toLowerCase().includes(q);
       if (!hit) continue;
     }
     rows.push({
       productId: p.id,
       name: p.name,
-      sku: p.sku,
+      sku: p.sku ?? '',
       nodeCount,
     });
   }

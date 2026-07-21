@@ -4,62 +4,21 @@ import {
   BATCH_NO_UNTAGGED,
   DevStyleStatus,
   PROD_OP_REASON_FROM_DEV,
-  batchNoForDisplay,
   isUntaggedBatch,
   type DevMaterialBatchRequest,
   type DevMaterialBatchResult,
-  type DevMaterialDocGroup,
-  type DevMaterialLineInput,
   type DevMaterialRecordsResponse,
-  type DevMaterialReturnableRow,
-  type DevMaterialSummaryRow,
 } from '../../../shared/types.js';
 import { createRecordBatch } from './production.service.js';
-
-type MaterialOpType = 'STOCK_OUT' | 'STOCK_RETURN';
-
-interface RawOpRow {
-  id: string;
-  type: string;
-  productId: string;
-  quantity: unknown;
-  warehouseId: string | null;
-  batchNo: string | null;
-  docNo: string | null;
-  operator: string | null;
-  timestamp: Date;
-}
-
-function toQty(value: unknown): number {
-  const n = typeof value === 'number' ? value : Number(value);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function returnKey(productId: string, warehouseId: string, batchNo: string | null | undefined): string {
-  return `${productId}::${warehouseId}::${batchNoForDisplay(batchNo)}`;
-}
-
-function normalizeLines(raw: unknown): DevMaterialLineInput[] {
-  if (!Array.isArray(raw) || raw.length === 0) {
-    throw new AppError(400, '至少需要一条物料明细');
-  }
-  return raw.map((row, index) => {
-    const r = (row ?? {}) as Record<string, unknown>;
-    const productId = String(r.productId ?? '').trim();
-    const warehouseId = String(r.warehouseId ?? '').trim();
-    const quantity = toQty(r.quantity);
-    if (!productId) throw new AppError(400, `第 ${index + 1} 行缺少物料`);
-    if (!warehouseId) throw new AppError(400, `第 ${index + 1} 行缺少仓库`);
-    if (!(quantity > 0)) throw new AppError(400, `第 ${index + 1} 行数量须大于 0`);
-    const batchRaw = r.batchNo == null ? null : String(r.batchNo);
-    return {
-      productId,
-      warehouseId,
-      quantity,
-      batchNo: batchRaw,
-    };
-  });
-}
+import {
+  assertReturnWithinReturnable,
+  buildDocGroups,
+  buildSummaryAndReturnable,
+  loadProductMeta,
+  normalizeLines,
+  type MaterialOpType,
+  type RawOpRow,
+} from './material-op-shared.js';
 
 async function assertStyle(db: TenantPrismaClient, styleId: string) {
   const style = await db.devStyle.findUnique({
@@ -106,120 +65,6 @@ async function listDevMaterialOpRows(db: TenantPrismaClient, styleId: string): P
     },
   });
   return rows as RawOpRow[];
-}
-
-async function loadProductMeta(
-  db: TenantPrismaClient,
-  productIds: string[],
-): Promise<Map<string, { name: string; sku: string }>> {
-  const uniq = [...new Set(productIds.filter(Boolean))];
-  if (uniq.length === 0) return new Map();
-  const products = await db.product.findMany({
-    where: { id: { in: uniq } },
-    select: { id: true, name: true, sku: true },
-  });
-  return new Map(products.map((p) => [p.id, { name: p.name, sku: p.sku ?? '' }]));
-}
-
-function buildSummaryAndReturnable(
-  rows: RawOpRow[],
-  productMeta: Map<string, { name: string; sku: string }>,
-): { summary: DevMaterialSummaryRow[]; returnable: DevMaterialReturnableRow[] } {
-  const byProduct = new Map<string, { issued: number; returned: number }>();
-  const byReturnKey = new Map<string, { productId: string; warehouseId: string; batchNo: string; issued: number; returned: number }>();
-
-  for (const row of rows) {
-    const qty = toQty(row.quantity);
-    const productId = row.productId;
-    const warehouseId = String(row.warehouseId ?? '').trim();
-    const batchNo = batchNoForDisplay(row.batchNo);
-
-    const prodAcc = byProduct.get(productId) ?? { issued: 0, returned: 0 };
-    if (row.type === 'STOCK_OUT') prodAcc.issued += qty;
-    else if (row.type === 'STOCK_RETURN') prodAcc.returned += qty;
-    byProduct.set(productId, prodAcc);
-
-    if (!warehouseId) continue;
-    const key = returnKey(productId, warehouseId, row.batchNo);
-    const acc = byReturnKey.get(key) ?? {
-      productId,
-      warehouseId,
-      batchNo,
-      issued: 0,
-      returned: 0,
-    };
-    if (row.type === 'STOCK_OUT') acc.issued += qty;
-    else if (row.type === 'STOCK_RETURN') acc.returned += qty;
-    byReturnKey.set(key, acc);
-  }
-
-  const summary: DevMaterialSummaryRow[] = [...byProduct.entries()]
-    .map(([productId, acc]) => {
-      const meta = productMeta.get(productId);
-      return {
-        productId,
-        productName: meta?.name ?? productId,
-        productSku: meta?.sku ?? '',
-        issuedQty: acc.issued,
-        returnedQty: acc.returned,
-        netQty: acc.issued - acc.returned,
-      };
-    })
-    .sort((a, b) => a.productName.localeCompare(b.productName, 'zh-CN'));
-
-  const returnable: DevMaterialReturnableRow[] = [...byReturnKey.values()]
-    .map((acc) => {
-      const meta = productMeta.get(acc.productId);
-      return {
-        productId: acc.productId,
-        productName: meta?.name ?? acc.productId,
-        productSku: meta?.sku ?? '',
-        warehouseId: acc.warehouseId,
-        batchNo: acc.batchNo,
-        returnableQty: acc.issued - acc.returned,
-      };
-    })
-    .filter((r) => r.returnableQty > 1e-9)
-    .sort((a, b) => {
-      const nameCmp = a.productName.localeCompare(b.productName, 'zh-CN');
-      if (nameCmp !== 0) return nameCmp;
-      return a.batchNo.localeCompare(b.batchNo, 'zh-CN');
-    });
-
-  return { summary, returnable };
-}
-
-function buildDocGroups(
-  rows: RawOpRow[],
-  productMeta: Map<string, { name: string; sku: string }>,
-): DevMaterialDocGroup[] {
-  const byDoc = new Map<string, DevMaterialDocGroup>();
-  for (const row of rows) {
-    const docNo = String(row.docNo ?? '').trim() || row.id;
-    const type = row.type === 'STOCK_RETURN' ? 'STOCK_RETURN' : 'STOCK_OUT';
-    const meta = productMeta.get(row.productId);
-    let group = byDoc.get(docNo);
-    if (!group) {
-      group = {
-        docNo,
-        type,
-        timestamp: row.timestamp.toISOString(),
-        operator: row.operator,
-        lines: [],
-      };
-      byDoc.set(docNo, group);
-    }
-    group.lines.push({
-      id: row.id,
-      productId: row.productId,
-      productName: meta?.name ?? row.productId,
-      productSku: meta?.sku ?? '',
-      quantity: toQty(row.quantity),
-      warehouseId: row.warehouseId,
-      batchNo: row.batchNo,
-    });
-  }
-  return [...byDoc.values()].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 }
 
 export async function countDevMaterialRecords(db: TenantPrismaClient, styleId: string): Promise<number> {
@@ -288,18 +133,7 @@ async function createDevMaterialBatch(
     const existing = await listDevMaterialOpRows(db, styleId);
     const productMeta = await loadProductMeta(db, existing.map((r) => r.productId));
     const { returnable } = buildSummaryAndReturnable(existing, productMeta);
-    const avail = new Map(returnable.map((r) => [returnKey(r.productId, r.warehouseId, r.batchNo), r.returnableQty]));
-    for (const line of lines) {
-      const key = returnKey(line.productId, line.warehouseId, line.batchNo);
-      const left = avail.get(key) ?? 0;
-      if (line.quantity > left + 1e-9) {
-        throw new AppError(
-          400,
-          `退料超出可退数量（物料 ${line.productId} / 仓库 ${line.warehouseId} / 批次 ${batchNoForDisplay(line.batchNo)}，可退 ${left}）`,
-        );
-      }
-      avail.set(key, left - line.quantity);
-    }
+    assertReturnWithinReturnable(lines, returnable);
   }
 
   const operator = String(body.operator ?? '').trim() || undefined;

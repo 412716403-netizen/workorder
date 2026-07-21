@@ -817,7 +817,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                   {productSkuDisplay ? (
                     <span
                       className="min-w-0 text-[10px] font-bold text-slate-400 normal-case tabular-nums"
-                      title="产品编号"
+                      title="产品名称"
                     >
                       {productSkuDisplay}
                     </span>

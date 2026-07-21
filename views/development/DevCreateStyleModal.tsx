@@ -15,7 +15,6 @@ import type {
 import { validateProductColorSizeSelection } from '../../utils/productColorSize';
 import { devStyleToProductInfo, resolveDevStyleWithPublishedProduct } from '../../utils/productInfoDevStyleBridge';
 import { validateProductCatalogUnique } from '../../utils/productCatalogUnique';
-import { resolveProductSkuForSave } from '../../utils/productSkuAutoGen';
 import { DevStyleStatus } from '../../types';
 import DevStyleProductFields from './DevStyleProductFields';
 import DevBomConfigSection from './DevBomConfigSection';
@@ -106,14 +105,10 @@ const DevCreateStyleModal: React.FC<DevCreateStyleModalProps> = ({
   const validate = (style: DevStyleDto): boolean => {
     const p = devStyleToProductInfo(style);
     if (!p.name.trim()) {
-      toast.error('请填写产品全称');
+      toast.error('请填写产品编号');
       return false;
     }
-    // 产品编号留空时已在 handleSave 经 resolveProductSkuForSave 自动生成；此处仅兜底
-    if (!p.sku.trim()) {
-      toast.error('请填写产品编号（款号）');
-      return false;
-    }
+    // 产品名称（款号）选填，不自动生成；发布大货时再校验
     const catalogConflict = validateProductCatalogUnique(products, {
       name: p.name,
       sku: p.sku,
@@ -137,21 +132,20 @@ const DevCreateStyleModal: React.FC<DevCreateStyleModalProps> = ({
   };
 
   const handleSave = async () => {
-    // 产品编号(款号)留空时自动生成，与「基本信息 → 产品档案」一致
-    let next = working;
-    if (!(working.code ?? '').trim()) {
-      const resolved = resolveProductSkuForSave(devStyleToProductInfo(working), products);
-      next = { ...working, code: resolved.sku };
-      setWorking(next);
-    }
+    const next = {
+      ...working,
+      code: (working.code ?? '').trim(),
+      name: working.name.trim(),
+    };
+    setWorking(next);
     if (!validate(next)) return;
     setSaving(true);
     try {
       await onSave(
         {
           ...next,
-          code: next.code.trim(),
-          name: next.name.trim(),
+          code: next.code,
+          name: next.name,
           status: isNew ? DevStyleStatus.DEVELOPING : initial.status,
           // 编辑态也持久化默认开发流程；新建态由 templateStageNames 写入
           defaultStageNames: stageNames,

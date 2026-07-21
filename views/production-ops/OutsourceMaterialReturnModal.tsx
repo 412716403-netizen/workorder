@@ -28,6 +28,10 @@ import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDo
 import { useStockSnapshot } from '../../hooks/useStockSnapshot';
 import { psiOrderBillCompactLineInputClass } from '../../styles/uiDensity';
 import type { StockDocDetail } from './types';
+import {
+  buildOutsourceDeliveryConsumable,
+  outsourceReturnableQty,
+} from '../../utils/outsourceMaterialStats';
 
 export interface OutsourceMaterialReturnModalProps {
   productionLinkMode: 'order' | 'product';
@@ -207,53 +211,20 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
       returnedByPartnerMat.set(r.productId, (returnedByPartnerMat.get(r.productId) ?? 0) + r.quantity);
     });
   }
-  const consumedByPartnerMat = new Map<string, number>();
-  (() => {
-    const receivedByNodeVar = new Map<string, number>();
-    const outsourceFilter = (r: ProductionOpRecord) => {
-      if (isProductMode) {
-        return !r.orderId && r.productId === targetProductId;
-      }
-      return r.orderId === matReturnOrderId;
-    };
-    const accum = (r: ProductionOpRecord) => {
-      const key = r.variantId ? `${r.nodeId!}|${r.variantId}` : r.nodeId!;
-      receivedByNodeVar.set(key, (receivedByNodeVar.get(key) ?? 0) + r.quantity);
-    };
-    records.filter(r => r.type === 'OUTSOURCE' && r.status === '已收回' && r.partner === matReturnPartner && r.nodeId && outsourceFilter(r)).forEach(accum);
-    if (isProductMode) {
-      const relatedOrderIds = new Set(orders.filter(o => o.productId === targetProductId).map(o => o.id));
-      records.filter(r => r.type === 'OUTSOURCE' && r.status === '已收回' && r.partner === matReturnPartner && r.nodeId && r.orderId && relatedOrderIds.has(r.orderId)).forEach(accum);
-    }
-    const variants = targetProduct?.variants ?? [];
-    receivedByNodeVar.forEach((recvQty, key) => {
-      const sepIdx = key.indexOf('|');
-      const nodeId = sepIdx >= 0 ? key.slice(0, sepIdx) : key;
-      const variantId = sepIdx >= 0 ? key.slice(sepIdx + 1) : undefined;
-      let matchedBoms: BOM[] = [];
-      if (variantId) {
-        const v = variants.find(vx => vx.id === variantId);
-        if (v?.nodeBoms) {
-          const bomId = (v.nodeBoms as Record<string, string>)[nodeId];
-          if (bomId) {
-            const b = boms.find(bx => bx.id === bomId);
-            if (b) matchedBoms = [b];
-          }
-        }
-        if (matchedBoms.length === 0) {
-          matchedBoms = boms.filter(b => b.parentProductId === targetProductId && b.nodeId === nodeId && b.variantId === variantId);
-        }
-      }
-      if (matchedBoms.length === 0) {
-        matchedBoms = boms.filter(b => b.parentProductId === targetProductId && b.nodeId === nodeId && !b.variantId);
-      }
-      matchedBoms.forEach(bom => {
-        bom.items.forEach(bi => {
-          consumedByPartnerMat.set(bi.productId, (consumedByPartnerMat.get(bi.productId) ?? 0) + Number(bi.quantity) * recvQty);
-        });
-      });
-    });
-  })();
+  const consumableScope = {
+    productionLinkMode,
+    orderId: isProductMode ? null : matReturnOrderId,
+    productId: isProductMode ? matReturnProductId : null,
+    orders,
+  };
+  const consumedByPartnerMat = matReturnPartner.trim()
+    ? buildOutsourceDeliveryConsumable(records, consumableScope, {
+        finishedProductId: targetProductId,
+        products,
+        boms,
+        partner: matReturnPartner,
+      })
+    : new Map<string, number>();
   const returnableMaterialsAll = Array.from(dispatchedByPartnerMat.entries()).map(([pid, dispatched]) => ({
     productId: pid,
     name: matInfoMap.get(pid)?.name ?? '未知物料',
@@ -353,8 +324,7 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
         return;
       }
     }
-    const overItems = toReturn.filter(m => (matReturnQty[m.productId] ?? 0) > Math.max(0, Math.round((m.dispatched - m.consumed - m.returned) * 100) / 100));
-    if (overItems.length > 0) { toast.warning(`「${overItems[0].name}」退回数量超过可退回数量`); return; }
+    // 允许超过「可退回」参考值（可退回列仅作展示参考）
     const docNo = getNextWtDocNo();
     const timestamp = entryDatetimeLocalToTimestamp(entryTimestamp);
     const collabExtra = buildMaterialStockCustomCollabPayload(matReturnCustomValues, 'STOCK_RETURN', matReturnPartner);
@@ -426,7 +396,7 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
 
   return (
     <ModalPortal>
-    <div className="fixed inset-0 z-[55] flex items-center justify-center p-4 sm:p-6">
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} aria-hidden />
       <div
         className="relative z-10 bg-white w-full max-w-4xl max-h-[min(92vh,960px)] rounded-[32px] shadow-2xl flex flex-col overflow-hidden"
@@ -549,14 +519,14 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
               <tbody className="divide-y divide-slate-50">
                 {returnableMaterials.map(m => {
                   const consumedDisplay = Math.round(m.consumed * 100) / 100;
-                  const remaining = Math.max(0, Math.round((m.dispatched - m.consumed - m.returned) * 100) / 100);
+                  const remaining = outsourceReturnableQty(m.dispatched, m.consumed, m.returned);
                   return (
                     <tr key={m.productId} className="hover:bg-slate-50/50">
                       <td className="min-w-0 px-2 py-3 align-top">
                         <div className="min-w-0 flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
                           <span className="text-xs font-bold text-slate-800 break-words">{m.name}</span>
                           {m.sku ? (
-                            <span className="shrink-0 text-[10px] font-bold text-slate-400 tabular-nums" title="产品编号">
+                            <span className="shrink-0 text-[10px] font-bold text-slate-400 tabular-nums" title="产品名称">
                               {m.sku}
                             </span>
                           ) : null}
@@ -589,7 +559,6 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
                         <input
                           type="number"
                           min={0}
-                          max={remaining}
                           step="any"
                           value={matReturnQty[m.productId] ?? ''}
                           onChange={e => {
@@ -604,11 +573,11 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
                             }
                             const n = Number(raw);
                             if (!Number.isFinite(n) || n < 0) return;
-                            setMatReturnQty(prev => ({ ...prev, [m.productId]: Math.min(n, remaining) }));
+                            setMatReturnQty(prev => ({ ...prev, [m.productId]: n }));
                           }}
                           className={`${psiOrderBillCompactLineInputClass} w-full max-w-[11rem] bg-white text-right tabular-nums placeholder:text-slate-400`}
                           placeholder="数量"
-                          title={remaining > 0 ? `最多可退 ${remaining}` : '当前可退为 0'}
+                          title={remaining > 0 ? `参考可退 ${remaining}（可超过）` : '参考可退 0（可超过）'}
                           aria-label={`${m.name} 本次退回数量`}
                         />
                       </td>

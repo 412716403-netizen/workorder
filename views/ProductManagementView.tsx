@@ -327,8 +327,8 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/80 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                     <th className="py-3 pl-4 pr-2 w-12"></th>
-                    <th className="py-3 px-3">产品名称</th>
-                    <th className="py-3 px-3 hidden sm:table-cell">SKU</th>
+                    <th className="py-3 px-3">产品编号</th>
+                    <th className="py-3 px-3 hidden sm:table-cell">产品名称</th>
                     <th className="py-3 px-3 hidden md:table-cell">分类</th>
                     <th className="py-3 px-3 text-center hidden md:table-cell">工序</th>
                     <th className="py-3 px-3 text-center hidden md:table-cell">变体</th>

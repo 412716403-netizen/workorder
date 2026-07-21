@@ -1047,7 +1047,7 @@ const BUILTIN_MATERIAL_ISSUE_V1: Record<string, unknown> = {
             id: 'el-builtin-mat-issue-col-sku',
             color: '#000000',
             textAlign: 'center',
-            headerLabel: '产品编号',
+            headerLabel: '产品名称',
             contentTemplate: '{{行.sku}}',
           },
           {
@@ -1544,7 +1544,7 @@ const BUILTIN_PLAN_LIST_V1: Record<string, unknown> = {
       width: 60,
       config: {
         color: '#111827',
-        content: '产品名称：{{产品.name}}\n产品编号：{{产品.sku}}',
+        content: '产品编号：{{产品.name}}\n产品名称：{{产品.sku}}',
         textAlign: 'left',
         fontSizePt: 10,
         fontWeight: 'normal',

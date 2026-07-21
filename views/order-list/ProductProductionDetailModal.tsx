@@ -378,7 +378,7 @@ const ProductProductionDetailModal: React.FC<ProductProductionDetailModalProps> 
                       {product.name}
                     </span>
                     {product.sku ? (
-                      <span className="min-w-0 text-[10px] font-bold text-slate-400 normal-case tabular-nums" title="产品编号">
+                      <span className="min-w-0 text-[10px] font-bold text-slate-400 normal-case tabular-nums" title="产品名称">
                         {product.sku}
                       </span>
                     ) : null}

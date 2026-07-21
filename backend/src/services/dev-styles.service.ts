@@ -167,17 +167,15 @@ export async function getDevStyle(db: TenantPrismaClient, id: string) {
 
 async function assertNoProductCatalogConflict(
   db: TenantPrismaClient,
-  code: string,
+  _code: string,
   name: string,
   excludeProductId?: string,
 ): Promise<void> {
-  const sku = code.trim();
   const productName = name.trim();
   const idFilter = excludeProductId ? { id: { not: excludeProductId } } : {};
-  const dupSku = await db.product.findFirst({ where: { sku, ...idFilter } });
-  if (dupSku) throw new AppError(409, '产品编号在租户内已存在，请更换');
+  // 产品名称(sku/code)允许重复；仅校验产品编号(name/品名)
   const dupName = await db.product.findFirst({ where: { name: productName, ...idFilter } });
-  if (dupName) throw new AppError(409, '产品名称在租户内已存在，请更换');
+  if (dupName) throw new AppError(409, '产品编号在租户内已存在，请更换');
 }
 
 async function syncDevStyleCustomerNameFromSupplier(
@@ -209,16 +207,17 @@ export async function createDevStyle(
   data.createdByUserId = creatorUserId ?? null;
   const code = String(data.code ?? '').trim();
   const name = String(data.name ?? '').trim();
-  if (!code) throw new AppError(400, '款号不能为空');
   if (!name) throw new AppError(400, '品名不能为空');
-  data.code = code;
+  data.code = code || null;
   data.name = name;
   data.categoryId = await assertCategory(db, data.categoryId);
   coerceStyleJson(data);
   if (!data.status) data.status = DevStyleStatus.DEVELOPING;
 
-  const dup = await db.devStyle.findFirst({ where: { code } });
-  if (dup) throw new AppError(409, '款号已存在');
+  if (code) {
+    const dup = await db.devStyle.findFirst({ where: { code } });
+    if (dup) throw new AppError(409, '款号已存在');
+  }
 
   await assertNoProductCatalogConflict(db, code, name);
   await syncDevStyleCustomerNameFromSupplier(db, data);
@@ -285,17 +284,18 @@ export async function updateDevStyle(
   }
   if ('code' in data) {
     const code = String(data.code ?? '').trim();
-    if (!code) throw new AppError(400, '款号不能为空');
-    const dup = await db.devStyle.findFirst({ where: { code, id: { not: styleId } } });
-    if (dup) throw new AppError(409, '款号已存在');
-    data.code = code;
+    if (code) {
+      const dup = await db.devStyle.findFirst({ where: { code, id: { not: styleId } } });
+      if (dup) throw new AppError(409, '款号已存在');
+    }
+    data.code = code || null;
   }
   if ('name' in data) {
     const name = String(data.name ?? '').trim();
     if (!name) throw new AppError(400, '品名不能为空');
     data.name = name;
   }
-  const nextCode = ('code' in data ? String(data.code ?? '').trim() : existing.code) || existing.code;
+  const nextCode = ('code' in data ? String(data.code ?? '').trim() : String(existing.code ?? '').trim());
   const nextName = ('name' in data ? String(data.name ?? '').trim() : existing.name) || existing.name;
   if ('code' in data || 'name' in data) {
     await assertNoProductCatalogConflict(db, nextCode, nextName, existing.publishedProductId ?? undefined);

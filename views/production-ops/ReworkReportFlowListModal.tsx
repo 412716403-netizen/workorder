@@ -209,7 +209,7 @@ const ReworkReportFlowListModal: React.FC<ReworkReportFlowListModalProps> = ({
             )}
             <div>
               <label className="text-[10px] font-bold text-slate-400 block mb-1">产品</label>
-              <input type="text" value={f.productId} onChange={e => setReworkFlowFilter(prev => ({ ...prev, productId: e.target.value }))} placeholder="产品名称模糊搜索" className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200" />
+              <input type="text" value={f.productId} onChange={e => setReworkFlowFilter(prev => ({ ...prev, productId: e.target.value }))} placeholder="产品编号模糊搜索" className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200" />
             </div>
             <div>
               <label className="text-[10px] font-bold text-slate-400 block mb-1">工序</label>

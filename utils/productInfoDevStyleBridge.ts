@@ -1,7 +1,7 @@
 import type { DevStyleDto, Product } from '../types';
 import { devStyleToProductForBom } from './devStyleToProduct';
 
-/** 开发款式 → 与产品档案一致的编辑形状（sku = 款号/产品编号） */
+/** 开发款式 → 与产品档案一致的编辑形状（sku = 款号/产品名称） */
 export function devStyleToProductInfo(style: DevStyleDto): Product {
   return devStyleToProductForBom(style);
 }

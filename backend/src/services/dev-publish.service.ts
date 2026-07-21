@@ -43,11 +43,9 @@ export async function publishDevStyleToProduct(
   if (!style.code?.trim()) throw new AppError(400, '款号不能为空');
   if (!style.name?.trim()) throw new AppError(400, '品名不能为空');
 
-  // 提前校验产品档案冲突，避免事务失败后只抛含糊的 500
-  const dupSku = await db.product.findFirst({ where: { sku: style.code.trim() } });
-  if (dupSku) throw new AppError(409, '产品编号（款号）已存在，请更换款号后再生成商品');
+  // 提前校验产品编号冲突；产品名称(sku)允许与档案重复
   const dupName = await db.product.findFirst({ where: { name: style.name.trim() } });
-  if (dupName) throw new AppError(409, '产品名称（品名）已存在，请更换品名后再生成商品');
+  if (dupName) throw new AppError(409, '产品编号（品名）已存在，请更换品名后再生成商品');
 
   const productId = genId('prod');
   const variantIdMap = new Map<string, string>();
@@ -110,7 +108,7 @@ export async function publishDevStyleToProduct(
     await productsService.createProduct(txDb, tenantId, {
       id: productId,
       tenantId,
-      sku: style.code.trim(),
+      sku: style.code!.trim(),
       name: style.name.trim(),
       imageUrl: style.imageUrl ?? undefined,
       categoryId: style.categoryId,

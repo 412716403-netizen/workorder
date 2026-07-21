@@ -220,7 +220,7 @@ const ProductEconomicsModal: React.FC<ProductEconomicsModalProps> = ({
                   <Search className="absolute left-2.5 top-2 h-4 w-4 text-slate-400" />
                   <input
                     className="w-full rounded-lg border border-slate-200 py-1.5 pl-8 pr-3 text-xs"
-                    placeholder="搜索产品名称 / SKU"
+                    placeholder="搜索产品编号 / SKU"
                     value={search}
                     onChange={e => setSearch(e.target.value)}
                   />

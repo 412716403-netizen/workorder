@@ -1,7 +1,8 @@
-/** 产品 SKU 自动生成（对齐 Web utils/productSkuAutoGen.ts） */
+/** 产品名称(sku) 保存前规范化（对齐 Web utils/productSkuAutoGen.ts：选填、不自动生成） */
 
 const AUTO_SKU_LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 
+/** @deprecated 产品名称不再自动生成 */
 function generateAutoProductSku() {
   let prefix = '';
   for (let i = 0; i < 2; i += 1) {
@@ -10,18 +11,10 @@ function generateAutoProductSku() {
   return `${prefix}${Date.now()}`;
 }
 
-function resolveProductSkuForSave(p, catalog) {
+function resolveProductSkuForSave(p, _catalog) {
   const sku = String((p && p.sku) || '').trim();
-  if (sku) return p;
-  let candidate = '';
-  for (let i = 0; i < 20; i += 1) {
-    candidate = generateAutoProductSku();
-    const taken = (catalog || []).some(
-      (o) => o.id !== p.id && String(o.sku || '').trim() === candidate,
-    );
-    if (!taken) break;
-  }
-  return { ...p, sku: candidate };
+  if (sku === String((p && p.sku) || '')) return p;
+  return { ...p, sku };
 }
 
 module.exports = {

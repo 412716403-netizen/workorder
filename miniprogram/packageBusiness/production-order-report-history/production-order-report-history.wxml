@@ -103,7 +103,7 @@
               <text class="report-history-row__qty">{{item.goodQtyText}}</text>
             </view>
 
-            <!-- 次行：产品名称 · 产品编号 | 不良 · 操作人 · 报工单号 -->
+            <!-- 次行：产品编号 · 产品名称 | 不良 · 操作人 · 报工单号 -->
             <view class="report-history-row__sub">
               <view class="report-history-row__sub-left">
                 <text class="report-history-row__product-name">{{item.productName}}</text>

@@ -54,7 +54,7 @@ describe('normalizePlanFormSettings listDisplay', () => {
     const n = normalizePlanFormSettings({
       standardFields: [
         { id: 'planNumber', label: '计划单号', showInList: false, showInCreate: false, showInDetail: true },
-        { id: 'product', label: '产品名称', showInList: true, showInCreate: false, showInDetail: true },
+        { id: 'product', label: '产品编号', showInList: true, showInCreate: false, showInDetail: true },
         { id: 'customer', label: '客户', showInList: false, showInCreate: false, showInDetail: false },
       ],
     });

@@ -101,8 +101,8 @@ function syncVariantsIfNeeded(product, category, dictionaries) {
 function validateProductForSave(product, catalog, category) {
   const name = String((product && product.name) || '').trim();
   const sku = String((product && product.sku) || '').trim();
-  if (!name) return '产品全称不能为空';
-  if (!sku) return '产品编号不能为空';
+  if (!name) return '产品编号不能为空';
+  // 产品名称选填，不自动生成
   const catalogErr = validateProductCatalogUnique(catalog, {
     name,
     sku,

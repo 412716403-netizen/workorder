@@ -407,7 +407,8 @@ model Equipment {
 model Product {
   id                 String   @id @db.VarChar(50)
   tenantId           String   @map("tenant_id") @db.Uuid
-  sku                String   @db.VarChar(100)
+  /** 产品名称（展示名）；可空，多条空值互不冲突（PG UNIQUE 允许多 NULL） */
+  sku                String?  @db.VarChar(100)
   name               String   @db.VarChar(200)
   description        String?  @db.Text
   imageUrl           String?  @map("image_url") @db.Text
@@ -445,9 +446,9 @@ model Product {
   variants ProductVariant[]
   boms     Bom[]
 
-  @@unique([tenantId, sku])
   @@unique([tenantId, name])
   @@index([tenantId])
+  @@index([tenantId, sku])
   @@index([categoryId])
   @@map("products")
 }
@@ -1114,7 +1115,8 @@ model OutsourceRoute {
 model DevStyle {
   id                 String   @id @db.VarChar(50)
   tenantId           String   @map("tenant_id") @db.Uuid
-  code               String   @db.VarChar(100)
+  /** 款号（对应产品名称/sku）；可空，发布大货前须填写 */
+  code               String?  @db.VarChar(100)
   name               String   @db.VarChar(200)
   customerName       String?  @map("customer_name") @db.VarChar(200)
   imageUrl           String?  @map("image_url") @db.Text

@@ -43,7 +43,7 @@ import OrderDetailModal from './OrderDetailModal';
 import ProductProductionDetailModal from './order-list/ProductProductionDetailModal';
 import OrderFlowView from './OrderFlowView';
 import PendingStockPanel from './order-list/PendingStockPanel';
-import MaterialIssueModal from './order-list/MaterialIssueModal';
+import OrderMaterialModal from './order-list/OrderMaterialModal';
 import ReportModal from './order-list/ReportModal';
 import ReportHistoryModal, { type ReportHistoryInitialSeed } from './order-list/ReportHistoryModal';
 import ReportPendingApprovalModal from './order-list/ReportPendingApprovalModal';
@@ -308,6 +308,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   const [showStockFlowModal, setShowStockFlowModal] = useState(false);
   const [stockFlowSeed, setStockFlowSeed] = useState<StockFlowInitialSeed | null>(null);
   const [stockDocDetail, setStockDocDetail] = useState<StockDocDetail | null>(null);
+  const [stockDocDetailRecords, setStockDocDetailRecords] = useState<ProductionOpRecord[]>([]);
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search, 300);
   const [currentPage, setCurrentPage] = useState(1);
@@ -1700,7 +1701,10 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
         orders={orders}
         products={products}
         productionLinkMode={productionLinkMode}
-        onOpenDocDetail={setStockDocDetail}
+        onOpenDocDetail={(detail, docRecords) => {
+          setStockDocDetail(detail);
+          setStockDocDetailRecords(docRecords ?? []);
+        }}
         userPermissions={userPermissions}
         tenantRole={tenantRole}
         initialSeed={stockFlowSeed}
@@ -1708,9 +1712,12 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
 
       <StockDocDetailModal
         detail={stockDocDetail}
-        onClose={() => setStockDocDetail(null)}
+        onClose={() => {
+          setStockDocDetail(null);
+          setStockDocDetailRecords([]);
+        }}
         onDetailChange={setStockDocDetail}
-        records={effectiveProdRecords}
+        records={stockDocDetailRecords.length > 0 ? stockDocDetailRecords : effectiveProdRecords}
         orders={orders}
         products={products}
         warehouses={warehouses}
@@ -1930,7 +1937,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
       )}
 
       {onAddRecord && (materialIssueOrderId || materialIssueForProduct) && (
-        <MaterialIssueModal
+        <OrderMaterialModal
           orderId={materialIssueForProduct ? null : materialIssueOrderId}
           forProduct={materialIssueForProduct}
           orders={orders}
@@ -1940,11 +1947,17 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
           globalNodes={globalNodes}
           dictionaries={dictionaries}
           productionLinkMode={productionLinkMode}
+          productMilestoneProgresses={productMilestoneProgresses}
           onAddRecord={onAddRecord}
           onAddRecordBatch={onAddRecordBatch}
           onClose={() => {
             setMaterialIssueOrderId(null);
             setMaterialIssueForProduct(null);
+          }}
+          canViewMaterialFlow={canViewMaterialFlow}
+          onOpenMaterialFlow={(seed) => {
+            setStockFlowSeed(seed);
+            setShowStockFlowModal(true);
           }}
           userPermissions={userPermissions}
           tenantRole={tenantRole}

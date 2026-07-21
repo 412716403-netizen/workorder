@@ -48,7 +48,7 @@
         class="sps__search-input"
         value="{{search}}"
         bindinput="onSearchInput"
-        placeholder="搜索产品名称、SKU、自定义内容..."
+        placeholder="搜索产品编号、SKU、自定义内容..."
         confirm-type="search"
       />
     </view>

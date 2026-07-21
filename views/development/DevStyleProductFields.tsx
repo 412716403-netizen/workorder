@@ -111,7 +111,7 @@ const DevStyleProductFields: React.FC<DevStyleProductFieldsProps> = ({
       embeddedInQuickCreateModal={embeddedInModal}
       sectionHeading={embeddedInModal ? '' : '款式 / 商品信息'}
       useCardShell={!embeddedInModal}
-      skuPlaceholder="款号（产品编号），发布大货时同步"
+      skuPlaceholder="款号（产品名称），选填；发布大货前须填写"
     />
   );
 

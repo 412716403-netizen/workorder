@@ -40,7 +40,7 @@
   line-height: 1;
 }
 
-/** 列表/流水/详情：产品名称后的编号（对齐报工流水 report-history-row__sku） */
+/** 列表/流水/详情：产品编号后的编号（对齐报工流水 report-history-row__sku） */
 .list-product-sku {
   font-size: 22rpx;
   font-weight: 400;

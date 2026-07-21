@@ -86,7 +86,7 @@ const OrderDetailView: React.FC<OrderDetailViewProps> = ({
           </div>
           <div className="flex items-center gap-4 mt-4 md:mt-0 py-3 px-4 bg-slate-50 rounded-2xl border border-slate-100 flex-wrap">
             <div>
-              <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">产品编号</p>
+              <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">产品名称</p>
               <p className="text-sm font-bold text-slate-800">{order.sku}</p>
             </div>
             <div>

@@ -35,7 +35,7 @@ interface OrderFlowViewProps {
   /** 嵌入弹窗时隐藏主标题，避免重复 */
   embedded?: boolean;
   productionLinkMode?: 'order' | 'product';
-  /** 从产品卡片打开时传入，用于预填产品名称筛选 */
+  /** 从产品卡片打开时传入，用于预填产品编号筛选 */
   initialProductId?: string | null;
   /** 点击详情时打开弹窗，不传则无详情入口 */
   onOpenOrderDetail?: (orderId: string) => void;
@@ -154,12 +154,12 @@ const OrderFlowView: React.FC<OrderFlowViewProps> = ({
           />
         </div>
         <div>
-          <label className="text-[10px] font-bold text-slate-400 block mb-1">产品名称</label>
+          <label className="text-[10px] font-bold text-slate-400 block mb-1">产品编号</label>
           <input
             type="text"
             value={productNameKeyword}
             onChange={e => setProductNameKeyword(e.target.value)}
-            placeholder="产品名称模糊搜索"
+            placeholder="产品编号模糊搜索"
             className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200"
           />
         </div>

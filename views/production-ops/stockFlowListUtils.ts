@@ -1,5 +1,5 @@
 import type { ProductionOpRecord } from '../../types';
-import { isDevMaterialOpReason } from '../../shared/types';
+import { isDevMaterialOpReason, isReworkMaterialOpReason } from '../../shared/types';
 import { flowRecordsEarliestMs } from '../../utils/flowDocSort';
 import { toLocalDateYmdFromProductionTimestamp } from '../../utils/localDateTime';
 import type { StockDocDetail } from './types';
@@ -9,7 +9,9 @@ export type StockFlowBizType =
   | 'ISSUE_INTERNAL'
   | 'RETURN_INTERNAL'
   | 'ISSUE_OUTSOURCE'
-  | 'RETURN_OUTSOURCE';
+  | 'RETURN_OUTSOURCE'
+  | 'ISSUE_REWORK'
+  | 'RETURN_REWORK';
 
 export type StockFlowInitialSeed = {
   orderKeyword?: string;
@@ -18,21 +20,29 @@ export type StockFlowInitialSeed = {
   sourceProductId?: string;
   dateFrom?: string;
   dateTo?: string;
+  /** 限定只展示这些业务类型（如返工物料入口只看返工领料/退料）；类型下拉也只保留这些选项 */
+  onlyBizTypes?: Exclude<StockFlowBizType, 'all'>[];
 };
 
 export function getStockFlowBizType(r: ProductionOpRecord): Exclude<StockFlowBizType, 'all'> {
+  if (isReworkMaterialOpReason(r.reason)) {
+    return r.type === 'STOCK_OUT' ? 'ISSUE_REWORK' : 'RETURN_REWORK';
+  }
   if (r.type === 'STOCK_OUT') return r.partner ? 'ISSUE_OUTSOURCE' : 'ISSUE_INTERNAL';
   return r.partner ? 'RETURN_OUTSOURCE' : 'RETURN_INTERNAL';
 }
 
+export const STOCK_FLOW_BIZ_TYPE_LABEL: Record<Exclude<StockFlowBizType, 'all'>, string> = {
+  ISSUE_INTERNAL: '领料发出',
+  RETURN_INTERNAL: '生产退料',
+  ISSUE_OUTSOURCE: '外协领料发出',
+  RETURN_OUTSOURCE: '外协生产退料',
+  ISSUE_REWORK: '返工领料',
+  RETURN_REWORK: '返工退料',
+};
+
 export function getStockFlowTypeLabel(rec: ProductionOpRecord): string {
-  const isReturn = rec.type === 'STOCK_RETURN';
-  const isOutsourceDispatch = rec.type === 'STOCK_OUT' && !!rec.partner;
-  const isOutsourceReturn = rec.type === 'STOCK_RETURN' && !!rec.partner;
-  if (isOutsourceReturn) return '外协生产退料';
-  if (isReturn) return '生产退料';
-  if (isOutsourceDispatch) return '外协领料发出';
-  return '领料发出';
+  return STOCK_FLOW_BIZ_TYPE_LABEL[getStockFlowBizType(rec)];
 }
 
 /** 生产物料「领料退料流水」：排除开发领退（仍进仓库流水） */

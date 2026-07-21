@@ -248,7 +248,9 @@ const StockDocDetailModal: React.FC<StockDocDetailModalProps> = ({
   const operatorLabel = (() => {
     const names = docRecordsForDetail.map(r => r.operator?.trim()).filter((v): v is string => Boolean(v));
     const uniq = [...new Set(names)];
-    return uniq.length ? uniq.join('、') : '—';
+    if (uniq.length) return uniq.join('、');
+    const fromDetail = stockDocDetail.operator?.trim();
+    return fromDetail || '—';
   })();
 
   const totalQty = detailLines.reduce((s, l) => s + (l.quantity ?? 0), 0);

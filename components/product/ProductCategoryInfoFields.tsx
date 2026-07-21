@@ -125,7 +125,7 @@ const ProductCategoryInfoFields: React.FC<ProductCategoryInfoFieldsProps> = ({
   embeddedInQuickCreateModal = false,
   sectionHeading = '1. 核心业务档案',
   useCardShell = true,
-  skuPlaceholder = '留空则保存时自动生成',
+  skuPlaceholder = '选填',
 }) => {
   const auth = useAuthOptional();
   const nestedOverlayZ = embeddedInQuickCreateModal ? 'z-[11200]' : 'z-[10250]';
@@ -562,7 +562,7 @@ const ProductCategoryInfoFields: React.FC<ProductCategoryInfoFieldsProps> = ({
           </div>
           <div className="space-y-1">
             <label className={productArchiveFormLabelClass}>
-              产品全称 <span className="text-rose-500">*</span>
+              产品编号 <span className="text-rose-500">*</span>
             </label>
             <input
               type="text"
@@ -575,7 +575,7 @@ const ProductCategoryInfoFields: React.FC<ProductCategoryInfoFieldsProps> = ({
             />
           </div>
           <div className="space-y-1">
-            <label className={productArchiveFormLabelClass}>产品编号</label>
+            <label className={productArchiveFormLabelClass}>产品名称</label>
             <input
               type="text"
               disabled={readOnly}

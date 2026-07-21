@@ -1,17 +1,15 @@
 /**
- * 产品编号(sku)自动生成 + 保存前去重。
+ * 产品名称(sku) 保存前规范化。
  *
- * 拆自 ProductEditForm.tsx (Phase 3.1)。规则：
- * - `generateAutoProductSku()`：两个大写字母（去掉 I/O 这种易误读字符）+ 毫秒时间戳
- * - `resolveProductSkuForSave(p, catalog)`：若 sku 未手填，则生成租户内唯一的候选编号；
- *   候选与现有产品 sku 冲突时最多重试 20 次（实际碰撞概率极小，时间戳维持单调）。
+ * 历史曾支持留空自动生成；现规则：产品名称选填、不自动生成。
+ * `resolveProductSkuForSave` 仅做 trim，空串保持为空。
  */
 import type { Product } from '../types';
 
-/** 不含易误读字符 I/O 的大写字母集合 */
+/** @deprecated 产品名称不再自动生成；保留导出以免旧引用报错 */
 export const AUTO_SKU_LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 
-/** 两位大写字母前缀 + Date.now()；调用方一般不需要直接用，走 resolveProductSkuForSave */
+/** @deprecated 产品名称不再自动生成 */
 export function generateAutoProductSku(): string {
   let prefix = '';
   for (let i = 0; i < 2; i++) {
@@ -20,14 +18,9 @@ export function generateAutoProductSku(): string {
   return `${prefix}${Date.now()}`;
 }
 
-/** 产品编号留空时生成租户内唯一的编号，供保存前写入 */
-export function resolveProductSkuForSave(p: Product, catalog: Product[]): Product {
+/** 保存前规范化 sku：只 trim，留空不生成 */
+export function resolveProductSkuForSave(p: Product, _catalog: Product[]): Product {
   const sku = (p.sku ?? '').trim();
-  if (sku) return p;
-  let candidate = '';
-  for (let i = 0; i < 20; i++) {
-    candidate = generateAutoProductSku();
-    if (!catalog.some(o => o.id !== p.id && (o.sku ?? '').trim() === candidate)) break;
-  }
-  return { ...p, sku: candidate };
+  if (sku === (p.sku ?? '')) return p;
+  return { ...p, sku };
 }

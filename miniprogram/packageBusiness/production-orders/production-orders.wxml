@@ -86,7 +86,7 @@
             class="order-flow-input"
             value="{{orderFlowProductNameKeyword}}"
             bindinput="onOrderFlowProductNameInput"
-            placeholder="产品名称"
+            placeholder="产品编号"
             placeholder-class="order-flow-input__ph"
           />
         </view>

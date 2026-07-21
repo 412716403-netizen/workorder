@@ -180,6 +180,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
         plans={plans}
         reworkFormSettings={reworkFormSettings}
         onUpdateReworkFormSettings={onUpdateReworkFormSettings}
+        materialFormSettings={materialFormSettings}
         printTemplates={printTemplates}
         onUpdatePrintTemplates={onUpdatePrintTemplates}
         onRefreshPrintTemplates={onRefreshPrintTemplates}

@@ -11,7 +11,7 @@ function purchaseBillRelatedProductFields(showPurchaseBillRelatedProduct: boolea
       o => o.group === '采购入库' && o.value === '采购入库.relatedProduct' && o.label === '关联产品',
     ),
     lineName: options.some(
-      o => o.group === '采购入库明细' && o.value === '行.relatedProductName' && o.label === '关联产品名称',
+      o => o.group === '采购入库明细' && o.value === '行.relatedProductName' && o.label === '关联产品编号',
     ),
     lineSku: options.some(
       o => o.group === '采购入库明细' && o.value === '行.relatedProductSku' && o.label === '关联产品货号',

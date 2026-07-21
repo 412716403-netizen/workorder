@@ -27,6 +27,7 @@ import { ModalPortal } from '../../components/ModalPortal';
 import {
   type StockFlowBizType,
   type StockFlowInitialSeed,
+  STOCK_FLOW_BIZ_TYPE_LABEL,
   getStockFlowBizType,
   getStockFlowTypeLabel,
   sortStockFlowRecordsByDoc,
@@ -41,7 +42,7 @@ export interface StockFlowListModalProps {
   orders: ProductionOrder[];
   products: Product[];
   productionLinkMode: 'order' | 'product';
-  onOpenDocDetail: (detail: StockDocDetail) => void;
+  onOpenDocDetail: (detail: StockDocDetail, docRecords?: ProductionOpRecord[]) => void;
   userPermissions?: string[];
   tenantRole?: string;
   /** 从工单详情等入口打开时预填筛选（含 orderIds 服务端窄拉） */
@@ -69,6 +70,8 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
   const [stockFlowFilterDateTo, setStockFlowFilterDateTo] = useState(todayDate);
   const [scopedOrderIds, setScopedOrderIds] = useState('');
   const [scopedSourceProductId, setScopedSourceProductId] = useState('');
+  /** 入口限定的业务类型（如返工物料入口只看返工领料/退料）；null 表示不限 */
+  const [restrictedBizTypes, setRestrictedBizTypes] = useState<Exclude<StockFlowBizType, 'all'>[] | null>(null);
 
   useEffect(() => {
     if (!visible) return;
@@ -83,6 +86,7 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
       setStockFlowFilterDateTo(initialSeed.dateTo ?? (scoped ? '' : todayDate));
       setScopedOrderIds(initialSeed.orderIds ?? '');
       setScopedSourceProductId(initialSeed.sourceProductId ?? '');
+      setRestrictedBizTypes(initialSeed.onlyBizTypes?.length ? initialSeed.onlyBizTypes : null);
     } else {
       setStockFlowFilterOrderKeyword('');
       setStockFlowFilterProductKeyword('');
@@ -93,6 +97,7 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
       setStockFlowFilterDateTo(todayDate);
       setScopedOrderIds('');
       setScopedSourceProductId('');
+      setRestrictedBizTypes(null);
     }
   }, [visible, initialSeed, todayDate]);
 
@@ -125,6 +130,7 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
 
   const { filteredStockFlowRecords, totalIssueQty, totalReturnQty } = useMemo(() => {
     let list = stockFlowRecords;
+    if (restrictedBizTypes) list = list.filter(r => restrictedBizTypes.includes(getStockFlowBizType(r)));
     if (stockFlowFilterType !== 'all') list = list.filter(r => getStockFlowBizType(r) === stockFlowFilterType);
     if (stockFlowFilterOrderKeyword.trim() && !scopedOrderIds) {
       const kw = stockFlowFilterOrderKeyword.trim().toLowerCase();
@@ -186,6 +192,7 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
     };
   }, [
     stockFlowRecords,
+    restrictedBizTypes,
     stockFlowFilterType,
     stockFlowFilterOrderKeyword,
     stockFlowFilterProductKeyword,
@@ -202,9 +209,12 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
   const buildStockDocDetailFromDocNo = (docNo: string): StockDocDetail | null =>
     buildStockDocDetailFromRecords(docNo, stockFlowRecords);
 
-  const filterHint = scopedOrderIds || scopedSourceProductId
+  const restrictedHint = restrictedBizTypes
+    ? `；仅显示${restrictedBizTypes.map(t => STOCK_FLOW_BIZ_TYPE_LABEL[t]).join('/')}`
+    : '';
+  const filterHint = (scopedOrderIds || scopedSourceProductId
     ? '已按当前工单/产品窄拉，不限日期；可手动补充日期或其它筛选项'
-    : '默认显示当天，扩大日期范围需手动改';
+    : '默认显示当天，扩大日期范围需手动改') + restrictedHint;
 
   if (!visible) return null;
 
@@ -250,10 +260,11 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
                 className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200 bg-white"
               >
                 <option value="all">全部</option>
-                <option value="ISSUE_INTERNAL">领料发出</option>
-                <option value="RETURN_INTERNAL">生产退料</option>
-                <option value="ISSUE_OUTSOURCE">外协领料发出</option>
-                <option value="RETURN_OUTSOURCE">外协生产退料</option>
+                {(restrictedBizTypes ??
+                  (Object.keys(STOCK_FLOW_BIZ_TYPE_LABEL) as Exclude<StockFlowBizType, 'all'>[])
+                ).map(t => (
+                  <option key={t} value={t}>{STOCK_FLOW_BIZ_TYPE_LABEL[t]}</option>
+                ))}
               </select>
             </div>
             {productionLinkMode !== 'product' ? (
@@ -364,14 +375,18 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
                     const order = orders.find(o => o.id === rec.orderId);
                     const matProduct = products.find(p => p.id === rec.productId);
                     const sourceProd = rec.sourceProductId ? products.find(p => p.id === rec.sourceProductId) : null;
+                    const bizType = getStockFlowBizType(rec);
                     const isReturn = rec.type === 'STOCK_RETURN';
-                    const isOutsourceDispatch = rec.type === 'STOCK_OUT' && !!rec.partner;
-                    const isOutsourceReturn = rec.type === 'STOCK_RETURN' && !!rec.partner;
+                    const isOutsourceDispatch = bizType === 'ISSUE_OUTSOURCE';
+                    const isOutsourceReturn = bizType === 'RETURN_OUTSOURCE';
                     const docNo = rec.docNo ?? '';
                     const openDetail = () => {
                       if (!docNo) return;
                       const detail = buildStockDocDetailFromDocNo(docNo);
-                      if (detail) onOpenDocDetail(detail);
+                      if (detail) {
+                        const docRecords = stockFlowRecords.filter(r => r.docNo === docNo && r.type === detail.type);
+                        onOpenDocDetail(detail, docRecords);
+                      }
                     };
                     const linkCol =
                       productionLinkMode === 'product'
@@ -380,13 +395,17 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
                           ? order?.orderNumber ?? '—'
                           : matProduct?.name ?? '—';
                     const typeLabel = getStockFlowTypeLabel(rec);
-                    const typeClass = isOutsourceReturn
-                      ? 'bg-orange-100 text-orange-800'
-                      : isReturn
-                        ? 'bg-amber-100 text-amber-800'
-                        : isOutsourceDispatch
-                          ? 'bg-teal-100 text-teal-800'
-                          : 'bg-indigo-100 text-indigo-800';
+                    const typeClass = bizType === 'ISSUE_REWORK'
+                      ? 'bg-purple-100 text-purple-800'
+                      : bizType === 'RETURN_REWORK'
+                        ? 'bg-rose-100 text-rose-800'
+                        : isOutsourceReturn
+                          ? 'bg-orange-100 text-orange-800'
+                          : isReturn
+                            ? 'bg-amber-100 text-amber-800'
+                            : isOutsourceDispatch
+                              ? 'bg-teal-100 text-teal-800'
+                              : 'bg-indigo-100 text-indigo-800';
                     return (
                       <tr key={rec.id} className="border-b border-slate-100 hover:bg-slate-50/50">
                         <td className="px-4 py-3 text-[10px] font-mono font-bold text-slate-600 whitespace-nowrap">{rec.docNo ?? '—'}</td>

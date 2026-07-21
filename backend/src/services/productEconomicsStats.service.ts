@@ -1181,7 +1181,7 @@ export async function computeProductEconomicsList(
         buildRow(
           p.id,
           p.name,
-          p.sku,
+          p.sku ?? '',
           p.imageThumb ?? null,
           productHasProcessNodes(p.milestoneNodeIds),
           agg,
@@ -1326,7 +1326,7 @@ export async function computeProductEconomicsDetail(
     const row = buildRow(
       product.id,
       product.name,
-      product.sku,
+      product.sku ?? '',
       product.imageThumb ?? product.imageUrl ?? null,
       productHasProcessNodes(product.milestoneNodeIds),
       prodAgg,
@@ -1388,7 +1388,7 @@ export async function computeProductEconomicsDetail(
       materialCostMode,
       productId: product.id,
       name: product.name,
-      sku: product.sku,
+      sku: product.sku ?? '',
       imageUrl: product.imageThumb ?? product.imageUrl ?? null,
       materialCost: row.materialCost,
       reportCost: row.reportCost,

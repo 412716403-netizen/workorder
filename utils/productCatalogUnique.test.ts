@@ -20,11 +20,11 @@ const catalog: Product[] = [
 ];
 
 describe('productCatalogUnique', () => {
-  it('detects duplicate name and sku', () => {
+  it('仅拦截重复产品编号；产品名称允许重复', () => {
     expect(isProductNameTakenInCatalog(catalog, '经典T恤')).toBe(true);
-    expect(isProductSkuTakenInCatalog(catalog, 'ST-001')).toBe(true);
-    expect(validateProductCatalogUnique(catalog, { name: '经典T恤', sku: 'NEW-01' })).toMatch(/名称/);
-    expect(validateProductCatalogUnique(catalog, { name: '新款', sku: 'ST-001' })).toMatch(/编号/);
+    expect(isProductSkuTakenInCatalog(catalog, 'ST-001')).toBe(false);
+    expect(validateProductCatalogUnique(catalog, { name: '经典T恤', sku: 'NEW-01' })).toMatch(/产品编号/);
+    expect(validateProductCatalogUnique(catalog, { name: '新款', sku: 'ST-001' })).toBeNull();
   });
 
   it('excludes current product id when editing', () => {

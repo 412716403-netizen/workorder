@@ -542,7 +542,7 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
 
   return (
     <ModalPortal>
-    <div className="fixed inset-0 z-[55] flex items-center justify-center p-4 sm:p-6">
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} aria-hidden />
       <div
         className="relative z-10 bg-white w-full max-w-4xl max-h-[min(92vh,960px)] rounded-[32px] shadow-2xl flex flex-col overflow-hidden"
@@ -651,7 +651,7 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
                         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                           <span className="text-sm font-bold text-slate-800">{m.name}</span>
                           {m.sku ? (
-                            <span className="text-xs font-bold text-slate-400 tabular-nums" title="产品编号">
+                            <span className="text-xs font-bold text-slate-400 tabular-nums" title="产品名称">
                               {m.sku}
                             </span>
                           ) : null}

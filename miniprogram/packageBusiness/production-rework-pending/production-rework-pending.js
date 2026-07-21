@@ -67,7 +67,7 @@ function mapPendingRowForUi(row, productionLinkMode, productsById) {
   const productLabel = row.showProductSku
     ? `${row.productName} ${row.productSku}`
     : (row.productName || '—');
-  // 工单模式：只展示产品名称 + 编号（不展示工单号）
+  // 工单模式：只展示产品编号 + 名称（不展示工单号）
   // 产品模式：优先产品信息；无编号时回退关联工单摘要
   const subtitleLine = productionLinkMode === 'product'
     ? (productLabel || row.productOrdersLine || '—')

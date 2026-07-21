@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import * as ctrl from '../controllers/production.controller.js';
+import * as reworkMaterialCtrl from '../controllers/rework-material.controller.js';
 import { validate } from '../middleware/validate.js';
 import { requireProductionRead, requireProductionWrite } from '../middleware/tenant.js';
 
@@ -15,6 +16,19 @@ const createBatchSchema = z.object({
 });
 
 const updateRecordSchema = z.object({}).passthrough();
+
+const reworkMaterialLineSchema = z.object({
+  productId: z.string().min(1, '物料不能为空'),
+  quantity: z.number().positive('数量须大于 0'),
+  warehouseId: z.string().min(1, '仓库不能为空'),
+  batchNo: z.string().nullable().optional(),
+});
+
+const reworkMaterialBatchSchema = z.object({
+  lines: z.array(reworkMaterialLineSchema).min(1, '至少需要一条物料明细'),
+  operator: z.string().optional(),
+  timestamp: z.string().optional(),
+});
 
 /**
  * 通用 `/production/records*` 端点：承载报工 / 领退料 / 外协收发 / 返工 / 待入库等所有生产流水。
@@ -54,6 +68,25 @@ router.get(
   '/defective-rework',
   requireProductionRead(),
   ctrl.getDefectiveRework,
+);
+
+// ── 返工物料领退（type/reason/orderId 由服务端写入；前端按 rework_material 权限 gating）──
+router.get(
+  '/orders/:orderId/rework-material-records',
+  requireProductionRead(),
+  reworkMaterialCtrl.listReworkMaterialRecords,
+);
+router.post(
+  '/orders/:orderId/rework-material-issues/batch',
+  requireProductionWrite('write'),
+  validate(reworkMaterialBatchSchema),
+  reworkMaterialCtrl.createReworkMaterialIssueBatch,
+);
+router.post(
+  '/orders/:orderId/rework-material-returns/batch',
+  requireProductionWrite('write'),
+  validate(reworkMaterialBatchSchema),
+  reworkMaterialCtrl.createReworkMaterialReturnBatch,
 );
 
 router.get(

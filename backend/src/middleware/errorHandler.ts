@@ -87,12 +87,17 @@ export function errorHandler(err: Error, req: Request, res: Response, _next: Nex
         const pe = err as Prisma.PrismaClientKnownRequestError;
         const targets = Array.isArray(pe.meta?.target) ? (pe.meta!.target as string[]) : [];
         const hit = (key: string) => targets.some((t) => String(t).toLowerCase().includes(key));
-        if (hit('sku') || hit('code')) {
-          res.status(409).json({ error: '编号已存在，请更换后再试' });
+        // products.name = 产品编号；products.sku = 产品名称（可重复后一般不再触发）
+        if (hit('sku')) {
+          res.status(409).json({ error: '产品名称与已有产品冲突，请更换后再试' });
+          return;
+        }
+        if (hit('code')) {
+          res.status(409).json({ error: '款号已存在，请更换后再试' });
           return;
         }
         if (hit('name')) {
-          res.status(409).json({ error: '名称已存在，请更换后再试' });
+          res.status(409).json({ error: '产品编号已存在，请更换后再试' });
           return;
         }
         res.status(409).json({ error: '数据重复，违反唯一约束' });

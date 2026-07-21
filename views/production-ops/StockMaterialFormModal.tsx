@@ -25,6 +25,7 @@ import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldCo
 import DocEntryTimeField from '../../components/DocEntryTimeField';
 import { ModalPortal } from '../../components/ModalPortal';
 import { defaultEntryDatetimeLocal, entryDatetimeLocalToTimestamp } from '../../utils/docEntryTime';
+import { formatMaterialQtyDisplay } from '../../utils/formatMaterialQtyDisplay';
 
 export interface StockMaterialFormModalProps {
   visible: boolean;
@@ -67,6 +68,7 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
   });
   const [customValues, setCustomValues] = useState<Record<string, unknown>>({});
   const [entryTimestamp, setEntryTimestamp] = useState(() => defaultEntryDatetimeLocal());
+  const [operator, setOperator] = useState(docOperator);
 
   const emptyMaterialForm = () => ({
     orderId: '',
@@ -83,8 +85,9 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
       setForm(emptyMaterialForm());
       setCustomValues({});
       setEntryTimestamp(defaultEntryDatetimeLocal());
+      setOperator(currentOperatorDisplayName(currentUser));
     }
-  }, [visible]);
+  }, [visible, currentUser]);
 
   const materialCustomFieldDefs = useMemo(() => {
     const wx = Boolean(form.partner?.trim());
@@ -144,6 +147,11 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
   const handleAdd = async () => {
     const isStockReturn = stockModalMode === 'stock_return';
     const recordType: ProdOpType = isStockReturn ? 'STOCK_RETURN' : 'STOCK_OUT';
+    const operatorName = operator.trim() || docOperator;
+    if (!operatorName) {
+      toast.error('请填写经办人');
+      return;
+    }
     if (batchEnabled && !isStockReturn) {
       const bn = clampBatchNoInput(form.batchNo);
       if (!bn) {
@@ -153,7 +161,7 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
       const row = batchOptions.find(o => o.batchNo === bn);
       const av = row?.stock ?? 0;
       if ((form.quantity ?? 0) > av) {
-        toast.error(`批次「${bn}」可用库存不足（${av}）`);
+        toast.error(`批次「${bn}」可用库存不足（${formatMaterialQtyDisplay(av)}）`);
         return;
       }
     }
@@ -171,7 +179,7 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
       quantity: form.quantity,
       reason: form.reason,
       partner: form.partner,
-      operator: docOperator,
+      operator: operatorName,
       timestamp: entryDatetimeLocalToTimestamp(entryTimestamp),
       status: '已完成',
       warehouseId: form.warehouseId || undefined,
@@ -195,7 +203,7 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
         warehouseId: form.warehouseId || '',
         lines: [{ productId: form.productId, quantity: form.quantity, ...(bn ? { batchNo: bn } : {}) }],
         reason: form.reason || undefined,
-        operator: docOperator,
+        operator: operatorName,
         partner: form.partner?.trim() || undefined,
       });
     }
@@ -219,7 +227,19 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
         <h3 className="text-lg font-black text-slate-900">
           {stockModalMode === 'stock_return' ? '生产退料' : '生产领料'}
         </h3>
-        <DocEntryTimeField mode="datetime" value={entryTimestamp} onChange={setEntryTimestamp} />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <DocEntryTimeField mode="datetime" value={entryTimestamp} onChange={setEntryTimestamp} />
+          <div>
+            <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">经办人</label>
+            <input
+              type="text"
+              value={operator}
+              onChange={e => setOperator(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+              placeholder="必填"
+            />
+          </div>
+        </div>
         {form.orderId && (
           <div className="text-sm">
             <span className="text-slate-500">工单：</span>
@@ -258,7 +278,7 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
                 <datalist id={batchListId}>
                   {batchOptions.map(o => (
                     <option key={o.batchNo} value={o.batchNo}>
-                      {o.batchNo}（余 {o.stock}）
+                      {o.batchNo}（余 {formatMaterialQtyDisplay(o.stock)}）
                     </option>
                   ))}
                 </datalist>
@@ -273,7 +293,7 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
                 <option value="">{batchLoading ? '加载中…' : form.warehouseId ? '选择批次' : '先选仓库'}</option>
                 {batchOptions.map(o => (
                   <option key={o.batchNo} value={o.batchNo}>
-                    {o.batchNo}（余 {o.stock}）
+                    {o.batchNo}（余 {formatMaterialQtyDisplay(o.stock)}）
                   </option>
                 ))}
               </select>

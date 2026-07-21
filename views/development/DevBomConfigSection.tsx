@@ -92,7 +92,16 @@ const DevBomConfigSection: React.FC<DevBomConfigSectionProps> = ({
     copyBOMDropdownOpen,
     setCopyBOMDropdownOpen,
     setCopyBOMDropdownStyle,
+    setActiveVariantIdForBOM,
+    setActiveNodeIdForBOM,
   } = bomState;
+
+  /** 关闭编辑器时同步清掉矩阵「编辑中」高亮（与产品档案 BOM 一致） */
+  const closeBomEditor = useCallback(() => {
+    setWorkingBOM(null);
+    setActiveVariantIdForBOM(null);
+    setActiveNodeIdForBOM(null);
+  }, [setWorkingBOM, setActiveVariantIdForBOM, setActiveNodeIdForBOM]);
 
   useEffect(() => {
     if (copyBOMDropdownOpen && copyBOMTriggerRef.current) {
@@ -280,7 +289,7 @@ const DevBomConfigSection: React.FC<DevBomConfigSectionProps> = ({
         if (devBom.variantId) {
           patchVariantNodeBoms(devBom.variantId, devBom.nodeId!, devBom.id);
         }
-        bomState.setWorkingBOM(null);
+        closeBomEditor();
         toast.success('BOM 已加入待保存列表');
         return;
       }
@@ -293,7 +302,7 @@ const DevBomConfigSection: React.FC<DevBomConfigSectionProps> = ({
         await api.devStyles.syncVariantNodeBoms(working.id, devBom.variantId, nodeBoms);
         patchVariantNodeBoms(devBom.variantId, devBom.nodeId, devBom.id);
       }
-      bomState.setWorkingBOM(null);
+      closeBomEditor();
       toast.success('BOM 已保存');
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : '保存 BOM 失败');
@@ -426,7 +435,7 @@ const DevBomConfigSection: React.FC<DevBomConfigSectionProps> = ({
           bomState.setWorkingBOM({ ...bomState.workingBOM, items });
         }}
         onSave={() => void handleSaveBom()}
-        onClose={() => bomState.setWorkingBOM(null)}
+        onClose={closeBomEditor}
       />
     </>
   );

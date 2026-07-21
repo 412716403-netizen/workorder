@@ -33,13 +33,13 @@
         </view>
 
         <view class="plan-form-cell plan-form-cell--input">
-          <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>产品全称</text>
+          <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>产品编号</text>
           <input class="plan-form-cell__input" value="{{form.name}}" bindinput="onNameInput" placeholder="请填写" placeholder-class="plan-form-cell__ph" />
         </view>
 
         <view class="plan-form-cell plan-form-cell--input">
-          <text class="plan-form-cell__label">产品编号</text>
-          <input class="plan-form-cell__input" value="{{form.sku}}" bindinput="onSkuInput" placeholder="留空则保存时自动生成" placeholder-class="plan-form-cell__ph" />
+          <text class="plan-form-cell__label">产品名称</text>
+          <input class="plan-form-cell__input" value="{{form.sku}}" bindinput="onSkuInput" placeholder="选填" placeholder-class="plan-form-cell__ph" />
         </view>
 
         <unit-select

@@ -7,8 +7,9 @@ import { validate } from '../middleware/validate.js';
 const router = Router();
 
 const createProductSchema = z.object({
-  name: z.string().min(1, '产品名称不能为空'),
-  sku: z.string().min(1, 'SKU不能为空'),
+  name: z.string().min(1, '产品编号不能为空'),
+  /** 产品名称：选填，不自动生成 */
+  sku: z.string().optional(),
   variants: z.array(z.object({}).passthrough()).optional(),
 }).passthrough();
 
@@ -19,8 +20,8 @@ const updateProductSchema = z.object({
 const importProductsSchema = z.object({
   categoryId: z.string().min(1, '分类ID不能为空'),
   products: z.array(z.object({
-    name: z.string().min(1, '产品名称不能为空'),
-    sku: z.string().min(1, 'SKU不能为空'),
+    name: z.string().min(1, '产品编号不能为空'),
+    sku: z.string().optional(),
   }).passthrough()).min(1, '至少导入一条产品'),
   newDictionaryItems: z.array(z.object({
     type: z.string(),

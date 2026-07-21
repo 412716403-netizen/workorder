@@ -9,7 +9,8 @@ import { validate } from '../middleware/validate.js';
 const router = Router();
 
 const createStyleSchema = z.object({
-  code: z.string().min(1, '款号不能为空'),
+  /** 款号（对应产品名称）：选填；发布大货前须填写 */
+  code: z.string().optional(),
   name: z.string().min(1, '品名不能为空'),
 }).passthrough();
 

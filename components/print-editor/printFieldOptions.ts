@@ -163,12 +163,12 @@ export function buildPrintFieldOptions(opts: {
     { group: '工单', value: '工单.startDate', label: '开始日期' },
     { group: '工单', value: '工单.priority', label: '优先级' },
     { group: '工单', value: '工单.status', label: '工单状态' },
-    { group: '工单', value: '工单.productName', label: '产品名称' },
+    { group: '工单', value: '工单.productName', label: '产品编号' },
     { group: '工单', value: '工单.sku', label: 'SKU' },
     { group: '工单', value: '工单.createdAt', label: '创建日期' },
   ];
   const productStatic: PrintFieldOption[] = [
-    { group: '产品', value: '产品.name', label: '产品名称' },
+    { group: '产品', value: '产品.name', label: '产品编号' },
     { group: '产品', value: '产品.sku', label: 'SKU' },
     { group: '产品', value: '产品.processNodes', label: '产品工序' },
     { group: '产品', value: '产品.imageUrl', label: '产品主图', isFileOrImageField: true },
@@ -292,7 +292,7 @@ export function buildPrintFieldOptions(opts: {
     { group: '收款单', value: '收款单.amountText', label: '金额大写' },
     { group: '收款单', value: '收款单.paymentAccount', label: '收支账户' },
     { group: '收款单', value: '收款单.workerName', label: '关联工人' },
-    { group: '收款单', value: '收款单.productName', label: '关联产品名称' },
+    { group: '收款单', value: '收款单.productName', label: '关联产品编号' },
     { group: '收款单', value: '收款单.productSku', label: '关联产品货号' },
     { group: '收款单', value: '收款单.relatedDocNo', label: '关联工单号' },
     { group: '收款单', value: '收款单.note', label: '备注' },
@@ -310,7 +310,7 @@ export function buildPrintFieldOptions(opts: {
     { group: '付款单', value: '付款单.amountText', label: '金额大写' },
     { group: '付款单', value: '付款单.paymentAccount', label: '收支账户' },
     { group: '付款单', value: '付款单.workerName', label: '关联工人' },
-    { group: '付款单', value: '付款单.productName', label: '关联产品名称' },
+    { group: '付款单', value: '付款单.productName', label: '关联产品编号' },
     { group: '付款单', value: '付款单.productSku', label: '关联产品货号' },
     { group: '付款单', value: '付款单.relatedDocNo', label: '关联工单号' },
     { group: '付款单', value: '付款单.note', label: '备注' },
@@ -324,7 +324,7 @@ export function buildPrintFieldOptions(opts: {
     { group: '采购入库明细', value: '行.productName', label: '名称' },
     ...(showPurchaseBillRelatedProduct
       ? [
-          { group: '采购入库明细' as const, value: '行.relatedProductName', label: '关联产品名称' },
+          { group: '采购入库明细' as const, value: '行.relatedProductName', label: '关联产品编号' },
           { group: '采购入库明细' as const, value: '行.relatedProductSku', label: '关联产品货号' },
         ]
       : []),
@@ -351,7 +351,7 @@ export function buildPrintFieldOptions(opts: {
     { group: '报工', value: '报工.reportNo', label: '报工单号/批次号' },
     { group: '报工', value: '报工.sourceLabel', label: '来源（工单/产品）' },
     { group: '报工', value: '报工.milestoneName', label: '工序名称' },
-    { group: '报工', value: '报工.productName', label: '产品名称' },
+    { group: '报工', value: '报工.productName', label: '产品编号' },
     { group: '报工', value: '报工.totalGood', label: '良品合计' },
     { group: '报工', value: '报工.totalDefective', label: '不良合计' },
     { group: '报工', value: '报工.totalAmount', label: '金额合计' },
@@ -374,7 +374,7 @@ export function buildPrintFieldOptions(opts: {
     { group: '入库', value: '入库.warehouseName', label: '入库仓库' },
     { group: '入库', value: '入库.operator', label: '经办人' },
     { group: '入库', value: '入库.timestamp', label: '入库时间' },
-    { group: '入库', value: '入库.productName', label: '产品名称' },
+    { group: '入库', value: '入库.productName', label: '产品编号' },
     { group: '入库', value: '入库.orderNumber', label: '工单号' },
     { group: '入库', value: '入库.totalQty', label: '合计数量' },
     ...stockInCustomOpts,
@@ -395,7 +395,7 @@ export function buildPrintFieldOptions(opts: {
     { group: '领料发出', value: '领料发出.partner', label: '加工厂/外协' },
     { group: '领料发出', value: '领料发出.reason', label: '备注' },
     { group: '领料发出', value: '领料发出.orderNumber', label: '工单号' },
-    { group: '领料发出', value: '领料发出.productName', label: '成品/来源产品名称' },
+    { group: '领料发出', value: '领料发出.productName', label: '成品/来源产品编号' },
     { group: '领料发出', value: '领料发出.totalQty', label: '合计数量' },
     ...materialIssueCustomOpts,
   ];
@@ -418,7 +418,7 @@ export function buildPrintFieldOptions(opts: {
     { group: '生产退料', value: '生产退料.partner', label: '加工厂/外协' },
     { group: '生产退料', value: '生产退料.reason', label: '备注' },
     { group: '生产退料', value: '生产退料.orderNumber', label: '工单号' },
-    { group: '生产退料', value: '生产退料.productName', label: '成品/来源产品名称' },
+    { group: '生产退料', value: '生产退料.productName', label: '成品/来源产品编号' },
     { group: '生产退料', value: '生产退料.totalQty', label: '合计数量' },
     ...materialReturnCustomOpts,
   ];
@@ -441,7 +441,7 @@ export function buildPrintFieldOptions(opts: {
     { group: '外协领料发出', value: '外协领料发出.partner', label: '加工厂/外协' },
     { group: '外协领料发出', value: '外协领料发出.reason', label: '备注' },
     { group: '外协领料发出', value: '外协领料发出.orderNumber', label: '工单号' },
-    { group: '外协领料发出', value: '外协领料发出.productName', label: '成品/来源产品名称' },
+    { group: '外协领料发出', value: '外协领料发出.productName', label: '成品/来源产品编号' },
     { group: '外协领料发出', value: '外协领料发出.totalQty', label: '合计数量' },
     ...outsourceMaterialIssueCustomOpts,
   ];
@@ -464,7 +464,7 @@ export function buildPrintFieldOptions(opts: {
     { group: '外协生产退料', value: '外协生产退料.partner', label: '加工厂/外协' },
     { group: '外协生产退料', value: '外协生产退料.reason', label: '备注' },
     { group: '外协生产退料', value: '外协生产退料.orderNumber', label: '工单号' },
-    { group: '外协生产退料', value: '外协生产退料.productName', label: '成品/来源产品名称' },
+    { group: '外协生产退料', value: '外协生产退料.productName', label: '成品/来源产品编号' },
     { group: '外协生产退料', value: '外协生产退料.totalQty', label: '合计数量' },
     ...outsourceMaterialReturnCustomOpts,
   ];
@@ -495,7 +495,7 @@ export function buildPrintFieldOptions(opts: {
     { group: '外协发出明细行', value: '行.index', label: '行序号' },
     { group: '外协发出明细行', value: '行.orderNumber', label: '工单号' },
     { group: '外协发出明细行', value: '行.sku', label: '货号' },
-    { group: '外协发出明细行', value: '行.productName', label: '产品名称' },
+    { group: '外协发出明细行', value: '行.productName', label: '产品编号' },
     { group: '外协发出明细行', value: '行.nodeName', label: '工序名称' },
     { group: '外协发出明细行', value: '行.variantLabel', label: '规格' },
     { group: '外协发出明细行', value: '行.quantity', label: '数量' },
@@ -518,7 +518,7 @@ export function buildPrintFieldOptions(opts: {
     { group: '外协收回明细行', value: '行.index', label: '行序号' },
     { group: '外协收回明细行', value: '行.orderNumber', label: '工单号' },
     { group: '外协收回明细行', value: '行.sku', label: '货号' },
-    { group: '外协收回明细行', value: '行.productName', label: '产品名称' },
+    { group: '外协收回明细行', value: '行.productName', label: '产品编号' },
     { group: '外协收回明细行', value: '行.nodeName', label: '工序名称' },
     { group: '外协收回明细行', value: '行.variantLabel', label: '规格' },
     { group: '外协收回明细行', value: '行.quantity', label: '数量' },
@@ -538,14 +538,14 @@ export function buildPrintFieldOptions(opts: {
     { group: '处理不良', value: '处理不良.operators', label: '操作人' },
     { group: '处理不良', value: '处理不良.reason', label: '原因/备注' },
     { group: '处理不良', value: '处理不良.orderNumber', label: '工单号' },
-    { group: '处理不良', value: '处理不良.productName', label: '产品名称' },
+    { group: '处理不良', value: '处理不良.productName', label: '产品编号' },
     { group: '处理不良', value: '处理不良.outsourceFactoryBlock', label: '外协工厂（外协返工时有值，含换行）' },
     ...defectTreatmentCustomOpts,
   ];
   const defectTreatmentRow: PrintFieldOption[] = [
     { group: '处理不良明细行', value: '行.index', label: '行序号' },
     { group: '处理不良明细行', value: '行.sku', label: '货号' },
-    { group: '处理不良明细行', value: '行.productName', label: '产品名称' },
+    { group: '处理不良明细行', value: '行.productName', label: '产品编号' },
     { group: '处理不良明细行', value: '行.variantLabel', label: '规格' },
     { group: '处理不良明细行', value: '行.quantity', label: '数量' },
   ];
@@ -568,7 +568,7 @@ export function buildPrintFieldOptions(opts: {
   const reworkReportRow: PrintFieldOption[] = [
     { group: '返工报工明细行', value: '行.index', label: '行序号' },
     { group: '返工报工明细行', value: '行.sku', label: '货号' },
-    { group: '返工报工明细行', value: '行.productName', label: '产品名称' },
+    { group: '返工报工明细行', value: '行.productName', label: '产品编号' },
     { group: '返工报工明细行', value: '行.variantLabel', label: '规格' },
     { group: '返工报工明细行', value: '行.quantity', label: '数量' },
     { group: '返工报工明细行', value: '行.nodeName', label: '工序' },
@@ -584,7 +584,7 @@ export function buildPrintFieldOptions(opts: {
     { group: '批次码', value: '批次.sizeName', label: '尺码名称' },
     { group: '批次码', value: '批次.planNumber', label: '计划单号' },
     { group: '批次码', value: '批次.orderNumbers', label: '关联工单号' },
-    { group: '批次码', value: '批次.productName', label: '产品名称' },
+    { group: '批次码', value: '批次.productName', label: '产品编号' },
     { group: '批次码', value: '批次.sku', label: 'SKU' },
     { group: '批次码', value: '批次.status', label: '批次状态' },
   ];

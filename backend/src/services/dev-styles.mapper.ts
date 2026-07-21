@@ -27,7 +27,7 @@ function dec(v: unknown): number | undefined {
 
 type DevStyleRow = {
   id: string;
-  code: string;
+  code: string | null;
   name: string;
   customerName: string | null;
   imageUrl?: string | null;
@@ -80,7 +80,7 @@ type DevStyleRow = {
 export function mapDevStyleRow(row: DevStyleRow) {
   return {
     id: row.id,
-    code: row.code,
+    code: row.code ?? '',
     name: row.name,
     customerName: row.customerName ?? undefined,
     imageUrl: row.imageUrl ?? undefined,

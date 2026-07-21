@@ -9,6 +9,9 @@ import type {
   DispatchCompletionPending,
   ProductionRecordWriteResponse,
   ProductionRecordBatchWriteResponse,
+  ReworkMaterialRecordsResponse,
+  ReworkMaterialBatchRequest,
+  ReworkMaterialBatchResult,
 } from '../../types';
 import type { OrderDispatchStatus } from '../../types';
 
@@ -166,4 +169,17 @@ export const production = {
     request<ProductionSummary>(`/production/summary${buildQs(params as Record<string, string | number | undefined>)}`),
   getDefectiveRework: () =>
     request<Array<{ orderId: string; productId: string; defectiveQty: number; reworkQty: number }>>('/production/defective-rework'),
+  /** 返工物料：按工单聚合的领退汇总 / 可退量 / 单据流水 */
+  listReworkMaterialRecords: (orderId: string) =>
+    request<ReworkMaterialRecordsResponse>(`/production/orders/${orderId}/rework-material-records`),
+  reworkMaterialIssueBatch: (orderId: string, body: ReworkMaterialBatchRequest) =>
+    request<ReworkMaterialBatchResult>(`/production/orders/${orderId}/rework-material-issues/batch`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  reworkMaterialReturnBatch: (orderId: string, body: ReworkMaterialBatchRequest) =>
+    request<ReworkMaterialBatchResult>(`/production/orders/${orderId}/rework-material-returns/batch`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 };

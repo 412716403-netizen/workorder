@@ -176,13 +176,18 @@ function omitUndefinedValues(data: Record<string, unknown>): void {
 
 function normalizeProductNameSku(
   data: Record<string, unknown>,
-  existing?: { name: string; sku: string },
+  existing?: { name: string; sku: string | null },
 ): { name: string; sku: string } {
   const name = data.name !== undefined && typeof data.name === 'string'
     ? data.name.trim() : (existing ? String(existing.name ?? '').trim() : '');
   const sku = data.sku !== undefined && typeof data.sku === 'string'
     ? data.sku.trim() : (existing ? String(existing.sku ?? '').trim() : '');
   return { name, sku };
+}
+
+/** 空产品名称存 NULL，避免 (tenantId, '') 唯一约束冲突 */
+function skuForDb(sku: string): string | null {
+  return sku ? sku : null;
 }
 
 // ── 变体（颜色/尺码规格）引用校验与 diff 写入 ──
@@ -458,10 +463,9 @@ export async function createProduct(
   stripClientImageThumb(data);
 
   const { name, sku } = normalizeProductNameSku(data);
-  if (!name) throw new AppError(400, '产品名称不能为空');
-  if (!sku) throw new AppError(400, '产品编号不能为空');
+  if (!name) throw new AppError(400, '产品编号不能为空');
   data.name = name;
-  data.sku = sku;
+  data.sku = skuForDb(sku);
   coerceProductJsonFields(data);
   omitUndefinedValues(data);
   await applyImageThumbFromUrl(data);
@@ -471,10 +475,8 @@ export async function createProduct(
   await assertProductCategoryIdForWrite(db, data, 'create');
   await assertProductColorSizeForWrite(db, data, 'create');
 
-  const dupSku = await basePrisma.product.findFirst({ where: { tenantId, sku } });
-  if (dupSku) throw new AppError(409, '产品编号已存在');
   const dupName = await basePrisma.product.findFirst({ where: { tenantId, name } });
-  if (dupName) throw new AppError(409, '产品名称已存在');
+  if (dupName) throw new AppError(409, '产品编号已存在');
 
   let cleanVariants: any[] | undefined;
   if (variants && Array.isArray(variants) && variants.length > 0) {
@@ -524,10 +526,9 @@ export async function updateProduct(
   }
 
   const { name, sku } = normalizeProductNameSku(data, { name: existing.name, sku: existing.sku });
-  if (!name) throw new AppError(400, '产品名称不能为空');
-  if (!sku) throw new AppError(400, '产品编号不能为空');
+  if (!name) throw new AppError(400, '产品编号不能为空');
   data.name = name;
-  data.sku = sku;
+  data.sku = skuForDb(sku);
   coerceProductJsonFields(data);
   omitUndefinedValues(data);
   // lite 列表缺 imageUrl 时前端可能不带该字段；absent ≠ 清空，勿强制重算 thumb
@@ -540,10 +541,8 @@ export async function updateProduct(
     sizeIds: existing.sizeIds,
   });
 
-  const dupSku = await basePrisma.product.findFirst({ where: { tenantId, sku, id: { not: productId } } });
-  if (dupSku) throw new AppError(409, '产品编号已存在');
   const dupName = await basePrisma.product.findFirst({ where: { tenantId, name, id: { not: productId } } });
-  if (dupName) throw new AppError(409, '产品名称已存在');
+  if (dupName) throw new AppError(409, '产品编号已存在');
 
   const oldNodeIds = (existing.milestoneNodeIds as string[]) || [];
   const newNodeIds = (data.milestoneNodeIds as string[] | undefined) ?? oldNodeIds;
@@ -793,9 +792,8 @@ export async function importProducts(
 
   const existingProducts = await basePrisma.product.findMany({
     where: { tenantId },
-    select: { sku: true, name: true },
+    select: { name: true },
   });
-  const existingSkus = new Set(existingProducts.map((p) => p.sku.toLowerCase()));
   const existingNames = new Set(existingProducts.map((p) => p.name.toLowerCase()));
 
   const results: Array<{ row: number; success: boolean; name?: string; sku?: string; reason?: string }> = [];
@@ -807,16 +805,14 @@ export async function importProducts(
     try {
       const name = (row.name ?? '').trim();
       const sku = (row.sku ?? '').trim();
-      if (!name) { results.push({ row: rowNum, success: false, name, sku, reason: '产品名称不能为空' }); continue; }
-      if (!sku) { results.push({ row: rowNum, success: false, name, sku, reason: '产品编号不能为空' }); continue; }
-      if (existingSkus.has(sku.toLowerCase())) { results.push({ row: rowNum, success: false, name, sku, reason: `产品编号 "${sku}" 已存在` }); continue; }
-      if (existingNames.has(name.toLowerCase())) { results.push({ row: rowNum, success: false, name, sku, reason: `产品名称 "${name}" 已存在` }); continue; }
+      if (!name) { results.push({ row: rowNum, success: false, name, sku, reason: '产品编号不能为空' }); continue; }
+      if (existingNames.has(name.toLowerCase())) { results.push({ row: rowNum, success: false, name, sku, reason: `产品编号 "${name}" 已存在` }); continue; }
 
       const productId = genId('prod');
       const colorIds = row.colorIds ?? [];
       const sizeIds = row.sizeIds ?? [];
       const productData: Record<string, unknown> = {
-        id: productId, sku, name, categoryId,
+        id: productId, sku: sku || null, name, categoryId,
         imageUrl: row.imageUrl || null, salesPrice: row.salesPrice ?? null,
         purchasePrice: row.purchasePrice ?? null, supplierId: row.supplierId || null,
         unitId: row.unitId || null,
@@ -845,7 +841,6 @@ export async function importProducts(
         data: { ...productData, variants: variants.length > 0 ? { create: variants } : undefined } as any,
       });
 
-      existingSkus.add(sku.toLowerCase());
       existingNames.add(name.toLowerCase());
       successCount++;
       results.push({ row: rowNum, success: true, name, sku });

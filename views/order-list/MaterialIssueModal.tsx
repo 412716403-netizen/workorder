@@ -115,6 +115,7 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
   const [materialIssueLineBatch, setMaterialIssueLineBatch] = useState<Record<string, string>>({});
   const [materialIssueWarehouseId, setMaterialIssueWarehouseId] = useState<string>(warehouses[0]?.id ?? '');
   const [materialIssueEntryTimestamp, setMaterialIssueEntryTimestamp] = useState(() => defaultEntryDatetimeLocal());
+  const [materialIssueOperator, setMaterialIssueOperator] = useState(docOperator);
   /** 本次发料单据中临时移除的物料行（不改变 BOM；关闭弹窗后重置） */
   const [removedMaterialIds, setRemovedMaterialIds] = useState<Set<string>>(() => new Set());
   const materialIssueOpenKeyRef = useRef<string | null>(null);
@@ -129,10 +130,11 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
     if (materialIssueOpenKeyRef.current === key) return;
     materialIssueOpenKeyRef.current = key;
     setRemovedMaterialIds(new Set());
+    setMaterialIssueOperator(currentOperatorDisplayName(currentUser));
     const pref = readWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.PROD_MATERIAL_ISSUE);
     const wid = resolvePreferredSingleWarehouse(warehouses, pref, warehouses[0]?.id ?? '');
     setMaterialIssueWarehouseId(wid || '');
-  }, [orderId, forProduct?.productId, forProduct, warehouses, tenantCtx?.tenantId, userId]);
+  }, [orderId, forProduct?.productId, forProduct, warehouses, tenantCtx?.tenantId, userId, currentUser]);
 
   const removeMaterialRow = (productId: string) => {
     setRemovedMaterialIds(prev => {
@@ -316,6 +318,11 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
     const handleIssueMaterials = async () => {
       const toIssue = bomMaterials.filter(m => (materialIssueQty[m.productId] ?? 0) > 0);
       if (toIssue.length === 0) return;
+      const operatorName = materialIssueOperator.trim() || docOperator;
+      if (!operatorName) {
+        toast.error('请填写经办人');
+        return;
+      }
       const wh = materialIssueWarehouseId || '';
       if (wh) {
         for (const m of toIssue) {
@@ -350,7 +357,7 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
           orderId: order.id,
           productId: m.productId,
           quantity: materialIssueQty[m.productId],
-          operator: docOperator,
+          operator: operatorName,
           timestamp: entryDatetimeLocalToTimestamp(materialIssueEntryTimestamp),
           status: '已完成',
           warehouseId: materialIssueWarehouseId || undefined,
@@ -391,8 +398,18 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
             </button>
           </div>
           <div className="flex-1 overflow-auto p-5 space-y-4">
-            <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+            <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4 grid gap-3 sm:grid-cols-2">
               <DocEntryTimeField mode="datetime" value={materialIssueEntryTimestamp} onChange={setMaterialIssueEntryTimestamp} />
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">经办人</label>
+                <input
+                  type="text"
+                  value={materialIssueOperator}
+                  onChange={e => setMaterialIssueOperator(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                  placeholder="必填"
+                />
+              </div>
             </div>
             {warehouses.length > 0 && (
               <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
@@ -439,7 +456,7 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
                         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                           <span className="text-sm font-bold text-slate-800">{m.name}</span>
                           {m.sku ? (
-                            <span className="text-xs font-bold text-slate-400 tabular-nums" title="产品编号">
+                            <span className="text-xs font-bold text-slate-400 tabular-nums" title="产品名称">
                               {m.sku}
                             </span>
                           ) : null}
@@ -663,6 +680,11 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
     const handleIssueMaterials = async () => {
       const toIssue = bomMaterials.filter(m => (materialIssueQty[m.productId] ?? 0) > 0);
       if (toIssue.length === 0) return;
+      const operatorName = materialIssueOperator.trim() || docOperator;
+      if (!operatorName) {
+        toast.error('请填写经办人');
+        return;
+      }
       const wh = materialIssueWarehouseId || '';
       if (wh) {
         for (const m of toIssue) {
@@ -696,7 +718,7 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
           type: 'STOCK_OUT' as ProdOpType,
           productId: m.productId,
           quantity: materialIssueQty[m.productId],
-          operator: docOperator,
+          operator: operatorName,
           timestamp: entryDatetimeLocalToTimestamp(materialIssueEntryTimestamp),
           status: '已完成',
           warehouseId: materialIssueWarehouseId || undefined,
@@ -749,8 +771,18 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
             </button>
           </div>
           <div className="flex-1 overflow-auto p-5 space-y-4">
-            <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+            <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4 grid gap-3 sm:grid-cols-2">
               <DocEntryTimeField mode="datetime" value={materialIssueEntryTimestamp} onChange={setMaterialIssueEntryTimestamp} />
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">经办人</label>
+                <input
+                  type="text"
+                  value={materialIssueOperator}
+                  onChange={e => setMaterialIssueOperator(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                  placeholder="必填"
+                />
+              </div>
             </div>
             {warehouses.length > 0 && (
               <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
@@ -800,7 +832,7 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
                           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                             <span className="text-sm font-bold text-slate-800">{m.name}</span>
                             {m.sku ? (
-                              <span className="text-xs font-bold text-slate-400 tabular-nums" title="产品编号">
+                              <span className="text-xs font-bold text-slate-400 tabular-nums" title="产品名称">
                                 {m.sku}
                               </span>
                             ) : null}

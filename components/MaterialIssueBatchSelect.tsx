@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import type { Product, ProductCategory } from '../types';
 import { BATCH_NO_UNTAGGED, categoryUsesBatchManagement, normalizeBatchNo } from '../types';
 import { useWarehouseBatchOptions } from '../hooks/useBatchPicker';
+import { formatMaterialQtyDisplay } from '../utils/formatMaterialQtyDisplay';
 
 /** `default`：表格/弹窗内紧凑行（略小字号）；`formRow`：与单据行同高框体，批次字号为 xs */
 export type MaterialIssueBatchControlVariant = 'default' | 'formRow';
@@ -105,8 +106,9 @@ export const MaterialIssueBatchSelect: React.FC<MaterialIssueBatchSelectProps> =
 
   if (!enabled) return null;
 
+  /** 批次余量为多单据浮点累加结果，展示前修剪精度噪声（如 20.299999999999997 → 20.3） */
   const renderOptionLabel = (o: { batchNo: string; stock: number }) =>
-    showStockHint ? `${o.batchNo}（余 ${o.stock}）` : o.batchNo;
+    showStockHint ? `${o.batchNo}（余 ${formatMaterialQtyDisplay(o.stock)}）` : o.batchNo;
 
   if (mode === 'return') {
     return (

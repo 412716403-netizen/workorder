@@ -496,11 +496,11 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
       const name = acceptName.trim();
       const sku = acceptSku.trim();
       if (!name) {
-        toast.warning('请填写乙方产品名称');
+        toast.warning('请填写乙方产品编号');
         return;
       }
       if (!sku) {
-        toast.warning('请填写乙方产品编号/SKU');
+        toast.warning('请填写乙方产品名称/SKU');
         return;
       }
       const specColors = normalizeAcceptSpecList(acceptColors);
@@ -784,7 +784,7 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-500 uppercase block ml-0.5">产品名称 *</label>
+                    <label className="text-[10px] font-black text-slate-500 uppercase block ml-0.5">产品编号 *</label>
                     <input
                       type="text"
                       value={acceptName}
@@ -794,7 +794,7 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-500 uppercase block ml-0.5">产品编号/SKU *</label>
+                    <label className="text-[10px] font-black text-slate-500 uppercase block ml-0.5">产品名称/SKU *</label>
                     <input
                       type="text"
                       value={acceptSku}
