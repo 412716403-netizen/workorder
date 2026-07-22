@@ -346,7 +346,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                     const purchase = product.purchasePrice ?? 0;
                     const displayPrice = sales > 0 ? sales : purchase;
                     const priceLabel = sales > 0 ? '销售' : '采购';
-                    const customTags = getProductCategoryCustomFieldEntries(product, category, { includeFile: false }).slice(0, 2);
+                    const customTags = getProductCategoryCustomFieldEntries(product, category, { includeFile: false });
                     const enabled = isProductEnabled(product);
                     return (
                       <tr

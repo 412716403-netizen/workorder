@@ -22,6 +22,7 @@ import {
   toDatetimeLocalInputValue,
 } from '../utils/localDateTime';
 import { getFileExtFromDataUrl } from '../utils/fileHelpers';
+import { PdfThumbPreview } from './PdfThumbPreview';
 
 const FILE_ACCEPT = 'image/*,.pdf,.doc,.docx,.xls,.xlsx';
 
@@ -263,7 +264,20 @@ export const PlanFormCustomFieldInput: React.FC<PlanFormCustomFieldInputProps> =
             <img src={dataStr} alt="" className="max-h-32 max-w-full object-contain" />
           </button>
         )}
-        {dataStr.startsWith('data:') && !dataStr.startsWith('data:image/') && (
+        {dataStr.startsWith('data:application/pdf') && (
+          <div className="flex flex-wrap items-center gap-2">
+            <PdfThumbPreview src={dataStr} onClick={onThumbClick} title="点击查看 PDF" />
+            <a
+              href={dataStr}
+              download={`${cf.label}.pdf`}
+              className="text-xs font-bold text-indigo-600 hover:underline"
+              onClick={e => e.stopPropagation()}
+            >
+              下载
+            </a>
+          </div>
+        )}
+        {dataStr.startsWith('data:') && !dataStr.startsWith('data:image/') && !dataStr.startsWith('data:application/pdf') && (
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs text-slate-500">已选择附件</span>
             <button type="button" onClick={onThumbClick} className="text-xs font-bold text-indigo-600 hover:underline">
@@ -408,9 +422,7 @@ export const PlanFormCustomFieldReadonly: React.FC<PlanFormCustomFieldReadonlyPr
     };
     return (
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" onClick={open} className="rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100">
-          点击查看
-        </button>
+        <PdfThumbPreview src={str} onClick={open} title="点击查看 PDF" className="h-20 w-16" />
         <a href={str} download={`${cf.label}.pdf`} className="text-xs font-bold text-indigo-600 hover:underline" onClick={e => e.stopPropagation()}>
           下载
         </a>

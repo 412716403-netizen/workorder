@@ -18,6 +18,7 @@ import {
   formatReportCustomDataForList,
 } from '../../utils/reportCustomDocField';
 import { parseKnowledgeFieldValue } from '../../utils/knowledgeFieldValue';
+import { PdfThumbPreview } from '../../components/PdfThumbPreview';
 import { KnowledgeDocPreviewModal } from '../../components/knowledge/KnowledgeDocPickerModal';
 
 type FilePreviewKind = 'image' | 'pdf';
@@ -304,20 +305,22 @@ const ProductQuickDetailBody: React.FC<ProductQuickDetailBodyProps> = ({
                 if (isPdf)
                   return (
                     <div key={f.id} className="flex items-center gap-2">
-                      <button
-                        type="button"
+                      <PdfThumbPreview
+                        src={val}
                         onClick={() => onOpenFilePreview(val, 'pdf')}
-                        className="px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs font-bold hover:bg-indigo-100"
-                      >
-                        在线查看
-                      </button>
-                      <a
-                        href={val}
-                        download={`${f.label}.${getFileExtFromDataUrl(val)}`}
-                        className="text-xs font-bold text-indigo-600 hover:underline"
-                      >
-                        下载
-                      </a>
+                        title={`${f.label} · 查看 PDF`}
+                        className="h-12 w-10"
+                      />
+                      <div className="min-w-0">
+                        <span className="block text-[10px] font-bold text-slate-400">{f.label}</span>
+                        <a
+                          href={val}
+                          download={`${f.label}.${getFileExtFromDataUrl(val)}`}
+                          className="text-xs font-bold text-indigo-600 hover:underline"
+                        >
+                          下载
+                        </a>
+                      </div>
                     </div>
                   );
                 return (

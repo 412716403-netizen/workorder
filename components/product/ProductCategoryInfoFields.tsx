@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Plus,
@@ -25,7 +25,6 @@ import { SupplierSelect } from '../SupplierSelect';
 import SpecSelectorModal from './SpecSelectorModal';
 import ColorSizeSpecPickerTable from './ColorSizeSpecPickerTable';
 import { useAuthOptional } from '../../contexts/AuthContext';
-import { hasSubPermission } from '../../utils/hasSubPermission';
 import * as api from '../../services/api';
 import { toast } from 'sonner';
 import {
@@ -44,13 +43,8 @@ import {
   sectionTitleClass,
 } from '../../styles/uiDensity';
 import { dataUrlToBlobUrl } from '../../utils/routeReportFileUrls';
-import { findPartnerByName } from '../../utils/partnerNormalize';
 import { compressImageFile, readFileAsDataUrl } from '../../utils/compressImageFile';
 import { productThumbSrc } from '../../utils/productImageSrc';
-
-function resolveDefaultPartnerCategoryId(categories: PartnerCategory[]): string {
-  return categories.find((c) => c.name.includes('供应商'))?.id ?? categories[0]?.id ?? '';
-}
 
 function FilePreviewPortal({
   preview,
@@ -121,7 +115,6 @@ const ProductCategoryInfoFields: React.FC<ProductCategoryInfoFieldsProps> = ({
   readOnly = false,
   isNewRecord = false,
   onRefreshDictionaries,
-  onRefreshPartners,
   embeddedInQuickCreateModal = false,
   sectionHeading = '1. 核心业务档案',
   useCardShell = true,
@@ -137,28 +130,12 @@ const ProductCategoryInfoFields: React.FC<ProductCategoryInfoFieldsProps> = ({
   const [quickAddUnitOpen, setQuickAddUnitOpen] = useState(false);
   const [quickAddUnitName, setQuickAddUnitName] = useState('');
   const [quickAddUnitBusy, setQuickAddUnitBusy] = useState(false);
-  const [quickAddSupplierOpen, setQuickAddSupplierOpen] = useState(false);
-  const [quickAddSupplierName, setQuickAddSupplierName] = useState('');
-  const [quickAddSupplierCategoryId, setQuickAddSupplierCategoryId] = useState(() =>
-    resolveDefaultPartnerCategoryId(partnerCategories),
-  );
-  const [quickAddSupplierBusy, setQuickAddSupplierBusy] = useState(false);
   const [productImageDragOver, setProductImageDragOver] = useState(false);
   const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null);
   const [filePreview, setFilePreview] = useState<{ src: string; kind: 'image' | 'pdf' } | null>(null);
   const filePreviewRevokeRef = useRef<(() => void) | undefined>(undefined);
 
   const activeCategory = categories.find((c) => c.id === working.categoryId);
-
-  const canQuickAddSupplier = useMemo(() => {
-    const tctx = auth?.tenantCtx;
-    if (!tctx) return false;
-    if (tctx.tenantRole === 'owner') return true;
-    return (
-      hasSubPermission(tctx.permissions, 'basic:partners:view') &&
-      hasSubPermission(tctx.permissions, 'basic:partners:create')
-    );
-  }, [auth]);
 
   const persistLastUnitPreference = useCallback(
     (categoryId: string | undefined, unitId: string | undefined) => {
@@ -371,40 +348,6 @@ const ProductCategoryInfoFields: React.FC<ProductCategoryInfoFieldsProps> = ({
     }
   };
 
-  const submitQuickAddSupplier = async () => {
-    const name = quickAddSupplierName.trim();
-    if (!name) {
-      toast.error('请输入供应商名称');
-      return;
-    }
-    const existing = findPartnerByName(partners, name);
-    if (existing) {
-      setWorking({ ...working, supplierId: existing.id });
-      setQuickAddSupplierOpen(false);
-      setQuickAddSupplierName('');
-      return;
-    }
-    if (quickAddSupplierBusy) return;
-    setQuickAddSupplierBusy(true);
-    try {
-      const created = await api.partners.create({
-        name,
-        categoryId: quickAddSupplierCategoryId || undefined,
-        contact: '',
-        customData: {},
-      }) as Partner;
-      await onRefreshPartners();
-      setWorking({ ...working, supplierId: created.id });
-      toast.success('已添加供应商');
-      setQuickAddSupplierOpen(false);
-      setQuickAddSupplierName('');
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : '添加失败');
-    } finally {
-      setQuickAddSupplierBusy(false);
-    }
-  };
-
   const shellClass = useCardShell ? productArchiveFormCardClass : 'space-y-4';
   // 产品新增/编辑/详情表单始终展示分类的全部扩展字段；showInForm 仅控制计划单/工单中心列表是否展示。
   const visibleCustomFields = activeCategory?.customFields ?? [];
@@ -488,25 +431,6 @@ const ProductCategoryInfoFields: React.FC<ProductCategoryInfoFieldsProps> = ({
             <div className="flex justify-end gap-2">
               <button type="button" onClick={() => setQuickAddSpecOpen(null)} className="text-xs font-bold text-slate-500">取消</button>
               <button type="button" onClick={() => void submitQuickAddSpec()} className="text-xs font-bold text-indigo-600">确定</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {quickAddSupplierOpen && (
-        <div className={`fixed inset-0 ${nestedOverlayZ} flex items-center justify-center p-4`}>
-          <div className="absolute inset-0 bg-slate-900/60" onClick={() => !quickAddSupplierBusy && setQuickAddSupplierOpen(false)} role="presentation" />
-          <div className="relative bg-white w-full max-w-md rounded-3xl shadow-2xl p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-bold">新增供应商</h2>
-            <input
-              value={quickAddSupplierName}
-              onChange={(e) => setQuickAddSupplierName(e.target.value)}
-              className={productArchiveFormControlClass}
-              disabled={quickAddSupplierBusy}
-            />
-            <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setQuickAddSupplierOpen(false)} className="text-xs font-bold text-slate-500">取消</button>
-              <button type="button" onClick={() => void submitQuickAddSupplier()} className="text-xs font-bold text-indigo-600">确定</button>
             </div>
           </div>
         </div>
@@ -708,33 +632,16 @@ const ProductCategoryInfoFields: React.FC<ProductCategoryInfoFieldsProps> = ({
               {activeCategory.linkPartner && (
                 <div className="space-y-1">
                   <label className={productArchiveFormLabelClass}>合作单位</label>
-                  <div className="flex gap-2 items-stretch">
-                    <div className="flex-1 min-w-0">
-                      <SupplierSelect
-                        options={partners}
-                        categories={partnerCategories}
-                        value={working.supplierId || ''}
-                        onChange={(_, id) => setWorking({ ...working, supplierId: id })}
-                        valueMode="id"
-                        placeholder="未关联合作单位"
-                        portalZIndex={embeddedInQuickCreateModal ? 10900 : undefined}
-                        triggerClassName={productArchiveFormPartnerTriggerClass}
-                      />
-                    </div>
-                    {canQuickAddSupplier && !readOnly && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setQuickAddSupplierName('');
-                          setQuickAddSupplierCategoryId(resolveDefaultPartnerCategoryId(partnerCategories));
-                          setQuickAddSupplierOpen(true);
-                        }}
-                        className={productArchiveFormQuickAddBtnClass}
-                      >
-                        <Plus className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
+                  <SupplierSelect
+                    options={partners}
+                    categories={partnerCategories}
+                    value={working.supplierId || ''}
+                    onChange={(_, id) => setWorking({ ...working, supplierId: id })}
+                    valueMode="id"
+                    placeholder="未关联合作单位"
+                    portalZIndex={embeddedInQuickCreateModal ? 10900 : undefined}
+                    triggerClassName={productArchiveFormPartnerTriggerClass}
+                  />
                 </div>
               )}
             </div>
