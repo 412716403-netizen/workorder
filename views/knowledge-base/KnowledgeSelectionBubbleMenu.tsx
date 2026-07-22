@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BubbleMenu } from '@tiptap/react/menus';
 import type { Editor } from '@tiptap/core';
+import { CellSelection } from '@tiptap/pm/tables';
 import {
   AlignCenter,
   AlignCenterVertical,
@@ -14,6 +15,8 @@ import {
   Italic,
   Link2,
   Strikethrough,
+  TableCellsMerge,
+  TableCellsSplit,
   Type,
   Underline,
 } from 'lucide-react';
@@ -127,7 +130,10 @@ const KnowledgeSelectionBubbleMenu: React.FC<KnowledgeSelectionBubbleMenuProps> 
   const btnClass = (active: boolean) =>
     `kb-selection-bubble-btn${active ? ' is-active' : ''}`;
 
-  const inTable = isKnowledgeSelectionInTable(editor);
+  const isCellSelection = editor.state.selection instanceof CellSelection;
+  const inTable = isKnowledgeSelectionInTable(editor) || isCellSelection;
+  const canMergeCells = isCellSelection && editor.can().mergeCells();
+  const canSplitCell = isCellSelection && editor.can().splitCell();
   const cellAlign = inTable ? getKnowledgeTableCellAlign(editor) : null;
   const currentH = inTable
     ? (cellAlign?.align ?? 'left')
@@ -143,21 +149,24 @@ const KnowledgeSelectionBubbleMenu: React.FC<KnowledgeSelectionBubbleMenuProps> 
     }
   };
 
+  /** 单元格多选时不要 focus，避免 CellSelection 被收成光标 */
+  const applyKeepSelection = (run: () => boolean) => {
+    run();
+  };
+
   const applyTextColor = (value: string) => {
-    if (!value) {
-      editor.chain().focus().unsetColor().run();
-    } else {
-      editor.chain().focus().setColor(value).run();
-    }
+    applyKeepSelection(() => {
+      if (!value) return editor.commands.unsetColor();
+      return editor.commands.setColor(value);
+    });
     closeMenus();
   };
 
   const applyHighlight = (value: string) => {
-    if (!value) {
-      editor.chain().focus().unsetHighlight().run();
-    } else {
-      editor.chain().focus().toggleHighlight({ color: value }).run();
-    }
+    applyKeepSelection(() => {
+      if (!value) return editor.commands.unsetHighlight();
+      return editor.commands.toggleHighlight({ color: value });
+    });
     closeMenus();
   };
 
@@ -172,6 +181,32 @@ const KnowledgeSelectionBubbleMenu: React.FC<KnowledgeSelectionBubbleMenuProps> 
       onHide={closeMenus}
     >
       <div className="kb-selection-bubble-inner" ref={menusRef}>
+        {isCellSelection && (
+          <>
+            <button
+              type="button"
+              className={btnClass(false)}
+              title="合并单元格"
+              disabled={!canMergeCells}
+              onMouseDown={preventBlur}
+              onClick={() => applyKeepSelection(() => editor.commands.mergeCells())}
+            >
+              <TableCellsMerge className="h-3.5 w-3.5" strokeWidth={2.5} />
+            </button>
+            <button
+              type="button"
+              className={btnClass(false)}
+              title="拆分单元格"
+              disabled={!canSplitCell}
+              onMouseDown={preventBlur}
+              onClick={() => applyKeepSelection(() => editor.commands.splitCell())}
+            >
+              <TableCellsSplit className="h-3.5 w-3.5" strokeWidth={2.5} />
+            </button>
+            <span className="kb-selection-bubble-divider" />
+          </>
+        )}
+
         <div className="kb-selection-bubble-picker-wrap">
           <button
             type="button"
@@ -240,7 +275,7 @@ const KnowledgeSelectionBubbleMenu: React.FC<KnowledgeSelectionBubbleMenuProps> 
           className={btnClass(editor.isActive('bold'))}
           title="加粗"
           onMouseDown={preventBlur}
-          onClick={() => editor.chain().focus().toggleBold().run()}
+          onClick={() => applyKeepSelection(() => editor.commands.toggleBold())}
         >
           <Bold className="h-3.5 w-3.5" strokeWidth={2.5} />
         </button>
@@ -249,7 +284,7 @@ const KnowledgeSelectionBubbleMenu: React.FC<KnowledgeSelectionBubbleMenuProps> 
           className={btnClass(editor.isActive('italic'))}
           title="斜体"
           onMouseDown={preventBlur}
-          onClick={() => editor.chain().focus().toggleItalic().run()}
+          onClick={() => applyKeepSelection(() => editor.commands.toggleItalic())}
         >
           <Italic className="h-3.5 w-3.5" strokeWidth={2.5} />
         </button>
@@ -258,7 +293,7 @@ const KnowledgeSelectionBubbleMenu: React.FC<KnowledgeSelectionBubbleMenuProps> 
           className={btnClass(editor.isActive('underline'))}
           title="下划线"
           onMouseDown={preventBlur}
-          onClick={() => editor.chain().focus().toggleUnderline().run()}
+          onClick={() => applyKeepSelection(() => editor.commands.toggleUnderline())}
         >
           <Underline className="h-3.5 w-3.5" strokeWidth={2.5} />
         </button>
@@ -267,25 +302,28 @@ const KnowledgeSelectionBubbleMenu: React.FC<KnowledgeSelectionBubbleMenuProps> 
           className={btnClass(editor.isActive('strike'))}
           title="删除线"
           onMouseDown={preventBlur}
-          onClick={() => editor.chain().focus().toggleStrike().run()}
+          onClick={() => applyKeepSelection(() => editor.commands.toggleStrike())}
         >
           <Strikethrough className="h-3.5 w-3.5" strokeWidth={2.5} />
         </button>
 
-        <span className="kb-selection-bubble-divider" />
-
-        <button
-          type="button"
-          className={btnClass(editor.isActive('link'))}
-          title="超链接"
-          onMouseDown={preventBlur}
-          onClick={() => {
-            closeMenus();
-            onOpenLinkDialog();
-          }}
-        >
-          <Link2 className="h-3.5 w-3.5" strokeWidth={2.5} />
-        </button>
+        {!isCellSelection && (
+          <>
+            <span className="kb-selection-bubble-divider" />
+            <button
+              type="button"
+              className={btnClass(editor.isActive('link'))}
+              title="超链接"
+              onMouseDown={preventBlur}
+              onClick={() => {
+                closeMenus();
+                onOpenLinkDialog();
+              }}
+            >
+              <Link2 className="h-3.5 w-3.5" strokeWidth={2.5} />
+            </button>
+          </>
+        )}
 
         <span className="kb-selection-bubble-divider" />
 

@@ -337,12 +337,18 @@ const EditorInsertHandle: React.FC<EditorInsertHandleProps> = ({
   }, [getShell]);
 
   const openMenu = useCallback(() => {
-    if (!handlePos) return;
+    if (!handlePos || !editor) return;
     clearCloseTimer();
-    focusBlock(handlePos.blockEl);
+    // 光标已在当前块内时不要拽回块首，否则表格/段内「关联产品」会插错位置或看起来像另起一行
+    const caretBlock = getCaretBlockEl(editor);
+    if (caretBlock !== handlePos.blockEl) {
+      focusBlock(handlePos.blockEl);
+    } else {
+      editor.chain().focus().run();
+    }
     setMenuOpen(true);
     requestAnimationFrame(updatePopupPosition);
-  }, [handlePos, focusBlock, updatePopupPosition]);
+  }, [handlePos, editor, focusBlock, updatePopupPosition]);
 
   /** 表格：跟光标锁定；正文：可跟鼠标悬停 */
   const syncHandle = useCallback((clientX: number, clientY: number) => {

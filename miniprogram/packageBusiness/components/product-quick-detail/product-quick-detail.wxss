@@ -194,6 +194,22 @@
   color: var(--color-text-tertiary);
 }
 
+.kb-bom-item__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6rpx;
+  margin-top: 6rpx;
+}
+
+.kb-bom-item__tag {
+  padding: 2rpx 8rpx;
+  border-radius: 6rpx;
+  background: #f8fafc;
+  font-size: 18rpx;
+  font-weight: 700;
+  color: #64748b;
+}
+
 .kb-bom-item__qty {
   flex-shrink: 0;
   font-size: 26rpx;

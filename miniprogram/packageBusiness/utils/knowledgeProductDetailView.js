@@ -4,6 +4,7 @@ const {
   effectiveCustomDocFieldType,
   formatReportCustomDataForList,
   parseKnowledgeFieldValue,
+  getProductCategoryCustomFieldEntries,
 } = require('../../utils/reportCustomDocField.js');
 const { productColorSizeEnabled } = require('../utils/productColorSize.js');
 
@@ -67,13 +68,15 @@ function sanitizeProductForMiniView(product) {
   return next;
 }
 
-/** BOM 物料名解析只需轻量字段 */
+/** BOM 物料名解析需轻量字段 + 表单展示用扩展属性 */
 function slimProductsForBomLookup(products) {
   return (products || []).map((p) => ({
     id: p.id,
     name: p.name,
     sku: p.sku,
     unitId: p.unitId,
+    categoryId: p.categoryId,
+    categoryCustomData: p.categoryCustomData,
   }));
 }
 
@@ -213,9 +216,10 @@ function resolveDefaultBomSkuId(options, productBomsWithItems) {
   return firstConfigured ? firstConfigured.id : '';
 }
 
-function buildBomGroups(product, bomSkuId, productBomsWithItems, globalNodes, products, dictionaries) {
+function buildBomGroups(product, bomSkuId, productBomsWithItems, globalNodes, products, dictionaries, categories) {
   if (!bomSkuId) return [];
   const nodes = globalNodes || [];
+  const cats = categories || [];
   const productMap = {};
   (products || []).forEach((p) => {
     if (p && p.id) productMap[p.id] = p;
@@ -233,11 +237,22 @@ function buildBomGroups(product, bomSkuId, productBomsWithItems, globalNodes, pr
           const sub = productMap[item.productId];
           const unitName = sub ? getProductUnitName(sub, dictionaries) || '件' : '件';
           const parts = productNameSkuParts(sub || { name: '', sku: item.productId });
+          const subCat = sub
+            ? cats.find((c) => c && c.id === sub.categoryId) || null
+            : null;
+          const customEntries = getProductCategoryCustomFieldEntries(sub, subCat, {
+            includeFile: false,
+            includeEmpty: false,
+          });
+          const customTags = (customEntries || []).map((e) => ({
+            id: e.field.id,
+            text: `${e.field.label}: ${e.display}`,
+          }));
           return {
             key: `${bom.id}-${idx}`,
             productName: parts.name || (sub && sub.name) || '未知物料',
-            productSku: parts.sku || (sub && sub.sku) || item.productId || '',
-            showProductSku: parts.showSku || Boolean(sub && sub.sku),
+            customTags,
+            showCustomTags: customTags.length > 0,
             qtyText: `×${item.quantity} ${unitName}`,
             note: item.note && String(item.note).trim() ? String(item.note).trim() : '',
             showNote: Boolean(item.note && String(item.note).trim()),
@@ -262,6 +277,7 @@ function buildKnowledgeProductDetailView(ctx) {
   if (!product) return null;
 
   const category = ctx.category || null;
+  const categories = ctx.categories || (category ? [category] : []);
   const dictionaries = ctx.dictionaries || { units: [], colors: [], sizes: [] };
   const partners = ctx.partners || [];
   const globalNodes = ctx.globalNodes || [];
@@ -310,6 +326,7 @@ function buildKnowledgeProductDetailView(ctx) {
     ...opt,
     selected: opt.id === bomSkuId,
   }));
+  const hasVariantMatrix = ((product.variants) || []).length > 0;
   const showBomSection = productBomsWithItems.length > 0 || hasBomNodes;
   const bomGroups = buildBomGroups(
     product,
@@ -318,11 +335,12 @@ function buildKnowledgeProductDetailView(ctx) {
     globalNodes,
     products,
     dictionaries,
+    categories,
   );
 
   let bomEmptyText = '';
   if (showBomSection) {
-    if (!bomSkuId && bomSkuOptions.length > 1) {
+    if (!bomSkuId && hasVariantMatrix && bomSkuOptions.length > 1) {
       bomEmptyText = '请选择上方规格查看 BOM';
     } else if (bomSkuId && bomGroups.length === 0) {
       bomEmptyText = '该规格尚未配置有效 BOM 物料明细';
@@ -347,7 +365,7 @@ function buildKnowledgeProductDetailView(ctx) {
     processEmpty: processRows.length === 0,
     showBomSection,
     bomSkuOptions,
-    showBomSkuTabs: bomSkuOptions.length > 0,
+    showBomSkuTabs: hasVariantMatrix && bomSkuOptions.length > 0,
     bomGroups,
     bomEmptyText,
     showBomEmpty: Boolean(bomEmptyText),

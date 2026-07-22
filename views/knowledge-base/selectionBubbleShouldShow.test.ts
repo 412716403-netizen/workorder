@@ -11,11 +11,18 @@ function mockEditor(selection: object) {
 }
 
 describe('shouldShowKnowledgeSelectionBubbleMenu', () => {
-  it('hides for CellSelection', () => {
+  it('shows for CellSelection so multi-cell merge/format is available', () => {
+    const sel = Object.create(CellSelection.prototype) as CellSelection;
+    vi.spyOn(sel, 'isColSelection').mockReturnValue(false);
+    vi.spyOn(sel, 'isRowSelection').mockReturnValue(false);
+    expect(shouldShowKnowledgeSelectionBubbleMenu(mockEditor(sel), { hasFocus: () => true })).toBe(true);
+  });
+
+  it('shows for column CellSelection', () => {
     const sel = Object.create(CellSelection.prototype) as CellSelection;
     vi.spyOn(sel, 'isColSelection').mockReturnValue(true);
     vi.spyOn(sel, 'isRowSelection').mockReturnValue(false);
-    expect(shouldShowKnowledgeSelectionBubbleMenu(mockEditor(sel), { hasFocus: () => true })).toBe(false);
+    expect(shouldShowKnowledgeSelectionBubbleMenu(mockEditor(sel), { hasFocus: () => true })).toBe(true);
   });
 
   it('shows for non-empty text selection', () => {
@@ -25,5 +32,14 @@ describe('shouldShowKnowledgeSelectionBubbleMenu', () => {
         { hasFocus: () => true },
       ),
     ).toBe(true);
+  });
+
+  it('hides when editor unfocused', () => {
+    expect(
+      shouldShowKnowledgeSelectionBubbleMenu(
+        mockEditor({ empty: false }),
+        { hasFocus: () => false },
+      ),
+    ).toBe(false);
   });
 });

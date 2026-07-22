@@ -16,6 +16,7 @@ import { parseRouteReportFileUrls } from '../../utils/routeReportFileUrls';
 import {
   effectiveCustomDocFieldType,
   formatReportCustomDataForList,
+  getProductCategoryCustomFieldEntries,
 } from '../../utils/reportCustomDocField';
 import { parseKnowledgeFieldValue } from '../../utils/knowledgeFieldValue';
 import { PdfThumbPreview } from '../../components/PdfThumbPreview';
@@ -90,19 +91,19 @@ const ProductQuickDetailBody: React.FC<ProductQuickDetailBodyProps> = ({
     nid => globalNodes.find(n => n.id === nid)?.hasBOM
   );
   const singleSkuId = `single-${p.id}`;
-  const skuOptions: { id: string; label: string }[] =
-    p.variants && p.variants.length > 0
-      ? p.variants.map(v => ({
-          id: v.id,
-          label:
-            [
-              dictionaries.colors?.find(c => c.id === v.colorId)?.name,
-              dictionaries.sizes?.find(s => s.id === v.sizeId)?.name,
-            ]
-              .filter(Boolean)
-              .join(' / ') || v.skuSuffix,
-        }))
-      : [{ id: singleSkuId, label: '单 SKU' }];
+  const hasVariantMatrix = (p.variants?.length ?? 0) > 0;
+  const skuOptions: { id: string; label: string }[] = hasVariantMatrix
+    ? p.variants.map(v => ({
+        id: v.id,
+        label:
+          [
+            dictionaries.colors?.find(c => c.id === v.colorId)?.name,
+            dictionaries.sizes?.find(s => s.id === v.sizeId)?.name,
+          ]
+            .filter(Boolean)
+            .join(' / ') || v.skuSuffix,
+      }))
+    : [{ id: singleSkuId, label: '单 SKU' }];
   const selectedSkuBoms = bomSkuId
     ? productBomsWithItems.filter(b => b.variantId === bomSkuId)
     : [];
@@ -164,27 +165,15 @@ const ProductQuickDetailBody: React.FC<ProductQuickDetailBodyProps> = ({
           业务分类
         </h3>
         <div className="flex flex-wrap gap-1.5" role="list" aria-label="产品所属业务分类">
-          {categories.length === 0 ? (
-            <span className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-400">
-              暂无分类配置
+          {cat ? (
+            <span
+              role="listitem"
+              className="inline-flex items-center px-4 py-2 rounded-lg text-xs font-semibold border bg-indigo-600 text-white shadow-sm border-indigo-600"
+            >
+              {cat.name}
             </span>
           ) : (
-            categories.map(c => {
-              const active = c.id === p.categoryId;
-              return (
-                <span
-                  key={c.id}
-                  role="listitem"
-                  className={`inline-flex items-center px-4 py-2 rounded-lg text-xs font-semibold transition-all border ${
-                    active
-                      ? 'bg-indigo-600 text-white shadow-sm border-indigo-600'
-                      : 'bg-white/40 text-slate-400 border-slate-200/60'
-                  }`}
-                >
-                  {c.name}
-                </span>
-              );
-            })
+            <span className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-400">未分类</span>
           )}
         </div>
       </div>
@@ -557,29 +546,31 @@ const ProductQuickDetailBody: React.FC<ProductQuickDetailBodyProps> = ({
           <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
             <Boxes className="w-3.5 h-3.5" /> 工艺 BOM
           </h3>
-          <div className="flex flex-wrap gap-2">
-            {skuOptions.map(opt => {
-              const hasBom = productBomsWithItems.some(b => b.variantId === opt.id);
-              const selected = bomSkuId === opt.id;
-              return (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => setBomSkuId(opt.id)}
-                  className={`px-4 py-2 rounded-xl text-sm font-bold transition-all border ${
-                    selected
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-md ring-2 ring-indigo-300 ring-offset-1'
-                      : hasBom
-                        ? 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border-indigo-200'
-                        : 'bg-slate-50 text-slate-400 border-slate-200 hover:border-slate-300'
-                  }`}
-                >
-                  {opt.label}
-                  {!hasBom && <span className="text-[10px] ml-1 font-medium">(未配置)</span>}
-                </button>
-              );
-            })}
-          </div>
+          {hasVariantMatrix && (
+            <div className="flex flex-wrap gap-2">
+              {skuOptions.map(opt => {
+                const hasBom = productBomsWithItems.some(b => b.variantId === opt.id);
+                const selected = bomSkuId === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setBomSkuId(opt.id)}
+                    className={`px-4 py-2 rounded-xl text-sm font-bold transition-all border ${
+                      selected
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-md ring-2 ring-indigo-300 ring-offset-1'
+                        : hasBom
+                          ? 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border-indigo-200'
+                          : 'bg-slate-50 text-slate-400 border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    {opt.label}
+                    {!hasBom && <span className="text-[10px] ml-1 font-medium">(未配置)</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           {bomSkuId && selectedSkuBoms.length > 0 ? (
             <div className="space-y-4 pt-1">
               {selectedSkuBoms.map(bom => {
@@ -602,6 +593,10 @@ const ProductQuickDetailBody: React.FC<ProductQuickDetailBodyProps> = ({
                           const subUnit = subProd?.unitId
                             ? dictionaries.units?.find(u => u.id === subProd.unitId)?.name
                             : '件';
+                          const subCat = categories.find(c => c.id === subProd?.categoryId);
+                          const customTags = getProductCategoryCustomFieldEntries(subProd, subCat, {
+                            includeFile: false,
+                          });
                           return (
                             <div
                               key={`${bom.id}-${idx}`}
@@ -612,9 +607,18 @@ const ProductQuickDetailBody: React.FC<ProductQuickDetailBodyProps> = ({
                                   <p className="text-sm font-bold text-slate-800 truncate">
                                     {subProd?.name || '未知物料'}
                                   </p>
-                                  <p className="text-[10px] font-mono text-slate-400 mt-0.5">
-                                    SKU {subProd?.sku || item.productId}
-                                  </p>
+                                  {customTags.length > 0 && (
+                                    <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                                      {customTags.map(({ field, display }) => (
+                                        <span
+                                          key={field.id}
+                                          className="rounded bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-500"
+                                        >
+                                          {field.label}: {display}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
                                 <span className="text-sm font-black text-indigo-600 shrink-0">
                                   ×{item.quantity}{' '}
@@ -636,7 +640,7 @@ const ProductQuickDetailBody: React.FC<ProductQuickDetailBodyProps> = ({
             </div>
           ) : bomSkuId ? (
             <p className="text-sm text-slate-400 italic py-2">该规格尚未配置有效 BOM 物料明细</p>
-          ) : skuOptions.length > 1 ? (
+          ) : hasVariantMatrix ? (
             <p className="text-xs text-slate-400 italic">请选择上方规格查看 BOM</p>
           ) : null}
         </div>

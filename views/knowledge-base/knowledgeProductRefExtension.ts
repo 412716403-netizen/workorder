@@ -65,16 +65,22 @@ export const KnowledgeProductRef = Node.create({
 
   addCommands() {
     return {
-      insertProductRef: (attrs: KnowledgeProductRefAttrs) => ({ chain }) => {
+      insertProductRef: (attrs: KnowledgeProductRefAttrs) => ({ tr, dispatch, state }) => {
         if (!attrs.productId?.trim()) return false;
-        const label = attrs.label.trim() || '产品';
-        return chain()
-          .focus()
-          .insertContent({
-            type: this.name,
-            attrs: { productId: attrs.productId.trim(), label },
-          })
-          .run();
+        const type = state.schema.nodes[this.name];
+        if (!type) return false;
+        const node = type.create({
+          productId: attrs.productId.trim(),
+          label: attrs.label.trim() || '产品',
+        });
+        if (dispatch) {
+          // 用 replaceSelectionWith 内联插入；insertContent 会把单独 inline 节点包成新段落，看起来像「掉到下一行」
+          let next = tr.replaceSelectionWith(node);
+          const after = next.selection.to;
+          next = next.insertText(' ', after);
+          dispatch(next.scrollIntoView());
+        }
+        return true;
       },
     };
   },

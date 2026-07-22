@@ -107,6 +107,8 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
   const [linkDialogInitialText, setLinkDialogInitialText] = useState('');
   const [productDialogOpen, setProductDialogOpen] = useState(false);
   const [documentDialogOpen, setDocumentDialogOpen] = useState(false);
+  /** 打开选择弹窗前记下光标，确认插入时还原（避免失焦后插到段末/新行） */
+  const insertCaretRef = useRef<{ from: number; to: number } | null>(null);
   const [viewProductId, setViewProductId] = useState<string | null>(null);
   const [viewDocId, setViewDocId] = useState<string | null>(null);
   const [filePreview, setFilePreview] = useState<{ url: string; type: 'image' | 'pdf' } | null>(null);
@@ -396,12 +398,34 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
   }, [editor]);
 
   const openProductDialog = useCallback(() => {
+    if (editor) {
+      const { from, to } = editor.state.selection;
+      insertCaretRef.current = { from, to };
+    }
     setProductDialogOpen(true);
-  }, []);
+  }, [editor]);
 
   const openDocumentDialog = useCallback(() => {
+    if (editor) {
+      const { from, to } = editor.state.selection;
+      insertCaretRef.current = { from, to };
+    }
     setDocumentDialogOpen(true);
-  }, []);
+  }, [editor]);
+
+  const restoreInsertCaret = useCallback(() => {
+    if (!editor || editor.isDestroyed) return;
+    const saved = insertCaretRef.current;
+    insertCaretRef.current = null;
+    if (!saved) {
+      editor.commands.focus();
+      return;
+    }
+    const max = editor.state.doc.content.size;
+    const from = Math.max(0, Math.min(saved.from, max));
+    const to = Math.max(0, Math.min(saved.to, max));
+    editor.chain().focus().setTextSelection({ from, to }).run();
+  }, [editor]);
 
   const handleLinkConfirm = useCallback((text: string, href: string) => {
     if (!editor) return;
@@ -411,11 +435,12 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
 
   const handleProductConfirm = useCallback((productId: string) => {
     if (!editor) return;
+    restoreInsertCaret();
     const product = products.find(p => p.id === productId);
     const label = formatKnowledgeProductRefLabel(product ?? { name: '', sku: '' });
     editor.commands.insertProductRef({ productId, label });
     scheduleSaveRef.current(documentIdRef.current, editor);
-  }, [editor, products]);
+  }, [editor, products, restoreInsertCaret]);
 
   const handleDocumentConfirm = useCallback((ref: KnowledgeFieldRef) => {
     if (!editor) return;
@@ -423,10 +448,11 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
       toast.error('不能关联当前文档');
       return;
     }
+    restoreInsertCaret();
     const label = formatKnowledgeDocumentRefLabel(ref.title);
     editor.commands.insertDocumentRef({ documentId: ref.id, label });
     scheduleSaveRef.current(documentIdRef.current, editor);
-  }, [editor]);
+  }, [editor, restoreInsertCaret]);
 
   const handleEditorShellMouseDown = (e: React.MouseEvent) => {
     if (!editor || !editable || e.button !== 0) return;

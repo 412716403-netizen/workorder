@@ -128,7 +128,14 @@
           <view class="kb-bom-item__main">
             <view class="kb-bom-item__text">
               <text class="kb-bom-item__name">{{mat.productName}}</text>
-              <text wx:if="{{mat.showProductSku}}" class="kb-bom-item__sku">{{mat.productSku}}</text>
+              <view wx:if="{{mat.showCustomTags}}" class="kb-bom-item__tags">
+                <text
+                  wx:for="{{mat.customTags}}"
+                  wx:for-item="tag"
+                  wx:key="id"
+                  class="kb-bom-item__tag"
+                >{{tag.text}}</text>
+              </view>
             </view>
             <text class="kb-bom-item__qty">{{mat.qtyText}}</text>
           </view>

@@ -54,6 +54,43 @@ describe('knowledgeProductDetailView', () => {
     expect(view.bomGroups).toHaveLength(1);
     expect(view.bomGroups[0].items[0].productName).toBe('面料');
     expect(view.bomGroups[0].items[0].qtyText).toContain('×2');
+    expect(view.showBomSkuTabs).toBe(false);
+  });
+
+  it('hides single-sku tab when product has no variants', () => {
+    const view = buildKnowledgeProductDetailView({
+      product: {
+        id: 'p1',
+        name: '成品A',
+        sku: 'A01',
+        categoryId: 'c1',
+        milestoneNodeIds: ['n1'],
+        variants: [],
+      },
+      category: { id: 'c1', name: '成衣' },
+      dictionaries: { units: [], colors: [], sizes: [] },
+      partners: [],
+      globalNodes: [{ id: 'n1', name: '裁剪', hasBOM: true }],
+      boms: [
+        {
+          id: 'b1',
+          parentProductId: 'p1',
+          variantId: 'single-p1',
+          nodeId: 'n1',
+          name: '裁剪BOM',
+          items: [{ productId: 'm1', quantity: 1 }],
+        },
+      ],
+      products: [{ id: 'm1', name: '面料', sku: 'M1', categoryId: 'c2', categoryCustomData: { f1: '棉' } }],
+      categories: [
+        { id: 'c2', name: '物料', customFields: [{ id: 'f1', label: '成分', type: 'text', showInForm: true }] },
+      ],
+      bomSkuId: 'single-p1',
+    });
+
+    expect(view.showBomSkuTabs).toBe(false);
+    expect(view.bomGroups[0].items[0].showCustomTags).toBe(true);
+    expect(view.bomGroups[0].items[0].customTags[0].text).toBe('成分: 棉');
   });
 
   it('shows all category custom fields including empty (not filtered by showInForm)', () => {

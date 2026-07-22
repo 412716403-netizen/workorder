@@ -164,6 +164,7 @@ Page({
     const view = buildKnowledgeProductDetailView({
       product: this._product,
       category: this._category,
+      categories: this._categories,
       dictionaries: this._dictionaries,
       partners: this._partners,
       globalNodes: this._nodes,

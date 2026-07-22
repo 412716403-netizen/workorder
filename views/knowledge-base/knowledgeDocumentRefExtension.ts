@@ -65,16 +65,22 @@ export const KnowledgeDocumentRef = Node.create({
 
   addCommands() {
     return {
-      insertDocumentRef: (attrs: KnowledgeDocumentRefAttrs) => ({ chain }) => {
+      insertDocumentRef: (attrs: KnowledgeDocumentRefAttrs) => ({ tr, dispatch, state }) => {
         if (!attrs.documentId?.trim()) return false;
-        const label = attrs.label.trim() || '文档';
-        return chain()
-          .focus()
-          .insertContent({
-            type: this.name,
-            attrs: { documentId: attrs.documentId.trim(), label },
-          })
-          .run();
+        const type = state.schema.nodes[this.name];
+        if (!type) return false;
+        const node = type.create({
+          documentId: attrs.documentId.trim(),
+          label: attrs.label.trim() || '文档',
+        });
+        if (dispatch) {
+          // 与关联产品一致：内联插入，避免 insertContent 包成新段落
+          let next = tr.replaceSelectionWith(node);
+          const after = next.selection.to;
+          next = next.insertText(' ', after);
+          dispatch(next.scrollIntoView());
+        }
+        return true;
       },
     };
   },
