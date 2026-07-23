@@ -13,6 +13,7 @@ const {
   extractPlayerVideoAssetIdsFromHtml,
   buildKnowledgeDocBlocks,
   applyImageBlockLayout,
+  collectKnowledgeOutlineFromHtml,
 } = require('../utils/knowledgeHtmlForMini.js');
 const { formatDateShort } = require('../utils/knowledgeTree.js');
 const {
@@ -32,9 +33,13 @@ Page({
     updatedText: '',
     blocks: [],
     previewUrls: [],
+    outline: [],
+    outlineOpen: false,
+    scrollTop: 0,
     emptyText: '文档不存在或无权查看',
     statusBarHeight: 20,
     navBarHeight: 44,
+    menuRightInset: 96,
     headerBlockHeight: 64,
     scrollHeight: 600,
   },
@@ -52,6 +57,7 @@ Page({
     this.setData({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
+      menuRightInset: nav.menuRightInset || 96,
       headerBlockHeight,
       scrollHeight: Math.max(320, win.windowHeight - headerBlockHeight),
       title: titleHint || '文档',
@@ -95,6 +101,70 @@ Page({
 
   onHeaderBack() {
     wx.navigateBack();
+  },
+
+  onToggleOutline() {
+    if (!(this.data.outline || []).length) return;
+    this.setData({ outlineOpen: !this.data.outlineOpen });
+  },
+
+  onCloseOutline() {
+    this.setData({ outlineOpen: false });
+  },
+
+  onOutlineJump(e) {
+    const ds = e.currentTarget.dataset || {};
+    const elementId = ds.id || ds.elementId || ds.anchorId;
+    if (!elementId) return;
+    this.setData({ outlineOpen: false });
+    // 等底栏动画结束再滚动；enhanced scroll-view 必须用 node().scrollTo
+    setTimeout(() => {
+      this.scrollToOutlineAnchor(String(elementId), 0);
+    }, 220);
+  },
+
+  scrollToOutlineAnchor(elementId, attempt) {
+    const tryCount = attempt || 0;
+    const query = this.createSelectorQuery();
+    query.select('.plan-detail-scroll').scrollOffset();
+    query.select('.plan-detail-scroll').boundingClientRect();
+    query.select(`.kb-a-${elementId}`).boundingClientRect();
+    query.select(`#${elementId}`).boundingClientRect();
+    query.select('.plan-detail-scroll').node();
+    query.exec((res) => {
+      const offset = res && res[0];
+      const svRect = res && res[1];
+      const targetByClass = res && res[2];
+      const targetById = res && res[3];
+      const targetRect =
+        targetByClass && targetByClass.height > 0
+          ? targetByClass
+          : targetById && targetById.height > 0
+            ? targetById
+            : null;
+      const scrollNode = res && res[4] && res[4].node;
+
+      if (!offset || !svRect || !targetRect) {
+        if (tryCount < 8) {
+          setTimeout(() => this.scrollToOutlineAnchor(elementId, tryCount + 1), 60);
+        } else {
+          console.warn('[kb-doc] scrollToOutlineAnchor miss', elementId, res);
+        }
+        return;
+      }
+
+      const nextTop = Math.max(0, offset.scrollTop + (targetRect.top - svRect.top) - 12);
+      if (scrollNode && typeof scrollNode.scrollTo === 'function') {
+        scrollNode.scrollTo({ top: nextTop, animated: true });
+        return;
+      }
+      // 非 enhanced 兜底：双次 setData 强制触发 scroll-top
+      const cur = Number(this.data.scrollTop) || 0;
+      const bump = Math.abs(cur - nextTop) < 1 ? nextTop + 1.5 : 0.01;
+      this.setData({ scrollTop: bump }, () => {
+        this.setData({ scrollTop: nextTop });
+      });
+    });
   },
 
   onImageTap(e) {
@@ -275,10 +345,41 @@ Page({
       this._tempAssetPaths = tempPaths;
 
       const maxContentWidthPx = Math.max(160, (this._windowWidth || 375) - 48);
-      const { blocks, previewUrls } = buildKnowledgeDocBlocks(content, urlById, {
+      const built = buildKnowledgeDocBlocks(content, urlById, {
         maxContentWidthPx,
       });
-      const layoutBlocks = applyImageBlockLayout(blocks, this._windowWidth, 48);
+      const layoutBlocks = applyImageBlockLayout(built.blocks || [], this._windowWidth, 48);
+      let outline = Array.isArray(built.outline) ? built.outline : [];
+      if (!outline.length) {
+        outline = collectKnowledgeOutlineFromHtml(content);
+      }
+      // 若分块里已有 heading 但大纲为空，从块回填（防止解析漂移）
+      if (!outline.length) {
+        const fromBlocks = [];
+        const walk = (list) => {
+          (list || []).forEach((b) => {
+            if (b && b.type === 'heading' && b.text) {
+              fromBlocks.push({
+                id: `${b.anchorId || fromBlocks.length}`,
+                level: b.level || 3,
+                text: b.text,
+                elementId: b.anchorId || `kb-outline-${fromBlocks.length}`,
+              });
+            } else if (b && b.type === 'callout') {
+              walk(b.blocks);
+            } else if (b && b.type === 'table') {
+              (b.rows || []).forEach((row) => {
+                (row.cells || []).forEach((cell) => walk(cell.blocks));
+              });
+            }
+          });
+        };
+        walk(layoutBlocks);
+        outline = fromBlocks;
+      }
+      console.warn(
+        `[kb-doc] id=${id} outline=${outline.length} hasH3=${/<\/?h3\b/i.test(content)} contentLen=${content.length}`,
+      );
       this.setData({
         loading: false,
         found: true,
@@ -289,7 +390,10 @@ Page({
         blocks: layoutBlocks.length
           ? layoutBlocks
           : [{ type: 'html', key: 'empty', html: '<p></p>', isTable: false }],
-        previewUrls,
+        previewUrls: built.previewUrls || [],
+        outline,
+        outlineOpen: false,
+        scrollTop: 0,
       });
     } catch (err) {
       this.setData({

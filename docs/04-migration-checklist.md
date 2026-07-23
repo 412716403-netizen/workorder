@@ -14,7 +14,7 @@
 
 | 模块 | 当前状态 | 说明 | 剩余收口 |
 |------|------|------|------|
-| 登录、登出、刷新 token | 已落地 | 已有后端认证接口与前端 API 封装 | 继续收敛会话缓存语义，减少文档与实现漂移 |
+| 登录、登出、刷新 token | 已落地 | JWT + refresh；`refresh_tokens.client` 按端隔离，网页/小程序可同时在线（见 `docs/07` §4.3.3） | 会话缓存语义继续收敛 |
 | 租户选择、成员与权限 | 已落地 | 已有 tenants / roles / admin 相关接口 | 统一权限模型与文档说明 |
 | 平台企业使用情况 | 已落地 | `GET /api/admin/tenants/usage`：业务/负担/MAU/告警；`GET /api/admin/audit-logs`；登录写 `last_login_*` / `last_active_at` | 告警暂为看板红标，未做消息推送 | |
 | 浏览器本地缓存 | 部分落地 | `currentUser`、`tenantCtx`、`userTenants`、`isLoggedIn` 仍保存在 `localStorage` | 明确哪些属于会话缓存，哪些不得再作为业务真源 |

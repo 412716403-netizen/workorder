@@ -63,11 +63,14 @@ model RefreshToken {
   id        String   @id @default(uuid()) @db.Uuid
   userId    String   @map("user_id") @db.Uuid
   token     String   @unique @db.Text
+  /** 签发端：web | miniprogram | unknown；同端互顶、跨端可并存 */
+  client    String   @default("unknown") @db.VarChar(20)
   expiresAt DateTime @map("expires_at") @db.Timestamptz()
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId, client])
   @@map("refresh_tokens")
 }
 

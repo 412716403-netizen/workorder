@@ -605,7 +605,14 @@ const ProductQuickDetailBody: React.FC<ProductQuickDetailBodyProps> = ({
                               <div className="flex justify-between gap-2 items-start">
                                 <div className="min-w-0 flex-1">
                                   <p className="text-sm font-bold text-slate-800 truncate">
-                                    {subProd?.name || '未知物料'}
+                                    {subProd
+                                      ? [
+                                          (subProd.name || '').trim() || '未知物料',
+                                          (subProd.sku || '').trim(),
+                                        ]
+                                          .filter(Boolean)
+                                          .join(' ')
+                                      : '未知物料'}
                                   </p>
                                   {customTags.length > 0 && (
                                     <div className="mt-0.5 flex flex-wrap items-center gap-1">

@@ -204,4 +204,36 @@ describe('knowledgeHtmlForMini', () => {
     expect(tag.displayMode).toBe('tag');
     expect(tag.localSrc).toBe('');
   });
+
+  it('collects outline from h1–h3 and builds heading blocks with anchors', () => {
+    const {
+      collectKnowledgeOutlineFromHtml,
+    } = require('./knowledgeHtmlForMini.js');
+    const html =
+      '<h1>总则</h1><p>说明</p><h2>工艺</h2><h3>裁剪</h3><p>步骤</p>';
+    const outline = collectKnowledgeOutlineFromHtml(html);
+    expect(outline).toEqual([
+      { id: '总则-1-0', level: 1, text: '总则', elementId: 'kb-outline-0' },
+      { id: '工艺-2-1', level: 2, text: '工艺', elementId: 'kb-outline-1' },
+      { id: '裁剪-3-2', level: 3, text: '裁剪', elementId: 'kb-outline-2' },
+    ]);
+    const { blocks, outline: builtOutline } = buildKnowledgeDocBlocks(html, {});
+    expect(builtOutline).toEqual(outline);
+    const headings = blocks.filter((b) => b.type === 'heading');
+    expect(headings).toHaveLength(3);
+    expect(headings[0].anchorId).toBe('kb-outline-0');
+    expect(headings[0].anchorClass).toBe('kb-a-kb-outline-0');
+    expect(headings[0].html).toContain('id="kb-outline-0"');
+    expect(headings[1].level).toBe(2);
+    expect(headings[2].text).toBe('裁剪');
+  });
+
+  it('skips empty headings in outline', () => {
+    const {
+      collectKnowledgeOutlineFromHtml,
+    } = require('./knowledgeHtmlForMini.js');
+    expect(collectKnowledgeOutlineFromHtml('<h2></h2><h2>有内容</h2>')).toEqual([
+      { id: '有内容-2-0', level: 2, text: '有内容', elementId: 'kb-outline-0' },
+    ]);
+  });
 });

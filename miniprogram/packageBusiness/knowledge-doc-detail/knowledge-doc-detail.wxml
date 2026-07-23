@@ -1,9 +1,8 @@
 <view class="plan-detail-shell">
   <view class="plan-detail-header" style="padding-top: {{statusBarHeight}}px;">
-    <view class="plan-detail-header__bar" style="height: {{navBarHeight}}px;">
+    <view class="plan-detail-header__bar kb-doc-header-bar" style="height: {{navBarHeight}}px;">
       <view class="plan-detail-header__back" bindtap="onHeaderBack">‹</view>
-      <text class="plan-detail-header__title">资料库文档</text>
-      <view class="plan-detail-header__back plan-detail-header__back--placeholder"></view>
+      <view class="kb-doc-header-title">资料库文档</view>
     </view>
   </view>
 
@@ -12,6 +11,7 @@
   <scroll-view
     class="plan-detail-scroll"
     scroll-y
+    enhanced
     show-scrollbar="{{false}}"
     style="height: {{scrollHeight}}px;"
   >
@@ -46,8 +46,16 @@
                   class="kb-doc-mini-table__cell {{cell.isHeader ? 'kb-doc-mini-table__cell--header' : ''}}"
                 >
                   <block wx:for="{{cell.blocks}}" wx:for-item="cellBlock" wx:key="key">
+                    <view
+                      wx:if="{{cellBlock.type === 'heading'}}"
+                      id="{{cellBlock.anchorId}}"
+                      class="kb-doc-heading kb-doc-heading--cell kb-doc-heading--l{{cellBlock.level}} kb-doc-anchor {{cellBlock.anchorClass}}"
+                    >
+                      <text class="kb-doc-heading__text">{{cellBlock.text}}</text>
+                    </view>
+
                     <rich-text
-                      wx:if="{{cellBlock.type === 'html'}}"
+                      wx:elif="{{cellBlock.type === 'html'}}"
                       class="kb-doc-rich kb-doc-rich--cell"
                       nodes="{{cellBlock.html}}"
                       space="nbsp"
@@ -86,8 +94,15 @@
                       class="kb-doc-callout kb-doc-callout--cell"
                     >
                       <block wx:for="{{cellBlock.blocks}}" wx:for-item="cellCalloutBlock" wx:key="key">
+                        <view
+                          wx:if="{{cellCalloutBlock.type === 'heading'}}"
+                          id="{{cellCalloutBlock.anchorId}}"
+                          class="kb-doc-heading kb-doc-heading--callout kb-doc-heading--l{{cellCalloutBlock.level}} kb-doc-anchor {{cellCalloutBlock.anchorClass}}"
+                        >
+                          <text class="kb-doc-heading__text">{{cellCalloutBlock.text}}</text>
+                        </view>
                         <rich-text
-                          wx:if="{{cellCalloutBlock.type === 'html'}}"
+                          wx:elif="{{cellCalloutBlock.type === 'html'}}"
                           class="kb-doc-rich kb-doc-rich--callout"
                           nodes="{{cellCalloutBlock.html}}"
                           space="nbsp"
@@ -126,8 +141,16 @@
 
           <view wx:elif="{{block.type === 'callout'}}" class="kb-doc-callout">
             <block wx:for="{{block.blocks}}" wx:for-item="calloutBlock" wx:key="key">
+              <view
+                wx:if="{{calloutBlock.type === 'heading'}}"
+                id="{{calloutBlock.anchorId}}"
+                class="kb-doc-heading kb-doc-heading--callout kb-doc-heading--l{{calloutBlock.level}} kb-doc-anchor {{calloutBlock.anchorClass}}"
+              >
+                <text class="kb-doc-heading__text">{{calloutBlock.text}}</text>
+              </view>
+
               <rich-text
-                wx:if="{{calloutBlock.type === 'html'}}"
+                wx:elif="{{calloutBlock.type === 'html'}}"
                 class="kb-doc-rich kb-doc-rich--callout"
                 nodes="{{calloutBlock.html}}"
                 space="nbsp"
@@ -161,6 +184,14 @@
                 <template is="kbDocFile" data="{{file: calloutBlock, extraClass: 'kb-doc-file--callout'}}" />
               </block>
             </block>
+          </view>
+
+          <view
+            wx:elif="{{block.type === 'heading'}}"
+            id="{{block.anchorId}}"
+            class="kb-doc-heading kb-doc-heading--l{{block.level}} kb-doc-anchor {{block.anchorClass}}"
+          >
+            <text class="kb-doc-heading__text">{{block.text}}</text>
           </view>
 
           <rich-text
@@ -203,6 +234,29 @@
 
     <view wx:else class="plan-detail-muted">{{emptyText}}</view>
   </scroll-view>
+
+  <view
+    wx:if="{{found && outline.length > 0 && !outlineOpen}}"
+    class="kb-doc-outline-fab"
+    bindtap="onToggleOutline"
+  >目录</view>
+
+  <view wx:if="{{outlineOpen}}" class="kb-doc-outline-mask" bindtap="onCloseOutline"></view>
+  <view wx:if="{{outlineOpen}}" class="kb-doc-outline-sheet" catchtap="">
+    <view class="kb-doc-outline-sheet__head">
+      <text class="kb-doc-outline-sheet__title">目录</text>
+      <view class="kb-doc-outline-sheet__close" bindtap="onCloseOutline">关闭</view>
+    </view>
+    <scroll-view class="kb-doc-outline-sheet__nav" scroll-y show-scrollbar="{{false}}">
+      <view
+        wx:for="{{outline}}"
+        wx:key="id"
+        class="kb-doc-outline-item kb-doc-outline-item--l{{item.level}}"
+        data-id="{{item.elementId}}"
+        bindtap="onOutlineJump"
+      >{{item.text}}</view>
+    </scroll-view>
+  </view>
 </view>
 
 <template name="kbDocFile">

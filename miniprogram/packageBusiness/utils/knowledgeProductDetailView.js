@@ -248,9 +248,11 @@ function buildBomGroups(product, bomSkuId, productBomsWithItems, globalNodes, pr
             id: e.field.id,
             text: `${e.field.label}: ${e.display}`,
           }));
+          const code = parts.name || (sub && sub.name) || '未知物料';
+          const titleName = parts.showSku && parts.sku ? `${code} ${parts.sku}` : code;
           return {
             key: `${bom.id}-${idx}`,
-            productName: parts.name || (sub && sub.name) || '未知物料',
+            productName: titleName,
             customTags,
             showCustomTags: customTags.length > 0,
             qtyText: `×${item.quantity} ${unitName}`,

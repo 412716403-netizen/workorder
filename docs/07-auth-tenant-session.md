@@ -142,6 +142,13 @@ refresh 依赖后端 Cookie 机制，而不是前端直接读写 refresh token�
 - **网页**：`AuthContext.handleLogin` 登录后清除 `tenantCtx`，由 `AuthRouter` 进入 `TenantSelectView`。
 - **小程序**：`utils/authLogin.applyLoginSuccess` 登录后清除 `tenantCtx`，有企业则 `reLaunch` 到 `pages/tenant-select`。
 
+### 4.3.3 网页与小程序可同时登录
+
+- **规则**：同一账号允许 **网页端** 与 **小程序端** 同时保持有效会话；一端选企业 / 重新登录**不会**踢掉另一端。
+- **实现**：`refresh_tokens.client`（`web` | `miniprogram` | `unknown`）。登录与 `POST /tenants/:id/select` 只删除**同端** refresh（`web` 与历史 `unknown` 共用一组；`miniprogram` 单独一组），再写入带 `client` 的新 token。
+- **仍会全端失效**：改密码、换绑手机号等安全操作仍 `deleteMany({ userId })`；登出只删当前这条 refresh。
+- **同端**：同一端再次登录/选企业会顶掉该端旧会话（例如两台电脑都用网页登录时，后选企业的会顶先登录的）。
+
 ### 4.4 「自动掉线」常见原因（会话层）
 
 - 业务请求使用 **Bearer access JWT**（默认约 **15 分钟** 过期，见 `backend/src/config/env.ts` 的 `JWT_EXPIRES_IN`）。过期后若 **`POST /auth/refresh`** 未成功换新 access，前端在 **401 后刷新仍失败** 时会清理 `localStorage` 并整页回到登录（`services/api.ts`）。

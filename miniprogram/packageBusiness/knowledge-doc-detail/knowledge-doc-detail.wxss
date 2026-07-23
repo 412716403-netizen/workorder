@@ -1,5 +1,32 @@
 @import '/styles/psi-purchase-order-detail-page.wxss';
 
+.kb-doc-header-bar {
+  position: relative;
+  padding-right: 16rpx;
+}
+
+.kb-doc-header-title {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 34rpx;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.98);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.kb-doc-header-bar .plan-detail-header__back {
+  position: relative;
+  z-index: 1;
+}
+
 .kb-doc-page {
   padding: 0 var(--spacing-page) calc(48rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
@@ -274,4 +301,140 @@
   font-size: 24rpx;
   color: #3b82f6;
   font-weight: 600;
+}
+
+.kb-doc-outline-fab {
+  position: fixed;
+  right: 32rpx;
+  bottom: calc(48rpx + env(safe-area-inset-bottom));
+  z-index: 80;
+  min-width: 96rpx;
+  height: 80rpx;
+  padding: 0 28rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999rpx;
+  background: #2563eb;
+  color: #fff;
+  font-size: 28rpx;
+  font-weight: 700;
+  box-shadow: 0 10rpx 28rpx rgba(37, 99, 235, 0.35);
+}
+
+.kb-doc-heading {
+  display: block;
+  width: 100%;
+  margin: 12rpx 0 16rpx;
+  scroll-margin-top: 16rpx;
+}
+
+.kb-doc-heading__text {
+  display: block;
+  line-height: 1.4;
+  color: #0f172a;
+  word-break: break-word;
+}
+
+.kb-doc-heading--l1 .kb-doc-heading__text {
+  font-size: 36rpx;
+  font-weight: 800;
+}
+
+.kb-doc-heading--l2 .kb-doc-heading__text {
+  font-size: 32rpx;
+  font-weight: 700;
+}
+
+.kb-doc-heading--l3 .kb-doc-heading__text {
+  font-size: 30rpx;
+  font-weight: 700;
+}
+
+.kb-doc-heading--cell,
+.kb-doc-heading--callout {
+  margin: 4rpx 0 8rpx;
+}
+
+.kb-doc-outline-mask {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 90;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.kb-doc-outline-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 91;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-radius: 24rpx 24rpx 0 0;
+  box-shadow: 0 -8rpx 32rpx rgba(15, 23, 42, 0.12);
+  padding-bottom: env(safe-area-inset-bottom);
+  box-sizing: border-box;
+}
+
+.kb-doc-outline-sheet__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 28rpx 32rpx 16rpx;
+  border-bottom: 1rpx solid #e2e8f0;
+}
+
+.kb-doc-outline-sheet__title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.kb-doc-outline-sheet__close {
+  font-size: 26rpx;
+  color: #64748b;
+  padding: 8rpx 4rpx;
+}
+
+.kb-doc-outline-sheet__nav {
+  flex: 1;
+  max-height: calc(70vh - 100rpx);
+  padding: 8rpx 0 24rpx;
+  box-sizing: border-box;
+}
+
+.kb-doc-outline-item {
+  padding: 22rpx 32rpx;
+  font-size: 28rpx;
+  line-height: 1.4;
+  color: #334155;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-doc-outline-item:active {
+  background: #f1f5f9;
+}
+
+.kb-doc-outline-item--l1 {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.kb-doc-outline-item--l2 {
+  padding-left: 56rpx;
+  font-weight: 600;
+}
+
+.kb-doc-outline-item--l3 {
+  padding-left: 80rpx;
+  font-size: 26rpx;
+  color: #64748b;
 }

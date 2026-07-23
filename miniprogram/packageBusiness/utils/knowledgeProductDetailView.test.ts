@@ -52,7 +52,7 @@ describe('knowledgeProductDetailView', () => {
     expect(view.processRows[0].showPieceHint).toBe(true);
     expect(view.showBomSection).toBe(true);
     expect(view.bomGroups).toHaveLength(1);
-    expect(view.bomGroups[0].items[0].productName).toBe('面料');
+    expect(view.bomGroups[0].items[0].productName).toBe('面料 M1');
     expect(view.bomGroups[0].items[0].qtyText).toContain('×2');
     expect(view.showBomSkuTabs).toBe(false);
   });
@@ -89,6 +89,7 @@ describe('knowledgeProductDetailView', () => {
     });
 
     expect(view.showBomSkuTabs).toBe(false);
+    expect(view.bomGroups[0].items[0].productName).toBe('面料 M1');
     expect(view.bomGroups[0].items[0].showCustomTags).toBe(true);
     expect(view.bomGroups[0].items[0].customTags[0].text).toBe('成分: 棉');
   });

@@ -18,6 +18,8 @@ const TABLE_RE = /<table\b[\s\S]*?<\/table>/gi;
 const BLOCKQUOTE_RE = /<blockquote\b[\s\S]*?<\/blockquote>/gi;
 const TOP_BLOCK_RE = /<(table|blockquote)\b[\s\S]*?<\/\1>/gi;
 const IMG_RE = /<img\b[^>]*>/gi;
+/** 与网页端一致：仅 h1–h3 进入目录 */
+const HEADING_BLOCK_RE = /<(h[1-3])\b[^>]*>[\s\S]*?<\/\1>/gi;
 
 const TABLE_STYLE =
   'border-collapse:collapse;width:max-content;min-width:100%;border:1px solid #cbd5e1;table-layout:auto;';
@@ -320,6 +322,87 @@ function isBlankHtml(html) {
   return !s;
 }
 
+function stripTagsToText(html) {
+  return decodeHtmlAttr(
+    String(html || '')
+      .replace(/<br\s*\/?>/gi, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/<[^>]+>/g, '')
+      .replace(/\s+/g, ' ')
+      .trim(),
+  );
+}
+
+function slugifyHeadingText(text) {
+  const base = String(text || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^\w\u4e00-\u9fff-]+/g, '')
+    .slice(0, 48);
+  return base || 'heading';
+}
+
+function makeOutlineId(text, level, index) {
+  return `${slugifyHeadingText(text)}-${level}-${index}`;
+}
+
+/**
+ * 扫描 HTML 中的 h1–h3，生成与网页端同形的目录项（无 DOM）。
+ * @returns {{ id: string, level: 1|2|3, text: string, elementId: string }[]}
+ */
+function collectKnowledgeOutlineFromHtml(html) {
+  const items = [];
+  const s = String(html || '');
+  const re = /<(h[1-3])\b[^>]*>[\s\S]*?<\/\1>/gi;
+  let m;
+  let index = 0;
+  while ((m = re.exec(s)) !== null) {
+    const tag = String(m[1] || '').toLowerCase();
+    const level = tag === 'h1' ? 1 : tag === 'h2' ? 2 : 3;
+    const inner = m[0].replace(/^<h[1-3]\b[^>]*>/i, '').replace(/<\/h[1-3]>\s*$/i, '');
+    const text = stripTagsToText(inner);
+    if (!text) continue;
+    items.push({
+      id: makeOutlineId(text, level, index),
+      level,
+      text,
+      elementId: `kb-outline-${index}`,
+    });
+    index += 1;
+  }
+  return items;
+}
+
+/** 按出现顺序给 h1–h3 写入稳定 id（kb-outline-N），供分块锚点对齐 */
+function annotateKnowledgeHeadings(html) {
+  let index = 0;
+  return String(html || '').replace(/<(h[1-3])\b([^>]*)>([\s\S]*?)<\/\1>/gi, (full, tag, attrs, inner) => {
+    const text = stripTagsToText(inner);
+    if (!text) return full;
+    const elementId = `kb-outline-${index}`;
+    index += 1;
+    let openAttrs = attrs || '';
+    if (/\bid\s*=/i.test(openAttrs)) {
+      openAttrs = openAttrs.replace(/\bid\s*=\s*(["'])[\s\S]*?\1/i, ` id="${elementId}"`);
+    } else {
+      openAttrs = `${openAttrs} id="${elementId}"`;
+    }
+    return `<${tag}${openAttrs}>${inner}</${tag}>`;
+  });
+}
+
+function parseHeadingBlockTag(tag) {
+  const m = String(tag || '').match(/^<(h[1-3])\b([^>]*)>([\s\S]*?)<\/\1>$/i);
+  if (!m) return null;
+  const level = Number(m[1][1]);
+  const attrs = m[2] || '';
+  const text = stripTagsToText(m[3]);
+  if (!text || (level !== 1 && level !== 2 && level !== 3)) return null;
+  const elementId = extractAttr(attrs, 'id') || '';
+  return { level, text, elementId, html: tag };
+}
+
 /**
  * 非表格流：拆成 html / image / product / file 块，便于原生点击
  * （不含 blockquote；由 splitFlowIntoBlocks 先拆高亮块）
@@ -329,6 +412,7 @@ function splitInlineFlowIntoBlocks(flowHtml, previewUrls, keyPrefix, maxContentW
   const documents = [];
   const images = [];
   const files = [];
+  const headings = [];
   const assetMap = urlById && typeof urlById === 'object' ? urlById : {};
   let s = String(flowHtml || '');
 
@@ -358,7 +442,13 @@ function splitInlineFlowIntoBlocks(flowHtml, previewUrls, keyPrefix, maxContentW
     return `\u0001KBIMG${idx}\u0001`;
   });
 
-  const parts = s.split(/(\u0001KB(?:FILE|DOC|PROD|IMG)\d+\u0001)/);
+  s = s.replace(/<(h[1-3])\b[^>]*>[\s\S]*?<\/\1>/gi, (tag) => {
+    const idx = headings.length;
+    headings.push(tag);
+    return `\u0001KBHD${idx}\u0001`;
+  });
+
+  const parts = s.split(/(\u0001KB(?:FILE|DOC|PROD|IMG|HD)\d+\u0001)/);
   const blocks = [];
 
   parts.forEach((part, i) => {
@@ -367,6 +457,7 @@ function splitInlineFlowIntoBlocks(flowHtml, previewUrls, keyPrefix, maxContentW
     const docM = part.match(/^\u0001KBDOC(\d+)\u0001$/);
     const prodM = part.match(/^\u0001KBPROD(\d+)\u0001$/);
     const imgM = part.match(/^\u0001KBIMG(\d+)\u0001$/);
+    const hdM = part.match(/^\u0001KBHD(\d+)\u0001$/);
     if (fileM) {
       const f = files[Number(fileM[1])];
       if (!f || !f.assetId) return;
@@ -419,6 +510,20 @@ function splitInlineFlowIntoBlocks(flowHtml, previewUrls, keyPrefix, maxContentW
         src: img.src,
         widthPx: img.widthPx || null,
         previewIndex,
+      });
+      return;
+    }
+    if (hdM) {
+      const parsed = parseHeadingBlockTag(headings[Number(hdM[1])]);
+      if (!parsed) return;
+      blocks.push({
+        type: 'heading',
+        key: `${keyPrefix}-hd${i}`,
+        level: parsed.level,
+        text: parsed.text,
+        html: styleKnowledgeImages(parsed.html, maxContentWidthPx),
+        anchorId: parsed.elementId || '',
+        anchorClass: parsed.elementId ? `kb-a-${parsed.elementId}` : '',
       });
       return;
     }
@@ -574,7 +679,8 @@ function buildKnowledgeDocBlocks(html, urlById, opts) {
     opts && Number.isFinite(opts.maxContentWidthPx) && opts.maxContentWidthPx > 0
       ? opts.maxContentWidthPx
       : 9999;
-  let s = String(html || '');
+  const outline = collectKnowledgeOutlineFromHtml(html);
+  let s = annotateKnowledgeHeadings(String(html || ''));
   // 先抽出附件占位，避免 data-asset-url 被当成图片路径替换
   const earlyFiles = [];
   s = s.replace(FILE_ATTACH_RE, (tag) => {
@@ -625,7 +731,7 @@ function buildKnowledgeDocBlocks(html, urlById, opts) {
     );
   }
 
-  return { blocks, previewUrls };
+  return { blocks, previewUrls, outline };
 }
 
 /** @deprecated 保留给旧调用；详情页改用 buildKnowledgeDocBlocks */
@@ -668,6 +774,8 @@ module.exports = {
   parseImgWidthPx,
   pxToRpx,
   applyImageBlockLayout,
+  collectKnowledgeOutlineFromHtml,
+  annotateKnowledgeHeadings,
   buildKnowledgeDocBlocks,
   prepareKnowledgeHtmlForRichText,
   assetBufferToDataUrl,

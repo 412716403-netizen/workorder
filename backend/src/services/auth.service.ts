@@ -49,6 +49,34 @@ export function normalizeAuthClient(v: unknown): AuthClient {
   return 'unknown';
 }
 
+/**
+ * 同端互顶、跨端并存：小程序只顶小程序；网页/unknown 共用一组（兼容历史无 client 行）。
+ * 改密/换绑手机等安全场景仍应 deleteMany({ userId }) 全清。
+ */
+function clientsToReplace(client: AuthClient): AuthClient[] {
+  if (client === 'miniprogram') return ['miniprogram'];
+  return ['web', 'unknown'];
+}
+
+async function replaceRefreshTokenForClient(
+  userId: string,
+  client: AuthClient,
+  refreshTokenPlain: string,
+): Promise<number> {
+  const deleted = await prisma.refreshToken.deleteMany({
+    where: { userId, client: { in: clientsToReplace(client) } },
+  });
+  await prisma.refreshToken.create({
+    data: {
+      userId,
+      token: hashToken(refreshTokenPlain),
+      client,
+      expiresAt: parseExpiry(env.JWT_REFRESH_EXPIRES_IN),
+    },
+  });
+  return deleted.count;
+}
+
 /** 记录用户登录与租户成员活跃（平台用量 MAU） */
 async function recordLoginActivity(
   userId: string,
@@ -302,9 +330,7 @@ export async function registerByPhone(phone: string, password: string, displayNa
   };
   const tokens = generateTokens(payload);
 
-  await prisma.refreshToken.create({
-    data: { userId: user.id, token: hashToken(tokens.refreshToken), expiresAt: parseExpiry(env.JWT_REFRESH_EXPIRES_IN) },
-  });
+  await replaceRefreshTokenForClient(user.id, 'unknown', tokens.refreshToken);
 
   return {
     user: {
@@ -362,13 +388,7 @@ async function issueLoginForUser(user: DbUser, client: AuthClient, logTag: strin
   console.warn(
     `[auth:${logTag}] user=${user.id} (${user.username}) tenantId=${tenantInfo.tenantId ?? 'none'} client=${client}`,
   );
-  await prisma.refreshToken.create({
-    data: {
-      userId: user.id,
-      token: hashToken(tokens.refreshToken),
-      expiresAt: parseExpiry(env.JWT_REFRESH_EXPIRES_IN),
-    },
-  });
+  await replaceRefreshTokenForClient(user.id, client, tokens.refreshToken);
   await recordLoginActivity(user.id, { tenantId: tenantInfo.tenantId, client });
 
   return {
@@ -543,12 +563,11 @@ export async function selectTenant(userId: string, tenantId: string, client: Aut
     tenantRole: membership.role,
   };
 
-  const deletedCount = await prisma.refreshToken.deleteMany({ where: { userId } });
-  console.warn(`[auth:selectTenant] deleted ${deletedCount.count} refresh tokens for user=${userId} tenant=${tenantId}`);
   const tokens = generateTokens(payload);
-  await prisma.refreshToken.create({
-    data: { userId: user.id, token: hashToken(tokens.refreshToken), expiresAt: parseExpiry(env.JWT_REFRESH_EXPIRES_IN) },
-  });
+  const deletedCount = await replaceRefreshTokenForClient(user.id, client, tokens.refreshToken);
+  console.warn(
+    `[auth:selectTenant] replaced ${deletedCount} ${client} refresh token(s) for user=${userId} tenant=${tenantId}`,
+  );
   await recordLoginActivity(userId, { tenantId, client });
 
   return {
@@ -738,8 +757,14 @@ export async function updateProfile(
       tenantRole: tenantInfo.tenantRole,
     };
     const tokens = generateTokens(payload);
+    // 改密后全端失效；新会话记为 unknown（当前请求端会立刻拿到新 token）
     await prisma.refreshToken.create({
-      data: { userId: updated.id, token: hashToken(tokens.refreshToken), expiresAt: parseExpiry(env.JWT_REFRESH_EXPIRES_IN) },
+      data: {
+        userId: updated.id,
+        token: hashToken(tokens.refreshToken),
+        client: 'unknown',
+        expiresAt: parseExpiry(env.JWT_REFRESH_EXPIRES_IN),
+      },
     });
     return { user: userOut, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken };
   }
@@ -916,7 +941,12 @@ export async function phoneChangeComplete(
   };
   const tokens = generateTokens(payload);
   await prisma.refreshToken.create({
-    data: { userId: updated.id, token: hashToken(tokens.refreshToken), expiresAt: parseExpiry(env.JWT_REFRESH_EXPIRES_IN) },
+    data: {
+      userId: updated.id,
+      token: hashToken(tokens.refreshToken),
+      client: 'unknown',
+      expiresAt: parseExpiry(env.JWT_REFRESH_EXPIRES_IN),
+    },
   });
   return { user: userOut, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken };
 }
