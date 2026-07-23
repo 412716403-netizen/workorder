@@ -1,13 +1,17 @@
-import React, { useState } from 'react';
-import { Download, FileText, ListChecks, X } from 'lucide-react';
+import React, { useCallback, useState } from 'react';
+import { Download, FileText, ListChecks } from 'lucide-react';
+import { toast } from 'sonner';
 import type { DevStageDto, DevStageTemplateDto } from '../../types';
 import type { CustomDocFieldType } from '../../types';
 import { effectiveCustomDocFieldType } from '../../utils/reportCustomDocField';
 import { formatLocalDateTimeZh } from '../../utils/localDateTime';
 import { getStageRegisteredDisplayFields } from '../../utils/devStageDisplay';
 import { parseDevStageFileItems, resolveDevStageFileDownloadName } from '../../utils/devStageFileValue';
-import { ModalPortal } from '../../components/ModalPortal';
+import { toKnowledgeAttachmentInfo } from '../../utils/devStageAttachmentPreview';
+import { formatUnpreviewableMessage, resolveAttachmentKind } from '../../utils/knowledgeAttachment';
 import { formStandardLabelClass } from '../../styles/uiDensity';
+import KnowledgeFilePreviewOverlay from '../knowledge-base/KnowledgeFilePreviewOverlay';
+import type { KnowledgeAttachmentInfo } from '../knowledge-base/knowledgeFileAttachmentExtension';
 
 interface DevStageRegisteredContentProps {
   stage: DevStageDto;
@@ -40,7 +44,26 @@ function DevStageFieldValue({
   label: string;
   dateWithTime?: boolean;
 }) {
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [attachmentPreview, setAttachmentPreview] = useState<KnowledgeAttachmentInfo | null>(null);
+  const openAttachment = useCallback(
+    (item: { url: string; name?: string }, index: number) => {
+      const info = toKnowledgeAttachmentInfo(item, label, index);
+      const kind = resolveAttachmentKind(info.mimeType, info.fileName);
+      if (kind === 'image' || kind === 'pdf' || kind === 'excel' || kind === 'word' || kind === 'video') {
+        setAttachmentPreview(info);
+        return;
+      }
+      toast.message(formatUnpreviewableMessage(info.fileName));
+      const a = document.createElement('a');
+      a.href = item.url;
+      a.download = info.fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    },
+    [label],
+  );
+
   const str = value.trim();
   if (!str) return null;
 
@@ -50,41 +73,26 @@ function DevStageFieldValue({
 
     return (
       <>
-        {previewUrl && (
-          <ModalPortal>
-            <div
-              className="fixed inset-0 z-[500] flex items-center justify-center bg-slate-900/90 p-4 sm:p-6 backdrop-blur-xl"
-              onClick={() => setPreviewUrl(null)}
-              role="presentation"
-            >
-              <button
-                type="button"
-                className="absolute right-10 top-10 rounded-full bg-white/10 p-4 text-white hover:bg-white/20"
-                onClick={() => setPreviewUrl(null)}
-              >
-                <X className="h-8 w-8" />
-              </button>
-              <img
-                src={previewUrl}
-                alt=""
-                className="relative z-10 max-h-full max-w-full rounded-2xl object-contain shadow-2xl"
-                onClick={(e) => e.stopPropagation()}
-              />
-            </div>
-          </ModalPortal>
-        )}
+        <KnowledgeFilePreviewOverlay
+          attachment={attachmentPreview}
+          onClose={() => setAttachmentPreview(null)}
+        />
         <div className="flex flex-wrap items-center gap-3">
           {items.map((item, idx) => {
             const url = item.url;
             const downloadName = resolveDevStageFileDownloadName(item, label, idx);
-            const isImage = url.startsWith('data:image/');
-            const isPdf = url.startsWith('data:application/pdf');
+            const info = toKnowledgeAttachmentInfo(item, label, idx);
+            const kind = resolveAttachmentKind(info.mimeType, info.fileName);
+            const isImage = kind === 'image';
+            const isPdf = kind === 'pdf';
+            const kindLabel =
+              kind === 'pdf' ? 'PDF 文档' : kind === 'excel' ? 'Excel' : kind === 'word' ? 'Word' : '附件';
             if (isImage) {
               return (
                 <div key={`${idx}-${url.slice(0, 24)}`} className="flex flex-col items-center gap-1">
                   <button
                     type="button"
-                    onClick={() => setPreviewUrl(url)}
+                    onClick={() => openAttachment(item, idx)}
                     className="h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-transform hover:scale-[1.02]"
                     title={downloadName}
                   >
@@ -106,13 +114,23 @@ function DevStageFieldValue({
                 key={`${idx}-${url.slice(0, 24)}`}
                 className="flex max-w-[240px] items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm"
               >
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-50">
+                <button
+                  type="button"
+                  onClick={() => openAttachment(item, idx)}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-50 hover:bg-slate-100"
+                  title={`查看 ${downloadName}`}
+                >
                   <FileText className={`h-5 w-5 ${isPdf ? 'text-red-400' : 'text-indigo-500'}`} />
-                </div>
+                </button>
                 <div className="flex min-w-0 flex-col gap-0.5">
-                  <span className="truncate text-[11px] font-semibold text-slate-700" title={downloadName}>
-                    {item.name || (isPdf ? 'PDF 文档' : '附件')}
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => openAttachment(item, idx)}
+                    className="truncate text-left text-[11px] font-semibold text-slate-700 hover:text-indigo-700 hover:underline"
+                    title={downloadName}
+                  >
+                    {item.name || kindLabel}
+                  </button>
                   <a
                     href={url}
                     download={downloadName}

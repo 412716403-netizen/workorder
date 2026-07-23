@@ -19,6 +19,7 @@ import type {
   ProductionOrder,
 } from '../../../types';
 import { DocInlineMetaRow, DocSummaryCard } from '../../../components/doc-modal';
+import { PlanFormCustomFieldReadonly } from '../../../components/PlanFormCustomFieldControls';
 import { fmtDT } from '../../../utils/formatTime';
 import { getEffectiveReportTemplate, getReportCustomDataDisplayEntries } from '../../../utils/effectiveReportTemplate';
 import { getProductCategoryCustomFieldEntries } from '../../../utils/reportCustomDocField';
@@ -30,8 +31,29 @@ import {
 } from '../../../utils/outsourceReceiveReportDisplay';
 import { AMOUNT_PERMISSION_KEYS, useCanViewAmount } from '../../../utils/canViewAmount';
 import { formatWeightKgDisplay } from '../../../utils/reportBatchWeightHelpers';
-import type { ProductionOpRecord } from '../../../types';
+import type { PlanFormFieldConfig, ProductionOpRecord } from '../../../types';
 import { productThumbSrc } from '../../../utils/productImageSrc';
+
+function reportFieldToPlanFormCf(f: {
+  id: string;
+  label: string;
+  type: PlanFormFieldConfig['type'];
+  options?: string[];
+  dateWithTime?: boolean;
+  dateAutoFill?: boolean;
+}): PlanFormFieldConfig {
+  return {
+    id: f.id,
+    label: f.label,
+    type: f.type,
+    options: f.options,
+    dateWithTime: f.dateWithTime,
+    dateAutoFill: f.dateAutoFill,
+    showInList: true,
+    showInCreate: true,
+    showInDetail: true,
+  };
+}
 
 type OrderReportRow = {
   order: ProductionOrder;
@@ -139,7 +161,15 @@ const ReportBatchItemsTable: React.FC<Props> = ({
                   className="inline-flex max-w-full min-w-0 items-center gap-1.5 normal-case"
                 >
                   <span className="shrink-0 text-slate-400">{e.label}:</span>
-                  <span className="min-w-0 font-bold text-slate-700 break-all">{e.display}</span>
+                  {e.fieldType === 'file' ? (
+                    <PlanFormCustomFieldReadonly
+                      cf={reportFieldToPlanFormCf(e.fieldDef)}
+                      value={e.rawValue}
+                      variant="inlineMeta"
+                    />
+                  ) : (
+                    <span className="min-w-0 font-bold text-slate-700 break-all">{e.display}</span>
+                  )}
                 </span>
               ))}
             </DocInlineMetaRow>

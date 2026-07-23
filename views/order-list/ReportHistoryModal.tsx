@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { History, X, Filter, FileText, Loader2 } from 'lucide-react';
+import { History, X, Filter, FileText, Loader2, ClipboardCheck } from 'lucide-react';
 import { ModalPortal } from '../../components/ModalPortal';
 import {
   ProductionOrder,
@@ -52,6 +52,11 @@ interface ReportHistoryModalProps {
   onOpenBatchDetail: (batch: any) => void;
   /** 从工单详情等入口打开时预填筛选（日期范围覆盖默认「当天」） */
   initialSeed?: ReportHistoryInitialSeed | null;
+  /** 有报工审核权限时，在标题栏展示入口 */
+  canReviewReports?: boolean;
+  /** 待审批次数，用于入口角标 */
+  pendingApprovalCount?: number;
+  onOpenPendingApproval?: () => void;
 }
 
 const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
@@ -66,6 +71,9 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
   prodRecords,
   onOpenBatchDetail,
   initialSeed = null,
+  canReviewReports = false,
+  pendingApprovalCount = 0,
+  onOpenPendingApproval,
 }) => {
   const todayDate = useMemo(() => isoToDateInput(getTodayRangeIso().from), []);
   const [reportHistoryFilter, setReportHistoryFilter] = useState<{
@@ -375,9 +383,25 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
     <div className="fixed inset-0 z-[88] flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} />
       <div className="relative z-10 bg-white w-full max-w-6xl max-h-[min(92vh,960px)] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
-          <h3 className="font-bold text-slate-800 flex items-center gap-2"><History className="w-5 h-5 text-indigo-600" /> 报工流水</h3>
-          <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
+        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0 gap-3">
+          <h3 className="font-bold text-slate-800 flex items-center gap-2">
+            <History className="w-5 h-5 text-indigo-600" /> 报工流水
+          </h3>
+          <div className="flex items-center gap-2">
+            {canReviewReports && onOpenPendingApproval ? (
+              <button
+                type="button"
+                onClick={onOpenPendingApproval}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-bold text-indigo-600 bg-indigo-50 rounded-xl hover:bg-indigo-100 transition-all"
+              >
+                <ClipboardCheck className="w-4 h-4 shrink-0" />
+                报工审核{pendingApprovalCount > 0 ? `（${pendingApprovalCount}）` : ''}
+              </button>
+            ) : null}
+            <button type="button" onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
         <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
           <div className="flex items-center gap-2 mb-3">

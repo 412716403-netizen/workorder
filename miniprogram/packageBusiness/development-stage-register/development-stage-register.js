@@ -26,6 +26,59 @@ const {
   parseDevStageFileItems,
   serializeDevStageFileItems,
 } = require('../utils/devStageFileValue.js');
+const {
+  resolveOpenDocumentFileType,
+  formatUnpreviewableMessage,
+  getFileExtension,
+} = require('../utils/knowledgeAttachmentForMini.js');
+
+function mimeFromDataUrl(url) {
+  const m = /^data:([^;,]+)/i.exec(String(url || '').trim());
+  return (m && m[1] ? m[1] : '').trim().toLowerCase();
+}
+
+/** data URL → 临时文件，供 wx.openDocument */
+function writeDataUrlTempFile(dataUrl, fileName) {
+  const raw = String(dataUrl || '');
+  const comma = raw.indexOf(',');
+  if (comma < 0 || raw.indexOf('data:') !== 0) {
+    return Promise.reject(new Error('无效附件'));
+  }
+  const meta = raw.slice(0, comma);
+  const payload = raw.slice(comma + 1);
+  if (!/;base64/i.test(meta)) {
+    return Promise.reject(new Error('仅支持 base64 附件'));
+  }
+  const mime = mimeFromDataUrl(raw);
+  const ext =
+    getFileExtension(fileName) ||
+    (mime === 'application/pdf'
+      ? 'pdf'
+      : mime.indexOf('spreadsheetml') >= 0
+        ? 'xlsx'
+        : mime === 'application/vnd.ms-excel'
+          ? 'xls'
+          : mime.indexOf('wordprocessingml') >= 0
+            ? 'docx'
+            : mime === 'application/msword'
+              ? 'doc'
+              : 'bin');
+  const base = (typeof wx !== 'undefined' && wx.env && wx.env.USER_DATA_PATH) || '';
+  if (!base) return Promise.reject(new Error('无法写入临时文件'));
+  const safe = String(fileName || 'attach')
+    .replace(/[^a-zA-Z0-9._\u4e00-\u9fa5-]/g, '_')
+    .slice(0, 40);
+  const filePath = `${base}/dev-stage-${Date.now()}-${safe}.${ext}`;
+  return new Promise((resolve, reject) => {
+    wx.getFileSystemManager().writeFile({
+      filePath,
+      data: payload,
+      encoding: 'base64',
+      success: () => resolve(filePath),
+      fail: reject,
+    });
+  });
+}
 
 function computeScrollHeight(nav) {
   const win = readWindowMetrics();
@@ -327,13 +380,43 @@ Page({
       });
       return;
     }
-    wx.showModal({
-      title: item.name || '附件',
-      content: item.name
-        ? `文件「${item.name}」请在电脑端查看或下载。`
-        : '该文件类型请在电脑端查看或下载。',
-      showCancel: false,
-    });
+
+    const fileName = item.name || '附件';
+    const mimeType = mimeFromDataUrl(item.url);
+    const fileType = resolveOpenDocumentFileType(fileName, mimeType);
+    if (!fileType) {
+      wx.showModal({
+        title: fileName,
+        content: `${formatUnpreviewableMessage(fileName)}，请在电脑端查看。`,
+        showCancel: false,
+      });
+      return;
+    }
+
+    wx.showLoading({ title: '打开中…', mask: true });
+    writeDataUrlTempFile(item.url, fileName)
+      .then(
+        (filePath) =>
+          new Promise((resolve, reject) => {
+            wx.openDocument({
+              filePath,
+              fileType,
+              showMenu: true,
+              success: resolve,
+              fail: reject,
+            });
+          }),
+      )
+      .catch(() => {
+        wx.showModal({
+          title: '无法打开',
+          content: '请在电脑端查看该文件。',
+          showCancel: false,
+        });
+      })
+      .finally(() => {
+        wx.hideLoading();
+      });
   },
 
   async onSaveTap() {

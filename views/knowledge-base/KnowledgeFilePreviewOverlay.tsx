@@ -16,6 +16,7 @@ import { formatFileSize, formatUnpreviewableMessage, resolveAttachmentKind } fro
 import KnowledgeExcelPreview from './KnowledgeExcelPreview';
 import KnowledgeWordPreview from './KnowledgeWordPreview';
 import type { KnowledgeAttachmentInfo } from './knowledgeFileAttachmentExtension';
+import './knowledge-editor.css';
 
 interface KnowledgeFilePreviewOverlayProps {
   attachment: KnowledgeAttachmentInfo | null;

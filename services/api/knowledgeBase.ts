@@ -80,9 +80,15 @@ function assetUrlToApiPath(assetUrl: string): string {
   return assetUrl.replace(/^\/api(?=\/)/, '');
 }
 
-/** 带鉴权拉取附件二进制（供 Excel 解析）。 */
+/** 带鉴权拉取附件二进制（供 Excel/Word 解析）；data:/blob: 直转 Blob，供开发节点等本地附件预览。 */
 export async function fetchKnowledgeAssetBlob(assetUrl: string): Promise<Blob> {
-  const res = await authorizedFetch(assetUrlToApiPath(assetUrl));
+  const raw = String(assetUrl ?? '').trim();
+  if (raw.startsWith('data:') || raw.startsWith('blob:')) {
+    const res = await fetch(raw);
+    if (!res.ok) throw new Error('加载附件失败');
+    return res.blob();
+  }
+  const res = await authorizedFetch(assetUrlToApiPath(raw));
   if (!res.ok) throw new Error('加载附件失败');
   return res.blob();
 }

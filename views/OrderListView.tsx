@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { Clock, Layers, Plus, History, User, Sliders, X, FileText, ChevronDown, ChevronRight, ScrollText, Pencil, Search, Package, RotateCcw, ArrowDownToLine, Split, ClipboardCheck } from 'lucide-react';
+import { Clock, Layers, Plus, History, User, Sliders, X, FileText, ChevronDown, ChevronRight, ScrollText, Pencil, Search, Package, RotateCcw, ArrowDownToLine, Split } from 'lucide-react';
 import {
   ProductionOrder,
   MilestoneStatus,
@@ -863,17 +863,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
             className={outlineToolbarButtonClass}
           >
             <History className="w-4 h-4 shrink-0" />
-            报工流水
-          </button>
-          )}
-          {canReviewReports && (
-          <button
-            type="button"
-            onClick={() => setShowReportPendingModal(true)}
-            className={outlineToolbarButtonClass}
-          >
-            <ClipboardCheck className="w-4 h-4 shrink-0" />
-            报工审核{pendingApprovalCount > 0 ? `（${pendingApprovalCount}）` : ''}
+            报工流水{canReviewReports && pendingApprovalCount > 0 ? `（${pendingApprovalCount}）` : ''}
           </button>
           )}
           {hasOrderPerm('production:orders_pending_stock_in') && (
@@ -1681,6 +1671,9 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
         prodRecords={effectiveProdRecords}
         onOpenBatchDetail={(batch) => setReportDetailBatch(batch)}
         initialSeed={reportHistorySeed}
+        canReviewReports={canReviewReports}
+        pendingApprovalCount={pendingApprovalCount}
+        onOpenPendingApproval={() => setShowReportPendingModal(true)}
       />
 
       <ReportPendingApprovalModal

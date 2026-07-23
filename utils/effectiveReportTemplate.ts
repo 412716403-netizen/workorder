@@ -1,6 +1,7 @@
-import type { GlobalNodeTemplate, Milestone, ReportFieldDefinition } from '../types';
+import type { CustomDocFieldType, GlobalNodeTemplate, Milestone, ReportFieldDefinition } from '../types';
 import { SCAN_ITEM_CODE_IDS_KEY } from '../types';
 import { effectiveCustomDocFieldType, normalizeReportFieldDefinition } from './reportCustomDocField';
+import { parseDevStageFileItems, resolveDevStageFileDownloadName } from './devStageFileValue';
 
 /**
  * 里程碑上的 reportTemplate 为建单快照；节点库更新后以节点库为准（与报工弹窗一致）。
@@ -48,13 +49,36 @@ export function coerceRouteReportDefaultForField(
   return String(raw);
 }
 
+export type ReportCustomDataDisplayEntry = {
+  fieldId: string;
+  label: string;
+  /** 纯文本摘要（非 file 或兜底） */
+  display: string;
+  fieldType: CustomDocFieldType;
+  /** 原始值，file 类型供 Readonly 预览 */
+  rawValue: string;
+  fieldDef: ReportFieldDefinition;
+};
+
+function formatFileFieldDisplay(raw: string, fallbackLabel: string): string {
+  const items = parseDevStageFileItems(raw);
+  if (items.length === 0) {
+    if (raw.startsWith('data:image/')) return '（已上传图片）';
+    if (raw.startsWith('data:')) return '（已上传附件）';
+    return raw.length > 80 ? `${raw.slice(0, 80)}…` : raw;
+  }
+  const names = items.map((it, i) => resolveDevStageFileDownloadName(it, fallbackLabel, i));
+  if (names.length === 1) return names[0]!;
+  return names.join('、');
+}
+
 /** 将报工 customData 按当前填报项定义格式化为只读行（用于流水/工单详情） */
 export function getReportCustomDataDisplayEntries(
-  customData: Record<string, any> | undefined | null,
+  customData: Record<string, unknown> | undefined | null,
   fieldDefs: ReportFieldDefinition[],
-): { fieldId: string; label: string; display: string }[] {
+): ReportCustomDataDisplayEntry[] {
   if (!customData || !fieldDefs.length) return [];
-  const out: { fieldId: string; label: string; display: string }[] = [];
+  const out: ReportCustomDataDisplayEntry[] = [];
   for (const f of fieldDefs) {
     const v = customData[f.id];
     if (v == null || v === '') continue;
@@ -63,24 +87,51 @@ export function getReportCustomDataDisplayEntries(
     if (eff === 'select') {
       const disp = String(coerceRouteReportDefaultForField(norm, v));
       if (!disp) continue;
-      out.push({ fieldId: f.id, label: f.label, display: disp });
+      out.push({
+        fieldId: f.id,
+        label: f.label,
+        display: disp,
+        fieldType: 'select',
+        rawValue: disp,
+        fieldDef: norm,
+      });
       continue;
     }
     if (eff === 'file') {
       const s = typeof v === 'string' ? v : '';
-      if (!s) continue;
-      if (s.startsWith('data:image/')) out.push({ fieldId: f.id, label: f.label, display: '（已上传图片）' });
-      else if (s.startsWith('data:')) out.push({ fieldId: f.id, label: f.label, display: '（已上传附件）' });
-      else out.push({ fieldId: f.id, label: f.label, display: s.length > 80 ? `${s.slice(0, 80)}…` : s });
+      if (!s.trim()) continue;
+      out.push({
+        fieldId: f.id,
+        label: f.label,
+        display: formatFileFieldDisplay(s, f.label),
+        fieldType: 'file',
+        rawValue: s,
+        fieldDef: norm,
+      });
       continue;
     }
-    out.push({ fieldId: f.id, label: f.label, display: String(v) });
+    out.push({
+      fieldId: f.id,
+      label: f.label,
+      display: String(v),
+      fieldType: eff,
+      rawValue: String(v),
+      fieldDef: norm,
+    });
   }
   for (const [k, v] of Object.entries(customData)) {
     if (INTERNAL_CUSTOM_DATA_KEYS.has(k)) continue;
     if (fieldDefs.some(f => f.id === k)) continue;
     if (v == null || v === '') continue;
-    out.push({ fieldId: k, label: k, display: typeof v === 'object' ? JSON.stringify(v) : String(v) });
+    const display = typeof v === 'object' ? JSON.stringify(v) : String(v);
+    out.push({
+      fieldId: k,
+      label: k,
+      display,
+      fieldType: 'text',
+      rawValue: display,
+      fieldDef: { id: k, label: k, type: 'text' },
+    });
   }
   return out;
 }

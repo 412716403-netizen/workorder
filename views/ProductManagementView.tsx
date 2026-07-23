@@ -103,6 +103,19 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
     return m;
   }, [boms]);
 
+  /** 作为 BOM 子件被引用的次数（物料被调用次数） */
+  const materialCallCountMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const b of boms) {
+      for (const it of b.items ?? []) {
+        const pid = (it.productId ?? '').trim();
+        if (!pid) continue;
+        m.set(pid, (m.get(pid) || 0) + 1);
+      }
+    }
+    return m;
+  }, [boms]);
+
   const categoryMapPM = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
 
   useEffect(() => {
@@ -330,9 +343,10 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                     <th className="py-3 px-3">产品编号</th>
                     <th className="py-3 px-3 hidden sm:table-cell">产品名称</th>
                     <th className="py-3 px-3 hidden md:table-cell">分类</th>
-                    <th className="py-3 px-3 text-center hidden md:table-cell">工序</th>
-                    <th className="py-3 px-3 text-center hidden md:table-cell">变体</th>
                     <th className="py-3 px-3 text-center hidden lg:table-cell">BOM</th>
+                    <th className="py-3 px-3 text-center hidden lg:table-cell" title="作为其它产品 BOM 子件被引用的次数">
+                      被调用
+                    </th>
                     <th className="py-3 px-3 text-right hidden sm:table-cell">价格</th>
                     <th className="py-3 px-3 text-center w-20">状态</th>
                     <th className="py-3 pr-4 pl-2 w-12"></th>
@@ -342,6 +356,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                   {pagedProducts.map(product => {
                     const category = categoryMapPM.get(product.categoryId);
                     const bomCount = bomCountMap.get(product.id) || 0;
+                    const callCount = materialCallCountMap.get(product.id) || 0;
                     const sales = product.salesPrice ?? 0;
                     const purchase = product.purchasePrice ?? 0;
                     const displayPrice = sales > 0 ? sales : purchase;
@@ -391,14 +406,17 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                         <td className="py-3 px-3 hidden md:table-cell">
                           {category && <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold text-white bg-indigo-600">{category.name}</span>}
                         </td>
-                        <td className="py-3 px-3 text-center hidden md:table-cell">
-                          <span className="text-xs font-bold text-blue-600 tabular-nums">{product.milestoneNodeIds.length}</span>
-                        </td>
-                        <td className="py-3 px-3 text-center hidden md:table-cell">
-                          <span className="text-xs font-bold text-amber-600 tabular-nums">{product.variants.length}</span>
-                        </td>
                         <td className="py-3 px-3 text-center hidden lg:table-cell">
                           {bomCount > 0 ? <span className="text-xs font-bold text-emerald-600 tabular-nums">{bomCount}</span> : <span className="text-slate-300">—</span>}
+                        </td>
+                        <td className="py-3 px-3 text-center hidden lg:table-cell">
+                          {callCount > 0 ? (
+                            <span className="text-xs font-bold text-violet-600 tabular-nums" title="BOM 子件引用次数">
+                              {callCount}
+                            </span>
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
                         </td>
                         <td className="py-3 px-3 text-right hidden sm:table-cell">
                           <span className="text-sm font-bold text-slate-800">¥{displayPrice > 0 ? displayPrice.toLocaleString() : '0'}</span>

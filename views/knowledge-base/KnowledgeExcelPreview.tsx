@@ -8,6 +8,11 @@ import {
   formatExcelCellValue,
   parseCellRange,
 } from '../../utils/excelPreview';
+import {
+  parseXlsFallbackPreview,
+  type ExcelPreviewSheetGrid,
+  type ExcelPreviewHtmlSheet,
+} from '../../utils/excelXlsGrid';
 
 /** 防止超大表拖垮渲染 */
 const MAX_ROWS = 1000;
@@ -30,19 +35,12 @@ interface SheetGrid {
   name: string;
   colWidths: number[];
   rowHeights: number[];
-  /** null 表示被合并区覆盖的从属单元格（不渲染） */
   rows: Array<Array<GridCell | null>>;
 }
 
-/** SheetJS 回退（.xls 等 ExcelJS 无法解析的旧格式，无图片） */
-interface HtmlSheet {
-  name: string;
-  html: string;
-}
-
 type ParseResult =
-  | { mode: 'grid'; sheets: SheetGrid[] }
-  | { mode: 'html'; sheets: HtmlSheet[] };
+  | { mode: 'grid'; sheets: SheetGrid[] | ExcelPreviewSheetGrid[] }
+  | { mode: 'html'; sheets: ExcelPreviewHtmlSheet[] };
 
 const RENDERABLE_IMAGE_EXT = new Set(['png', 'jpeg', 'jpg', 'gif']);
 
@@ -56,7 +54,6 @@ async function parseWithExcelJS(
 
   const sheets: SheetGrid[] = [];
   wb.eachSheet((ws) => {
-    // 图片锚点可能落在正文行列之外（如表尾简图），行列数需覆盖锚点
     const rawImages = ws.getImages();
     let maxImageRow = 0;
     let maxImageCol = 0;
@@ -76,7 +73,6 @@ async function parseWithExcelJS(
       rowHeights.push(excelRowHeightToPx(ws.getRow(r).height));
     }
 
-    // 合并区：master 记录跨行列，covered 指回 master
     const spanByMaster = new Map<string, { rowSpan: number; colSpan: number }>();
     const coveredToMaster = new Map<string, string>();
     for (const rangeStr of ws.model.merges ?? []) {
@@ -95,7 +91,6 @@ async function parseWithExcelJS(
       }
     }
 
-    // 图片：按 tl 锚点归入单元格；锚点落在合并区从属格时归到 master
     const imagesByCell = new Map<string, CellImage[]>();
     for (const img of rawImages) {
       const media = wb.getImage(Number(img.imageId));
@@ -143,16 +138,6 @@ async function parseWithExcelJS(
   return sheets;
 }
 
-async function parseWithSheetJS(buffer: ArrayBuffer): Promise<HtmlSheet[]> {
-  const XLSX = await import('xlsx');
-  const wb = XLSX.read(buffer, { type: 'array' });
-  const sheets = wb.SheetNames.map((name) => ({
-    name,
-    html: XLSX.utils.sheet_to_html(wb.Sheets[name]),
-  }));
-  return sheets.length ? sheets : [{ name: 'Sheet1', html: '<table></table>' }];
-}
-
 const KnowledgeExcelPreview: React.FC<{ assetUrl: string }> = ({ assetUrl }) => {
   const [result, setResult] = useState<ParseResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -175,8 +160,7 @@ const KnowledgeExcelPreview: React.FC<{ assetUrl: string }> = ({ assetUrl }) => 
         try {
           parsed = { mode: 'grid', sheets: await parseWithExcelJS(buffer, registerUrl) };
         } catch {
-          // .xls（BIFF）等旧格式 ExcelJS 不支持，回退 SheetJS（无图片）
-          parsed = { mode: 'html', sheets: await parseWithSheetJS(buffer) };
+          parsed = await parseXlsFallbackPreview(buffer, registerUrl);
         }
         if (!cancelled) setResult(parsed);
       } catch {
@@ -233,7 +217,7 @@ const KnowledgeExcelPreview: React.FC<{ assetUrl: string }> = ({ assetUrl }) => 
   );
 };
 
-const ExcelGridTable: React.FC<{ grid: SheetGrid }> = ({ grid }) => (
+const ExcelGridTable: React.FC<{ grid: SheetGrid | ExcelPreviewSheetGrid }> = ({ grid }) => (
   <table className="kb-excel-grid">
     <colgroup>
       {grid.colWidths.map((w, i) => (
@@ -246,7 +230,12 @@ const ExcelGridTable: React.FC<{ grid: SheetGrid }> = ({ grid }) => (
           {row.map((cell, c) => {
             if (!cell) return null;
             return (
-              <td key={c} rowSpan={cell.rowSpan} colSpan={cell.colSpan}>
+              <td
+                key={c}
+                rowSpan={cell.rowSpan}
+                colSpan={cell.colSpan}
+                className={cell.images.length ? 'has-image' : undefined}
+              >
                 {cell.images.map((img, i) => (
                   <img
                     key={i}

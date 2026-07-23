@@ -1568,6 +1568,12 @@
   word-break: break-word;
 }
 
+.kb-excel-grid td.has-image {
+  text-align: center;
+  vertical-align: middle;
+  padding: 2px 4px;
+}
+
 .kb-excel-img {
   display: block;
   margin: 2px auto;
