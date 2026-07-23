@@ -395,14 +395,25 @@ function stripClientImageThumb(data: Record<string, unknown>): void {
   delete data.imageThumb;
 }
 
-async function applyImageThumbFromUrl(data: Record<string, unknown>): Promise<void> {
+async function applyImageThumbFromUrl(
+  data: Record<string, unknown>,
+  previousImageUrl?: string | null,
+): Promise<void> {
   if (!('imageUrl' in data)) return;
   const url = data.imageUrl;
   if (url == null || url === '') {
     data.imageThumb = null;
     return;
   }
-  data.imageThumb = await buildImageThumb(typeof url === 'string' ? url : String(url));
+  const next = String(url);
+  const prev = (previousImageUrl ?? '').trim();
+  // 原图未变：跳过 thumb 重算，也不回写 imageUrl（大 data URL 易 OOM / 拖垮保存）
+  if (prev && next === prev) {
+    delete data.imageUrl;
+    delete data.imageThumb;
+    return;
+  }
+  data.imageThumb = await buildImageThumb(next);
 }
 
 export async function listProducts(
@@ -531,8 +542,7 @@ export async function updateProduct(
   data.sku = skuForDb(sku);
   coerceProductJsonFields(data);
   omitUndefinedValues(data);
-  // lite 列表缺 imageUrl 时前端可能不带该字段；absent ≠ 清空，勿强制重算 thumb
-  await applyImageThumbFromUrl(data);
+  await applyImageThumbFromUrl(data, existing.imageUrl);
 
   await assertProductCategoryIdForWrite(db, data, 'update');
   await assertProductColorSizeForWrite(db, data, 'update', {

@@ -80,7 +80,7 @@
   height: 112rpx;
   border-radius: 20rpx;
   flex-shrink: 0;
-  background: var(--color-bg-page);
+  background: #fff;
 }
 
 .plan-detail-hero__img--placeholder {

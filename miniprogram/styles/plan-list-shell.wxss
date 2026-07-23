@@ -314,7 +314,7 @@ page {
   height: 96rpx;
   border-radius: 12rpx;
   border: 1rpx solid var(--color-border);
-  background: var(--color-bg-page);
+  background: #fff;
   display: block;
 }
 

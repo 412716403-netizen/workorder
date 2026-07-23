@@ -20,7 +20,7 @@
   height: 96rpx;
   border-radius: 14rpx;
   border: 1rpx solid var(--color-border, #e5e7eb);
-  background: var(--color-bg-page, #f7f8fa);
+  background: #fff;
   display: block;
 }
 

@@ -18,9 +18,9 @@ export function generateAutoProductSku(): string {
   return `${prefix}${Date.now()}`;
 }
 
-/** 保存前规范化 sku：只 trim，留空不生成 */
+/** 保存前规范化 sku：只 trim，null/undefined 收成空串，留空不生成 */
 export function resolveProductSkuForSave(p: Product, _catalog: Product[]): Product {
   const sku = (p.sku ?? '').trim();
-  if (sku === (p.sku ?? '')) return p;
+  if (sku === p.sku) return p;
   return { ...p, sku };
 }

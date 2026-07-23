@@ -564,7 +564,7 @@ const ProductCategoryInfoFields: React.FC<ProductCategoryInfoFieldsProps> = ({
                 applyProductImageFile(e.dataTransfer.files?.[0]);
               }}
             >
-              <div className="w-20 h-20 bg-slate-50 rounded-2xl flex items-center justify-center overflow-hidden border-2 border-dashed border-slate-200 shrink-0">
+              <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center overflow-hidden border-2 border-dashed border-slate-200 shrink-0">
                 {productThumbSrc(working) ? (
                   <button type="button" onClick={() => setLightboxImageUrl((working.imageUrl ?? '').trim() || productThumbSrc(working) || null)} className="w-full h-full">
                     <img src={productThumbSrc(working)} alt="" className="w-full h-full object-cover" />

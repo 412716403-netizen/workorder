@@ -93,12 +93,16 @@ const ProductImageLightbox: React.FC<ProductImageLightboxProps> = ({
       aria-label={alt}
     >
       <div className="absolute inset-0 bg-black/80 animate-in fade-in" aria-hidden />
-      <img
-        src={displaySrc}
-        alt={alt}
-        className="relative z-10 max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+      <div
+        className="relative z-10 max-w-full max-h-full rounded-lg bg-white p-3 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
-      />
+      >
+        <img
+          src={displaySrc}
+          alt={alt}
+          className="max-w-full max-h-[min(85vh,900px)] object-contain"
+        />
+      </div>
       {loadingOriginal && (
         <div className="absolute bottom-6 left-1/2 z-10 -translate-x-1/2 flex items-center gap-2 rounded-full bg-black/50 px-3 py-1.5 text-xs text-white">
           <Loader2 className="w-3.5 h-3.5 animate-spin" />

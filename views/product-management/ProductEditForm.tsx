@@ -111,6 +111,40 @@ function normalizeRouteReportValuesFromApi(raw: unknown): Record<string, Record<
   return out;
 }
 
+/**
+ * 已落库产品保存时去掉未变更的 imageUrl，避免把大图 data URL 反复 PUT。
+ * 原图尚未从 GET 拉回时：仅省略「仍像未换图」的情况；用户已换图/清空则保留字段。
+ */
+function omitUnchangedProductImageUrl(
+  payload: { imageUrl?: string | null },
+  opts: {
+    isPersisted: boolean;
+    serverLoaded: boolean;
+    serverImageUrl: string | null;
+    initialThumb: string;
+    initialFull: string;
+  },
+): void {
+  if (!opts.isPersisted) return;
+  if (!('imageUrl' in payload)) return;
+  const nextImg = (payload.imageUrl ?? '').trim();
+  if (opts.serverLoaded) {
+    if (nextImg === (opts.serverImageUrl ?? '').trim()) {
+      delete payload.imageUrl;
+    }
+    return;
+  }
+  const initialThumb = opts.initialThumb.trim();
+  const initialFull = opts.initialFull.trim();
+  const looksUnchanged =
+    nextImg === initialThumb ||
+    nextImg === initialFull ||
+    (!nextImg && !initialThumb && !initialFull);
+  if (looksUnchanged) {
+    delete payload.imageUrl;
+  }
+}
+
 /** 附件预览挂到 document.body，且 z-index 极高，避免产品详情页（另一路 return）未渲染或 stacking 盖住 */
 function FilePreviewPortal({
   preview,
@@ -558,8 +592,14 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
     processLocked: initialProduct.processLocked,
   }));
 
+  /** GET /products/:id 拉回的原图；用于保存时判断是否真换图，避免每次把大图 data URL 回传 */
+  const serverImageUrlRef = useRef<string | null>(null);
+  const serverImageLoadedRef = useRef(false);
+
   useEffect(() => {
     if (!isPersistedProduct) return;
+    serverImageUrlRef.current = null;
+    serverImageLoadedRef.current = false;
     let cancelled = false;
     void api.products.get(initialProduct.id).then((p: Product) => {
       if (cancelled) return;
@@ -567,6 +607,8 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
         milestoneNodeIds: p.milestoneNodeIds ?? [],
         processLocked: p.processLocked,
       });
+      serverImageUrlRef.current = (p.imageUrl ?? '').trim();
+      serverImageLoadedRef.current = true;
       // lite 列表不带原图：补齐 imageUrl，避免编辑保存时 absent 原图；用户已本地换图则不覆盖
       setWorkingProduct(wp => {
         const local = (wp.imageUrl ?? '').trim();
@@ -1004,20 +1046,30 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
       toast.error('该产品已下达生产工单，工序已锁定，不能修改工序路线。');
       return;
     }
-    if (saveProductInFlightRef.current) return;
+    if (saveProductInFlightRef.current) {
+      toast.warning('正在保存，请稍候…');
+      return;
+    }
     saveProductInFlightRef.current = true;
-    const toSave: Product = {
-      ...resolved,
-      name: resolved.name.trim(),
-      sku: resolved.sku.trim(),
-      salesPrice: workingProduct.salesPrice ?? 0,
-      purchasePrice: workingProduct.purchasePrice ?? 0,
-      routeReportValues: normalizeRouteReportValuesFromApi(resolved.routeReportValues),
-      routeReportDisplayValues: routeReportDisplayFieldValues,
-    };
-    const { processLocked: _pl, ...payload } = toSave;
     setSaveProductBusy(true);
     try {
+      const toSave: Product = {
+        ...resolved,
+        name: resolved.name.trim(),
+        sku: (resolved.sku ?? '').trim(),
+        salesPrice: workingProduct.salesPrice ?? 0,
+        purchasePrice: workingProduct.purchasePrice ?? 0,
+        routeReportValues: normalizeRouteReportValuesFromApi(resolved.routeReportValues),
+        routeReportDisplayValues: routeReportDisplayFieldValues,
+      };
+      const { processLocked: _pl, imageThumb: _omitThumb, ...payload } = toSave;
+      omitUnchangedProductImageUrl(payload, {
+        isPersisted: isPersistedProduct,
+        serverLoaded: serverImageLoadedRef.current,
+        serverImageUrl: serverImageUrlRef.current,
+        initialThumb: initialProduct.imageThumb ?? '',
+        initialFull: initialProduct.imageUrl ?? '',
+      });
       const saved = await onUpdateProduct(payload);
       if (saved) {
         persistLastUnitPreference(saved.categoryId, saved.unitId);
@@ -1025,6 +1077,9 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
         onBack();
         setRouteReportDisplayFieldValues({});
       }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '保存失败';
+      toast.error(msg);
     } finally {
       saveProductInFlightRef.current = false;
       setSaveProductBusy(false);
@@ -1131,13 +1186,20 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
     saveBomInFlightRef.current = true;
     setBomSaving(true);
     try {
-      const { processLocked: _plBom, ...bomProductPayload } = {
+      const { processLocked: _plBom, imageThumb: _omitThumbBom, ...bomProductPayload } = {
         ...resolved,
         name: resolved.name.trim(),
-        sku: resolved.sku.trim(),
+        sku: (resolved.sku ?? '').trim(),
         salesPrice: resolved.salesPrice ?? 0,
         purchasePrice: resolved.purchasePrice ?? 0,
       };
+      omitUnchangedProductImageUrl(bomProductPayload, {
+        isPersisted: isPersistedProduct,
+        serverLoaded: serverImageLoadedRef.current,
+        serverImageUrl: serverImageUrlRef.current,
+        initialThumb: initialProduct.imageThumb ?? '',
+        initialFull: initialProduct.imageUrl ?? '',
+      });
       const savedProduct = await onUpdateProduct(bomProductPayload);
       if (!savedProduct) return;
       persistLastUnitPreference(savedProduct.categoryId, savedProduct.unitId);

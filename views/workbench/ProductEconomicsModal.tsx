@@ -45,7 +45,7 @@ function ProductThumb({
   const icon = size === 'lg' ? 'h-6 w-6' : 'h-4 w-4';
   if (imageUrl) {
     return (
-      <div className={`${dim} shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-slate-50`}>
+      <div className={`${dim} shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-white`}>
         <img
           src={imageUrl}
           alt={name}

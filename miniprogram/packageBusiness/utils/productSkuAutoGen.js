@@ -12,8 +12,8 @@ function generateAutoProductSku() {
 }
 
 function resolveProductSkuForSave(p, _catalog) {
-  const sku = String((p && p.sku) || '').trim();
-  if (sku === String((p && p.sku) || '')) return p;
+  const sku = String((p && p.sku) != null ? p.sku : '').trim();
+  if (p && p.sku === sku) return p;
   return { ...p, sku };
 }
 

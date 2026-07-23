@@ -50,7 +50,7 @@ const PlanProductDetail: React.FC<PlanProductDetailProps> = ({
         <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-4 min-w-0">
             {productThumbSrc(p) ? (
-              <img loading="lazy" decoding="async" src={productThumbSrc(p)} alt={p.name} className="w-16 h-16 rounded-2xl object-cover border border-slate-200 shrink-0" />
+              <img loading="lazy" decoding="async" src={productThumbSrc(p)} alt={p.name} className="w-16 h-16 rounded-2xl object-cover border border-slate-200 bg-white shrink-0" />
             ) : (
               <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-400 shrink-0"><Package className="w-8 h-8" /></div>
             )}

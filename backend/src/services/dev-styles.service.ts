@@ -53,14 +53,24 @@ function stripClientImageThumb(data: Record<string, unknown>): void {
   delete data.imageThumb;
 }
 
-async function applyImageThumbFromUrl(data: Record<string, unknown>): Promise<void> {
+async function applyImageThumbFromUrl(
+  data: Record<string, unknown>,
+  previousImageUrl?: string | null,
+): Promise<void> {
   if (!('imageUrl' in data)) return;
   const url = data.imageUrl;
   if (url == null || url === '') {
     data.imageThumb = null;
     return;
   }
-  data.imageThumb = await buildImageThumb(typeof url === 'string' ? url : String(url));
+  const next = String(url);
+  const prev = (previousImageUrl ?? '').trim();
+  if (prev && next === prev) {
+    delete data.imageUrl;
+    delete data.imageThumb;
+    return;
+  }
+  data.imageThumb = await buildImageThumb(next);
 }
 
 function coerceStyleJson(data: Record<string, unknown>): void {
@@ -304,7 +314,7 @@ export async function updateDevStyle(
   coerceStyleJson(data);
   await syncDevStyleCustomerNameFromSupplier(db, data);
   stripClientImageThumb(data);
-  await applyImageThumbFromUrl(data);
+  await applyImageThumbFromUrl(data, existing.imageUrl);
   const updateData = pickDevStyleWritable(data);
 
   await db.$transaction(async (tx) => {

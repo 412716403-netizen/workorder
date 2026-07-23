@@ -25,4 +25,11 @@ describe('productSkuAutoGen', () => {
     expect(out1.sku).toBe('');
     expect(out2.sku).toBe('');
   });
+
+  it('resolveProductSkuForSave：sku 为 null/undefined → 规范成空串（避免后续 .trim 抛错）', () => {
+    const out1 = resolveProductSkuForSave(mkProduct({ sku: null as unknown as string }), []);
+    const out2 = resolveProductSkuForSave(mkProduct({ sku: undefined }), []);
+    expect(out1.sku).toBe('');
+    expect(out2.sku).toBe('');
+  });
 });

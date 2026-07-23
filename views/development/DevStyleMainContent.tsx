@@ -254,14 +254,19 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
           <button type="button" className="absolute top-10 right-10 p-4 text-white" onClick={() => setShowFullImage(false)}>
             <X className="w-8 h-8" />
           </button>
-          <img src={originalSrc} alt="" className="relative z-10 max-w-full max-h-full object-contain rounded-2xl" onClick={(e) => e.stopPropagation()} />
+          <div
+            className="relative z-10 max-w-full max-h-full rounded-2xl bg-white p-3 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img src={originalSrc} alt="" className="max-w-full max-h-[min(85vh,900px)] object-contain" />
+          </div>
         </div>
         </ModalPortal>
       )}
 
       <div className="p-8 lg:p-10 flex flex-col lg:flex-row gap-8 border-b border-slate-100">
         <div
-          className={`w-full lg:w-56 h-56 bg-slate-50 rounded-[32px] overflow-hidden relative shadow-lg shrink-0 flex items-center justify-center ${
+          className={`w-full lg:w-56 h-56 bg-white rounded-[32px] overflow-hidden relative shadow-lg shrink-0 flex items-center justify-center border border-slate-100 ${
             hasImage ? 'cursor-zoom-in' : ''
           }`}
           onClick={() => hasImage && setShowFullImage(true)}

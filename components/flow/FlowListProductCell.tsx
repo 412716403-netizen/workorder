@@ -32,7 +32,7 @@ const FlowListProductCell: React.FC<FlowListProductCellProps> = ({
         <img
           src={imageUrl}
           alt=""
-          className="w-8 h-8 rounded-lg object-cover border border-slate-100 shrink-0"
+          className="w-8 h-8 rounded-lg object-cover border border-slate-100 bg-white shrink-0"
         />
       ) : (
         <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">

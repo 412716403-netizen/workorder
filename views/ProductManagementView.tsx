@@ -355,7 +355,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                         onClick={() => permCanEdit && handleStartEditProduct(product)}
                       >
                         <td className="py-3 pl-4 pr-2">
-                          <div className="w-9 h-9 bg-slate-50 rounded-xl flex items-center justify-center overflow-hidden text-slate-400 shrink-0">
+                          <div className="w-9 h-9 bg-white rounded-xl flex items-center justify-center overflow-hidden text-slate-400 shrink-0 border border-slate-100">
                             {productThumbSrc(product) ? (
                               <button type="button" onClick={(e) => { e.stopPropagation(); setImagePreview(productPreviewFromProduct(product)); }} className="w-full h-full focus:outline-none focus:ring-2 focus:ring-indigo-500" aria-label="查看产品图片">
                               <img loading="lazy" decoding="async" src={productThumbSrc(product)} alt={product.name} className="w-full h-full object-cover" />

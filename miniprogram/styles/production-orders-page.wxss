@@ -133,7 +133,7 @@
   height: 112rpx;
   border-radius: 16rpx;
   border: 1rpx solid var(--color-border);
-  background: var(--color-bg-page);
+  background: #fff;
   display: block;
 }
 

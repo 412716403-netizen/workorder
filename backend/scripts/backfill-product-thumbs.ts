@@ -4,16 +4,19 @@
  * 用法（在 backend 目录）:
  *   npm run db:backfill-product-thumbs
  *   npm run db:backfill-product-thumbs -- --force   # 已有 thumb 也强制重算
+ *   npm run db:backfill-product-thumbs -- --force --rewrite-url
+ *     # 同时把 imageUrl 黑底/透明抠图归一为白底 JPEG（点开大图也白底）
  *
  * 仅处理有 imageUrl 且（默认）无 imageThumb 的记录；http(s) 外链直接复用为 thumb。
  */
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
-import { buildImageThumb } from '../src/lib/imageThumb.js';
+import { buildImageThumb, normalizeProductImageDataUrl } from '../src/lib/imageThumb.js';
 
 const prisma = new PrismaClient();
 const BATCH = 50;
 const force = process.argv.includes('--force');
+const rewriteUrl = process.argv.includes('--rewrite-url');
 
 async function main() {
   const where = force
@@ -24,7 +27,9 @@ async function main() {
       };
 
   const total = await prisma.product.count({ where });
-  console.log(`[backfill-product-thumbs] candidates=${total} force=${force}`);
+  console.log(
+    `[backfill-product-thumbs] candidates=${total} force=${force} rewriteUrl=${rewriteUrl}`,
+  );
 
   let processed = 0;
   let updated = 0;
@@ -55,10 +60,20 @@ async function main() {
         continue;
       }
       try {
-        const thumb = await buildImageThumb(url);
+        let nextUrl = url;
+        if (rewriteUrl && url.startsWith('data:')) {
+          const normalized = await normalizeProductImageDataUrl(url, {
+            replaceBlackBackdrop: true,
+          });
+          if (normalized) nextUrl = normalized;
+        }
+        const thumb = await buildImageThumb(nextUrl, { replaceBlackBackdrop: !rewriteUrl });
         await prisma.product.update({
           where: { id: row.id },
-          data: { imageThumb: thumb },
+          data: {
+            imageThumb: thumb,
+            ...(rewriteUrl && nextUrl !== url ? { imageUrl: nextUrl } : {}),
+          },
         });
         updated += 1;
       } catch (err) {
@@ -66,7 +81,9 @@ async function main() {
         console.error(`[backfill-product-thumbs] fail id=${row.id}`, err);
       }
     }
-    console.log(`[backfill-product-thumbs] progress ${processed}/${total} updated=${updated} skipped=${skipped} failed=${failed}`);
+    console.log(
+      `[backfill-product-thumbs] progress ${processed}/${total} updated=${updated} skipped=${skipped} failed=${failed}`,
+    );
   }
 
   console.log(`[backfill-product-thumbs] done updated=${updated} skipped=${skipped} failed=${failed}`);

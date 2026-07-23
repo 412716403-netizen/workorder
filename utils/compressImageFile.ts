@@ -1,6 +1,9 @@
 /**
  * 产品主图上传前压缩：最长边 1600px、JPEG 质量 0.85。
  * 非图片或压缩失败时回退原 File，由调用方继续走 FileReader。
+ *
+ * 注意：canvas 导出 JPEG 时透明像素默认变黑；须先铺白底再 drawImage，
+ * 否则抠图 PNG 会变成「黑底图」写入 imageUrl。
  */
 
 const MAX_EDGE = 1600;
@@ -56,6 +59,9 @@ export async function compressImageFile(file: File): Promise<File> {
     canvas.height = th;
     const ctx = canvas.getContext('2d');
     if (!ctx) return file;
+    // 白底再绘制：保留抠图透明区为白，避免 JPEG 把透明变成黑
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, tw, th);
     ctx.drawImage(img, 0, 0, tw, th);
 
     const blob = await canvasToBlob(canvas, 'image/jpeg', JPEG_QUALITY);
