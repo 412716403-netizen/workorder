@@ -20,6 +20,8 @@ import {
   mergeAllowedTemplateIdInDraft,
 } from './formConfigSchema';
 
+export type FormConfigSaveStatus = 'saved' | 'pending' | 'saving' | 'error';
+
 export interface BusinessFormConfigModalProps<TSettings extends Record<string, unknown>>
   extends FormConfigPrintContextDependencies {
   open: boolean;
@@ -35,8 +37,29 @@ export interface BusinessFormConfigModalProps<TSettings extends Record<string, u
    * 不传则忽略 sideEffectSaves（保持向后兼容）。
    */
   onSideSave?: (key: string, payload: unknown) => void | Promise<void>;
+  /**
+   * 壳外独立草稿的保存状态（如工单「报工自定义单据内容」）。
+   * 与内部 draft 状态合并后显示在左下角：error > saving > pending > saved。
+   */
+  extraSaveStatus?: FormConfigSaveStatus;
+  /** extraSaveStatus === 'error' 时，左下角「重试」一并触发 */
+  onRetryExtraSave?: () => void;
   /** 透传给 CustomSlot / 用于 standardFieldsList 的默认隐藏规则等；可选 */
   productionLinkMode?: 'order' | 'product';
+}
+
+function mergeFormConfigSaveStatus(
+  primary: FormConfigSaveStatus,
+  extra?: FormConfigSaveStatus,
+): FormConfigSaveStatus {
+  if (!extra) return primary;
+  const rank: Record<FormConfigSaveStatus, number> = {
+    saved: 0,
+    pending: 1,
+    saving: 2,
+    error: 3,
+  };
+  return rank[extra] > rank[primary] ? extra : primary;
 }
 
 function resolveSubtitle(
@@ -73,6 +96,8 @@ export function BusinessFormConfigModal<TSettings extends Record<string, unknown
   initialValue,
   onSave,
   onSideSave,
+  extraSaveStatus,
+  onRetryExtraSave,
   productionLinkMode = 'order',
   printTemplates,
   onUpdatePrintTemplates,
@@ -84,13 +109,14 @@ export function BusinessFormConfigModal<TSettings extends Record<string, unknown
   const [draft, setDraftState] = useState<TSettings | null>(null);
   const [tabId, setTabId] = useState<string>(() => defaultTabId ?? schema.tabs[0]?.id ?? '');
   const [activePrintSection, setActivePrintSection] = useState<FormConfigPrintWhitelistSection | null>(null);
-  const [saveStatus, setSaveStatus] = useState<'saved' | 'pending' | 'saving' | 'error'>('saved');
+  const [saveStatus, setSaveStatus] = useState<FormConfigSaveStatus>('saved');
   const wasOpenRef = useRef(false);
   const draftRef = useRef<TSettings | null>(null);
   const lastSavedSnapshotRef = useRef<string | null>(null);
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   const snapshot = useCallback((value: TSettings) => JSON.stringify(value), []);
+  const displaySaveStatus = mergeFormConfigSaveStatus(saveStatus, extraSaveStatus);
 
   const hasAnyPrintWhitelist = useMemo(
     () => schema.tabs.some(t => t.sections.some(s => s.kind === 'printWhitelist')),
@@ -266,12 +292,19 @@ export function BusinessFormConfigModal<TSettings extends Record<string, unknown
         </div>
 
         <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-8 py-5">
-          <div className={`text-xs font-semibold ${saveStatus === 'error' ? 'text-rose-600' : saveStatus === 'saved' ? 'text-emerald-600' : 'text-slate-500'}`}>
-            {saveStatus === 'saving' && '正在保存…'}
-            {saveStatus === 'pending' && '更改将自动保存…'}
-            {saveStatus === 'saved' && '✓ 已保存'}
-            {saveStatus === 'error' && (
-              <button type="button" onClick={() => draftRef.current && void enqueueSave(draftRef.current)} className="font-bold underline underline-offset-2">
+          <div className={`text-xs font-semibold ${displaySaveStatus === 'error' ? 'text-rose-600' : displaySaveStatus === 'saved' ? 'text-emerald-600' : 'text-slate-500'}`}>
+            {displaySaveStatus === 'saving' && '正在保存…'}
+            {displaySaveStatus === 'pending' && '更改将自动保存…'}
+            {displaySaveStatus === 'saved' && '✓ 已保存'}
+            {displaySaveStatus === 'error' && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (saveStatus === 'error' && draftRef.current) void enqueueSave(draftRef.current);
+                  if (extraSaveStatus === 'error') onRetryExtraSave?.();
+                }}
+                className="font-bold underline underline-offset-2"
+              >
                 保存失败，点击重试
               </button>
             )}

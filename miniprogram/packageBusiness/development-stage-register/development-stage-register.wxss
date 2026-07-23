@@ -77,6 +77,20 @@
   display: block;
 }
 
+.dev-file-thumb--file {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 8rpx;
+  font-size: 22rpx;
+  font-weight: 700;
+  color: #475569;
+  background: #f8fafc;
+  border: 1rpx solid #e2e8f0;
+  text-align: center;
+}
+
 .dev-file-thumb-del {
   position: absolute;
   top: -10rpx;

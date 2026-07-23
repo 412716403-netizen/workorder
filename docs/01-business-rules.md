@@ -861,7 +861,7 @@
 
 - **开发节点库**（`DevStageTemplate` + `DevStageTemplateField`）中每个节点的「节点登记自定义内容」与 **工单中心 → 表单配置 → 字段配置 → 报工自定义单据内容（按工序）** 对齐：支持字段类型 `text | date | select | file`、下拉选项、日期（含时分 / 自动填入）、必填。
 - 配置 UI 复用 `ReportCustomFieldsConfigTable`；节点登记弹窗对模板字段复用 `ReportCustomFieldsEditor`，按类型渲染控件；登记值写入 `DevStageField.value`（字符串）与 `DevStageField.type`。
-- **图片/文件字段可上传多张**（最多 9 张）：单张仍存单个 data URL；多张存 JSON 数组字符串。网页端与小程序节点登记一致；列表/登记内容区按缩略图展示。
+- **图片/文件字段可上传多个**（最多 9 个，**不限文件类型**）：单个仍存裸 data URL；多个存 JSON 数组字符串。网页端与小程序节点登记一致；列表/登记内容区按缩略图或附件卡片展示。小程序单文件约 ≤4MB。
 - 模板外仍可添加「附加参数」（自由 label + 文本值），与模板字段一并保存。
 
 ---

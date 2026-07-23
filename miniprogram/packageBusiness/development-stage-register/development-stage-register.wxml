@@ -63,6 +63,7 @@
                 class="dev-file-thumb-item"
               >
                 <image
+                  wx:if="{{thumb.isImage}}"
                   class="dev-file-thumb"
                   src="{{thumb.src}}"
                   mode="aspectFill"
@@ -70,6 +71,13 @@
                   data-index="{{thumb.index}}"
                   catchtap="onFilePreview"
                 />
+                <view
+                  wx:else
+                  class="dev-file-thumb dev-file-thumb--file"
+                  data-id="{{item.id}}"
+                  data-index="{{thumb.index}}"
+                  catchtap="onFilePreview"
+                >{{thumb.kindLabel || '附件'}}</view>
                 <view
                   class="dev-file-thumb-del"
                   data-id="{{item.id}}"
@@ -83,7 +91,7 @@
               class="dev-file-btn {{item.hasFile ? 'dev-file-btn--on' : ''}}"
               data-id="{{item.id}}"
               bindtap="onFilePick"
-            >{{item.fileLabel || '选择图片'}}</view>
+            >{{item.fileLabel || '上传文件/图片'}}</view>
           </view>
           <view wx:else class="plan-form-cell plan-form-cell--input">
             <text class="plan-form-cell__label">{{item.required ? '*' : ''}}{{item.label}}</text>

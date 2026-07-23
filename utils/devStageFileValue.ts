@@ -1,7 +1,7 @@
 /**
  * 开发节点登记 · 文件/图片字段值
  * - 历史：单个 data URL 字符串
- * - 多图：JSON 数组字符串 `["data:image/...","data:image/..."]`
+ * - 多文件：JSON 数组字符串（不限类型，最多 9 个）
  */
 
 export const DEV_STAGE_FILE_MAX_COUNT = 9;
@@ -32,7 +32,7 @@ export function parseDevStageFileUrls(raw: unknown): string[] {
   return [];
 }
 
-/** 单张仍存裸 data URL（兼容旧展示）；多张存 JSON 数组 */
+/** 单个仍存裸 data URL（兼容旧展示）；多个存 JSON 数组 */
 export function serializeDevStageFileUrls(urls: string[]): string {
   const list = urls
     .filter((u) => typeof u === 'string' && u.trim() !== '')

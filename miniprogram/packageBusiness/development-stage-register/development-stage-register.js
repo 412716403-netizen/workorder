@@ -20,7 +20,7 @@ const {
   splitIsoToDateTime,
   joinDateTimeToIso,
 } = require('../utils/devStageRegister.js');
-const { chooseProductImages } = require('../utils/fileBase64.js');
+const { chooseCustomFieldFiles, isImageDataUrl } = require('../utils/fileBase64.js');
 const {
   DEV_STAGE_FILE_MAX_COUNT,
   parseDevStageFileUrls,
@@ -48,14 +48,23 @@ function enrichFileField(field, urls, previewSrcs) {
     hasFile,
     fileCount: list.length,
     fileLabel: hasFile
-      ? `已传 ${list.length} 张${list.length < DEV_STAGE_FILE_MAX_COUNT ? '（可继续添加）' : '（已满）'}`
-      : '选择图片',
+      ? `已传 ${list.length} 个${list.length < DEV_STAGE_FILE_MAX_COUNT ? '（可继续添加）' : '（已满）'}`
+      : '上传文件/图片',
     canAddMore: list.length < DEV_STAGE_FILE_MAX_COUNT,
-    previewList: previews.map((src, idx) => ({
-      id: `${field.id}-${idx}`,
-      src,
-      index: idx,
-    })),
+    previewList: previews.map((src, idx) => {
+      const dataUrl = list[idx] || src;
+      return {
+        id: `${field.id}-${idx}`,
+        src: isImageDataUrl(dataUrl) ? src : '',
+        isImage: isImageDataUrl(dataUrl),
+        kindLabel: isImageDataUrl(dataUrl)
+          ? '图片'
+          : String(dataUrl).indexOf('data:application/pdf') === 0
+            ? 'PDF'
+            : '附件',
+        index: idx,
+      };
+    }),
   };
 }
 
@@ -254,11 +263,11 @@ Page({
     const existing = this._fileValues[id] || [];
     const room = DEV_STAGE_FILE_MAX_COUNT - existing.length;
     if (room <= 0) {
-      wx.showToast({ title: `最多 ${DEV_STAGE_FILE_MAX_COUNT} 张`, icon: 'none' });
+      wx.showToast({ title: `最多 ${DEV_STAGE_FILE_MAX_COUNT} 个`, icon: 'none' });
       return;
     }
     try {
-      const picked = await chooseProductImages(room);
+      const picked = await chooseCustomFieldFiles(room);
       if (!picked || !picked.length) return;
       const nextUrls = existing.concat(picked.map((p) => p.dataUrl)).slice(0, DEV_STAGE_FILE_MAX_COUNT);
       const nextPreviews = (this._filePreviews[id] || [])
@@ -267,10 +276,10 @@ Page({
       this._fileValues[id] = nextUrls;
       this._filePreviews[id] = nextPreviews;
       this.refreshFileField(id);
-      wx.showToast({ title: `已添加 ${picked.length} 张`, icon: 'success' });
+      wx.showToast({ title: `已添加 ${picked.length} 个`, icon: 'success' });
     } catch (err) {
       if (err && err.code === 'FILE_TOO_LARGE') {
-        wx.showToast({ title: '单张图片不能超过 4MB', icon: 'none' });
+        wx.showToast({ title: '单个文件不能超过 4MB', icon: 'none' });
         return;
       }
       wx.showToast({
@@ -294,11 +303,27 @@ Page({
   onFilePreview(e) {
     const id = e.currentTarget.dataset.id;
     const index = Number(e.currentTarget.dataset.index) || 0;
-    const urls = this._filePreviews[id] || this._fileValues[id] || [];
-    if (!urls.length) return;
-    wx.previewImage({
-      current: urls[index] || urls[0],
-      urls,
+    const urls = this._fileValues[id] || [];
+    const dataUrl = urls[index];
+    if (!dataUrl) return;
+    if (isImageDataUrl(dataUrl)) {
+      const imageUrls = urls.filter((u) => isImageDataUrl(u));
+      const previews = this._filePreviews[id] || [];
+      const previewUrls = imageUrls.map((u, i) => {
+        const idx = urls.indexOf(u);
+        return previews[idx] || u;
+      });
+      wx.previewImage({
+        current: previews[index] || dataUrl,
+        urls: previewUrls.length ? previewUrls : [dataUrl],
+      });
+      return;
+    }
+    // 非图片：提示下载/无法预览（小程序内 data URL 不便直接打开 Office）
+    wx.showModal({
+      title: '附件',
+      content: '该文件类型请在电脑端查看或下载。',
+      showCancel: false,
     });
   },
 

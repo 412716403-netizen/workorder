@@ -100,29 +100,47 @@ function chooseProductImages(maxCount) {
 }
 
 function chooseMessageFileAsDataUrl() {
+  return chooseMessageFiles(1).then((list) => (list[0] ? list[0].dataUrl : null));
+}
+
+/**
+ * 从聊天选取多个文件（不限类型，对齐 Web 开发节点 file 字段）
+ * @returns {Promise<Array<{dataUrl:string,tempFilePath:string,size?:number,name?:string}>>}
+ */
+function chooseMessageFiles(maxCount) {
+  const count = Math.max(1, Math.min(9, maxCount || 1));
   return new Promise((resolve, reject) => {
     wx.chooseMessageFile({
-      count: 1,
-      type: 'file',
-      extension: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'doc', 'docx', 'xls', 'xlsx'],
+      count,
+      type: 'all',
       success: async (res) => {
         try {
-          const file = (res.tempFiles && res.tempFiles[0]) || null;
-          if (!file || !file.path) {
-            resolve(null);
+          const files = (res.tempFiles || []).filter((f) => f && f.path);
+          if (!files.length) {
+            resolve([]);
             return;
           }
-          assertFileSize(file.size);
-          const mime = guessMime(file.name || file.path);
-          const dataUrl = await readFileAsDataUrl(file.path, mime);
-          resolve(dataUrl);
+          const results = [];
+          for (let i = 0; i < files.length; i += 1) {
+            const file = files[i];
+            assertFileSize(file.size);
+            const mime = guessMime(file.name || file.path, file.type);
+            const dataUrl = await readFileAsDataUrl(file.path, mime);
+            results.push({
+              dataUrl,
+              tempFilePath: file.path,
+              size: file.size,
+              name: file.name || '',
+            });
+          }
+          resolve(results);
         } catch (err) {
           reject(err);
         }
       },
       fail: (err) => {
         if (err && err.errMsg && err.errMsg.indexOf('cancel') >= 0) {
-          resolve(null);
+          resolve([]);
           return;
         }
         reject(err);
@@ -136,23 +154,32 @@ function chooseMessageFileAsDataUrl() {
  * @returns {Promise<string|null>} data URL 或取消时 null
  */
 function chooseCustomFieldFileAsDataUrl() {
+  return chooseCustomFieldFiles(1).then((list) => (list[0] ? list[0].dataUrl : null));
+}
+
+/**
+ * 开发节点等多文件字段：相册多选 或 聊天文件多选
+ * @returns {Promise<Array<{dataUrl:string,tempFilePath:string,size?:number,name?:string}>>}
+ */
+function chooseCustomFieldFiles(maxCount) {
+  const count = Math.max(1, Math.min(9, maxCount || 9));
   return new Promise((resolve, reject) => {
     wx.showActionSheet({
-      itemList: ['拍照或相册', '从聊天选择文件'],
+      itemList: ['拍照或相册（可多选）', '从聊天选择文件（可多选）'],
       success: async (sheetRes) => {
         try {
           if (sheetRes.tapIndex === 0) {
-            resolve(await chooseProductImageAsDataUrl());
+            resolve(await chooseProductImages(count));
             return;
           }
-          resolve(await chooseMessageFileAsDataUrl());
+          resolve(await chooseMessageFiles(count));
         } catch (err) {
           reject(err);
         }
       },
       fail: (err) => {
         if (err && err.errMsg && err.errMsg.indexOf('cancel') >= 0) {
-          resolve(null);
+          resolve([]);
           return;
         }
         reject(err);
@@ -181,7 +208,9 @@ module.exports = {
   chooseProductImages,
   chooseProductImageAsDataUrl,
   chooseMessageFileAsDataUrl,
+  chooseMessageFiles,
   chooseCustomFieldFileAsDataUrl,
+  chooseCustomFieldFiles,
   formatCustomFileLabel,
   isImageDataUrl,
 };

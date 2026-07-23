@@ -24,8 +24,6 @@ import {
 import { getFileExtFromDataUrl } from '../utils/fileHelpers';
 import { PdfThumbPreview } from './PdfThumbPreview';
 
-const FILE_ACCEPT = 'image/*,.pdf,.doc,.docx,.xls,.xlsx';
-
 /** 「资料库」类型字段的填值控件：选择资料库文档，存储 {id,title}。 */
 export const PlanFormKnowledgeInput: React.FC<{
   value: unknown;
@@ -120,7 +118,7 @@ export interface PlanFormCustomFieldInputProps {
   /** 文本 / 日期 / 下拉 */
   controlClassName: string;
   onFilePreview?: (url: string, type: 'image' | 'pdf') => void;
-  /** 开发节点登记等多图场景：文件字段可追加多张（默认单文件） */
+  /** 开发节点登记等：文件字段可追加多个（默认单文件）；accept 与单文件一致（图片/PDF/Office） */
   multipleFiles?: boolean;
 }
 
@@ -166,7 +164,6 @@ export const PlanFormCustomFieldInput: React.FC<PlanFormCustomFieldInputProps> =
         <div className="space-y-2">
           <input
             type="file"
-            accept="image/*"
             multiple
             disabled={!canAdd}
             className="w-full text-xs text-slate-600 file:mr-2 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-indigo-700 disabled:opacity-50"
@@ -193,37 +190,67 @@ export const PlanFormCustomFieldInput: React.FC<PlanFormCustomFieldInputProps> =
             }}
           />
           <p className="text-[11px] text-slate-400">
-            最多 {DEV_STAGE_FILE_MAX_COUNT} 张，已选 {urls.length} 张
+            不限文件类型，最多 {DEV_STAGE_FILE_MAX_COUNT} 个，已选 {urls.length} 个
             {!canAdd ? '（已满）' : '，可继续添加'}
           </p>
           {urls.length > 0 && (
             <div className="flex flex-wrap gap-2">
-              {urls.map((url, idx) => (
-                <div key={`${idx}-${url.slice(0, 32)}`} className="relative">
-                  {url.startsWith('data:image/') ? (
+              {urls.map((url, idx) => {
+                const isImage = url.startsWith('data:image/');
+                const isPdf = url.startsWith('data:application/pdf');
+                const ext = getFileExtFromDataUrl(url);
+                return (
+                  <div key={`${idx}-${url.slice(0, 32)}`} className="relative">
+                    {isImage ? (
+                      <button
+                        type="button"
+                        onClick={() => openPreview(url, 'image')}
+                        className="block h-20 w-20 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+                        title="查看大图"
+                      >
+                        <img src={url} alt="" className="h-full w-full object-cover" />
+                      </button>
+                    ) : isPdf ? (
+                      <div className="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-1">
+                        <PdfThumbPreview
+                          src={url}
+                          onClick={() => openPreview(url, 'pdf')}
+                          title="查看 PDF"
+                          className="h-12 w-10"
+                        />
+                        <a
+                          href={url}
+                          download={`${cf.label}-${idx + 1}.pdf`}
+                          className="text-[9px] font-bold text-indigo-600 hover:underline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          下载
+                        </a>
+                      </div>
+                    ) : (
+                      <div className="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-1 text-center">
+                        <span className="text-[10px] font-bold text-slate-500">.{ext || '文件'}</span>
+                        <a
+                          href={url}
+                          download={`${cf.label}-${idx + 1}.${ext || 'bin'}`}
+                          className="text-[9px] font-bold text-indigo-600 hover:underline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          下载
+                        </a>
+                      </div>
+                    )}
                     <button
                       type="button"
-                      onClick={() => openPreview(url, 'image')}
-                      className="block h-20 w-20 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
-                      title="查看大图"
+                      aria-label="删除"
+                      onClick={() => onChange(serializeDevStageFileUrls(urls.filter((_, i) => i !== idx)))}
+                      className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-white shadow"
                     >
-                      <img src={url} alt="" className="h-full w-full object-cover" />
+                      <X className="h-3 w-3" />
                     </button>
-                  ) : (
-                    <div className="flex h-20 w-20 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-[10px] text-slate-500">
-                      附件
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    aria-label="删除"
-                    onClick={() => onChange(serializeDevStageFileUrls(urls.filter((_, i) => i !== idx)))}
-                    className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-white shadow"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -241,7 +268,6 @@ export const PlanFormCustomFieldInput: React.FC<PlanFormCustomFieldInputProps> =
       <div className="space-y-2">
         <input
           type="file"
-          accept={FILE_ACCEPT}
           className="w-full text-xs text-slate-600 file:mr-2 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-indigo-700"
           onChange={e => {
             const file = e.target.files?.[0];
@@ -254,6 +280,7 @@ export const PlanFormCustomFieldInput: React.FC<PlanFormCustomFieldInputProps> =
             reader.readAsDataURL(file);
           }}
         />
+        <p className="text-[11px] text-slate-400">不限文件类型</p>
         {dataStr.startsWith('data:image/') && (
           <button
             type="button"
@@ -362,6 +389,85 @@ export const PlanFormCustomFieldReadonly: React.FC<PlanFormCustomFieldReadonlyPr
     const display =
       str.includes('T') || /\d{4}-\d{2}-\d{2}\s+\d{1,2}:/.test(str) ? formatLocalDateTimeZh(str) : str.slice(0, 10);
     return <span className={valueCls}>{display || str}</span>;
+  }
+
+  if (t === 'file') {
+    const urls = parseDevStageFileUrls(str);
+    if (urls.length > 1 || (urls.length === 1 && (str.startsWith('[') || !str.startsWith('data:image/')))) {
+      // 多附件或非图：逐个展示；纯单图仍走下方大图样式
+      if (urls.length > 1 || (urls[0] && !urls[0].startsWith('data:image/'))) {
+        return (
+          <div className="flex flex-wrap gap-2">
+            {urls.map((url, idx) => {
+              const isImage = url.startsWith('data:image/');
+              const isPdf = url.startsWith('data:application/pdf');
+              const ext = getFileExtFromDataUrl(url);
+              const open = () => {
+                if (isImage) {
+                  if (onFilePreview) onFilePreview(url, 'image');
+                  else window.open(url, '_blank', 'noopener,noreferrer');
+                } else if (isPdf) {
+                  if (onFilePreview) onFilePreview(url, 'pdf');
+                  else window.open(url, '_blank', 'noopener,noreferrer');
+                } else {
+                  window.open(url, '_blank', 'noopener,noreferrer');
+                }
+              };
+              if (inlineMeta) {
+                const shortLabel = isImage ? '图片' : isPdf ? 'PDF' : '附件';
+                return (
+                  <button
+                    key={`${idx}-${url.slice(0, 24)}`}
+                    type="button"
+                    onClick={open}
+                    className={`${metaTextCls} underline decoration-slate-300/90 underline-offset-2 hover:text-slate-600`}
+                  >
+                    {shortLabel}{urls.length > 1 ? idx + 1 : ''}
+                  </button>
+                );
+              }
+              if (isImage) {
+                return (
+                  <div key={`${idx}-${url.slice(0, 24)}`} className="flex flex-col items-start gap-1">
+                    <button
+                      type="button"
+                      onClick={open}
+                      className="overflow-hidden rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      title="点击查看"
+                    >
+                      <img src={url} alt="" className="h-16 w-16 object-cover" />
+                    </button>
+                    <a
+                      href={url}
+                      download={`${cf.label}-${idx + 1}.${ext}`}
+                      className="text-[10px] font-bold text-indigo-600 hover:underline"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      下载
+                    </a>
+                  </div>
+                );
+              }
+              return (
+                <div key={`${idx}-${url.slice(0, 24)}`} className="flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-2 py-1.5">
+                  <button type="button" onClick={open} className="text-xs font-bold text-indigo-700 hover:underline">
+                    {isPdf ? 'PDF' : `.${ext || '文件'}`}
+                  </button>
+                  <a
+                    href={url}
+                    download={`${cf.label}-${idx + 1}.${ext || 'bin'}`}
+                    className="text-[10px] font-bold text-indigo-600 hover:underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    下载
+                  </a>
+                </div>
+              );
+            })}
+          </div>
+        );
+      }
+    }
   }
 
   if (inlineMeta && t === 'file' && str.startsWith('data:')) {

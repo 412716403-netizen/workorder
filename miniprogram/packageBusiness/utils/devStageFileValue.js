@@ -1,4 +1,4 @@
-/** 开发节点登记文件字段值：单图 data URL 或多图 JSON 数组 */
+/** 开发节点登记文件字段值：单个 data URL 或多个 JSON 数组（图片/PDF/Office） */
 
 const DEV_STAGE_FILE_MAX_COUNT = 9;
 
