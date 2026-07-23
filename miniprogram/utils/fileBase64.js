@@ -71,6 +71,11 @@ function chooseProductImage(options) {
               dataUrl,
               tempFilePath: file.tempFilePath,
               size: file.size,
+              name: (() => {
+                const p = String(file.tempFilePath || '');
+                const slash = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'));
+                return slash >= 0 ? p.slice(slash + 1) : p;
+              })(),
             });
           }
           resolve(maxCount > 1 ? results : results[0] || null);

@@ -10,7 +10,7 @@ const {
   getDevSampleDeleteBlockReason,
 } = require('./devStyleDisplay.js');
 const { DevStyleStatus } = require('./devStyleConstants.js');
-const { listDevStageImageUrls, parseDevStageFileUrls } = require('./devStageFileValue.js');
+const { listDevStageImageUrls, parseDevStageFileItems } = require('./devStageFileValue.js');
 
 function resolveDictName(items, id) {
   if (!id) return '';
@@ -44,9 +44,15 @@ function formatStageFieldPreviewText(field) {
   if (!value) return '';
   const images = listDevStageImageUrls(value);
   if (images.length > 0) return '';
-  const files = parseDevStageFileUrls(value);
-  if (files.length > 0 || field.type === 'file') {
-    return files.length > 1 ? `${field.label}: ${files.length} 个附件` : `${field.label}: 附件`;
+  const items = parseDevStageFileItems(value);
+  if (items.length > 0 || field.type === 'file') {
+    if (items.length === 1 && items[0].name) return `${field.label}: ${items[0].name}`;
+    if (items.length > 1) {
+      const named = items.filter((i) => i.name).map((i) => i.name);
+      if (named.length) return `${field.label}: ${named.slice(0, 2).join('、')}${named.length > 2 ? '…' : ''}`;
+      return `${field.label}: ${items.length} 个附件`;
+    }
+    return `${field.label}: 附件`;
   }
   if (value.indexOf('data:') === 0) {
     return `${field.label}: 附件`;

@@ -340,6 +340,7 @@ Page({
       const dataUrl = await chooseProductImageAsDataUrl();
       if (!dataUrl) return;
       this._workingProduct.imageUrl = dataUrl;
+      this._workingProduct.imageThumb = null;
       this.setData({ 'form.imageUrl': dataUrl });
     } catch {
       wx.showToast({ title: '图片读取失败', icon: 'none' });

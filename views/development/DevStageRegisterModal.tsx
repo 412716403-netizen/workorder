@@ -9,8 +9,8 @@ import ReportCustomFieldsEditor from '../../components/ReportCustomFieldsEditor'
 import { effectiveCustomDocFieldType } from '../../utils/reportCustomDocField';
 import {
   isDevStageFileValueFilled,
-  serializeDevStageFileUrls,
-  parseDevStageFileUrls,
+  serializeDevStageFileItems,
+  parseDevStageFileItems,
 } from '../../utils/devStageFileValue';
 import {
   formStandardControlClass,
@@ -160,7 +160,7 @@ const DevStageRegisterModal: React.FC<DevStageRegisterModalProps> = ({
           const raw = templateValues[tf.id];
           const value =
             type === 'file'
-              ? serializeDevStageFileUrls(parseDevStageFileUrls(raw))
+              ? serializeDevStageFileItems(parseDevStageFileItems(raw))
               : String(raw ?? '');
           return {
             label: tf.label,

@@ -77,7 +77,7 @@
                   data-id="{{item.id}}"
                   data-index="{{thumb.index}}"
                   catchtap="onFilePreview"
-                >{{thumb.kindLabel || '附件'}}</view>
+                >{{thumb.name || thumb.kindLabel || '附件'}}</view>
                 <view
                   class="dev-file-thumb-del"
                   data-id="{{item.id}}"

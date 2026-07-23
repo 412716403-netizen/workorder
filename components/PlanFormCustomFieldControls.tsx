@@ -3,8 +3,9 @@ import { BookOpen, X } from 'lucide-react';
 import type { PlanFormFieldConfig } from '../types';
 import {
   DEV_STAGE_FILE_MAX_COUNT,
-  parseDevStageFileUrls,
-  serializeDevStageFileUrls,
+  parseDevStageFileItems,
+  resolveDevStageFileDownloadName,
+  serializeDevStageFileItems,
 } from '../utils/devStageFileValue';
 import { effectivePlanFormFieldType } from '../utils/planFormCustomField';
 import {
@@ -158,8 +159,8 @@ export const PlanFormCustomFieldInput: React.FC<PlanFormCustomFieldInputProps> =
     };
 
     if (multipleFiles) {
-      const urls = parseDevStageFileUrls(value);
-      const canAdd = urls.length < DEV_STAGE_FILE_MAX_COUNT;
+      const items = parseDevStageFileItems(value);
+      const canAdd = items.length < DEV_STAGE_FILE_MAX_COUNT;
       return (
         <div className="space-y-2">
           <input
@@ -171,68 +172,80 @@ export const PlanFormCustomFieldInput: React.FC<PlanFormCustomFieldInputProps> =
               const files = Array.from(e.target.files ?? []);
               e.target.value = '';
               if (!files.length) return;
-              const room = DEV_STAGE_FILE_MAX_COUNT - urls.length;
+              const room = DEV_STAGE_FILE_MAX_COUNT - items.length;
               const slice = files.slice(0, room);
               Promise.all(
                 slice.map(
                   (file) =>
-                    new Promise<string>((resolve, reject) => {
+                    new Promise<{ url: string; name: string }>((resolve, reject) => {
                       const reader = new FileReader();
-                      reader.onload = () => resolve(String(reader.result ?? ''));
+                      reader.onload = () =>
+                        resolve({
+                          url: String(reader.result ?? ''),
+                          name: file.name || '',
+                        });
                       reader.onerror = () => reject(reader.error ?? new Error('read failed'));
                       reader.readAsDataURL(file);
                     }),
                 ),
               ).then((added) => {
-                const next = [...urls, ...added.filter((u) => u.startsWith('data:'))];
-                onChange(serializeDevStageFileUrls(next));
+                const next = [
+                  ...items,
+                  ...added.filter((a) => a.url.startsWith('data:')),
+                ];
+                onChange(serializeDevStageFileItems(next));
               });
             }}
           />
           <p className="text-[11px] text-slate-400">
-            不限文件类型，最多 {DEV_STAGE_FILE_MAX_COUNT} 个，已选 {urls.length} 个
+            不限文件类型，最多 {DEV_STAGE_FILE_MAX_COUNT} 个，已选 {items.length} 个
             {!canAdd ? '（已满）' : '，可继续添加'}
           </p>
-          {urls.length > 0 && (
+          {items.length > 0 && (
             <div className="flex flex-wrap gap-2">
-              {urls.map((url, idx) => {
+              {items.map((item, idx) => {
+                const url = item.url;
+                const downloadName = resolveDevStageFileDownloadName(item, cf.label, idx);
                 const isImage = url.startsWith('data:image/');
                 const isPdf = url.startsWith('data:application/pdf');
                 const ext = getFileExtFromDataUrl(url);
                 return (
-                  <div key={`${idx}-${url.slice(0, 32)}`} className="relative">
+                  <div key={`${idx}-${url.slice(0, 32)}`} className="relative" title={downloadName}>
                     {isImage ? (
                       <button
                         type="button"
                         onClick={() => openPreview(url, 'image')}
                         className="block h-20 w-20 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
-                        title="查看大图"
+                        title={downloadName}
                       >
-                        <img src={url} alt="" className="h-full w-full object-cover" />
+                        <img src={url} alt={downloadName} className="h-full w-full object-cover" />
                       </button>
                     ) : isPdf ? (
                       <div className="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-1">
                         <PdfThumbPreview
                           src={url}
                           onClick={() => openPreview(url, 'pdf')}
-                          title="查看 PDF"
+                          title={downloadName}
                           className="h-12 w-10"
                         />
                         <a
                           href={url}
-                          download={`${cf.label}-${idx + 1}.pdf`}
-                          className="text-[9px] font-bold text-indigo-600 hover:underline"
+                          download={downloadName}
+                          className="max-w-full truncate text-[9px] font-bold text-indigo-600 hover:underline"
                           onClick={(e) => e.stopPropagation()}
+                          title={downloadName}
                         >
                           下载
                         </a>
                       </div>
                     ) : (
                       <div className="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-1 text-center">
-                        <span className="text-[10px] font-bold text-slate-500">.{ext || '文件'}</span>
+                        <span className="line-clamp-2 w-full text-[9px] font-bold leading-tight text-slate-600" title={downloadName}>
+                          {item.name || `.${ext || '文件'}`}
+                        </span>
                         <a
                           href={url}
-                          download={`${cf.label}-${idx + 1}.${ext || 'bin'}`}
+                          download={downloadName}
                           className="text-[9px] font-bold text-indigo-600 hover:underline"
                           onClick={(e) => e.stopPropagation()}
                         >
@@ -243,7 +256,7 @@ export const PlanFormCustomFieldInput: React.FC<PlanFormCustomFieldInputProps> =
                     <button
                       type="button"
                       aria-label="删除"
-                      onClick={() => onChange(serializeDevStageFileUrls(urls.filter((_, i) => i !== idx)))}
+                      onClick={() => onChange(serializeDevStageFileItems(items.filter((_, i) => i !== idx)))}
                       className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-white shadow"
                     >
                       <X className="h-3 w-3" />
@@ -257,7 +270,12 @@ export const PlanFormCustomFieldInput: React.FC<PlanFormCustomFieldInputProps> =
       );
     }
 
-    const dataStr = typeof value === 'string' ? value : '';
+    const singleItems = parseDevStageFileItems(value);
+    const single = singleItems[0];
+    const dataStr = single?.url ?? '';
+    const singleDownloadName = single
+      ? resolveDevStageFileDownloadName(single, cf.label, 0)
+      : `${cf.label}.${getFileExtFromDataUrl(dataStr) || 'bin'}`;
     const onThumbClick = () => {
       if (!dataStr.startsWith('data:')) return;
       if (dataStr.startsWith('data:image/')) openPreview(dataStr, 'image');
@@ -276,11 +294,21 @@ export const PlanFormCustomFieldInput: React.FC<PlanFormCustomFieldInputProps> =
               return;
             }
             const reader = new FileReader();
-            reader.onload = () => onChange(reader.result as string);
+            reader.onload = () =>
+              onChange(
+                serializeDevStageFileItems([
+                  { url: String(reader.result ?? ''), name: file.name || '' },
+                ]),
+              );
             reader.readAsDataURL(file);
           }}
         />
         <p className="text-[11px] text-slate-400">不限文件类型</p>
+        {single?.name ? (
+          <p className="truncate text-[11px] font-medium text-slate-500" title={single.name}>
+            {single.name}
+          </p>
+        ) : null}
         {dataStr.startsWith('data:image/') && (
           <button
             type="button"
@@ -296,7 +324,7 @@ export const PlanFormCustomFieldInput: React.FC<PlanFormCustomFieldInputProps> =
             <PdfThumbPreview src={dataStr} onClick={onThumbClick} title="点击查看 PDF" />
             <a
               href={dataStr}
-              download={`${cf.label}.pdf`}
+              download={singleDownloadName}
               className="text-xs font-bold text-indigo-600 hover:underline"
               onClick={e => e.stopPropagation()}
             >
@@ -312,7 +340,7 @@ export const PlanFormCustomFieldInput: React.FC<PlanFormCustomFieldInputProps> =
             </button>
             <a
               href={dataStr}
-              download={`${cf.label}.${getFileExtFromDataUrl(dataStr)}`}
+              download={singleDownloadName}
               className="text-xs font-bold text-indigo-600 hover:underline"
               onClick={e => e.stopPropagation()}
             >
@@ -392,81 +420,94 @@ export const PlanFormCustomFieldReadonly: React.FC<PlanFormCustomFieldReadonlyPr
   }
 
   if (t === 'file') {
-    const urls = parseDevStageFileUrls(str);
-    if (urls.length > 1 || (urls.length === 1 && (str.startsWith('[') || !str.startsWith('data:image/')))) {
-      // 多附件或非图：逐个展示；纯单图仍走下方大图样式
-      if (urls.length > 1 || (urls[0] && !urls[0].startsWith('data:image/'))) {
-        return (
-          <div className="flex flex-wrap gap-2">
-            {urls.map((url, idx) => {
-              const isImage = url.startsWith('data:image/');
-              const isPdf = url.startsWith('data:application/pdf');
-              const ext = getFileExtFromDataUrl(url);
-              const open = () => {
-                if (isImage) {
-                  if (onFilePreview) onFilePreview(url, 'image');
-                  else window.open(url, '_blank', 'noopener,noreferrer');
-                } else if (isPdf) {
-                  if (onFilePreview) onFilePreview(url, 'pdf');
-                  else window.open(url, '_blank', 'noopener,noreferrer');
-                } else {
-                  window.open(url, '_blank', 'noopener,noreferrer');
-                }
-              };
-              if (inlineMeta) {
-                const shortLabel = isImage ? '图片' : isPdf ? 'PDF' : '附件';
-                return (
+    const items = parseDevStageFileItems(str);
+    if (items.length === 0) {
+      return <span className={inlineMeta ? metaTextCls : 'text-sm font-bold text-slate-400'}>—</span>;
+    }
+    const onlySingleLegacyImage =
+      items.length === 1 &&
+      !items[0]!.name &&
+      items[0]!.url.startsWith('data:image/') &&
+      !str.startsWith('[');
+    if (!onlySingleLegacyImage) {
+      return (
+        <div className="flex flex-wrap gap-2">
+          {items.map((item, idx) => {
+            const url = item.url;
+            const downloadName = resolveDevStageFileDownloadName(item, cf.label, idx);
+            const isImage = url.startsWith('data:image/');
+            const isPdf = url.startsWith('data:application/pdf');
+            const open = () => {
+              if (isImage) {
+                if (onFilePreview) onFilePreview(url, 'image');
+                else window.open(url, '_blank', 'noopener,noreferrer');
+              } else if (isPdf) {
+                if (onFilePreview) onFilePreview(url, 'pdf');
+                else window.open(url, '_blank', 'noopener,noreferrer');
+              } else {
+                window.open(url, '_blank', 'noopener,noreferrer');
+              }
+            };
+            if (inlineMeta) {
+              return (
+                <button
+                  key={`${idx}-${url.slice(0, 24)}`}
+                  type="button"
+                  onClick={open}
+                  className={`${metaTextCls} underline decoration-slate-300/90 underline-offset-2 hover:text-slate-600`}
+                  title={downloadName}
+                >
+                  {item.name || (isImage ? '图片' : isPdf ? 'PDF' : '附件')}
+                  {items.length > 1 && !item.name ? idx + 1 : ''}
+                </button>
+              );
+            }
+            if (isImage) {
+              return (
+                <div key={`${idx}-${url.slice(0, 24)}`} className="flex flex-col items-start gap-1">
                   <button
-                    key={`${idx}-${url.slice(0, 24)}`}
                     type="button"
                     onClick={open}
-                    className={`${metaTextCls} underline decoration-slate-300/90 underline-offset-2 hover:text-slate-600`}
+                    className="overflow-hidden rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    title={downloadName}
                   >
-                    {shortLabel}{urls.length > 1 ? idx + 1 : ''}
-                  </button>
-                );
-              }
-              if (isImage) {
-                return (
-                  <div key={`${idx}-${url.slice(0, 24)}`} className="flex flex-col items-start gap-1">
-                    <button
-                      type="button"
-                      onClick={open}
-                      className="overflow-hidden rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      title="点击查看"
-                    >
-                      <img src={url} alt="" className="h-16 w-16 object-cover" />
-                    </button>
-                    <a
-                      href={url}
-                      download={`${cf.label}-${idx + 1}.${ext}`}
-                      className="text-[10px] font-bold text-indigo-600 hover:underline"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      下载
-                    </a>
-                  </div>
-                );
-              }
-              return (
-                <div key={`${idx}-${url.slice(0, 24)}`} className="flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-2 py-1.5">
-                  <button type="button" onClick={open} className="text-xs font-bold text-indigo-700 hover:underline">
-                    {isPdf ? 'PDF' : `.${ext || '文件'}`}
+                    <img src={url} alt={downloadName} className="h-16 w-16 object-cover" />
                   </button>
                   <a
                     href={url}
-                    download={`${cf.label}-${idx + 1}.${ext || 'bin'}`}
-                    className="text-[10px] font-bold text-indigo-600 hover:underline"
+                    download={downloadName}
+                    className="max-w-[140px] truncate text-[10px] font-bold text-indigo-600 hover:underline"
                     onClick={(e) => e.stopPropagation()}
+                    title={downloadName}
                   >
-                    下载
+                    {item.name || '下载'}
                   </a>
                 </div>
               );
-            })}
-          </div>
-        );
-      }
+            }
+            return (
+              <div key={`${idx}-${url.slice(0, 24)}`} className="flex max-w-[220px] items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-2 py-1.5">
+                <button
+                  type="button"
+                  onClick={open}
+                  className="min-w-0 truncate text-xs font-bold text-indigo-700 hover:underline"
+                  title={downloadName}
+                >
+                  {item.name || (isPdf ? 'PDF' : '附件')}
+                </button>
+                <a
+                  href={url}
+                  download={downloadName}
+                  className="shrink-0 text-[10px] font-bold text-indigo-600 hover:underline"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  下载
+                </a>
+              </div>
+            );
+          })}
+        </div>
+      );
     }
   }
 

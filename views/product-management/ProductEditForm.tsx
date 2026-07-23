@@ -691,7 +691,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
         const compressed = await compressImageFile(file);
         const dataUrl = await readFileAsDataUrl(compressed);
         if (!dataUrl) return;
-        setWorkingProduct(wp => ({ ...wp, imageUrl: dataUrl }));
+        setWorkingProduct(wp => ({ ...wp, imageUrl: dataUrl, imageThumb: null }));
       } catch {
         toast.error('图片读取失败');
       }

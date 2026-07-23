@@ -1,6 +1,7 @@
 /**
  * Phase 3.H：产品列表/打印取图。
  * lite 列表只带 imageThumb；未回填或外链存量数据回退 imageUrl。
+ * 编辑页换图后应清空 imageThumb，否则仍会优先显示旧缩略图。
  */
 
 export type ProductImageFields = {

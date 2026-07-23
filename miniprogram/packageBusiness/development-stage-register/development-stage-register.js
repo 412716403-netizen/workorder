@@ -23,8 +23,8 @@ const {
 const { chooseCustomFieldFiles, isImageDataUrl } = require('../utils/fileBase64.js');
 const {
   DEV_STAGE_FILE_MAX_COUNT,
-  parseDevStageFileUrls,
-  serializeDevStageFileUrls,
+  parseDevStageFileItems,
+  serializeDevStageFileItems,
 } = require('../utils/devStageFileValue.js');
 
 function computeScrollHeight(nav) {
@@ -35,9 +35,9 @@ function computeScrollHeight(nav) {
   return Math.max(200, (win.windowHeight || 667) - headerPx - footerPx);
 }
 
-function enrichFileField(field, urls, previewSrcs) {
-  const list = parseDevStageFileUrls(urls);
-  const previews = (previewSrcs && previewSrcs.length ? previewSrcs : list).slice(
+function enrichFileField(field, items, previewSrcs) {
+  const list = Array.isArray(items) ? items : parseDevStageFileItems(items);
+  const previews = (previewSrcs && previewSrcs.length ? previewSrcs : list.map((i) => i.url)).slice(
     0,
     DEV_STAGE_FILE_MAX_COUNT,
   );
@@ -51,17 +51,21 @@ function enrichFileField(field, urls, previewSrcs) {
       ? `已传 ${list.length} 个${list.length < DEV_STAGE_FILE_MAX_COUNT ? '（可继续添加）' : '（已满）'}`
       : '上传文件/图片',
     canAddMore: list.length < DEV_STAGE_FILE_MAX_COUNT,
-    previewList: previews.map((src, idx) => {
-      const dataUrl = list[idx] || src;
+    previewList: list.map((item, idx) => {
+      const src = previews[idx] || item.url;
+      const isImage = String(item.url).indexOf('data:image/') === 0;
       return {
         id: `${field.id}-${idx}`,
-        src: isImageDataUrl(dataUrl) ? src : '',
-        isImage: isImageDataUrl(dataUrl),
-        kindLabel: isImageDataUrl(dataUrl)
+        src: isImage ? src : '',
+        isImage,
+        name: item.name || '',
+        kindLabel: isImage
           ? '图片'
-          : String(dataUrl).indexOf('data:application/pdf') === 0
+          : String(item.url).indexOf('data:application/pdf') === 0
             ? 'PDF'
-            : '附件',
+            : item.name
+              ? item.name
+              : '附件',
         index: idx,
       };
     }),
@@ -133,19 +137,19 @@ Page({
 
   resolveFieldValue(field) {
     if (field && field.type === 'file') {
-      const urls = this._fileValues && this._fileValues[field.id];
-      if (Array.isArray(urls)) return serializeDevStageFileUrls(urls);
-      if (typeof urls === 'string') return serializeDevStageFileUrls(parseDevStageFileUrls(urls));
+      const items = this._fileValues && this._fileValues[field.id];
+      if (Array.isArray(items)) return serializeDevStageFileItems(items);
+      if (typeof items === 'string') return serializeDevStageFileItems(parseDevStageFileItems(items));
       if (field.value === 'uploaded') return '';
     }
     return (field && field.value) || '';
   },
 
   refreshFileField(fieldId) {
-    const urls = this._fileValues[fieldId] || [];
-    const previews = this._filePreviews[fieldId] || urls;
+    const items = this._fileValues[fieldId] || [];
+    const previews = this._filePreviews[fieldId] || items.map((i) => i.url);
     const fields = (this.data.fields || []).map((f) =>
-      f.id === fieldId ? enrichFileField(f, urls, previews) : f,
+      f.id === fieldId ? enrichFileField(f, items, previews) : f,
     );
     this.setData({ fields });
   },
@@ -176,10 +180,10 @@ Page({
           timePart: f.dateWithTime ? parts.timePart : parts.timePart || '00:00',
         };
         if (f.type === 'file') {
-          const urls = parseDevStageFileUrls(f.value);
-          this._fileValues[f.id] = urls;
-          this._filePreviews[f.id] = urls.slice();
-          return enrichFileField(base, urls, urls);
+          const items = parseDevStageFileItems(f.value);
+          this._fileValues[f.id] = items;
+          this._filePreviews[f.id] = items.map((i) => i.url);
+          return enrichFileField(base, items, items.map((i) => i.url));
         }
         return base;
       });
@@ -269,11 +273,15 @@ Page({
     try {
       const picked = await chooseCustomFieldFiles(room);
       if (!picked || !picked.length) return;
-      const nextUrls = existing.concat(picked.map((p) => p.dataUrl)).slice(0, DEV_STAGE_FILE_MAX_COUNT);
+      const added = picked.map((p) => ({
+        url: p.dataUrl,
+        name: p.name || '',
+      }));
+      const nextItems = existing.concat(added).slice(0, DEV_STAGE_FILE_MAX_COUNT);
       const nextPreviews = (this._filePreviews[id] || [])
         .concat(picked.map((p) => p.tempFilePath || p.dataUrl))
         .slice(0, DEV_STAGE_FILE_MAX_COUNT);
-      this._fileValues[id] = nextUrls;
+      this._fileValues[id] = nextItems;
       this._filePreviews[id] = nextPreviews;
       this.refreshFileField(id);
       wx.showToast({ title: `已添加 ${picked.length} 个`, icon: 'success' });
@@ -293,9 +301,9 @@ Page({
     const id = e.currentTarget.dataset.id;
     const index = Number(e.currentTarget.dataset.index);
     if (!id || Number.isNaN(index)) return;
-    const urls = (this._fileValues[id] || []).filter((_, i) => i !== index);
+    const items = (this._fileValues[id] || []).filter((_, i) => i !== index);
     const previews = (this._filePreviews[id] || []).filter((_, i) => i !== index);
-    this._fileValues[id] = urls;
+    this._fileValues[id] = items;
     this._filePreviews[id] = previews;
     this.refreshFileField(id);
   },
@@ -303,26 +311,27 @@ Page({
   onFilePreview(e) {
     const id = e.currentTarget.dataset.id;
     const index = Number(e.currentTarget.dataset.index) || 0;
-    const urls = this._fileValues[id] || [];
-    const dataUrl = urls[index];
-    if (!dataUrl) return;
-    if (isImageDataUrl(dataUrl)) {
-      const imageUrls = urls.filter((u) => isImageDataUrl(u));
+    const items = this._fileValues[id] || [];
+    const item = items[index];
+    if (!item || !item.url) return;
+    if (isImageDataUrl(item.url)) {
+      const imageItems = items.filter((it) => isImageDataUrl(it.url));
       const previews = this._filePreviews[id] || [];
-      const previewUrls = imageUrls.map((u, i) => {
-        const idx = urls.indexOf(u);
-        return previews[idx] || u;
+      const previewUrls = imageItems.map((it) => {
+        const idx = items.indexOf(it);
+        return previews[idx] || it.url;
       });
       wx.previewImage({
-        current: previews[index] || dataUrl,
-        urls: previewUrls.length ? previewUrls : [dataUrl],
+        current: previews[index] || item.url,
+        urls: previewUrls.length ? previewUrls : [item.url],
       });
       return;
     }
-    // 非图片：提示下载/无法预览（小程序内 data URL 不便直接打开 Office）
     wx.showModal({
-      title: '附件',
-      content: '该文件类型请在电脑端查看或下载。',
+      title: item.name || '附件',
+      content: item.name
+        ? `文件「${item.name}」请在电脑端查看或下载。`
+        : '该文件类型请在电脑端查看或下载。',
       showCancel: false,
     });
   },

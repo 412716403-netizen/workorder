@@ -3,10 +3,9 @@ import { Download, FileText, ListChecks, X } from 'lucide-react';
 import type { DevStageDto, DevStageTemplateDto } from '../../types';
 import type { CustomDocFieldType } from '../../types';
 import { effectiveCustomDocFieldType } from '../../utils/reportCustomDocField';
-import { getFileExtFromDataUrl } from '../../utils/fileHelpers';
 import { formatLocalDateTimeZh } from '../../utils/localDateTime';
 import { getStageRegisteredDisplayFields } from '../../utils/devStageDisplay';
-import { parseDevStageFileUrls } from '../../utils/devStageFileValue';
+import { parseDevStageFileItems, resolveDevStageFileDownloadName } from '../../utils/devStageFileValue';
 import { ModalPortal } from '../../components/ModalPortal';
 import { formStandardLabelClass } from '../../styles/uiDensity';
 
@@ -46,8 +45,8 @@ function DevStageFieldValue({
   if (!str) return null;
 
   if (type === 'file') {
-    const urls = parseDevStageFileUrls(str);
-    if (urls.length === 0) return null;
+    const items = parseDevStageFileItems(str);
+    if (items.length === 0) return null;
 
     return (
       <>
@@ -75,10 +74,11 @@ function DevStageFieldValue({
           </ModalPortal>
         )}
         <div className="flex flex-wrap items-center gap-3">
-          {urls.map((url, idx) => {
+          {items.map((item, idx) => {
+            const url = item.url;
+            const downloadName = resolveDevStageFileDownloadName(item, label, idx);
             const isImage = url.startsWith('data:image/');
             const isPdf = url.startsWith('data:application/pdf');
-            const ext = getFileExtFromDataUrl(url);
             if (isImage) {
               return (
                 <div key={`${idx}-${url.slice(0, 24)}`} className="flex flex-col items-center gap-1">
@@ -86,16 +86,17 @@ function DevStageFieldValue({
                     type="button"
                     onClick={() => setPreviewUrl(url)}
                     className="h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-transform hover:scale-[1.02]"
-                    title="点击查看"
+                    title={downloadName}
                   >
-                    <img src={url} alt="" className="h-full w-full object-cover" />
+                    <img src={url} alt={downloadName} className="h-full w-full object-cover" />
                   </button>
                   <a
                     href={url}
-                    download={`${label}-${idx + 1}.${ext}`}
-                    className="text-[10px] font-bold text-indigo-600 hover:text-indigo-700"
+                    download={downloadName}
+                    className="max-w-[96px] truncate text-[10px] font-bold text-indigo-600 hover:text-indigo-700"
+                    title={downloadName}
                   >
-                    下载
+                    {item.name || '下载'}
                   </a>
                 </div>
               );
@@ -103,19 +104,18 @@ function DevStageFieldValue({
             return (
               <div
                 key={`${idx}-${url.slice(0, 24)}`}
-                className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm"
+                className="flex max-w-[240px] items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm"
               >
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-50">
                   <FileText className={`h-5 w-5 ${isPdf ? 'text-red-400' : 'text-indigo-500'}`} />
                 </div>
                 <div className="flex min-w-0 flex-col gap-0.5">
-                  <span className="text-[10px] font-medium text-slate-400">
-                    {isPdf ? 'PDF' : `.${ext || '文件'}`}
-                    {urls.length > 1 ? ` · ${idx + 1}/${urls.length}` : ''}
+                  <span className="truncate text-[11px] font-semibold text-slate-700" title={downloadName}>
+                    {item.name || (isPdf ? 'PDF 文档' : '附件')}
                   </span>
                   <a
                     href={url}
-                    download={`${label}-${idx + 1}.${ext || 'bin'}`}
+                    download={downloadName}
                     className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-700"
                   >
                     <Download className="h-3.5 w-3.5" /> 下载

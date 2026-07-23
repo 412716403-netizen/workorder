@@ -178,7 +178,7 @@ const ProductCategoryInfoFields: React.FC<ProductCategoryInfoFieldsProps> = ({
         const compressed = await compressImageFile(file);
         const dataUrl = await readFileAsDataUrl(compressed);
         if (!dataUrl) return;
-        setWorking((wp) => ({ ...wp, imageUrl: dataUrl }));
+        setWorking((wp) => ({ ...wp, imageUrl: dataUrl, imageThumb: null }));
       } catch {
         toast.error('图片读取失败');
       }
