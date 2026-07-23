@@ -677,7 +677,9 @@ export async function getStockBatches(
   addProdOpRowsToMap(map, prodOutRows, -1);
 
   return [...map.entries()]
-    .map(([batchNo, stock]) => ({ batchNo, stock: Math.max(0, stock) }))
+    // 多条流水浮点累加会产生 2.8899999999999992 之类噪声；归整到 6 位小数，
+    // 使展示（余 2.89）与出库校验口径一致，用户按显示值填写不再被误拦。
+    .map(([batchNo, stock]) => ({ batchNo, stock: Math.max(0, Number(stock.toFixed(6))) }))
     .filter(r => r.stock > 0)
     .sort((a, b) => a.batchNo.localeCompare(b.batchNo, 'zh-CN'));
 }

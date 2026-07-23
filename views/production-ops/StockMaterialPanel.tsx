@@ -19,6 +19,7 @@ import {
   Search,
 } from 'lucide-react';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
+import { formatMaterialQtyDisplay } from '../../utils/formatMaterialQtyDisplay';
 import type {
   ProductionOpRecord,
   ProductionOrder,
@@ -599,7 +600,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
             const opts = await api.psi.getStockBatches({ productId: pid, warehouseId: wh });
             const av = opts.find(o => o.batchNo === bn)?.stock ?? 0;
             if ((stockConfirmQuantities[pid] ?? 0) > av) {
-              toast.error(`物料「${p?.name ?? pid}」批次「${bn}」可用库存不足（${av}）`);
+              toast.error(`物料「${p?.name ?? pid}」批次「${bn}」可用库存不足（${formatMaterialQtyDisplay(av)}）`);
               return;
             }
           } catch {

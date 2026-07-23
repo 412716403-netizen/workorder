@@ -9,11 +9,18 @@ function normalizeBatchNoFromApi(raw) {
   return s || BATCH_NO_UNTAGGED;
 }
 
+/** 展示用量：消除浮点噪声（对齐 Web formatMaterialQtyDisplay，如 2.8899999999999992 → 2.89） */
+function formatBatchQtyDisplay(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return '0';
+  return String(Number(v.toFixed(6)));
+}
+
 function formatBatchOptionLabel(batchNo, stock) {
   const no = String(batchNo || '').trim();
   if (!no) return '';
   const qty = Math.max(0, Number(stock) || 0);
-  return `${no}（余 ${qty}）`;
+  return `${no}（余 ${formatBatchQtyDisplay(qty)}）`;
 }
 
 function enrichBatchRowFields(row) {
@@ -164,7 +171,7 @@ function validateMaterialIssueBatchRows(rows) {
     }
     const batchKey = row.batchNo === BATCH_NO_UNTAGGED ? BATCH_NO_UNTAGGED : row.batchNo;
     if (qty > (Number(row.batchStock) || 0)) {
-      errors.push(`物料「${row.name}」批次「${batchKey}」可用库存不足（${row.batchStock || 0}）`);
+      errors.push(`物料「${row.name}」批次「${batchKey}」可用库存不足（${formatBatchQtyDisplay(row.batchStock || 0)}）`);
     }
   });
   return errors;
@@ -323,7 +330,7 @@ function validateConfirmBatchRows(rows, mode) {
     if (mode !== 'stock_out') return;
     const batchKey = row.batchNo === BATCH_NO_UNTAGGED ? BATCH_NO_UNTAGGED : row.batchNo;
     if (qty > (Number(row.batchStock) || 0)) {
-      errors.push(`物料「${row.name}」批次「${batchKey}」可用库存不足（${row.batchStock || 0}）`);
+      errors.push(`物料「${row.name}」批次「${batchKey}」可用库存不足（${formatBatchQtyDisplay(row.batchStock || 0)}）`);
     }
   });
   return errors;

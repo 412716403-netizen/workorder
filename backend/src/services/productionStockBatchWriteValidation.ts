@@ -101,7 +101,9 @@ export async function validateStockOutBatchOnWrite(
     excludeProductionOpRecordId,
   });
   const available = rows.find(r => r.batchNo === batchKey)?.stock ?? 0;
-  if (qty > available) {
-    throw new AppError(400, `批次「${batchKey}」可用库存不足（当前 ${available}）`);
+  // 容差防浮点边界误拦（余量已在 getStockBatches 归整，此处兜底）
+  if (qty > available + 1e-9) {
+    const availableText = String(Number(available.toFixed(6)));
+    throw new AppError(400, `批次「${batchKey}」可用库存不足（当前 ${availableText}）`);
   }
 }

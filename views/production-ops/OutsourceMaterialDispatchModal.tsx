@@ -460,7 +460,7 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
           const opts = await api.psi.getStockBatches({ productId: m.productId, warehouseId: wh });
           const av = opts.find(o => o.batchNo === bn)?.stock ?? 0;
           if ((matDispatchQty[m.productId] ?? 0) > av) {
-            toast.error(`物料「${m.name}」批次「${bn}」可用库存不足（${av}）`);
+            toast.error(`物料「${m.name}」批次「${bn}」可用库存不足（${formatMaterialQtyDisplay(av)}）`);
             return;
           }
         } catch {

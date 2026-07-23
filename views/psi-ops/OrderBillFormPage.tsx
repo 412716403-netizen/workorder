@@ -42,6 +42,7 @@ import {
   lookupLastPrice,
 } from '../../utils/psiPartnerProductLastPrice';
 import { hasModulePerm } from '../../utils/hasModulePerm';
+import { formatMaterialQtyDisplay } from '../../utils/formatMaterialQtyDisplay';
 import { AMOUNT_PERMISSION_KEYS, canViewAmount } from '../../utils/canViewAmount';
 import { toast } from 'sonner';
 import * as api from '../../services/api';
@@ -1203,7 +1204,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
               ? (rows as { batchNo: string; stock: number }[]).find(r => r.batchNo === bn)?.stock ?? 0
               : 0;
             if (lineQty > avail) {
-              toast.error(`产品 ${prod?.name ?? item.productId} 批次「${bn}」可用库存不足（当前 ${avail}）`);
+              toast.error(`产品 ${prod?.name ?? item.productId} 批次「${bn}」可用库存不足（当前 ${formatMaterialQtyDisplay(avail)}）`);
               return;
             }
           } catch (e) {

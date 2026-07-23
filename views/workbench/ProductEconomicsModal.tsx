@@ -107,9 +107,9 @@ const ProductEconomicsModal: React.FC<ProductEconomicsModalProps> = ({
     if (!q) return rows;
     return rows.filter(
       r =>
-        r.name.toLowerCase().includes(q)
-        || r.sku.toLowerCase().includes(q)
-        || r.productId.toLowerCase().includes(q),
+        (r.name ?? '').toLowerCase().includes(q)
+        || (r.sku ?? '').toLowerCase().includes(q)
+        || (r.productId ?? '').toLowerCase().includes(q),
     );
   }, [data?.rows, search]);
 

@@ -786,7 +786,11 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
     });
     if (!debouncedSearchTerm.trim()) return allStocks;
     const term = debouncedSearchTerm.toLowerCase();
-    return allStocks.filter(ps => ps.name.toLowerCase().includes(term) || ps.sku.toLowerCase().includes(term) || ps.categoryName.toLowerCase().includes(term));
+    // sku 已允许为空（migration 20260721120000），搜索须空安全
+    return allStocks.filter(ps =>
+      (ps.name ?? '').toLowerCase().includes(term)
+      || (ps.sku ?? '').toLowerCase().includes(term)
+      || (ps.categoryName ?? '').toLowerCase().includes(term));
   }, [products, warehouses, recordsList, categories, debouncedSearchTerm, getVariantDisplayQty, dictionaries, getStock, categoryMapPSI]);
 
   // 仅展示当前有库存的产品；库存为 0（含盘点为 0）的产品不在仓库列表显示
