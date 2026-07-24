@@ -84,6 +84,24 @@ describe('formatReportCustomDataForList', () => {
     const f: ReportFieldDefinition = { id: '1', label: 'f', type: 'file' };
     expect(formatReportCustomDataForList(f, 'data:image/png;base64,xx')).toBe('[附件]');
   });
+  it('abbreviates named file json array', () => {
+    const f: ReportFieldDefinition = { id: '1', label: '图纸', type: 'file' };
+    expect(
+      formatReportCustomDataForList(
+        f,
+        JSON.stringify([{ url: 'data:application/pdf;base64,xx', name: '插针.pdf' }]),
+      ),
+    ).toBe('插针.pdf');
+    expect(
+      formatReportCustomDataForList(
+        f,
+        JSON.stringify([
+          { url: 'data:application/pdf;base64,a', name: 'a.pdf' },
+          { url: 'data:application/pdf;base64,b', name: 'b.pdf' },
+        ]),
+      ),
+    ).toBe('[附件×2]');
+  });
   it('shows knowledge title', () => {
     const f: ReportFieldDefinition = { id: '1', label: 'k', type: 'knowledge' };
     expect(formatReportCustomDataForList(f, '{"id":"d1","title":"工艺SOP"}')).toBe('工艺SOP');

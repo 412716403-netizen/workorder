@@ -8,6 +8,7 @@ import type {
   ReportFieldDefinition,
 } from '../types';
 import { parseKnowledgeFieldValue } from './knowledgeFieldValue';
+import { isDevStageFileValueFilled, parseDevStageFileItems } from './devStageFileValue';
 
 const DEFAULT_BOOLEAN_OPTIONS = ['是', '否'] as const;
 
@@ -66,7 +67,15 @@ export function formatReportCustomDataForList(
   if (eff === 'select' && typeof raw === 'boolean') {
     return String(normalizeReportCustomDataValue(f, raw));
   }
-  if (eff === 'file' && typeof raw === 'string' && raw.startsWith('data:')) return '[附件]';
+  if (eff === 'file') {
+    const items = parseDevStageFileItems(raw);
+    if (items.length === 0) return '';
+    if (items.length === 1) {
+      const name = items[0]?.name?.trim();
+      return name || '[附件]';
+    }
+    return `[附件×${items.length}]`;
+  }
   if (eff === 'knowledge') {
     const ref = parseKnowledgeFieldValue(raw);
     return ref ? (ref.title || '[资料库文件]') : '';
@@ -98,7 +107,10 @@ export function getProductCategoryCustomFieldEntries(
   const out: Array<{ field: ReportFieldDefinition; value: unknown; display: string; empty: boolean }> = [];
   for (const f of defs) {
     const value = product?.categoryCustomData?.[f.id];
-    const empty = value == null || value === '';
+    const empty =
+      effectiveCustomDocFieldType(f) === 'file'
+        ? !isDevStageFileValueFilled(value)
+        : value == null || value === '';
     if (empty && !includeEmpty) continue;
     out.push({
       field: f,

@@ -935,7 +935,7 @@
 .kb-editor .ProseMirror .kb-product-ref,
 .kb-editor .kb-product-ref {
   display: inline-block;
-  max-width: 12em;
+  max-width: none;
   margin: 0 0.15em;
   padding: 0.1em 0.45em;
   border-radius: 0.35rem;
@@ -947,15 +947,15 @@
   line-height: 1.4;
   cursor: pointer;
   vertical-align: baseline;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow: visible;
+  word-break: break-word;
 }
 
-/* 表格单元格较窄：避免 max-width:100% 把芯片挤到下一行 */
+/* 表格内同样完整展示产品编号与名称，不截断 */
 .kb-editor .ProseMirror td .kb-product-ref,
 .kb-editor .ProseMirror th .kb-product-ref {
-  max-width: 9em;
+  max-width: none;
 }
 
 .kb-editor .ProseMirror .kb-product-ref:hover,

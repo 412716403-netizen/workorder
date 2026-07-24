@@ -14,6 +14,10 @@ import { productColorSizeEnabled } from '../../utils/productColorSize';
 import { bomHasConfiguredItems } from '../../utils/bomEffective';
 import { parseRouteReportFileUrls } from '../../utils/routeReportFileUrls';
 import {
+  parseDevStageFileItems,
+  resolveDevStageFileDownloadName,
+} from '../../utils/devStageFileValue';
+import {
   effectiveCustomDocFieldType,
   formatReportCustomDataForList,
   getProductCategoryCustomFieldEntries,
@@ -236,7 +240,12 @@ const ProductQuickDetailBody: React.FC<ProductQuickDetailBodyProps> = ({
           <div className="flex flex-wrap gap-2">
             {visibleCustomFields.map(f => {
               const val = p.categoryCustomData?.[f.id];
-              const empty = val == null || val === '';
+              const fieldType = effectiveCustomDocFieldType(f);
+              const fileItems = fieldType === 'file' ? parseDevStageFileItems(val) : [];
+              const empty =
+                fieldType === 'file'
+                  ? fileItems.length === 0
+                  : val == null || val === '';
               if (empty) {
                 return (
                   <div key={f.id} className="px-3 py-1.5 bg-slate-50 rounded-lg border border-dashed border-slate-200">
@@ -245,7 +254,7 @@ const ProductQuickDetailBody: React.FC<ProductQuickDetailBodyProps> = ({
                   </div>
                 );
               }
-              if (effectiveCustomDocFieldType(f) === 'knowledge') {
+              if (fieldType === 'knowledge') {
                 const ref = parseKnowledgeFieldValue(val);
                 if (!ref) {
                   return (
@@ -270,57 +279,74 @@ const ProductQuickDetailBody: React.FC<ProductQuickDetailBodyProps> = ({
                   </div>
                 );
               }
-              if (f.type === 'file' && typeof val === 'string' && val.startsWith('data:')) {
-                const isImg = val.startsWith('data:image/');
-                const isPdf = val.startsWith('data:application/pdf');
-                if (isImg)
-                  return (
-                    <div key={f.id} className="flex items-center gap-2">
-                      <img
-                        src={val}
-                        alt={f.label}
-                        className="h-12 w-12 object-cover rounded-xl border cursor-pointer hover:ring-2 hover:ring-indigo-400"
-                        onClick={() => onOpenFilePreview(val, 'image')}
-                      />
-                      <a
-                        href={val}
-                        download={`${f.label}.${getFileExtFromDataUrl(val)}`}
-                        className="text-xs font-bold text-indigo-600 hover:underline"
-                      >
-                        下载
-                      </a>
-                    </div>
-                  );
-                if (isPdf)
-                  return (
-                    <div key={f.id} className="flex items-center gap-2">
-                      <PdfThumbPreview
-                        src={val}
-                        onClick={() => onOpenFilePreview(val, 'pdf')}
-                        title={`${f.label} · 查看 PDF`}
-                        className="h-12 w-10"
-                      />
-                      <div className="min-w-0">
-                        <span className="block text-[10px] font-bold text-slate-400">{f.label}</span>
-                        <a
-                          href={val}
-                          download={`${f.label}.${getFileExtFromDataUrl(val)}`}
-                          className="text-xs font-bold text-indigo-600 hover:underline"
-                        >
-                          下载
-                        </a>
-                      </div>
-                    </div>
-                  );
+              if (fieldType === 'file') {
                 return (
-                  <a
-                    key={f.id}
-                    href={val}
-                    download={`${f.label}.${getFileExtFromDataUrl(val)}`}
-                    className="px-3 py-1.5 bg-slate-100 rounded-lg text-xs font-bold text-slate-600 hover:bg-indigo-50"
-                  >
-                    下载
-                  </a>
+                  <div key={f.id} className="flex min-w-0 flex-col gap-1.5">
+                    <span className="text-[10px] font-bold text-slate-400">{f.label}:</span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {fileItems.map((item, idx) => {
+                        const url = item.url;
+                        const downloadName = resolveDevStageFileDownloadName(item, f.label, idx);
+                        const isImg = url.startsWith('data:image/');
+                        const isPdf = url.startsWith('data:application/pdf');
+                        if (isImg) {
+                          return (
+                            <div key={`${f.id}-${idx}`} className="flex items-center gap-2">
+                              <img
+                                src={url}
+                                alt={downloadName}
+                                className="h-12 w-12 object-cover rounded-xl border cursor-pointer hover:ring-2 hover:ring-indigo-400"
+                                onClick={() => onOpenFilePreview(url, 'image')}
+                              />
+                              <a
+                                href={url}
+                                download={downloadName}
+                                className="max-w-[140px] truncate text-xs font-bold text-indigo-600 hover:underline"
+                                title={downloadName}
+                              >
+                                {item.name || '下载'}
+                              </a>
+                            </div>
+                          );
+                        }
+                        if (isPdf) {
+                          return (
+                            <div key={`${f.id}-${idx}`} className="flex items-center gap-2">
+                              <PdfThumbPreview
+                                src={url}
+                                onClick={() => onOpenFilePreview(url, 'pdf')}
+                                title={`${downloadName} · 查看 PDF`}
+                                className="h-12 w-10"
+                              />
+                              <div className="min-w-0">
+                                <span className="block max-w-[160px] truncate text-xs font-bold text-slate-700" title={downloadName}>
+                                  {item.name || downloadName}
+                                </span>
+                                <a
+                                  href={url}
+                                  download={downloadName}
+                                  className="text-xs font-bold text-indigo-600 hover:underline"
+                                >
+                                  下载
+                                </a>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return (
+                          <a
+                            key={`${f.id}-${idx}`}
+                            href={url}
+                            download={downloadName}
+                            className="px-3 py-1.5 bg-slate-100 rounded-lg text-xs font-bold text-slate-600 hover:bg-indigo-50"
+                            title={downloadName}
+                          >
+                            {item.name || `下载.${getFileExtFromDataUrl(url)}`}
+                          </a>
+                        );
+                      })}
+                    </div>
+                  </div>
                 );
               }
               return (
