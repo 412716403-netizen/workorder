@@ -24,6 +24,7 @@ import type {
   ProcessSequenceMode,
 } from '../../../types';
 import WorkerSelector from '../../../components/WorkerSelector';
+import { UnitPriceInput } from '../../../components/UnitPriceInput';
 import {
   getEffectiveReportTemplate,
   mergeCustomDataForTemplate,
@@ -248,14 +249,11 @@ const ReportBatchEditFlow: React.FC<Props> = ({
             <div className="space-y-1">
               <label className={formStandardLabelClass}>工价</label>
               <div className="flex flex-wrap items-center gap-2">
-                <input
-                  type="number"
-                  min={0}
-                  step={0.01}
+                <UnitPriceInput
                   value={editingReport.form.rate}
-                  onChange={e =>
+                  onValueChange={v =>
                     setEditingReport(prev =>
-                      prev ? { ...prev, form: { ...prev.form, rate: parseFloat(e.target.value) || 0 } } : prev,
+                      prev ? { ...prev, form: { ...prev.form, rate: v } } : prev,
                     )
                   }
                   className="h-9 w-[6rem] rounded-lg border border-slate-200 bg-white px-2 text-sm font-bold text-slate-800 text-right outline-none focus:ring-2 focus:ring-indigo-200"
@@ -513,12 +511,9 @@ const MatrixEditTable: React.FC<MatrixEditTableProps> = ({
               </td>
               <td className="py-2.5 px-3 align-middle text-right">
                 <div className="inline-flex items-center justify-end gap-1.5">
-                  <input
-                    type="number"
-                    min={0}
-                    step={0.01}
+                  <UnitPriceInput
                     value={editingReport.form.rate}
-                    onChange={e => setEditingReport(prev => prev ? { ...prev, form: { ...prev.form, rate: parseFloat(e.target.value) || 0 } } : prev)}
+                    onValueChange={v => setEditingReport(prev => prev ? { ...prev, form: { ...prev.form, rate: v } } : prev)}
                     className="h-9 w-[5.25rem] shrink-0 rounded-lg border border-slate-200 bg-white px-2 text-sm font-bold text-slate-800 text-right outline-none focus:ring-2 focus:ring-indigo-200"
                   />
                   <span className="shrink-0 text-xs font-medium whitespace-nowrap text-slate-500">元/{matrixUnit}</span>

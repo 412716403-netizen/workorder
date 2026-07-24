@@ -66,6 +66,7 @@ import DocEntryTimeField from '../../components/DocEntryTimeField';
 import { defaultEntryDatetimeLocal, entryDatetimeLocalToTimestamp } from '../../utils/docEntryTime';
 import { productThumbSrc } from '../../utils/productImageSrc';
 import { ModalPortal } from '../../components/ModalPortal';
+import { UnitPriceInput } from '../../components/UnitPriceInput';
 
 function reworkReportCollabFromValues(values: Record<string, unknown>): { collabData?: Record<string, unknown> } {
   const clean = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== '' && v != null && v !== undefined));
@@ -1102,13 +1103,9 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
                               <>
                                 <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
                                   <label className={psiOrderBillCompactLineLabelClass}>单价 (元)</label>
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    step={0.01}
-                                    value={reworkReportUnitPrice || ''}
-                                    onChange={e => setReworkReportUnitPrice(Number(e.target.value) || 0)}
-                                    placeholder="0"
+                                  <UnitPriceInput
+                                    value={reworkReportUnitPrice}
+                                    onValueChange={setReworkReportUnitPrice}
                                     className={psiOrderBillCompactLineInputClass}
                                   />
                                 </div>

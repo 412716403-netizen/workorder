@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { SearchableProductSelect } from '../../components/SearchableProductSelect';
 import { CustomerSelect } from '../../components/CustomerSelect';
+import { UnitPriceInput } from '../../components/UnitPriceInput';
 import type { PlanListPrintSettings, PrintRenderContext, PrintTemplate } from '../../types';
 import {
   Product,
@@ -305,7 +306,7 @@ const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
                   {showAmount && (
                   <div className="w-[5.5rem] sm:w-24 shrink-0 space-y-0.5">
                     <label className={psiOrderBillCompactLineLabelClass}>销售价 (元)</label>
-                    <input type="number" min={0} step={0.01} value={line.salesPrice || ''} onChange={e => onUpdateItem(line.id, { salesPrice: parseFloat(e.target.value) || 0 })} className={psiOrderBillCompactLineInputClass} placeholder="0" />
+                    <UnitPriceInput value={line.salesPrice} onValueChange={v => onUpdateItem(line.id, { salesPrice: v })} className={psiOrderBillCompactLineInputClass} />
                   </div>
                   )}
                   {hasVariants && (

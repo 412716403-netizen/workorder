@@ -38,6 +38,7 @@ import {
   mergeOutsourceDetailEditCollab,
 } from '../../utils/productionOpCollab/outsource';
 import { PlanFormCustomFieldInput, PlanFormCustomFieldReadonly } from '../../components/PlanFormCustomFieldControls';
+import { UnitPriceInput } from '../../components/UnitPriceInput';
 import { psiCustomFieldHasFilledDisplayValue } from '../psi-ops/psiOpsListFormatting';
 import {
   buildOutsourceReceiveLastPriceIndex,
@@ -935,13 +936,9 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                       {isReceiveDoc && showOutsourceAmount ? (
                         <td className="py-2.5 px-3 text-right align-middle">
                           {editActive ? (
-                            <input
-                              type="number"
-                              min={0}
-                              step={0.01}
-                              value={flowDetailUnitPrices[key] ?? ''}
-                              onChange={e => setLineUnitPrice(key, e.target.value)}
-                              placeholder="0"
+                            <UnitPriceInput
+                              value={flowDetailUnitPrices[key]}
+                              onValueChange={v => setLineUnitPrice(key, String(v))}
                               className="ml-auto block h-8 w-full max-w-[6.5rem] rounded-lg border border-slate-200 bg-white px-2 text-right text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
                             />
                           ) : (
@@ -1068,12 +1065,9 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                   {isReceiveDoc && showOutsourceAmount ? (
                     <td className="py-2.5 px-3 text-right align-middle">
                       {editActive ? (
-                        <input
-                          type="number"
-                          min={0}
-                          step={0.01}
-                          value={flowDetailUnitPrices[key] ?? ''}
-                          onChange={e => setLineUnitPrice(key, e.target.value)}
+                        <UnitPriceInput
+                          value={flowDetailUnitPrices[key]}
+                          onValueChange={v => setLineUnitPrice(key, String(v))}
                           className="ml-auto block h-8 w-full max-w-[6.5rem] rounded-lg border border-slate-200 bg-white px-2 text-right text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
                         />
                       ) : (

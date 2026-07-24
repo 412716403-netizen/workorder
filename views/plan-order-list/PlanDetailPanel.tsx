@@ -75,6 +75,7 @@ import PlanPrintOverlays from './PlanPrintOverlays';
 import PlanSplitModal from './PlanSplitModal';
 import PlanProcessRouteModal from './PlanProcessRouteModal';
 import { SupplierSelect } from '../../components/SupplierSelect';
+import { UnitPriceInput } from '../../components/UnitPriceInput';
 import { resolvePrimaryOrderIdForPlan } from '../../utils/resolvePrimaryOrderIdForPlan';
 import {
   formStandardControlClass,
@@ -1607,16 +1608,9 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                                {node.enablePieceRate && (
                                <div className="flex items-center gap-2 w-[9rem]">
                                  <span className="text-[9px] font-bold text-slate-400 uppercase whitespace-nowrap w-6">工价</span>
-                                 <input
-                                   type="number"
-                                   min={0}
-                                   step={0.01}
-                                   placeholder="0"
-                                   value={tempNodeRates[node.id] ?? ''}
-                                   onChange={e => {
-                                     const v = parseFloat(e.target.value);
-                                     setTempNodeRates(prev => ({ ...prev, [node.id]: isNaN(v) ? 0 : v }));
-                                   }}
+                                 <UnitPriceInput
+                                   value={tempNodeRates[node.id]}
+                                   onValueChange={v => setTempNodeRates(prev => ({ ...prev, [node.id]: v }))}
                                    onBlur={() => { void saveNodeRates(); }}
                                    className="w-20 bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2 text-xs font-bold text-slate-800 text-right focus:ring-2 focus:ring-indigo-500 outline-none"
                                  />
@@ -2087,12 +2081,9 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                                               </div>
                                            </td>
                                            <td className="py-4 text-right">
-                                              <input
-                                                 type="number"
-                                                 min={0}
-                                                 step={0.01}
-                                                 value={Number.isFinite(item.purchasePrice) ? item.purchasePrice : 0}
-                                                 onChange={e => updateProposedItemPurchasePrice(order.orderNumber, item.id, e.target.value)}
+                                              <UnitPriceInput
+                                                 value={item.purchasePrice}
+                                                 onValueChange={v => updateProposedItemPurchasePrice(order.orderNumber, item.id, String(v))}
                                                  className="w-24 bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-sm font-bold text-slate-800 text-right focus:ring-2 focus:ring-indigo-500 outline-none"
                                                  title="与保存至采购订单的单价一致"
                                               />

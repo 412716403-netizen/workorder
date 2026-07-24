@@ -43,6 +43,7 @@ import { hasSubPermission } from '../../utils/hasSubPermission';
 import BomEditorPortal, { useBomEditorPortalState } from './BomEditorPortal';
 import { PlanFormKnowledgeInput } from '../../components/PlanFormCustomFieldControls';
 import ProductCategoryInfoFields from '../../components/product/ProductCategoryInfoFields';
+import { UnitPriceInput } from '../../components/UnitPriceInput';
 import { MediaFilePreviewOverlay } from '../../components/MediaFilePreviewOverlay';
 import { useEscapeToClose } from '../../hooks/useEscapeToClose';
 import {
@@ -1088,13 +1089,9 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                             {node.enablePieceRate && (
                               <div className="flex items-center gap-2">
                                 <label className="text-[9px] font-bold text-slate-400 uppercase whitespace-nowrap">工价</label>
-                                <input
-                                  type="number"
-                                  min={0}
-                                  step={0.01}
-                                  placeholder="0"
-                                  value={workingProduct.nodeRates?.[node.id] ?? ''}
-                                  onChange={e => updateNodeRate(node.id, parseFloat(e.target.value) || 0)}
+                                <UnitPriceInput
+                                  value={workingProduct.nodeRates?.[node.id]}
+                                  onValueChange={v => updateNodeRate(node.id, v)}
                                   className="w-20 bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2 text-xs font-bold text-slate-800 text-right focus:ring-2 focus:ring-indigo-500 outline-none"
                                 />
                                 <span className="text-[9px] text-slate-400 whitespace-nowrap">元/件</span>

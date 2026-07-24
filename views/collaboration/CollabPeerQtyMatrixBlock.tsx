@@ -128,11 +128,14 @@ const CollabPeerQtyMatrixBlock: React.FC<Props> = ({
                 <div className="flex min-w-[5.5rem] flex-col gap-1">
                   <label className="text-[10px] font-black uppercase tracking-wide text-slate-400">单价（元）</label>
                   <input
-                    type="number"
-                    min={0}
-                    step={0.01}
+                    type="text"
+                    inputMode="decimal"
                     value={unitPrice}
-                    onChange={e => onUnitPriceChange?.(blockIdx, e.target.value)}
+                    onChange={e => {
+                      const raw = e.target.value.replace(/,/g, '.');
+                      if (raw !== '' && !/^\d*\.?\d*$/.test(raw)) return;
+                      onUnitPriceChange?.(blockIdx, raw);
+                    }}
                     disabled={!selected}
                     className={`h-9 w-[6.5rem] rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-bold text-slate-900 shadow-sm outline-none transition-shadow disabled:opacity-50 ${ringClass}`}
                     placeholder="0"

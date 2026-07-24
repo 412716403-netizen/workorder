@@ -20,6 +20,7 @@ import type {
 import { DocCustomFieldEditGrid, DocSummaryCard } from '../../../components/doc-modal';
 import WorkerSelector from '../../../components/WorkerSelector';
 import EquipmentSelector from '../../../components/EquipmentSelector';
+import { UnitPriceInput } from '../../../components/UnitPriceInput';
 import VariantQtyMatrixInputs from '../../../components/variant-matrix/VariantQtyMatrixInputs';
 import { psiOrderBillFormFieldControlClass } from '../../../styles/uiDensity';
 import ReworkProductInfoCell from './ReworkProductInfoCell';
@@ -283,17 +284,13 @@ const MatrixEditTable: React.FC<{
               {totalQty.toLocaleString()} {unitName}
             </td>
             <td className="py-2.5 px-3 text-right align-middle">
-              <input
-                type="number"
-                min={0}
-                step={0.01}
-                value={editing.form.unitPrice || ''}
-                onChange={e =>
+              <UnitPriceInput
+                value={editing.form.unitPrice}
+                onValueChange={v =>
                   setEditing(prev =>
-                    prev ? { ...prev, form: { ...prev.form, unitPrice: Number(e.target.value) || 0 } } : prev,
+                    prev ? { ...prev, form: { ...prev.form, unitPrice: v } } : prev,
                   )
                 }
-                placeholder="0"
                 className="ml-auto block h-9 w-full max-w-[6.5rem] rounded-lg border border-slate-200 bg-white px-2 text-right text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 tabular-nums"
               />
             </td>
@@ -460,17 +457,13 @@ const NoColorSizeEditTable: React.FC<{
               </div>
             </td>
             <td className="py-2.5 px-3 align-middle">
-              <input
-                type="number"
-                min={0}
-                step={0.01}
-                value={editing.form.unitPrice || ''}
-                onChange={e =>
+              <UnitPriceInput
+                value={editing.form.unitPrice}
+                onValueChange={v =>
                   setEditing(prev =>
-                    prev ? { ...prev, form: { ...prev.form, unitPrice: Number(e.target.value) || 0 } } : prev,
+                    prev ? { ...prev, form: { ...prev.form, unitPrice: v } } : prev,
                   )
                 }
-                placeholder="0"
                 className="h-9 w-full min-w-[5rem] max-w-[6.5rem] rounded-lg border border-slate-200 bg-white px-2 text-right text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 tabular-nums"
               />
             </td>
@@ -536,17 +529,13 @@ const VariantsOnlyEditTable: React.FC<{
                 rowSpan={Math.max(1, editing.form.rowEdits.length)}
                 className="border-b border-slate-100 px-3 py-2.5 align-top text-right"
               >
-                <input
-                  type="number"
-                  min={0}
-                  step={0.01}
-                  value={editing.form.unitPrice || ''}
-                  onChange={e =>
+                <UnitPriceInput
+                  value={editing.form.unitPrice}
+                  onValueChange={v =>
                     setEditing(prev =>
-                      prev ? { ...prev, form: { ...prev.form, unitPrice: Number(e.target.value) || 0 } } : prev,
+                      prev ? { ...prev, form: { ...prev.form, unitPrice: v } } : prev,
                     )
                   }
-                  placeholder="0"
                   className="ml-auto block h-9 w-full max-w-[6.5rem] rounded-lg border border-slate-200 bg-white px-2 text-right text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 tabular-nums"
                 />
               </td>

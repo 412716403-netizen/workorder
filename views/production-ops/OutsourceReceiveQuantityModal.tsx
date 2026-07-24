@@ -14,6 +14,7 @@ import type {
 } from '../../types';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 import DocEntryTimeField from '../../components/DocEntryTimeField';
+import { UnitPriceInput } from '../../components/UnitPriceInput';
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import { RECEIVE_VARIANT_SEP, outsourceReceiveBaseKey } from './outsourceReceiveKeys';
@@ -529,13 +530,9 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                       <>
                       <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
                         <label className={psiOrderBillCompactLineLabelClass}>加工单价 (元)</label>
-                        <input
-                          type="number"
-                          min={0}
-                          step={0.01}
-                          value={receiveFormUnitPrices[baseKey] ?? ''}
-                          onChange={e => setReceiveFormUnitPrices(prev => ({ ...prev, [baseKey]: Number(e.target.value) || 0 }))}
-                          placeholder="0"
+                        <UnitPriceInput
+                          value={receiveFormUnitPrices[baseKey]}
+                          onValueChange={v => setReceiveFormUnitPrices(prev => ({ ...prev, [baseKey]: v }))}
                           className={psiOrderBillCompactLineInputClass}
                         />
                       </div>
@@ -670,13 +667,9 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                       <>
                       <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
                         <label className={psiOrderBillCompactLineLabelClass}>加工单价 (元)</label>
-                        <input
-                          type="number"
-                          min={0}
-                          step={0.01}
-                          value={receiveFormUnitPrices[baseKey] ?? ''}
-                          onChange={e => setReceiveFormUnitPrices(prev => ({ ...prev, [baseKey]: Number(e.target.value) || 0 }))}
-                          placeholder="0"
+                        <UnitPriceInput
+                          value={receiveFormUnitPrices[baseKey]}
+                          onValueChange={v => setReceiveFormUnitPrices(prev => ({ ...prev, [baseKey]: v }))}
                           className={psiOrderBillCompactLineInputClass}
                         />
                       </div>
@@ -795,13 +788,9 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                     <>
                     <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
                       <label className={psiOrderBillCompactLineLabelClass}>加工单价 (元)</label>
-                      <input
-                        type="number"
-                        min={0}
-                        step={0.01}
-                        value={receiveFormUnitPrices[baseKey] ?? ''}
-                        onChange={e => setReceiveFormUnitPrices(prev => ({ ...prev, [baseKey]: Number(e.target.value) || 0 }))}
-                        placeholder="0"
+                      <UnitPriceInput
+                        value={receiveFormUnitPrices[baseKey]}
+                        onValueChange={v => setReceiveFormUnitPrices(prev => ({ ...prev, [baseKey]: v }))}
                         className={psiOrderBillCompactLineInputClass}
                       />
                     </div>

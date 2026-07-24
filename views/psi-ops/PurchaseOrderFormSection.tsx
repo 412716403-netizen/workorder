@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { SearchableProductSelect } from '../../components/SearchableProductSelect';
 import { SupplierSelect } from '../../components/SupplierSelect';
+import { UnitPriceInput } from '../../components/UnitPriceInput';
 import { Product, ProductCategory, Partner, PartnerCategory, AppDictionaries } from '../../types';
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 import { parsePsiNonVariantQuantityInputOptional } from '../../utils/psiQtyInput';
@@ -279,7 +280,7 @@ const PurchaseOrderFormSection: React.FC<PurchaseOrderFormSectionProps> = ({
                   {showAmount && (
                   <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
                     <label className={psiOrderBillCompactLineLabelClass}>采购价 (元)</label>
-                    <input type="number" min={0} step={0.01} value={line.purchasePrice || ''} onChange={e => onUpdateItem(line.id, { purchasePrice: parseFloat(e.target.value) || 0 })} className={psiOrderBillCompactLineInputClass} placeholder="0" />
+                    <UnitPriceInput value={line.purchasePrice} onValueChange={v => onUpdateItem(line.id, { purchasePrice: v })} className={psiOrderBillCompactLineInputClass} />
                   </div>
                   )}
                   {hasVariants && (

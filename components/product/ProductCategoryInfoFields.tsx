@@ -21,6 +21,7 @@ import type {
 import { productColorSizeEnabled } from '../../utils/productColorSize';
 import ReportCustomFieldsEditor from '../ReportCustomFieldsEditor';
 import { SupplierSelect } from '../SupplierSelect';
+import { UnitPriceInput } from '../UnitPriceInput';
 import SpecSelectorModal from './SpecSelectorModal';
 import ColorSizeSpecPickerTable from './ColorSizeSpecPickerTable';
 import { useAuthOptional } from '../../contexts/AuthContext';
@@ -624,16 +625,10 @@ const ProductCategoryInfoFields: React.FC<ProductCategoryInfoFieldsProps> = ({
                   <label className={productArchiveFormLabelClass}>标准销售单价 (CNY)</label>
                   <div className="relative">
                     <DollarSign className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-300" />
-                    <input
-                      type="number"
+                    <UnitPriceInput
                       disabled={readOnly}
-                      value={working.salesPrice ?? ''}
-                      onChange={(e) =>
-                        setWorking({
-                          ...working,
-                          salesPrice: e.target.value === '' ? undefined : parseFloat(e.target.value) || 0,
-                        })
-                      }
+                      value={working.salesPrice}
+                      onValueChange={v => setWorking({ ...working, salesPrice: v })}
                       className={productArchiveFormControlIconClass}
                     />
                   </div>
@@ -644,16 +639,10 @@ const ProductCategoryInfoFields: React.FC<ProductCategoryInfoFieldsProps> = ({
                   <label className={productArchiveFormLabelClass}>参考采购单价 (CNY)</label>
                   <div className="relative">
                     <ShoppingCart className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-300" />
-                    <input
-                      type="number"
+                    <UnitPriceInput
                       disabled={readOnly}
-                      value={working.purchasePrice ?? ''}
-                      onChange={(e) =>
-                        setWorking({
-                          ...working,
-                          purchasePrice: e.target.value === '' ? undefined : parseFloat(e.target.value) || 0,
-                        })
-                      }
+                      value={working.purchasePrice}
+                      onValueChange={v => setWorking({ ...working, purchasePrice: v })}
                       className={productArchiveFormControlIconClass}
                     />
                   </div>
