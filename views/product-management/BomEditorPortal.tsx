@@ -219,13 +219,13 @@ const BomEditorPortal: React.FC<BomEditorPortalProps> = ({
               .map((other, i) => (i !== idx && other.productId ? other.productId : ''))
               .filter(Boolean);
             return (
-              <div key={idx} className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 grid grid-cols-1 md:grid-cols-[auto_1fr_auto] gap-3 md:gap-4 items-start relative group shadow-sm hover:bg-white hover:border-indigo-100 transition-all">
+              <div key={idx} className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 flex gap-3 md:gap-4 items-start relative group shadow-sm hover:bg-white hover:border-indigo-100 transition-all">
                 <button type="button" onClick={() => {
                   const newItems = [...workingBOM.items];
                   newItems.splice(idx, 1);
                   setWorkingBOM({ ...workingBOM, items: newItems });
                 }} className="absolute -top-2 -right-2 w-7 h-7 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-lg hover:bg-rose-600 z-10"><Trash2 className="w-4 h-4" /></button>
-                <div className="flex shrink-0 items-start justify-center md:justify-start pt-[3px] md:pt-1">
+                <div className="flex shrink-0 items-center pt-1">
                   <span
                     className="flex h-8 min-w-[2rem] items-center justify-center rounded-full bg-indigo-600 px-2 text-xs font-black text-white shadow-md shadow-indigo-600/25 ring-2 ring-white/30"
                     aria-label={`第 ${idx + 1} 行`}
@@ -233,23 +233,41 @@ const BomEditorPortal: React.FC<BomEditorPortalProps> = ({
                     {idx + 1}
                   </span>
                 </div>
-                <div className="space-y-2 min-w-0">
-                  <div>
-                    <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block tracking-widest">核心物料/组件</label>
-                    <SearchableProductSelect
-                      compact
-                      categories={categories}
-                      value={item.productId}
-                      unavailableProductIds={unavailableProductIds}
-                      disabledProductIds={bomBlockedProductIds}
-                      allowQuickCreate={allowQuickCreate}
-                      onChange={val => {
-                        const p = products.find(x => x.id === val);
-                        onUpdateBOMItem(idx, { productId: val, categoryId: p?.categoryId });
-                      }}
-                      options={products.filter(p => p.id !== product?.id)}
-                      placeholder="搜索并选择产品型号..."
-                    />
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="flex items-center gap-3">
+                    <div className="min-w-0 flex-1">
+                      <SearchableProductSelect
+                        compact
+                        categories={categories}
+                        value={item.productId}
+                        unavailableProductIds={unavailableProductIds}
+                        disabledProductIds={bomBlockedProductIds}
+                        allowQuickCreate={allowQuickCreate}
+                        onChange={val => {
+                          const p = products.find(x => x.id === val);
+                          onUpdateBOMItem(idx, { productId: val, categoryId: p?.categoryId });
+                        }}
+                        options={products.filter(p => p.id !== product?.id)}
+                        placeholder="搜索并选择产品型号..."
+                      />
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest shrink-0">用量</label>
+                      <input
+                        type="number"
+                        value={item.quantityInput ?? (() => {
+                          // BOMItem.quantity 声明为 number，但历史/导入数据可能是字符串（含空串）；断言放宽类型保留原防御口径
+                          const q = item.quantity as number | string | null | undefined;
+                          return q != null && q !== '' && q !== 0 ? Number(q) : '';
+                        })()}
+                        onChange={e => {
+                          const raw = e.target.value;
+                          const num = raw === '' ? 0 : (parseFloat(raw) || 0);
+                          onUpdateBOMItem(idx, { quantityInput: raw, quantity: num });
+                        }}
+                        className="w-24 bg-white border border-slate-100 rounded-xl p-3 text-xs font-bold outline-none text-center"
+                      />
+                    </div>
                   </div>
                   {weightReportEnabledForBom && (() => {
                     const rawQty = item.quantityInput !== undefined && item.quantityInput !== ''
@@ -260,7 +278,7 @@ const BomEditorPortal: React.FC<BomEditorPortalProps> = ({
                       ? (qtySafe / shareBase) * 100
                       : null;
                     return (
-                      <div className="flex flex-wrap items-center gap-3 pt-1">
+                      <div className="flex flex-wrap items-center gap-3">
                         <label className="flex items-center gap-1.5 cursor-pointer select-none">
                           <input
                             type="checkbox"
@@ -279,23 +297,6 @@ const BomEditorPortal: React.FC<BomEditorPortalProps> = ({
                       </div>
                     );
                   })()}
-                </div>
-                <div className="w-full md:w-32">
-                  <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block tracking-widest">标准单位用量</label>
-                  <input
-                    type="number"
-                    value={item.quantityInput ?? (() => {
-                      // BOMItem.quantity 声明为 number，但历史/导入数据可能是字符串（含空串）；断言放宽类型保留原防御口径
-                      const q = item.quantity as number | string | null | undefined;
-                      return q != null && q !== '' && q !== 0 ? Number(q) : '';
-                    })()}
-                    onChange={e => {
-                      const raw = e.target.value;
-                      const num = raw === '' ? 0 : (parseFloat(raw) || 0);
-                      onUpdateBOMItem(idx, { quantityInput: raw, quantity: num });
-                    }}
-                    className="w-full bg-white border border-slate-100 rounded-xl p-3 text-xs font-bold outline-none text-center"
-                  />
                 </div>
               </div>
             );

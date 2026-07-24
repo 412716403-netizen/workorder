@@ -5,9 +5,11 @@ import { ModalPortal } from '../../components/ModalPortal';
 import DocEntryTimeField from '../../components/DocEntryTimeField';
 import { MaterialIssueBatchSelect } from '../../components/MaterialIssueBatchSelect';
 import { useAuth } from '../../contexts/AuthContext';
+import { useStockSnapshot } from '../../hooks/useStockSnapshot';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 import { defaultEntryDatetimeLocal, entryDatetimeLocalToTimestamp } from '../../utils/docEntryTime';
 import { aggregateReturnableByProduct } from '../../utils/orderMaterialReturnable';
+import { formatMaterialQtyDisplay } from '../../utils/formatMaterialQtyDisplay';
 import * as api from '../../services/api';
 import type {
   Product,
@@ -58,6 +60,7 @@ const ReworkMaterialReturnModal: React.FC<ReworkMaterialReturnModalProps> = ({
   const productRows = useMemo(() => aggregateReturnableByProduct(data.returnable), [data.returnable]);
   const productsById = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
   const categoryById = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
+  const { getStock } = useStockSnapshot({ enabled: true });
 
   const showBatchCol = useMemo(
     () =>
@@ -210,7 +213,9 @@ const ReworkMaterialReturnModal: React.FC<ReworkMaterialReturnModalProps> = ({
                       <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap">物料</th>
                       {showBatchCol ? (
                         <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap w-48">批次</th>
-                      ) : null}
+                      ) : (
+                        <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap">库存数量</th>
+                      )}
                       <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap">可退</th>
                       <th className="px-3 py-2 text-center text-[10px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap">本次退料</th>
                     </tr>
@@ -248,7 +253,11 @@ const ReworkMaterialReturnModal: React.FC<ReworkMaterialReturnModalProps> = ({
                                 <span className="text-[10px] font-medium text-slate-300">—</span>
                               )}
                             </td>
-                          ) : null}
+                          ) : (
+                            <td className="px-3 py-2 text-right text-xs font-semibold text-slate-700 tabular-nums">
+                              {formatMaterialQtyDisplay(getStock(row.productId, warehouseId))}
+                            </td>
+                          )}
                           <td className="px-3 py-2 text-right text-xs font-semibold text-slate-700">{maxQty}</td>
                           <td className="px-3 py-2">
                             <input

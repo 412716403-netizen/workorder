@@ -10,6 +10,7 @@ import { clampBatchNoInput } from '../../hooks/useBatchPicker';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 import { defaultEntryDatetimeLocal, entryDatetimeLocalToTimestamp } from '../../utils/docEntryTime';
 import { buildIssueLines, buildReturnLines, productLabel, returnableRowKey } from '../../utils/devMaterialHelpers';
+import { formatMaterialQtyDisplay } from '../../utils/formatMaterialQtyDisplay';
 import * as api from '../../services/api';
 import type {
   DevMaterialRecordsResponse,
@@ -59,7 +60,7 @@ const DevMaterialOperationModal: React.FC<DevMaterialOperationModalProps> = ({
   const [qtyByReturnKey, setQtyByReturnKey] = useState<Record<string, number>>({});
   const [entryTimestamp, setEntryTimestamp] = useState(() => defaultEntryDatetimeLocal());
   const [submitting, setSubmitting] = useState(false);
-  const { listAvailableBatches } = useStockSnapshot({ enabled: isIssue });
+  const { listAvailableBatches, getStock } = useStockSnapshot({ enabled: true });
 
   const batchManagedIds = useMemo(() => {
     const set = new Set<string>();
@@ -73,6 +74,14 @@ const DevMaterialOperationModal: React.FC<DevMaterialOperationModalProps> = ({
   }, [data.bomProductIds, productMap, categoryById]);
 
   const showBatchCol = isIssue && batchManagedIds.size > 0;
+  const showReturnBatchCol = useMemo(
+    () =>
+      data.returnable.some(row => {
+        const p = productMap.get(row.productId);
+        return categoryUsesBatchManagement(categoryById.get(p?.categoryId ?? ''));
+      }),
+    [data.returnable, productMap, categoryById],
+  );
   const issueRows = useMemo(
     () =>
       data.bomProductIds.map((productId) => {
@@ -185,7 +194,11 @@ const DevMaterialOperationModal: React.FC<DevMaterialOperationModalProps> = ({
                       <tr className="border-b border-slate-100 bg-slate-50/80">
                         <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap">物料</th>
                         <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap">净领用</th>
-                        {showBatchCol ? <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap">批次</th> : null}
+                        {showBatchCol ? (
+                          <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap">批次</th>
+                        ) : (
+                          <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap">库存数量</th>
+                        )}
                         <th className="px-3 py-2 text-center text-[10px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap">本次领料</th>
                       </tr>
                     </thead>
@@ -219,7 +232,11 @@ const DevMaterialOperationModal: React.FC<DevMaterialOperationModalProps> = ({
                                 <span className="text-[10px] font-medium text-slate-300">—</span>
                               )}
                             </td>
-                          ) : null}
+                          ) : (
+                            <td className="px-3 py-2 text-right text-xs font-semibold text-slate-700 tabular-nums">
+                              {formatMaterialQtyDisplay(getStock(row.productId, warehouseId))}
+                            </td>
+                          )}
                           <td className="px-3 py-2">
                             <input
                               type="number"
@@ -248,7 +265,11 @@ const DevMaterialOperationModal: React.FC<DevMaterialOperationModalProps> = ({
                     <tr className="border-b border-slate-100 bg-slate-50/80">
                       <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap">物料</th>
                       <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap">仓库</th>
-                      <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap">批次</th>
+                      {showReturnBatchCol ? (
+                        <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap">批次</th>
+                      ) : (
+                        <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap">库存数量</th>
+                      )}
                       <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap">可退</th>
                       <th className="px-3 py-2 text-center text-[10px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap">本次退料</th>
                     </tr>
@@ -264,7 +285,13 @@ const DevMaterialOperationModal: React.FC<DevMaterialOperationModalProps> = ({
                             {row.productSku ? <p className="text-[10px] font-medium text-slate-400">{row.productSku}</p> : null}
                           </td>
                           <td className="px-3 py-2 text-xs font-medium text-slate-600">{whName}</td>
-                          <td className="px-3 py-2 text-xs font-medium text-slate-600">{row.batchNo}</td>
+                          {showReturnBatchCol ? (
+                            <td className="px-3 py-2 text-xs font-medium text-slate-600">{row.batchNo}</td>
+                          ) : (
+                            <td className="px-3 py-2 text-right text-xs font-semibold text-slate-700 tabular-nums">
+                              {formatMaterialQtyDisplay(getStock(row.productId, row.warehouseId))}
+                            </td>
+                          )}
                           <td className="px-3 py-2 text-right text-xs font-semibold text-slate-700">{row.returnableQty}</td>
                           <td className="px-3 py-2">
                             <input

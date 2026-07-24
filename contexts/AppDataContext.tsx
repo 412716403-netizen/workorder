@@ -352,6 +352,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
    *
    * 这样后续新增 panel 只要 queryKey 落到上述 prefix 之内即可自动被失效，
    * 不再依赖手动注册。
+   *
+   * 另：生产入库 / 领料发出 / 退料等会改仓库结存，须同步失效 `STOCK_SNAPSHOT_QK_BASE`，
+   * 否则领退料弹窗的「库存数量」列会继续展示发出前的缓存数。
    */
   const invalidateAllProdRecords = useCallback(() => {
     const PROD_KEY_PREFIXES = [
@@ -383,6 +386,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       },
     });
     qc.invalidateQueries({ queryKey: ['finance-detail', 'prod'] });
+    // 生产出入库改变仓库结存；领退料弹窗「库存数量」读自 stock-snapshot
+    qc.invalidateQueries({ queryKey: STOCK_SNAPSHOT_QK_BASE });
   }, [qc]);
   const invalidateAllPsiRecords = useCallback(() => {
     qc.invalidateQueries({ queryKey: ['psiOpsRecords'] });

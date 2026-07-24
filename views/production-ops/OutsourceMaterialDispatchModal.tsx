@@ -140,7 +140,7 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
   const [entryTimestamp, setEntryTimestamp] = useState(() => defaultEntryDatetimeLocal());
   const [removedMaterialIds, setRemovedMaterialIds] = useState<Set<string>>(() => new Set());
   const categoryById = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
-  const { listAvailableBatches } = useStockSnapshot({ enabled: !!(matDispatchOrderId || matDispatchProductId) });
+  const { listAvailableBatches, getStock } = useStockSnapshot({ enabled: !!(matDispatchOrderId || matDispatchProductId) });
   const productById = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
   const materialProductCustomTags = (productId: string) => {
     const p = productById.get(productId);
@@ -637,7 +637,9 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
                   <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest whitespace-nowrap w-40">净已发进度</th>
                   {showDispatchBatchCol ? (
                     <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest whitespace-nowrap w-52">批次</th>
-                  ) : null}
+                  ) : (
+                    <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest text-right whitespace-nowrap w-24">库存数量</th>
+                  )}
                   <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest text-center whitespace-nowrap w-44">本次外发数量</th>
                   <th className="px-2 py-3 text-[10px] font-black text-slate-400 tracking-widest text-center whitespace-nowrap w-14">操作</th>
                 </tr>
@@ -707,7 +709,11 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
                             mergeBatches={listAvailableBatches(m.productId, matDispatchWarehouseId)}
                           />
                         </td>
-                      ) : null}
+                      ) : (
+                        <td className="px-4 py-4 text-right text-sm font-bold text-slate-600 tabular-nums">
+                          {formatMaterialQtyDisplay(getStock(m.productId, matDispatchWarehouseId))}
+                        </td>
+                      )}
                       <td className="px-4 py-4">
                         <input
                           type="number"

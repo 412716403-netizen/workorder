@@ -64,7 +64,7 @@ const ReworkMaterialIssueModal: React.FC<ReworkMaterialIssueModalProps> = ({
     () => new Map(data.summary.map(row => [row.productId, row.netQty])),
     [data.summary],
   );
-  const { listAvailableBatches } = useStockSnapshot({ enabled: true });
+  const { listAvailableBatches, getStock } = useStockSnapshot({ enabled: true });
 
   useEffect(() => {
     const pref = readWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.PROD_REWORK_MATERIAL_ISSUE);
@@ -197,7 +197,9 @@ const ReworkMaterialIssueModal: React.FC<ReworkMaterialIssueModalProps> = ({
                   <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">净领用</th>
                   {showBatchCol ? (
                     <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest w-44">批次</th>
-                  ) : null}
+                  ) : (
+                    <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right w-24">库存数量</th>
+                  )}
                   <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center w-40">本次领料数量</th>
                 </tr>
               </thead>
@@ -225,7 +227,11 @@ const ReworkMaterialIssueModal: React.FC<ReworkMaterialIssueModalProps> = ({
                           mergeBatches={listAvailableBatches(m.productId, warehouseId)}
                         />
                       </td>
-                    ) : null}
+                    ) : (
+                      <td className="px-4 py-3 text-right text-sm font-bold text-slate-600 tabular-nums">
+                        {formatMaterialQtyDisplay(getStock(m.productId, warehouseId))}
+                      </td>
+                    )}
                     <td className="px-4 py-3">
                       <input type="number" min={0} step={1} value={qtyByProduct[m.productId] ?? ''} onChange={e => setQtyByProduct(prev => ({ ...prev, [m.productId]: Number(e.target.value) || 0 }))} className="w-full rounded-xl border border-slate-200 py-2 px-3 text-sm font-bold text-slate-800 text-right focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="0" />
                     </td>

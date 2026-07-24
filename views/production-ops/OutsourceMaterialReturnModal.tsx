@@ -26,6 +26,7 @@ import { buildMaterialStockCustomCollabPayload } from '../../utils/productionOpC
 import { writeWarehousePreference, WAREHOUSE_DOC_KIND } from '../../utils/warehouseDocPreference';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 import { useStockSnapshot } from '../../hooks/useStockSnapshot';
+import { formatMaterialQtyDisplay } from '../../utils/formatMaterialQtyDisplay';
 import { psiOrderBillCompactLineInputClass } from '../../styles/uiDensity';
 import type { StockDocDetail } from './types';
 import {
@@ -90,7 +91,7 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
   const [entryTimestamp, setEntryTimestamp] = useState(() => defaultEntryDatetimeLocal());
   const [removedMaterialIds, setRemovedMaterialIds] = useState<Set<string>>(() => new Set());
   const categoryById = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
-  const { listAvailableBatches } = useStockSnapshot({ enabled: !!(matReturnOrderId || matReturnProductId) });
+  const { listAvailableBatches, getStock } = useStockSnapshot({ enabled: !!(matReturnOrderId || matReturnProductId) });
   const productById = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
   const materialProductCustomTags = (productId: string) => {
     const p = productById.get(productId);
@@ -491,13 +492,13 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
             <div className="rounded-2xl border border-slate-100 overflow-hidden">
             <table className="w-full table-fixed border-collapse text-sm">
               <colgroup>
-                <col style={{ width: showReturnBatchCol ? '24%' : '30%' }} />
+                <col style={{ width: '24%' }} />
                 <col style={{ width: '10%' }} />
                 <col style={{ width: '11%' }} />
                 <col style={{ width: '10%' }} />
                 <col style={{ width: '10%' }} />
-                {showReturnBatchCol ? <col style={{ width: '12%' }} /> : null}
-                <col style={{ width: showReturnBatchCol ? '15%' : '20%' }} />
+                <col style={{ width: showReturnBatchCol ? '12%' : '10%' }} />
+                <col style={{ width: showReturnBatchCol ? '15%' : '17%' }} />
                 <col style={{ width: '8%' }} />
               </colgroup>
               <thead>
@@ -509,7 +510,9 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
                   <th className="px-1 py-2.5 text-right text-[10px] font-black text-slate-400 tracking-widest align-bottom">可退回</th>
                   {showReturnBatchCol ? (
                     <th className="min-w-0 px-1 py-2.5 text-left text-[10px] font-black text-slate-400 tracking-widest align-bottom">批次</th>
-                  ) : null}
+                  ) : (
+                    <th className="px-1 py-2.5 text-right text-[10px] font-black text-slate-400 tracking-widest align-bottom">库存数量</th>
+                  )}
                   <th className="min-w-0 px-2 py-2.5 text-right text-[10px] font-black text-slate-400 tracking-widest align-bottom leading-tight">
                     本次退回
                   </th>
@@ -554,7 +557,11 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
                             hideStockHint
                           />
                         </td>
-                      ) : null}
+                      ) : (
+                        <td className="px-1 py-3 text-right text-xs font-bold text-slate-600 tabular-nums">
+                          {formatMaterialQtyDisplay(getStock(m.productId, matReturnWarehouseId))}
+                        </td>
+                      )}
                       <td className="min-w-0 px-2 py-3 align-middle">
                         <input
                           type="number"

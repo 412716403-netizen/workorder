@@ -224,7 +224,7 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
       </div>
     );
   };
-  const { listAvailableBatches } = useStockSnapshot({ enabled: !!(orderId || forProduct) });
+  const { listAvailableBatches, getStock } = useStockSnapshot({ enabled: !!(orderId || forProduct) });
 
   if (!orderId && !forProduct) return null;
 
@@ -442,7 +442,9 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
                     <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest whitespace-nowrap w-44">领料进度</th>
                     {showOrderBatchCol ? (
                       <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest whitespace-nowrap w-48">批次</th>
-                    ) : null}
+                    ) : (
+                      <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest text-right whitespace-nowrap w-24">库存数量</th>
+                    )}
                     <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest text-center whitespace-nowrap w-36">本次领料</th>
                     <th className="px-2 py-3 text-[10px] font-black text-slate-400 tracking-widest text-center whitespace-nowrap w-14">操作</th>
                   </tr>
@@ -514,7 +516,11 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
                             mergeBatches={listAvailableBatches(m.productId, materialIssueWarehouseId)}
                           />
                         </td>
-                      ) : null}
+                      ) : (
+                        <td className="px-4 py-4 text-right text-sm font-black text-slate-700 tabular-nums">
+                          {formatMaterialQtyDisplay(getStock(m.productId, materialIssueWarehouseId))}
+                        </td>
+                      )}
                       <td className="px-4 py-4">
                         <input
                           type="number"
@@ -818,7 +824,9 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
                     <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest whitespace-nowrap w-44">领料进度</th>
                     {showFpBatchCol ? (
                       <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest whitespace-nowrap w-48">批次</th>
-                    ) : null}
+                    ) : (
+                      <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest text-right whitespace-nowrap w-24">库存数量</th>
+                    )}
                     <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest text-center whitespace-nowrap w-36">本次领料</th>
                     <th className="px-2 py-3 text-[10px] font-black text-slate-400 tracking-widest text-center whitespace-nowrap w-14">操作</th>
                   </tr>
@@ -896,7 +904,11 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
                               mergeBatches={listAvailableBatches(m.productId, materialIssueWarehouseId)}
                             />
                           </td>
-                        ) : null}
+                        ) : (
+                          <td className="px-4 py-4 text-right text-sm font-black text-slate-700 tabular-nums">
+                            {formatMaterialQtyDisplay(getStock(m.productId, materialIssueWarehouseId))}
+                          </td>
+                        )}
                         <td className="px-4 py-4">
                           <input
                             type="number"

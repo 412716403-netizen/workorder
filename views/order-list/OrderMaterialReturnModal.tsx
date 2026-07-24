@@ -5,12 +5,14 @@ import { ModalPortal } from '../../components/ModalPortal';
 import DocEntryTimeField from '../../components/DocEntryTimeField';
 import { MaterialIssueBatchSelect } from '../../components/MaterialIssueBatchSelect';
 import { useAuth } from '../../contexts/AuthContext';
+import { useStockSnapshot } from '../../hooks/useStockSnapshot';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 import { defaultEntryDatetimeLocal, entryDatetimeLocalToTimestamp } from '../../utils/docEntryTime';
 import {
   aggregateReturnableByProduct,
   type OrderMaterialReturnableRow,
 } from '../../utils/orderMaterialReturnable';
+import { formatMaterialQtyDisplay } from '../../utils/formatMaterialQtyDisplay';
 import { formStandardControlClass, formStandardLabelClass } from '../../styles/uiDensity';
 import type { ProdOpType, Product, ProductCategory, ProductionOpRecord, Warehouse } from '../../types';
 import { batchNoForDisplay, batchNoForWrite, categoryUsesBatchManagement } from '../../types';
@@ -62,6 +64,7 @@ const OrderMaterialReturnModal: React.FC<OrderMaterialReturnModalProps> = ({
   const productRows = useMemo(() => aggregateReturnableByProduct(returnable), [returnable]);
   const productsById = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
   const categoryById = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
+  const { getStock } = useStockSnapshot({ enabled: true });
 
   const showBatchCol = useMemo(
     () =>
@@ -230,7 +233,9 @@ const OrderMaterialReturnModal: React.FC<OrderMaterialReturnModalProps> = ({
                       <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap">物料</th>
                       {showBatchCol ? (
                         <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap w-48">批次</th>
-                      ) : null}
+                      ) : (
+                        <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap">库存数量</th>
+                      )}
                       <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap">可退</th>
                       <th className="px-3 py-2 text-center text-[10px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap">本次退料</th>
                     </tr>
@@ -268,7 +273,11 @@ const OrderMaterialReturnModal: React.FC<OrderMaterialReturnModalProps> = ({
                                 <span className="text-[10px] font-medium text-slate-300">—</span>
                               )}
                             </td>
-                          ) : null}
+                          ) : (
+                            <td className="px-3 py-2 text-right text-xs font-semibold text-slate-700 tabular-nums">
+                              {formatMaterialQtyDisplay(getStock(row.productId, warehouseId))}
+                            </td>
+                          )}
                           <td className="px-3 py-2 text-right text-xs font-semibold text-slate-700">{maxQty}</td>
                           <td className="px-3 py-2">
                             <input

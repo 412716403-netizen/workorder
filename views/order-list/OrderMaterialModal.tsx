@@ -15,6 +15,7 @@ import type {
 } from '../../types';
 import { ModalPortal } from '../../components/ModalPortal';
 import { useOrderMaterialStats } from '../../hooks/useOrderMaterialStats';
+import { STOCK_SNAPSHOT_QK_BASE } from '../../hooks/useStockSnapshot';
 import { buildOrderMaterialReturnable, toOrderCenterMaterialStats } from '../../utils/orderMaterialReturnable';
 import { outlineToolbarButtonClass, primaryToolbarButtonClass } from '../../styles/uiDensity';
 import { MaterialStatsTable } from '../production-ops/MaterialStatsTable';
@@ -117,6 +118,7 @@ const OrderMaterialModal: React.FC<OrderMaterialModalProps> = ({
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['orderDetailMaterialStats'] }),
       queryClient.invalidateQueries({ queryKey: ['materialIssueStockProd'] }),
+      queryClient.invalidateQueries({ queryKey: STOCK_SNAPSHOT_QK_BASE }),
     ]);
   }, [queryClient]);
 
