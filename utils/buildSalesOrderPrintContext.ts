@@ -101,7 +101,7 @@ export function buildSalesOrderPrintContextFromPsiDoc(params: {
   onlyUnshipped?: boolean;
 }): PrintRenderContext {
   const { docNumber, docItems, productMap, dictionaries, onlyUnshipped } = params;
-  const main = docItems[0] ?? {};
+  const main: Partial<PsiRecord> = docItems[0] ?? {};
   const lines = buildSalesOrderLinesFromPsiRecords(docItems, { onlyUnshipped });
   return buildSalesOrderPrintRenderContext({
     docNumber,

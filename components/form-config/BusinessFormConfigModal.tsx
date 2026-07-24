@@ -22,7 +22,7 @@ import {
 
 export type FormConfigSaveStatus = 'saved' | 'pending' | 'saving' | 'error';
 
-export interface BusinessFormConfigModalProps<TSettings extends Record<string, unknown>>
+export interface BusinessFormConfigModalProps<TSettings extends object>
   extends FormConfigPrintContextDependencies {
   open: boolean;
   onClose: () => void;
@@ -88,7 +88,7 @@ function resolveSubtitle(
  * - window.focus 刷新：当 schema 含任一 printWhitelist section 时自动启用
  * - 自动保存：编辑停止 600ms 后先跑 `transformOnSave`，再 `onSave`；另起 `sideEffectSaves` 钩子支持多 key 写入
  */
-export function BusinessFormConfigModal<TSettings extends Record<string, unknown>>({
+export function BusinessFormConfigModal<TSettings extends object>({
   open,
   onClose,
   defaultTabId,

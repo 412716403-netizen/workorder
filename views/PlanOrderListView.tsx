@@ -1,6 +1,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ModalPortal } from '../components/ModalPortal';
+import { PdfPreviewViewer } from '../components/PdfPreviewViewer';
 import {
   CalendarRange,
   Plus,
@@ -560,9 +561,10 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
     let cancelled = false;
     const timer = setTimeout(() => {
       if (cancelled) return;
-      const maybePromise = handlePlanListPrint();
-      if (maybePromise && typeof (maybePromise as any).then === 'function') {
-        (maybePromise as Promise<void>).finally(() => {
+      // handlePrint 声明返回 void；这里保留对「实现可能返回 Promise」的运行时防御探测，故先收窄为 unknown
+      const maybePromise: unknown = handlePlanListPrint();
+      if (maybePromise && typeof (maybePromise as { then?: unknown }).then === 'function') {
+        void (maybePromise as Promise<void>).finally(() => {
           if (!cancelled) setPlanListPrintRun(null);
         });
       } else {
@@ -1295,7 +1297,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
             {filePreviewType === 'image' ? (
               <img src={filePreviewUrl} alt="预览" className="w-full h-full max-h-[85vh] object-contain" />
             ) : (
-              <iframe src={filePreviewUrl} title="PDF 预览" className="w-full h-[85vh] border-0" />
+              <PdfPreviewViewer src={filePreviewUrl} />
             )}
           </div>
         </div>

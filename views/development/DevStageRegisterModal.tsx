@@ -83,6 +83,39 @@ function isTemplateFieldValueEmpty(field: ReportFieldDefinition, raw: unknown): 
   return raw === undefined || raw === null || String(raw).trim() === '';
 }
 
+function serializeTemplateFieldValue(
+  field: ReportFieldDefinition,
+  raw: unknown,
+): { type: string; value: string } {
+  const type = effectiveCustomDocFieldType(field);
+  const value =
+    type === 'file'
+      ? serializeDevStageFileItems(parseDevStageFileItems(raw))
+      : String(raw ?? '');
+  return { type, value };
+}
+
+/** 模板字段相对 stage.fields 是否无变更（避免只改状态仍重传大 data URL） */
+function templateFieldsUnchanged(
+  stage: DevStageDto,
+  templateFields: ReportFieldDefinition[],
+  templateValues: Record<string, unknown>,
+): boolean {
+  if (templateFields.length === 0) return true;
+  for (const tf of templateFields) {
+    const { type, value } = serializeTemplateFieldValue(tf, templateValues[tf.id]);
+    const existing = stage.fields.find((f) => f.label.trim() === tf.label.trim());
+    const prevRaw = existing?.value ?? '';
+    const prevNorm =
+      type === 'file'
+        ? serializeDevStageFileItems(parseDevStageFileItems(prevRaw))
+        : String(prevRaw);
+    if (prevNorm !== value) return false;
+    if ((existing?.type ?? 'text') !== type && (value || prevNorm)) return false;
+  }
+  return true;
+}
+
 const DevStageRegisterModal: React.FC<DevStageRegisterModalProps> = ({
   stage,
   open,
@@ -144,6 +177,13 @@ const DevStageRegisterModal: React.FC<DevStageRegisterModalProps> = ({
         return;
       }
     }
+    const statusChanged = status !== stage.status;
+    const fieldsChanged = !templateFieldsUnchanged(stage, templateFields, templateValues);
+    if (!statusChanged && !fieldsChanged) {
+      toast.success('节点登记已保存');
+      onClose();
+      return;
+    }
     setSaving(true);
     try {
       const payload: {
@@ -151,22 +191,13 @@ const DevStageRegisterModal: React.FC<DevStageRegisterModalProps> = ({
         fields?: Array<{ label: string; value: string; type?: string }>;
         user?: string;
       } = {
-        status,
         user: userName,
       };
-      if (templateFields.length > 0) {
+      if (statusChanged) payload.status = status;
+      if (fieldsChanged && templateFields.length > 0) {
         payload.fields = templateFields.map((tf) => {
-          const type = effectiveCustomDocFieldType(tf);
-          const raw = templateValues[tf.id];
-          const value =
-            type === 'file'
-              ? serializeDevStageFileItems(parseDevStageFileItems(raw))
-              : String(raw ?? '');
-          return {
-            label: tf.label,
-            value,
-            type,
-          };
+          const { type, value } = serializeTemplateFieldValue(tf, templateValues[tf.id]);
+          return { label: tf.label, value, type };
         });
       }
       await onSave(payload);

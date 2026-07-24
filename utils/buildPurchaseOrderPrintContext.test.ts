@@ -6,8 +6,6 @@ const emptyDict: AppDictionaries = {
   colors: [],
   sizes: [],
   units: [],
-  processCategories: [],
-  equipment: [],
 };
 
 describe('buildPurchaseOrderPrintRenderContext relatedProduct', () => {

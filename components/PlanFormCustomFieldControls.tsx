@@ -27,6 +27,7 @@ import {
   toDatetimeLocalInputValue,
 } from '../utils/localDateTime';
 import { getFileExtFromDataUrl } from '../utils/fileHelpers';
+import { readFileAsDevStageItem } from '../utils/readFileAsDevStageItem';
 import { PdfThumbPreview } from './PdfThumbPreview';
 import KnowledgeFilePreviewOverlay from '../views/knowledge-base/KnowledgeFilePreviewOverlay';
 import type { KnowledgeAttachmentInfo } from '../views/knowledge-base/knowledgeFileAttachmentExtension';
@@ -189,27 +190,15 @@ const PlanFormFileFieldInput: React.FC<{
             if (!files.length) return;
             const room = DEV_STAGE_FILE_MAX_COUNT - items.length;
             const slice = files.slice(0, room);
-            Promise.all(
-              slice.map(
-                (file) =>
-                  new Promise<{ url: string; name: string }>((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = () =>
-                      resolve({
-                        url: String(reader.result ?? ''),
-                        name: file.name || '',
-                      });
-                    reader.onerror = () => reject(reader.error ?? new Error('read failed'));
-                    reader.readAsDataURL(file);
-                  }),
-              ),
-            ).then((added) => {
-              const next = [
-                ...items,
-                ...added.filter((a) => a.url.startsWith('data:')),
-              ];
-              onChange(serializeDevStageFileItems(next));
-            });
+            void Promise.all(slice.map((file) => readFileAsDevStageItem(file)))
+              .then((added) => {
+                const next = [
+                  ...items,
+                  ...added.filter((a): a is DevStageFileItem => a != null),
+                ];
+                onChange(serializeDevStageFileItems(next));
+              })
+              .catch(() => toast.error('文件读取失败'));
           }}
         />
         <p className="text-[11px] text-slate-400">
@@ -317,14 +306,15 @@ const PlanFormFileFieldInput: React.FC<{
             onChange('');
             return;
           }
-          const reader = new FileReader();
-          reader.onload = () =>
-            onChange(
-              serializeDevStageFileItems([
-                { url: String(reader.result ?? ''), name: file.name || '' },
-              ]),
-            );
-          reader.readAsDataURL(file);
+          void readFileAsDevStageItem(file)
+            .then((item) => {
+              if (!item) {
+                onChange('');
+                return;
+              }
+              onChange(serializeDevStageFileItems([item]));
+            })
+            .catch(() => toast.error('文件读取失败'));
         }}
       />
       {single && dataStr.startsWith('data:') ? (

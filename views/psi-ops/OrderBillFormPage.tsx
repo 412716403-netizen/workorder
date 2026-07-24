@@ -290,7 +290,8 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         id: lgId,
         productId: first.productId,
         quantity: hasVar ? undefined : lineQtyNoVar,
-        purchasePrice: first.purchasePrice ?? 0,
+        // PsiRecord.purchasePrice 可能是 string（服务端 decimal）；行状态声明为 number，按本文件对 quantity 的既有口径归一
+        purchasePrice: Number(first.purchasePrice) || 0,
         variantQuantities: hasVar ? vq : undefined,
         sourceRecordIds: recs.map((r) => r.id),
       };
@@ -364,7 +365,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         id: lgId,
         productId: first.productId,
         quantity: hasVar ? undefined : lineQtyNoVar,
-        purchasePrice: first.purchasePrice ?? 0,
+        purchasePrice: Number(first.purchasePrice) || 0,
         variantQuantities: hasVar ? vq : undefined,
         batch: first.batchNo ?? first.batch,
         ...(lineRel ? { relatedProductId: lineRel } : {}),
@@ -395,7 +396,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         id: lgId,
         productId: first.productId,
         quantity: hasVar ? undefined : lineQtyNoVar,
-        salesPrice: first.salesPrice ?? 0,
+        salesPrice: Number(first.salesPrice) || 0,
         variantQuantities: hasVar ? vq : undefined,
         sourceRecordIds: recs.map((r) => r.id),
       };
@@ -436,7 +437,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         id: lgId,
         productId: first.productId,
         quantity: hasVar ? undefined : lineQtyNoVar,
-        salesPrice: first.salesPrice ?? 0,
+        salesPrice: Number(first.salesPrice) || 0,
         variantQuantities: hasVar ? vq : undefined,
         sourceRecordIds: recs.map((r) => r.id),
         batch: hasVar ? undefined : batch,
@@ -748,7 +749,8 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
     const map: Record<string, number> = {};
     recordsList.filter(r => r.type === 'PURCHASE_BILL' && r.sourceOrderNumber && r.sourceLineId).forEach(r => {
       const key = `${r.sourceOrderNumber}::${r.sourceLineId}`;
-      map[key] = (map[key] ?? 0) + (r.quantity ?? 0);
+      // quantity 可能是 string（服务端 decimal），直接 + 会变字符串拼接（真 bug）；按本文件既有口径 Number 归一
+      map[key] = (map[key] ?? 0) + (Number(r.quantity) || 0);
     });
     return map;
   }, [recordsList]);

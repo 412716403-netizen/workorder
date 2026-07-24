@@ -12,7 +12,7 @@ describe('productMatchesSearchQuery', () => {
     hasPurchasePrice: false,
     hasColorSize: true,
     customFields: [
-      { id: 'f1', label: '内部代号', type: 'text', showInList: true, showInCreate: true, showInDetail: true },
+      { id: 'f1', label: '内部代号', type: 'text', showInForm: true },
     ],
   };
 
@@ -25,6 +25,7 @@ describe('productMatchesSearchQuery', () => {
       sizeIds: [],
       variants: [],
       categoryId: 'cat1',
+      milestoneNodeIds: [],
     };
     expect(productMatchesSearchQuery(p, cat, '测试')).toBe(true);
     expect(productMatchesSearchQuery(p, cat, 'sku-99')).toBe(true);
@@ -39,6 +40,7 @@ describe('productMatchesSearchQuery', () => {
       sizeIds: [],
       variants: [],
       categoryId: 'cat1',
+      milestoneNodeIds: [],
       categoryCustomData: { f1: 'ALPHA-7' },
     };
     expect(productMatchesSearchQuery(p, cat, 'alpha-7')).toBe(true);
@@ -54,6 +56,7 @@ describe('productMatchesSearchQuery', () => {
       sizeIds: [],
       variants: [],
       categoryId: 'cat1',
+      milestoneNodeIds: [],
       routeReportValues: { nodeA: { fld: '特种缝纫说明' } },
     };
     expect(productMatchesSearchQuery(p, cat, '特种缝纫')).toBe(true);

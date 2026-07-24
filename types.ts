@@ -1,4 +1,20 @@
-import type { CustomDocFieldType, ReportApprovalStatus } from './shared/types';
+// re-export（export { X } from）不会把名字带入本文件作用域，文件内使用的需在此显式 import
+import type {
+  CustomDocFieldType,
+  ReportApprovalStatus,
+  MilestoneStatus,
+  OrderStatus,
+  PlanStatus,
+  OrderDispatchStatus,
+  PlanDispatchStatus,
+  ProcessPricingMode,
+  FinanceCategoryKind,
+  ProdOpType,
+  FinanceOpType,
+  ProductionOpCollabData,
+  DevBomDto,
+  DevBomItemDto,
+} from './shared/types';
 
 export {
   MilestoneStatus,
@@ -15,6 +31,9 @@ export {
   PLAN_DISPATCH_STATUS_BY_LABEL,
   isPlanDispatchStatus,
   isOrderDispatchStatus,
+  type DispatchCompletionPending,
+  type ProductionRecordWriteResponse,
+  type ProductionRecordBatchWriteResponse,
   FINANCE_DOC_NO_PREFIX,
   FINANCE_TRANSFER_DOC_NO_PREFIX,
   FINANCE_UNASSIGNED_ACCOUNT_KEY,

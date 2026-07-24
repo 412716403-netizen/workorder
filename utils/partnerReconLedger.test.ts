@@ -8,7 +8,7 @@ import {
 
 const fin = (type: 'RECEIPT' | 'PAYMENT', amount: number): PartnerReconRow => ({
   source: 'finance',
-  rec: { id: `fin-${type}`, type, amount, timestamp: '', partner: '万新' },
+  rec: { id: `fin-${type}`, type, amount, timestamp: '', partner: '万新', operator: '', status: 'COMPLETED' },
 });
 
 const psi = (docType: string, amount: number): PartnerReconRow => ({

@@ -35,7 +35,8 @@ describe('buildOrderMilestoneStripItems', () => {
       orders: [order],
       prodRecords: [],
       productionLinkMode: 'order',
-      processSequenceMode: 'flexible',
+      // 'flexible' 不是合法 ProcessSequenceMode；isProcessSequential 对非 'sequential' 一律按自由顺序处理，'free' 行为等价
+      processSequenceMode: 'free',
       outOfSequenceTemplateIds: new Set(),
     });
 

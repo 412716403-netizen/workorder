@@ -3,6 +3,7 @@ import { buildPrintFieldOptions } from './printFieldOptions';
 
 function purchaseBillRelatedProductFields(showPurchaseBillRelatedProduct: boolean) {
   const options = buildPrintFieldOptions({
+    planCustomFields: [],
     purchaseBillCustomFields: [],
     showPurchaseBillRelatedProduct,
   });

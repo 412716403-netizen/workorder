@@ -284,7 +284,11 @@ const BomEditorPortal: React.FC<BomEditorPortalProps> = ({
                   <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block tracking-widest">标准单位用量</label>
                   <input
                     type="number"
-                    value={item.quantityInput ?? (item.quantity != null && item.quantity !== '' && item.quantity !== 0 ? Number(item.quantity) : '')}
+                    value={item.quantityInput ?? (() => {
+                      // BOMItem.quantity 声明为 number，但历史/导入数据可能是字符串（含空串）；断言放宽类型保留原防御口径
+                      const q = item.quantity as number | string | null | undefined;
+                      return q != null && q !== '' && q !== 0 ? Number(q) : '';
+                    })()}
                     onChange={e => {
                       const raw = e.target.value;
                       const num = raw === '' ? 0 : (parseFloat(raw) || 0);

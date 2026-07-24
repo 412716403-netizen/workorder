@@ -54,7 +54,8 @@ function segmentsForMaterialMatrix(row: PrintListRow): Seg[] {
 }
 
 function mmAt(cfg: PrintDynamicListElementConfig, paddedIndex: number): number | undefined {
-  const raw = cfg.dataColumnWidthsMm?.[paddedIndex];
+  // 类型声明为 number，但持久化 JSON 中可能残留字符串（含空串），此处按 legacy 数据防御解析
+  const raw = cfg.dataColumnWidthsMm?.[paddedIndex] as number | string | undefined;
   if (raw == null || raw === '') return undefined;
   const n = typeof raw === 'number' ? raw : Number(raw);
   if (!Number.isFinite(n) || n <= 0) return undefined;
@@ -80,7 +81,8 @@ export function DynamicListColorMaterialMatrixTable({ cfg, ctx, padded, matrixId
   const colSpecs = useMemo(() => {
     const out: { key: string; wMm?: number }[] = [];
     if (showSerial) {
-      const s = cfg.serialColumnWidthMm;
+      // 同 mmAt：防御持久化 JSON 中的 legacy 字符串值
+      const s = cfg.serialColumnWidthMm as number | string | undefined;
       const sn = s != null && s !== '' ? (typeof s === 'number' ? s : Number(s)) : NaN;
       out.push({ key: 'serial', wMm: Number.isFinite(sn) && sn > 0 ? sn : undefined });
     }
@@ -133,7 +135,7 @@ export function DynamicListColorMaterialMatrixTable({ cfg, ctx, padded, matrixId
     backgroundColor: headBg,
     fontSize: `${col.headerFontSizePt ?? headPt}pt`,
     fontWeight: col.headerFontWeight === 'normal' ? 400 : col.headerFontWeight === 'bold' ? 700 : 600,
-    textAlign: (col.textAlign ?? 'center') as const,
+    textAlign: col.textAlign ?? 'center',
     padding: '0.25mm 0.35mm',
     verticalAlign: 'middle' as const,
     color: col.color,

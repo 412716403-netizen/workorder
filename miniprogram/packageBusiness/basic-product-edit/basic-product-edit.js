@@ -165,6 +165,7 @@ Page({
       }
 
       this._workingProduct = JSON.parse(JSON.stringify(product));
+      this._originalProduct = this._productId ? product : null;
       this.applyUiFromWorking();
     } catch (err) {
       wx.showToast({ title: err && err.message || '加载失败', icon: 'none' });
@@ -441,7 +442,8 @@ Page({
     const prepared = prepareProductForSave(
       syncVariantsIfNeeded(this._workingProduct, category, this._dictionaries),
       this._products,
-      category
+      category,
+      this._originalProduct || undefined
     );
     if (prepared.error) {
       wx.showToast({ title: prepared.error, icon: 'none' });

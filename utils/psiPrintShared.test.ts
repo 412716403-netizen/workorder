@@ -68,7 +68,7 @@ describe('groupPsiDocLines', () => {
     const items = [
       { id: 'r1', productId: 'p1', quantity: 5, purchasePrice: 10 },
     ];
-    const result = groupPsiDocLines(items, (lgId) => ({ id: lgId }));
+    const result = groupPsiDocLines(items, (lgId, first) => ({ id: lgId, productId: first.productId }));
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe('r1');
   });

@@ -359,7 +359,8 @@ const CollabPeerReturnModal: React.FC<CollabPeerReturnModalProps> = ({
                       onUnitPriceChange={updateUnitPrice}
                       rows={b.rows}
                       matrixOrder={resolvePreferredCollabMatrixOrder({
-                        payload: collabFirstDispatchPayload(b.transfer),
+                        // CollabDispatchPayload 的 colorNames/sizeNames 走索引签名，显式收窄为参数期望的弱类型
+                        payload: collabFirstDispatchPayload(b.transfer) as { colorNames?: unknown; sizeNames?: unknown } | undefined,
                         product: products.find(p => p.id === b.transfer.receiverProductId) ?? null,
                         dictionaries,
                       })}

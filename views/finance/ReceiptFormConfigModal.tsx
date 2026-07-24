@@ -42,7 +42,7 @@ const ReceiptFormConfigModal: React.FC<Props> = ({
     [navigate],
   );
   return (
-    <BusinessFormConfigModal
+    <BusinessFormConfigModal<ReceiptFormSettings>
       open={open}
       onClose={onClose}
       defaultTabId={defaultTabWhenOpen}

@@ -85,6 +85,12 @@ const KnowledgeSelectionBubbleMenu: React.FC<KnowledgeSelectionBubbleMenuProps> 
     };
   }, [editor]);
 
+  const closeMenus = useCallback(() => {
+    setColorMenuOpen(false);
+    setHighlightMenuOpen(false);
+    setAlignMenuOpen(false);
+  }, []);
+
   const bubbleOptions = useMemo(() => {
     const shell = editor?.view.dom.closest('.kb-editor-shell');
     return {
@@ -95,8 +101,10 @@ const KnowledgeSelectionBubbleMenu: React.FC<KnowledgeSelectionBubbleMenuProps> 
       flip: { padding: 8 },
       shift: { padding: 8 },
       scrollTarget: shell instanceof HTMLElement ? shell : window,
+      // onHide 属于 Floating UI options，不是 BubbleMenu 顶层 prop（顶层写法运行时不会触发）
+      onHide: closeMenus,
     };
-  }, [editor]);
+  }, [editor, closeMenus]);
 
   const appendTo = useCallback(() => {
     const shell = editor?.view.dom.closest('.kb-editor-shell');
@@ -108,12 +116,6 @@ const KnowledgeSelectionBubbleMenu: React.FC<KnowledgeSelectionBubbleMenuProps> 
       shouldShowKnowledgeSelectionBubbleMenu(ed, view),
     [],
   );
-
-  const closeMenus = useCallback(() => {
-    setColorMenuOpen(false);
-    setHighlightMenuOpen(false);
-    setAlignMenuOpen(false);
-  }, []);
 
   useEffect(() => {
     if (!colorMenuOpen && !highlightMenuOpen && !alignMenuOpen) return;
@@ -178,7 +180,6 @@ const KnowledgeSelectionBubbleMenu: React.FC<KnowledgeSelectionBubbleMenuProps> 
       appendTo={appendTo}
       options={bubbleOptions}
       className="kb-selection-bubble-menu"
-      onHide={closeMenus}
     >
       <div className="kb-selection-bubble-inner" ref={menusRef}>
         {isCellSelection && (

@@ -203,7 +203,7 @@ export function writeListPrintSlot(
 }
 
 /** 不可变地把 templateId 合并进 draft[path] 的白名单（供 setState 函数式更新使用，避免 stale closure） */
-export function mergeAllowedTemplateIdInDraft<T extends Record<string, unknown>>(
+export function mergeAllowedTemplateIdInDraft<T extends object>(
   draft: T,
   path: string,
   templateId: string,

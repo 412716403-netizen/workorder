@@ -7,6 +7,7 @@ import { Ban, Check, ClipboardCheck, FileText, Loader2, X } from 'lucide-react';
 import { ModalPortal } from '../../components/ModalPortal';
 import type {
   AppDictionaries,
+  MilestoneReport,
   Product,
   ProductCategory,
   GlobalNodeTemplate,
@@ -31,6 +32,12 @@ import FlowListTableShell from '../../components/flow/FlowListTableShell';
 import ReportPendingApprovalDetailModal from './ReportPendingApprovalDetailModal';
 
 type PendingRow = PendingLineInput;
+
+/**
+ * MilestoneReport 是 interface（无隐式索引签名），无法直接断言为 Record<string, unknown>；
+ * 映射一层得到结构相同、带隐式索引签名的类型，供 mapRaw 防御式读取（零运行时影响）。
+ */
+type LooseMilestoneReport = { [K in keyof MilestoneReport]: MilestoneReport[K] };
 
 type PendingBatch = {
   key: string;
@@ -168,11 +175,11 @@ const ReportPendingApprovalModal: React.FC<ReportPendingApprovalModalProps> = ({
           ? (r.customData as Record<string, unknown>)
           : undefined,
     });
-    const orderRows = ((pendingQuery.data?.orderReports ?? []) as Array<Record<string, unknown>>).map(
-      (r) => mapRaw(r, 'order'),
+    const orderRows = (pendingQuery.data?.orderReports ?? []).map(
+      (r) => mapRaw(r as LooseMilestoneReport, 'order'),
     );
-    const pmpRows = ((pendingQuery.data?.productReports ?? []) as Array<Record<string, unknown>>).map(
-      (r) => mapRaw(r, 'pmp'),
+    const pmpRows = (pendingQuery.data?.productReports ?? []).map(
+      (r) => mapRaw(r as LooseMilestoneReport, 'pmp'),
     );
     return groupPendingReportRows(
       orderRows.concat(pmpRows).filter((r) => r.reportId),
@@ -372,7 +379,7 @@ const ReportPendingApprovalModal: React.FC<ReportPendingApprovalModalProps> = ({
             ) : rows.length === 0 ? (
               <p className="text-slate-500 text-center py-12">暂无待审核报工</p>
             ) : (
-              <FlowListTableShell className="flex-1 min-h-0">
+              <FlowListTableShell className="flex-1 min-h-0" footer={null}>
                 <table className="w-full text-left text-sm">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200">

@@ -14,6 +14,7 @@ import KnowledgeImagePreviewOverlay from '../../views/knowledge-base/KnowledgeIm
 import KnowledgeDocOutline from '../../views/knowledge-base/KnowledgeDocOutline';
 import PlanProductDetail from '../../views/plan-order-list/PlanProductDetail';
 import { ModalPortal } from '../ModalPortal';
+import { PdfPreviewViewer } from '../PdfPreviewViewer';
 import {
   collectKnowledgeOutlineFromHtmlRoot,
   scrollHtmlToKnowledgeOutline,
@@ -398,7 +399,7 @@ export const KnowledgeDocPreviewModal: React.FC<KnowledgeDocPreviewModalProps> =
             {filePreview.type === 'image' ? (
               <img src={filePreview.url} alt="预览" className="w-full h-full max-h-[85vh] object-contain" />
             ) : (
-              <iframe src={filePreview.url} title="PDF 预览" className="w-full h-[85vh] border-0" />
+              <PdfPreviewViewer src={filePreview.url} />
             )}
           </div>
         </div>

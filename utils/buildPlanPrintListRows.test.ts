@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AppDictionaries, BOM, GlobalNodeTemplate, PlanOrder, Product, ProductCategory } from '../types';
+import { PlanStatus } from '../types';
 import {
   buildPlanPrintListRows,
   buildColorMaterialMatrixPayloadForPlan,
@@ -39,7 +40,7 @@ describe('buildPlanPrintListRows', () => {
         { variantId: 'v-white-m', quantity: 20 },
       ],
       startDate: '2026-01-01',
-      status: 'PLANNING',
+      status: PlanStatus.APPROVED,
       customer: '',
       priority: 'Medium',
     };
@@ -150,7 +151,7 @@ describe('buildPlanPrintListRows', () => {
         { variantId: 'v-black-m', quantity: 7 },
       ],
       startDate: '2026-01-01',
-      status: 'PLANNING',
+      status: PlanStatus.APPROVED,
       customer: '',
       priority: 'Medium',
     };
@@ -267,7 +268,7 @@ describe('buildPlanPrintListRows', () => {
         { variantId: 'v-white-m', quantity: 5 },
       ],
       startDate: '2026-01-01',
-      status: 'PLANNING',
+      status: PlanStatus.APPROVED,
       customer: '',
       priority: 'Medium',
     };
@@ -329,7 +330,7 @@ describe('buildColorMaterialMatrixPayloadForPlan', () => {
       productId: 'prod-s',
       items: [{ quantity: 100 }],
       startDate: '2026-01-01',
-      status: 'PLANNING',
+      status: PlanStatus.APPROVED,
       customer: '',
       priority: 'Medium',
     };
@@ -407,7 +408,7 @@ describe('buildColorMaterialMatrixPayloadForPlan', () => {
         { variantId: 'v-black-l', quantity: 20 },
       ],
       startDate: '2026-01-01',
-      status: 'PLANNING',
+      status: PlanStatus.APPROVED,
       customer: '',
       priority: 'Medium',
     };

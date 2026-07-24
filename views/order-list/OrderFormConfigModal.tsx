@@ -208,7 +208,7 @@ const OrderFormConfigModal: React.FC<OrderFormConfigModalProps> = ({
   }, [enqueueNodeReportSave]);
 
   return (
-    <BusinessFormConfigModal
+    <BusinessFormConfigModal<OrderFormSettings>
       open={open}
       onClose={handleShellClose}
       defaultTabId={defaultTabWhenOpen}

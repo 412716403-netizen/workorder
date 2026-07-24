@@ -4,6 +4,7 @@ import { ModalPortal } from './ModalPortal';
 import * as api from '../services/api';
 import type { Product } from '../types';
 import { productThumbSrc, type ProductImageFields } from '../utils/productImageSrc';
+import { useEscapeToClose } from '../hooks/useEscapeToClose';
 
 /** 产品缩略图点击预览：先显示 fallback，再按需拉原图 */
 export type ProductImagePreviewTarget =
@@ -80,6 +81,8 @@ const ProductImageLightbox: React.FC<ProductImageLightboxProps> = ({
       cancelled = true;
     };
   }, [target]);
+
+  useEscapeToClose(!!target && !!displaySrc, onClose);
 
   if (!target || !displaySrc) return null;
 

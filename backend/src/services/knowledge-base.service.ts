@@ -335,12 +335,14 @@ export async function deleteDocument(db: TenantPrismaClient, id: string) {
   return { ok: true };
 }
 
-function decodeBase64Payload(data: string, maxBytes: number, label: string): Buffer {
+function decodeBase64Payload(data: string, maxBytes: number, label: string): Buffer<ArrayBuffer> {
   const trimmed = data.trim();
   const base64 = trimmed.includes(',') ? trimmed.split(',').pop()! : trimmed;
-  let buf: Buffer;
+  let buf: Buffer<ArrayBuffer>;
   try {
-    buf = Buffer.from(base64, 'base64');
+    // Buffer.from 的返回类型是 Buffer<ArrayBufferLike>，但 base64 解码实际总是 ArrayBuffer 支撑；
+    // 收窄以匹配 Prisma Bytes 字段要求的 Uint8Array<ArrayBuffer>。
+    buf = Buffer.from(base64, 'base64') as Buffer<ArrayBuffer>;
   } catch {
     throw new AppError(400, `${label}数据格式无效`);
   }

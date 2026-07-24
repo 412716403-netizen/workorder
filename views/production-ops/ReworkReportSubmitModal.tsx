@@ -165,7 +165,6 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
                     [cf.id]: v,
                   }))
                 }
-                dictionaries={dictionaries}
                 controlClassName={
                   eff === 'select' ? psiOrderBillCompactWarehouseSelectClass : psiOrderBillCompactLineInputClass
                 }

@@ -1,5 +1,9 @@
 const { DEV_STAGE_STATUS_LABEL, DevStageStatus } = require('./devStyleConstants.js');
-const { isDevStageFileValueFilled } = require('./devStageFileValue.js');
+const {
+  isDevStageFileValueFilled,
+  parseDevStageFileItems,
+  serializeDevStageFileItems,
+} = require('./devStageFileValue.js');
 
 const STAGE_STATUS_OPTIONS = [
   { id: DevStageStatus.PENDING, label: DEV_STAGE_STATUS_LABEL.pending },
@@ -73,17 +77,49 @@ function validateStageRegisterFields(fields) {
   return null;
 }
 
-function buildStageUpdatePayload(status, fields, userName) {
-  return {
-    status,
-    fields: (fields || []).map((f) => ({
+function normalizeStageFieldValue(type, raw) {
+  if (type === 'file') {
+    return serializeDevStageFileItems(parseDevStageFileItems(raw));
+  }
+  return String(raw == null ? '' : raw);
+}
+
+/** 表单字段相对已保存 stage.fields 是否无变更（避免只改状态仍重传大 data URL） */
+function stageFieldsUnchanged(stage, fields) {
+  const existingByLabel = new Map();
+  (((stage && stage.fields) || [])).forEach((f) => {
+    existingByLabel.set(String(f.label || '').trim(), f);
+  });
+  for (const f of fields || []) {
+    const type = f.type || 'text';
+    const value = normalizeStageFieldValue(type, f.value);
+    const existing = existingByLabel.get(String(f.label || '').trim());
+    const prev = normalizeStageFieldValue(type, existing ? existing.value : '');
+    if (prev !== value) return false;
+    if (((existing && existing.type) || 'text') !== type && (value || prev)) return false;
+  }
+  return true;
+}
+
+/**
+ * 组保存 payload：状态未变则省略 status，字段未变则省略 fields。
+ * 两者都未变时返回 null（调用方跳过请求）。
+ */
+function buildStageUpdatePayload(status, fields, userName, originalStage) {
+  const statusChanged = !originalStage || status !== originalStage.status;
+  const fieldsChanged = !originalStage || !stageFieldsUnchanged(originalStage, fields);
+  if (!statusChanged && !fieldsChanged) return null;
+  const payload = { user: userName || undefined };
+  if (statusChanged) payload.status = status;
+  if (fieldsChanged) {
+    payload.fields = (fields || []).map((f) => ({
       id: f.id,
       label: f.label,
       value: f.value || '',
       type: f.type || 'text',
-    })),
-    user: userName || undefined,
-  };
+    }));
+  }
+  return payload;
 }
 
 function splitIsoToDateTime(iso) {

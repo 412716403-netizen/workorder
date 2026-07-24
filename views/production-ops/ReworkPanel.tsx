@@ -59,6 +59,7 @@ import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDo
 import PlanProductDetail from '../plan-order-list/PlanProductDetail';
 import { productThumbSrc } from '../../utils/productImageSrc';
 import { ModalPortal } from '../../components/ModalPortal';
+import { PdfPreviewViewer } from '../../components/PdfPreviewViewer';
 
 /** sourceReworkId → partner 的预建索引 */
 function buildReworkPartnerMap(allRecords: ProductionOpRecord[]): Map<string, string> {
@@ -1142,7 +1143,9 @@ const ReworkPanel: React.FC<PanelProps> = ({
           printTemplates={printTemplates}
           onUpdateRecord={onUpdateRecord}
           onDeleteRecord={onDeleteRecord}
-          onAddRecord={onAddRecord}
+          onAddRecord={async record => {
+            await onAddRecord(record);
+          }}
           onOpenReworkFormPrintTab={() => {
             setReworkFormConfigDefaultTab('print');
             void onRefreshPrintTemplates?.();
@@ -1183,7 +1186,9 @@ const ReworkPanel: React.FC<PanelProps> = ({
           printTemplates={printTemplates}
           onUpdateRecord={onUpdateRecord}
           onDeleteRecord={onDeleteRecord}
-          onAddRecord={onAddRecord}
+          onAddRecord={async record => {
+            await onAddRecord(record);
+          }}
           onOpenReworkFormPrintTab={() => {
             setReworkFormConfigDefaultTab('print');
             void onRefreshPrintTemplates?.();
@@ -1209,7 +1214,13 @@ const ReworkPanel: React.FC<PanelProps> = ({
           tenantRole={tenantRole}
           defectTreatmentCustomFields={rfSettings.defectTreatmentCustomFields}
           onAddRecord={onAddRecord}
-          onAddRecordBatch={onAddRecordBatch}
+          onAddRecordBatch={
+            onAddRecordBatch
+              ? async batch => {
+                  await onAddRecordBatch(batch);
+                }
+              : undefined
+          }
           getNextReworkDocNo={getNextReworkDocNo}
           getNextOutsourceReworkDocNo={getNextOutsourceReworkDocNo}
           onClose={() => { setReworkActionRow(null); }}
@@ -1269,7 +1280,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
             {filePreviewType === 'image' ? (
               <img src={filePreviewUrl} alt="预览" className="w-full h-full max-h-[85vh] object-contain" />
             ) : (
-              <iframe src={filePreviewUrl} title="PDF 预览" className="w-full h-[85vh] border-0" />
+              <PdfPreviewViewer src={filePreviewUrl} />
             )}
           </div>
         </div>

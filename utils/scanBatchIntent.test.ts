@@ -19,7 +19,8 @@ describe('normalizeScanPayloadForIntent', () => {
   it('ITEM intent + BATCH payload → reject', async () => {
     const r = await normalizeScanPayloadForIntent('ITEM', batch('x'), deps());
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.message).toContain('按件累计');
+    // 项目未开 strictNullChecks，`!r.ok` 不触发判别收窄，改用 === false
+    if (r.ok === false) expect(r.message).toContain('按件累计');
   });
 
   it('BATCH intent + BATCH payload → pass through', async () => {
@@ -74,7 +75,7 @@ describe('normalizeScanPayloadForIntent', () => {
         }) as import('../types').ScanItemCodeResult,
     });
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.message).toBe('该单品码没有对应的批次信息');
+    if (r.ok === false) expect(r.message).toBe('该单品码没有对应的批次信息');
   });
 
   it('BATCH intent + voided item → reject', async () => {
@@ -88,7 +89,7 @@ describe('normalizeScanPayloadForIntent', () => {
         }) as import('../types').ScanItemCodeResult,
     });
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.message).toBe('已作废');
+    if (r.ok === false) expect(r.message).toBe('已作废');
   });
 
   it('BATCH intent + IME-corrupted bare token → suggests input method on not found', async () => {
@@ -100,7 +101,7 @@ describe('normalizeScanPayloadForIntent', () => {
       },
     });
     expect(r.ok).toBe(false);
-    if (!r.ok) {
+    if (r.ok === false) {
       expect(r.message).toContain('输入法');
       expect(r.message).not.toBe('单品码不存在');
     }

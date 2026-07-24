@@ -84,7 +84,7 @@ export function buildPurchaseOrderPrintContextFromPsiDoc(params: {
   dictionaries: AppDictionaries;
 }): PrintRenderContext {
   const { docNumber, docItems, productMap, dictionaries } = params;
-  const main = docItems[0] ?? {};
+  const main: Partial<PsiRecord> = docItems[0] ?? {};
   const lines = buildPurchaseOrderLinesFromPsiRecords(docItems);
   return buildPurchaseOrderPrintRenderContext({
     docNumber,

@@ -1,6 +1,7 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
+import { useEscapeToClose } from '../../hooks/useEscapeToClose';
 
 interface KnowledgeImagePreviewOverlayProps {
   src: string | null;
@@ -11,14 +12,7 @@ const KnowledgeImagePreviewOverlay: React.FC<KnowledgeImagePreviewOverlayProps> 
   src,
   onClose,
 }) => {
-  useEffect(() => {
-    if (!src) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [src, onClose]);
+  useEscapeToClose(!!src, onClose);
 
   if (!src || typeof document === 'undefined') return null;
 

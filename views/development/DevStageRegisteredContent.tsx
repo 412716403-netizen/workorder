@@ -7,6 +7,7 @@ import { effectiveCustomDocFieldType } from '../../utils/reportCustomDocField';
 import { formatLocalDateTimeZh } from '../../utils/localDateTime';
 import { getStageRegisteredDisplayFields } from '../../utils/devStageDisplay';
 import { parseDevStageFileItems, resolveDevStageFileDownloadName } from '../../utils/devStageFileValue';
+import type { DevStageFileItem } from '../../utils/devStageFileValue';
 import { toKnowledgeAttachmentInfo } from '../../utils/devStageAttachmentPreview';
 import { formatUnpreviewableMessage, resolveAttachmentKind } from '../../utils/knowledgeAttachment';
 import { formStandardLabelClass } from '../../styles/uiDensity';
@@ -46,7 +47,7 @@ function DevStageFieldValue({
 }) {
   const [attachmentPreview, setAttachmentPreview] = useState<KnowledgeAttachmentInfo | null>(null);
   const openAttachment = useCallback(
-    (item: { url: string; name?: string }, index: number) => {
+    (item: DevStageFileItem, index: number) => {
       const info = toKnowledgeAttachmentInfo(item, label, index);
       const kind = resolveAttachmentKind(info.mimeType, info.fileName);
       if (kind === 'image' || kind === 'pdf' || kind === 'excel' || kind === 'word' || kind === 'video') {

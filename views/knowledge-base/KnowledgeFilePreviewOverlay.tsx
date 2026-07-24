@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Download,
@@ -15,6 +15,9 @@ import { downloadKnowledgeAsset } from '../../services/api/knowledgeBase';
 import { formatFileSize, formatUnpreviewableMessage, resolveAttachmentKind } from '../../utils/knowledgeAttachment';
 import KnowledgeExcelPreview from './KnowledgeExcelPreview';
 import KnowledgeWordPreview from './KnowledgeWordPreview';
+import { PdfPreviewViewer } from '../../components/PdfPreviewViewer';
+import { useFileOpenInTabMenu } from '../../hooks/useFileOpenInTabMenu';
+import { useEscapeToClose } from '../../hooks/useEscapeToClose';
 import type { KnowledgeAttachmentInfo } from './knowledgeFileAttachmentExtension';
 import './knowledge-editor.css';
 
@@ -34,15 +37,8 @@ const HEADER_ICON = {
 
 const KnowledgeFilePreviewOverlay: React.FC<KnowledgeFilePreviewOverlayProps> = ({ attachment, onClose }) => {
   const [downloading, setDownloading] = useState(false);
-
-  useEffect(() => {
-    if (!attachment) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [attachment, onClose]);
+  const { onContextMenuFor, menuNode } = useFileOpenInTabMenu();
+  useEscapeToClose(!!attachment, onClose);
 
   const kind = useMemo(
     () => (attachment ? resolveAttachmentKind(attachment.mimeType, attachment.fileName) : 'other'),
@@ -69,6 +65,7 @@ const KnowledgeFilePreviewOverlay: React.FC<KnowledgeFilePreviewOverlayProps> = 
 
   return createPortal(
     <div className="kb-file-preview-overlay" role="dialog" aria-modal="true" aria-label="文件预览">
+      {menuNode}
       <header className="kb-file-preview-header">
         <button type="button" className="kb-file-preview-exit" onClick={onClose}>
           <X className="h-4 w-4" />
@@ -87,9 +84,19 @@ const KnowledgeFilePreviewOverlay: React.FC<KnowledgeFilePreviewOverlayProps> = 
         </button>
       </header>
 
-      <div className="kb-file-preview-body">
+      <div
+        className="kb-file-preview-body"
+        onContextMenu={onContextMenuFor(assetUrl, {
+          mimeType: attachment.mimeType,
+          fileName: displayName,
+        })}
+      >
         {kind === 'pdf' && (
-          <iframe src={assetUrl} title={displayName} className="kb-file-preview-frame" />
+          <PdfPreviewViewer
+            src={assetUrl}
+            title={displayName}
+            className="kb-file-preview-frame min-h-0 flex-1 overflow-hidden rounded-lg"
+          />
         )}
         {kind === 'image' && (
           <div className="kb-file-preview-image-wrap">

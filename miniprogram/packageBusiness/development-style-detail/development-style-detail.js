@@ -282,10 +282,8 @@ Page({
     if (!ok) return;
     this.setData({ saving: true });
     try {
-      const saved = await updateDevStyle(this._style.id, {
-        ...this._style,
-        status: nextStatus,
-      });
+      // 只改状态：不要把整棵详情（主图 + 样品附件 data URL）重传
+      const saved = await updateDevStyle(this._style.id, { status: nextStatus });
       this._style = saved;
       this.applyStyle(saved);
       notifyHubChanged.call(this);

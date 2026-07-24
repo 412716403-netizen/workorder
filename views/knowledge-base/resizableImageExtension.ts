@@ -9,11 +9,13 @@ import { NodeSelection } from '@tiptap/pm/state';
  */
 export const ResizableImage = Image.extend({
   addNodeView() {
-    if (!this.options.resize?.enabled || typeof document === 'undefined') {
+    // options.resize 为 `false | { enabled: boolean; ... }` 联合，先收窄掉 false 再读取配置
+    const resizeOptions = this.options.resize;
+    if (!resizeOptions || !resizeOptions.enabled || typeof document === 'undefined') {
       return null;
     }
 
-    const { directions, minWidth, minHeight, alwaysPreserveAspectRatio } = this.options.resize;
+    const { directions, minWidth, minHeight, alwaysPreserveAspectRatio } = resizeOptions;
     const nodeName = this.name;
 
     return ({ node, getPos, HTMLAttributes, editor }) => {

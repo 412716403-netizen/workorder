@@ -541,7 +541,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                 <input
                   type="search"
-                  placeholder={type === 'RECONCILIATION' ? '在当前对账结果中搜索…' : '搜索单号、对方、金额、备注、分类…'}
+                  placeholder="搜索单号、对方、金额、备注、分类…"
                   value={financeListSearch}
                   onChange={e => setFinanceListSearch(e.target.value)}
                   className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-3 text-sm font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-medium outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"

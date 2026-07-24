@@ -40,6 +40,16 @@ import { psiCustomFieldHasFilledDisplayValue } from '../psi-ops/psiOpsListFormat
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 import { useAuth } from '../../contexts/AuthContext';
 import { productThumbSrc } from '../../utils/productImageSrc';
+import { formatWeightKgDisplay, weightToNumberSumPart } from '../../utils/reportBatchWeightHelpers';
+
+/** 处理不良流水重量列展示（当前 detailNodeUsesWeight 恒为 false，仅为类型完整保留） */
+const formatDefectWeightKgDisplay = formatWeightKgDisplay;
+
+/** 汇总指定记录 id 集合的交货重量（kg） */
+const weightSumForRecordIds = (batch: ProductionOpRecord[], recordIds: string[]): number => {
+  const ids = new Set(recordIds);
+  return batch.reduce((s, x) => s + (ids.has(x.id) ? weightToNumberSumPart(x.weight) : 0), 0);
+};
 
 const defectTreatmentCustomFieldEditControlClass =
   'h-9 w-full max-w-md rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500';
@@ -128,6 +138,7 @@ const DefectTreatmentFlowDetailModal: React.FC<DefectTreatmentFlowDetailModalPro
   const sourceNodeId = first ? (first.type === 'REWORK' ? (first.sourceNodeId ?? first.nodeId) : first.nodeId) : undefined;
   const sourceNodeName = sourceNodeId ? globalNodes.find(n => n.id === sourceNodeId)?.name ?? sourceNodeId : '—';
   const totalQty = detailBatch.reduce((s, x) => s + (x.quantity ?? 0), 0);
+  const totalWeightKg = detailBatch.reduce((s, x) => s + weightToNumberSumPart(x.weight), 0);
   const hasColorSize = productHasColorSizeMatrix(product, productCategory);
   const typeLabel = first?.type === 'REWORK' ? '返工' : '报损';
 

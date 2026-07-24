@@ -59,6 +59,8 @@ export interface PsiDocLineRecord {
   batchNo?: string | null;
   /** @deprecated API 历史字段，优先用 batchNo */
   batch?: string | null;
+  /** 行级扩展数据（如 relatedProductId），与 `PsiRecord.customData` 一致 */
+  customData?: Record<string, unknown> | null;
 }
 
 /**

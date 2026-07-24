@@ -4,8 +4,14 @@ import type { PartnerProductReconRow } from '../../utils/partnerReconProductLedg
 import { fmtDT } from '../../utils/formatTime';
 import FlowListProductCell from '../../components/flow/FlowListProductCell';
 
+/**
+ * 本表仅消费展示字段，不读 detailTarget；合作单位 / 报工结算两处行的 detailTarget
+ * 联合类型不同（PartnerProductLineDetail vs SettlementProductLineDetail），故放宽为展示行。
+ */
+export type PartnerProductReconDisplayRow = Omit<PartnerProductReconRow, 'detailTarget'>;
+
 interface PartnerProductReconTableProps {
-  rows: PartnerProductReconRow[];
+  rows: PartnerProductReconDisplayRow[];
   emptyMessage?: string;
 }
 

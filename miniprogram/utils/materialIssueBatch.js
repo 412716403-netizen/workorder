@@ -38,7 +38,7 @@ function enrichBatchRowFields(row) {
 }
 
 function categoryUsesBatchManagement(cat) {
-  return Boolean(cat && cat.hasBatchManagement) && !Boolean(cat && cat.hasColorSize);
+  return Boolean(cat && cat.hasBatchManagement) && !(cat && cat.hasColorSize);
 }
 
 function materialProductNeedsBatch(materialProductId, productsById, categoryById) {

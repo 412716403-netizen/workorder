@@ -263,7 +263,17 @@ const WarehouseFlowModal: React.FC<WarehouseFlowModalProps> = ({
     if (dateFrom) rows = rows.filter(r => r.dateStr >= dateFrom);
     if (dateTo) rows = rows.filter(r => r.dateStr <= dateTo);
     if (flowType !== 'all') {
-      rows = rows.filter(r => matchesWarehouseFlowTypeFilter(r, flowType));
+      // PsiRecord 未声明 reason，直接传 FlowRow 会触发弱类型检查；仅取用到的字段做显式适配
+      rows = rows.filter(r =>
+        matchesWarehouseFlowTypeFilter(
+          {
+            type: r.type,
+            quantity: r.quantity,
+            record: { reason: 'reason' in r.record ? r.record.reason : undefined },
+          },
+          flowType,
+        ),
+      );
     }
     if (flowWarehouse !== 'all') {
       rows = rows.filter(r => (r.warehouseId || '') === flowWarehouse);

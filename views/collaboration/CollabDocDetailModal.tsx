@@ -27,6 +27,11 @@ type DocKind = 'dispatch' | 'return';
 /** doc 是 dispatch 或 return 的并集 —— 字段几乎相同，按 docKind 分支处理 */
 type CollabDoc = CollabDispatch | CollabReturn;
 
+/** amendmentPayload 经索引签名读出为 unknown，这里按使用形态显式收窄（与 payload 形状一致） */
+type CollabAmendmentPayload = { items?: CollabPayloadItem[]; colorNames?: unknown; sizeNames?: unknown };
+const getAmendmentPayload = (d: CollabDoc | null | undefined): CollabAmendmentPayload | null | undefined =>
+  d?.amendmentPayload as CollabAmendmentPayload | null | undefined;
+
 interface CollabDocDetailModalProps {
   open: boolean;
   onClose: () => void;
@@ -41,11 +46,11 @@ interface CollabDocDetailModalProps {
   /** 乙方接受派发时选择本地产品分类（默认按甲方 payload.categoryName 匹配） */
   categories?: ProductCategory[];
   onRefreshList: () => void;
-  onRefreshOrders?: () => Promise<void>;
-  onRefreshPlans?: () => Promise<void>;
-  onRefreshProdRecords?: () => Promise<void>;
-  onRefreshPMP?: () => Promise<void>;
-  onRefreshProducts?: () => Promise<void>;
+  onRefreshOrders?: () => Promise<void> | void;
+  onRefreshPlans?: () => Promise<void> | void;
+  onRefreshProdRecords?: () => Promise<void> | void;
+  onRefreshPMP?: () => Promise<void> | void;
+  onRefreshProducts?: () => Promise<void> | void;
   /** 保留 prop 签名以兼容调用方，内部已不再使用（接受/回传/转发入口迁移至右侧栏批量弹窗） */
   onOpenCollabSettings?: () => void;
 }
@@ -176,7 +181,7 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
     if (!ok) return;
     setBusy(true);
     try {
-      await api.collaboration.withdrawForward(transfer.childTransferId);
+      await api.collaboration.withdrawForward(transfer.childTransferId as string);
       toast.success('已撤回转发');
       await afterMutation({ refreshProd: true });
     } catch (err: any) {
@@ -320,19 +325,20 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
   const specMatrix = useMemo(() => {
     const rowItems = (doc?.payload?.items ?? []) as CollabPayloadItem[];
     const ord = resolvePreferredCollabMatrixOrder({
-      payload: doc?.payload,
+      payload: { colorNames: doc?.payload?.colorNames, sizeNames: doc?.payload?.sizeNames },
       product: receiverProduct ?? null,
       dictionaries,
     });
     return collabPayloadItemsToQtyMatrixProps(rowItems, { ...ord });
   }, [doc?.payload, receiverProduct, dictionaries]);
   const amendmentMatrix = useMemo(() => {
+    const amendmentPayload = getAmendmentPayload(doc);
     const ord = resolvePreferredCollabMatrixOrder({
-      payload: doc?.amendmentPayload,
+      payload: amendmentPayload,
       product: receiverProduct ?? null,
       dictionaries,
     });
-    return collabPayloadItemsToQtyMatrixProps((doc?.amendmentPayload?.items ?? []) as CollabPayloadItem[], {
+    return collabPayloadItemsToQtyMatrixProps(amendmentPayload?.items ?? [], {
       ...ord,
     });
   }, [doc?.amendmentPayload, receiverProduct, dictionaries]);
@@ -350,7 +356,7 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
     if (docKind !== 'return' || doc?.amendmentStatus !== 'PENDING_A_CONFIRM' || amendmentMatrix.rows.length === 0) {
       return null;
     }
-    const aitems = (doc?.amendmentPayload?.items ?? []) as CollabPayloadItem[];
+    const aitems = getAmendmentPayload(doc)?.items ?? [];
     const aq = sumItemsQty(aitems);
     const up = firstFiniteCollabUnitPrice(aitems);
     const amt = up != null ? aq * up : null;
@@ -415,8 +421,8 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
     const itemList: CollabPayloadItem[] = (payload.items ?? []) as CollabPayloadItem[];
     if (!colors.length) colors = [...new Set(itemList.map(i => i.colorName).filter(Boolean))] as string[];
     if (!sizes.length) sizes = [...new Set(itemList.map(i => i.sizeName).filter(Boolean))] as string[];
-    setAcceptName(transfer.senderProductName || '');
-    setAcceptSku(transfer.senderProductSku || '');
+    setAcceptName((transfer.senderProductName as string | undefined) || '');
+    setAcceptSku((transfer.senderProductSku as string | undefined) || '');
     setAcceptDesc(typeof payload.description === 'string' ? payload.description : '');
     setAcceptColors(colors);
     setAcceptSizes(sizes);
@@ -612,7 +618,12 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
   if (!open) return null;
 
   const isSender = transfer.senderTenantName === '本企业';
-  const peerName = isSender ? transfer.receiverTenantName : transfer.senderTenantName;
+  const peerName = (isSender ? transfer.receiverTenantName : transfer.senderTenantName) as string | undefined;
+  const senderProductName = transfer.senderProductName as string | undefined;
+  const senderProductSku = transfer.senderProductSku as string | undefined;
+  const payloadNote = doc?.payload?.note as string | undefined;
+  const payloadReceiptDocNo = doc?.payload?.receiptDocNo as string | undefined;
+  const amendmentNote = doc?.amendmentNote as string | undefined;
   const docNo = formatDocNo(doc, docKind);
   const createdStr = doc?.createdAt ? new Date(doc.createdAt).toLocaleString() : '';
   const kindLabel = docKind === 'dispatch' ? '派发单' : '回传单';
@@ -705,9 +716,9 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
               <div className="flex items-start gap-3 mb-4">
                 <Package className="w-6 h-6 text-indigo-600 shrink-0 mt-0.5" />
                 <div className="min-w-0 flex-1">
-                  <h3 className="text-lg font-black text-slate-900 truncate">{transfer.senderProductName || '—'}</h3>
-                  {transfer.senderProductSku ? (
-                    <p className="text-xs font-semibold text-slate-500 mt-0.5">SKU {transfer.senderProductSku}</p>
+                  <h3 className="text-lg font-black text-slate-900 truncate">{senderProductName || '—'}</h3>
+                  {senderProductSku ? (
+                    <p className="text-xs font-semibold text-slate-500 mt-0.5">SKU {senderProductSku}</p>
                   ) : null}
                 </div>
               </div>
@@ -996,13 +1007,13 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
             )}
 
             {/* 备注 / 回收单号 */}
-            {(doc?.payload?.note || doc?.payload?.receiptDocNo) && (
+            {(payloadNote || payloadReceiptDocNo) && (
               <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 space-y-1 text-xs">
-                {doc?.payload?.note && (
-                  <p className="text-slate-600"><span className="font-bold text-slate-500">备注：</span>{doc.payload.note}</p>
+                {payloadNote && (
+                  <p className="text-slate-600"><span className="font-bold text-slate-500">备注：</span>{payloadNote}</p>
                 )}
-                {doc?.payload?.receiptDocNo && (
-                  <p className="font-bold text-emerald-700">外协回收单号：{doc.payload.receiptDocNo}</p>
+                {payloadReceiptDocNo && (
+                  <p className="font-bold text-emerald-700">外协回收单号：{payloadReceiptDocNo}</p>
                 )}
               </div>
             )}
@@ -1012,7 +1023,7 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="px-2 py-0.5 bg-amber-400 text-white text-[10px] font-black rounded">待确认修订</span>
-                  {doc.amendmentNote && <span className="text-xs text-amber-700">备注: {doc.amendmentNote}</span>}
+                  {amendmentNote && <span className="text-xs text-amber-700">备注: {amendmentNote}</span>}
                 </div>
                 <div className="space-y-2">
                   <span className="text-xs font-bold text-amber-900">修订规格明细</span>
@@ -1041,7 +1052,7 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="px-2 py-0.5 bg-amber-400 text-white text-[10px] font-black rounded">待甲方确认修订</span>
-                  {doc.amendmentNote && <span className="text-xs text-amber-700">备注: {doc.amendmentNote}</span>}
+                  {amendmentNote && <span className="text-xs text-amber-700">备注: {amendmentNote}</span>}
                 </div>
                 <div className="space-y-2">
                   <span className="text-xs font-bold text-amber-900">修订规格明细</span>

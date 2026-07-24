@@ -31,7 +31,7 @@ function mockTenantTransaction(updated: typeof pendingTenant) {
     financeCategory: { count: vi.fn().mockResolvedValue(0) },
     globalNodeTemplate: { count: vi.fn().mockResolvedValue(0) },
   };
-  vi.spyOn(prisma, '$transaction').mockImplementation(async (fn: (arg: typeof tx) => Promise<unknown>) =>
+  vi.spyOn(prisma, '$transaction').mockImplementation(async (fn) =>
     fn(tx as never),
   );
   return tx;

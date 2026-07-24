@@ -259,8 +259,10 @@ function buildDefaultDispatchQuantities(
     }
 
     if (variantsInProductBlock.length > 0) {
-      const getDr = (oid: string, tid: string) =>
-        defectiveReworkByOrderForOutsource.get(`${oid}|${tid}`) ?? { defective: 0, rework: 0, reworkByVariant: {} as Record<string, number> };
+      const getDr = (oid: string, tid: string) => {
+        const dr = defectiveReworkByOrderForOutsource.get(`${oid}|${tid}`);
+        return { defective: dr?.defective ?? 0, rework: dr?.rework ?? 0, reworkByVariant: dr?.reworkByVariant ?? {} };
+      };
       const milestoneNodeIds = product?.milestoneNodeIds || [];
       const seq = (processSequenceMode ?? 'sequential') as ProcessSequenceMode;
       const outsourceForProductNode = records.filter(
@@ -695,7 +697,10 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
             }
 
             if (variantsInProductBlock.length > 0) {
-              const getDr = (oid: string, tid: string) => defectiveReworkByOrderForOutsource.get(`${oid}|${tid}`) ?? { defective: 0, rework: 0, reworkByVariant: {} as Record<string, number> };
+              const getDr = (oid: string, tid: string) => {
+                const dr = defectiveReworkByOrderForOutsource.get(`${oid}|${tid}`);
+                return { defective: dr?.defective ?? 0, rework: dr?.rework ?? 0, reworkByVariant: dr?.reworkByVariant ?? {} };
+              };
               const milestoneNodeIds = product?.milestoneNodeIds || [];
               const seq = (processSequenceMode ?? 'sequential') as ProcessSequenceMode;
               const outsourceForProductNodeRender = records.filter(r => r.type === 'OUTSOURCE' && !r.orderId && r.productId === row.productId && r.nodeId === row.nodeId);

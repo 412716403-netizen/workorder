@@ -39,7 +39,6 @@ import type {
   Partner,
   Worker,
   Equipment,
-  OrderDispatchStatus,
   DispatchCompletionPending,
 } from '../types';
 import { useConfirm } from './ConfirmContext';
@@ -53,6 +52,7 @@ import {
   DEFAULT_OUTSOURCE_FORM_SETTINGS,
   DEFAULT_REWORK_FORM_SETTINGS,
   DEFAULT_PRODUCT_ECONOMICS_SETTINGS,
+  OrderDispatchStatus,
 } from '../types';
 import { normalizePartnersFromApi } from '../utils/partnerNormalize';
 import { stripProductOriginalForListCache } from '../utils/productImageSrc';
@@ -1066,7 +1066,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const onAddProdRecord = useCallback(async (record: ProductionOpRecord): Promise<ProductionOpRecord | null> => {
     try {
       const result = await api.production.create(record);
-      const created = norm1(result.record as ProductionOpRecord);
+      // 共享 DTO 将 record 声明为 Record<string, unknown>（后端序列化边界），此处显式断言为领域类型
+      const created = norm1(result.record as unknown as ProductionOpRecord);
       invalidateAllProdRecords();
       void Promise.allSettled([refreshOrders(), refreshPMP()]);
       await promptDispatchCompletion(result.dispatchCompletionPending ?? []);
@@ -1089,7 +1090,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
        * 而不需要再各自维护一份客户端 docNo 生成逻辑。
        */
       const result = await api.production.createBatch(records);
-      const created = (result.records ?? []).map(r => norm1(r as ProductionOpRecord));
+      // 同 onAddProdRecord：共享 DTO 的 records 元素为 Record<string, unknown>，边界处显式断言
+      const created = (result.records ?? []).map(r => norm1(r as unknown as ProductionOpRecord));
       invalidateAllProdRecords();
       void Promise.allSettled([refreshOrders(), refreshPMP()]);
       await promptDispatchCompletion(result.dispatchCompletionPending ?? []);

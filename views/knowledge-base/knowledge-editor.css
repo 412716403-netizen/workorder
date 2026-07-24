@@ -1438,13 +1438,18 @@
   flex-direction: column;
 }
 
+.kb-file-preview-body:has(.kb-file-preview-frame) {
+  padding: 0;
+  overflow: hidden;
+}
+
 .kb-file-preview-frame {
   flex: 1;
   width: 100%;
   min-height: 0;
   border: none;
-  border-radius: 8px;
-  background: #fff;
+  border-radius: 0;
+  background: #f1f5f9;
 }
 
 .kb-file-preview-image-wrap {

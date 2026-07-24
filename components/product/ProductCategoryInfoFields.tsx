@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import {
   Plus,
   X,
@@ -45,38 +44,8 @@ import {
 import { dataUrlToBlobUrl } from '../../utils/routeReportFileUrls';
 import { compressImageFile, readFileAsDataUrl } from '../../utils/compressImageFile';
 import { productThumbSrc } from '../../utils/productImageSrc';
-
-function FilePreviewPortal({
-  preview,
-  onClose,
-}: {
-  preview: { src: string; kind: 'image' | 'pdf' } | null;
-  onClose: () => void;
-}) {
-  if (!preview || typeof document === 'undefined') return null;
-  return createPortal(
-    <div
-      className="fixed inset-0 flex items-center justify-center p-8 bg-slate-900/80 backdrop-blur-sm"
-      style={{ zIndex: 2147483000 }}
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-label="附件预览"
-    >
-      <button type="button" onClick={onClose} className="absolute top-6 right-6 z-10 p-2 rounded-full bg-white/20 hover:bg-white/40 text-white">
-        <X className="w-8 h-8" />
-      </button>
-      <div className="relative z-10 w-full max-w-4xl max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        {preview.kind === 'image' ? (
-          <img src={preview.src} alt="预览" className="w-full h-full max-h-[85vh] object-contain" />
-        ) : (
-          <iframe src={preview.src} title="PDF 预览" className="w-full h-[85vh] border-0" />
-        )}
-      </div>
-    </div>,
-    document.body,
-  );
-}
+import { MediaFilePreviewOverlay } from '../MediaFilePreviewOverlay';
+import { useEscapeToClose } from '../../hooks/useEscapeToClose';
 
 export interface ProductCategoryInfoFieldsProps {
   working: Product;
@@ -166,6 +135,9 @@ const ProductCategoryInfoFields: React.FC<ProductCategoryInfoFieldsProps> = ({
     filePreviewRevokeRef.current = undefined;
     setFilePreview(null);
   }, []);
+
+  const closeLightbox = useCallback(() => setLightboxImageUrl(null), []);
+  useEscapeToClose(!!lightboxImageUrl, closeLightbox);
 
   const applyProductImageFile = useCallback((file: File | null | undefined) => {
     if (!file || readOnly) return;
@@ -388,11 +360,11 @@ const ProductCategoryInfoFields: React.FC<ProductCategoryInfoFieldsProps> = ({
 
   return (
     <>
-      <FilePreviewPortal preview={filePreview} onClose={closeFilePreview} />
+      <MediaFilePreviewOverlay preview={filePreview} onClose={closeFilePreview} />
       {lightboxImageUrl && (
         <div
           className={`fixed inset-0 ${nestedOverlayZ} flex items-center justify-center p-8 bg-slate-900/80`}
-          onClick={() => setLightboxImageUrl(null)}
+          onClick={closeLightbox}
           role="presentation"
         >
           <img src={lightboxImageUrl} alt="" className="max-h-[90vh] max-w-full object-contain" onClick={(e) => e.stopPropagation()} />

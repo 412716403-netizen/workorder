@@ -41,6 +41,7 @@ describe('buildPartnerReconciliationExportSheet', () => {
         docType: '采购入库',
         partner: '万新',
         productName: '产品A',
+        product: null,
         quantity: 2,
         unitPrice: 10,
         receivableInc: 0,

@@ -3,6 +3,7 @@ import type {
   ProductionOrder,
   Product,
   ProductMilestoneProgress,
+  ProductVariant,
   ProcessSequenceMode,
 } from '../types';
 import { variantMaxGoodProductMode } from './productReportAggregates';

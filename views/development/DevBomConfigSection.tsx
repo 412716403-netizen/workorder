@@ -253,6 +253,8 @@ const DevBomConfigSection: React.FC<DevBomConfigSectionProps> = ({
           variantId: isSingleSkuUi ? singleSkuVariantId : variant.id,
           nodeId,
           name: `${working.name || working.code} [${nodeName}]`,
+          // BOM 类型要求 version；开发款链路不消费该字段（workingBomToDevBom 白名单不含它），取值与 ProductEditForm 一致
+          version: 'V1.0',
           items: [],
         });
       }

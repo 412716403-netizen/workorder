@@ -38,7 +38,8 @@ function roundDynamicListConfig(
 ): PrintDynamicListElementConfig {
   const { dataSource: _legacyDataSource, ...base } = c;
   const serial = toOptionalMm(base.serialColumnWidthMm);
-  const widths = base.dataColumnWidthsMm?.map(w => {
+  // 旧模板数据的列宽可能以字符串（含空串）落库，这里按 legacy 输入放宽后统一归一为数字
+  const widths = base.dataColumnWidthsMm?.map((w: number | string | null | undefined) => {
     if (w == null || w === '') return 0;
     const n = typeof w === 'number' ? w : Number(w);
     if (!Number.isFinite(n) || n < 0) return 0;

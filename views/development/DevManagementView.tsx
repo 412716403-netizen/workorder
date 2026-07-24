@@ -268,7 +268,9 @@ const DevManagementView: React.FC = () => {
       templatePerms={templatePerms}
       devBoms={devBoms}
       onSaveBom={saveDevBom}
-      onCreateTemplate={createTemplate}
+      onCreateTemplate={async (name) => {
+        await createTemplate(name);
+      }}
       onUpdateTemplate={updateTemplate}
       onDeleteTemplate={deleteTemplate}
       onMoveTemplate={moveTemplate}
@@ -344,7 +346,9 @@ const DevManagementView: React.FC = () => {
             canDeleteStyle={canDeleteStyle}
             canManageTemplates={canManageTemplates}
             templatePerms={templatePerms}
-            onCreateTemplate={createTemplate}
+            onCreateTemplate={async (name) => {
+              await createTemplate(name);
+            }}
             onUpdateTemplate={updateTemplate}
             onDeleteTemplate={deleteTemplate}
             onMoveTemplate={moveTemplate}

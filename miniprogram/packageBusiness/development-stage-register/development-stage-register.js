@@ -222,6 +222,7 @@ Page({
         return;
       }
       this._style = style;
+      this._originalStage = found.stage;
       this._templates = templates || [];
       this._fileValues = {};
       this._filePreviews = {};
@@ -432,7 +433,17 @@ Page({
     }
     const userName =
       (this._tenantCtx && (this._tenantCtx.userName || this._tenantCtx.name)) || '';
-    const payload = buildStageUpdatePayload(this.data.status, fieldsForSave, userName);
+    const payload = buildStageUpdatePayload(
+      this.data.status,
+      fieldsForSave,
+      userName,
+      this._originalStage,
+    );
+    if (!payload) {
+      wx.showToast({ title: '已保存', icon: 'success' });
+      setTimeout(() => wx.navigateBack(), 400);
+      return;
+    }
     this.setData({ submitting: true });
     try {
       await updateDevStage(this.data.stageId, payload);

@@ -131,7 +131,8 @@ function alignPlanCustomerVisibility(
   );
 }
 
-export function normalizePlanFormSettings(raw: PlanFormSettings | null | undefined): PlanFormSettings {
+/** 入参是持久化 JSON，任意顶层字段都可能缺失，故按 Partial 兜底解析 */
+export function normalizePlanFormSettings(raw: Partial<PlanFormSettings> | null | undefined): PlanFormSettings {
   const s = raw ?? DEFAULT_PLAN_FORM_SETTINGS;
   const allowedList = s.listPrint?.allowedTemplateIds?.filter(Boolean) ?? [];
   const migratedLabelPrint = migratePlanLabelPrintSettings(s.labelPrint);
@@ -209,8 +210,9 @@ export function repairPlanLabelPrintWhitelistMissingPlanLabelTemplates(
 
     const scopeIds = printTemplates
       .filter(t => {
-        const ms = t.printTemplateManageScope;
-        return ms === scope || (scope === 'planItemLabel' && ms === 'planLabel' && String(t.id).trim() !== BUILTIN_PLAN_BATCH_LABEL_PRINT_TEMPLATE_ID);
+      // 存量模版可能仍带历史 scope `planLabel`（normalizeStoredPrintTemplateManageScope 迁移前），按 string 比较兜底
+      const ms: string | undefined = t.printTemplateManageScope;
+      return ms === scope || (scope === 'planItemLabel' && ms === 'planLabel' && String(t.id).trim() !== BUILTIN_PLAN_BATCH_LABEL_PRINT_TEMPLATE_ID);
       })
       .map(t => String(t.id).trim())
       .filter(Boolean);
@@ -469,7 +471,8 @@ function mergePurchaseOrderStandardFields(
   return merged.map(f => (f.id === 'docNumber' ? { ...f, showInCreate: false } : f));
 }
 
-export function normalizePurchaseOrderFormSettings(raw: PurchaseOrderFormSettings | null | undefined): PurchaseOrderFormSettings {
+/** 入参是持久化 JSON，任意顶层字段都可能缺失，故按 Partial 兜底解析 */
+export function normalizePurchaseOrderFormSettings(raw: Partial<PurchaseOrderFormSettings> | null | undefined): PurchaseOrderFormSettings {
   const s = raw ?? DEFAULT_PURCHASE_ORDER_FORM_SETTINGS;
   const legacyDetail = normalizePlanListSlot(
     (s as PurchaseOrderFormSettings & { detailPrint?: PlanListPrintSettings }).detailPrint,
@@ -532,7 +535,8 @@ function mergeSalesOrderStandardFields(
   return merged.map(f => (f.id === 'docNumber' ? { ...f, showInCreate: false } : f));
 }
 
-export function normalizeSalesOrderFormSettings(raw: SalesOrderFormSettings | null | undefined): SalesOrderFormSettings {
+/** 入参是持久化 JSON，任意顶层字段都可能缺失，故按 Partial 兜底解析 */
+export function normalizeSalesOrderFormSettings(raw: Partial<SalesOrderFormSettings> | null | undefined): SalesOrderFormSettings {
   const s = raw ?? DEFAULT_SALES_ORDER_FORM_SETTINGS;
   const legacyDetail = normalizePlanListSlot(
     (s as SalesOrderFormSettings & { detailPrint?: PlanListPrintSettings }).detailPrint,
@@ -591,7 +595,8 @@ function mergePurchaseBillStandardFields(
   return merged.map(f => (f.id === 'docNumber' ? { ...f, showInCreate: false } : f));
 }
 
-export function normalizePurchaseBillFormSettings(raw: PurchaseBillFormSettings | null | undefined): PurchaseBillFormSettings {
+/** 入参是持久化 JSON，任意顶层字段都可能缺失，故按 Partial 兜底解析 */
+export function normalizePurchaseBillFormSettings(raw: Partial<PurchaseBillFormSettings> | null | undefined): PurchaseBillFormSettings {
   const s = raw ?? DEFAULT_PURCHASE_BILL_FORM_SETTINGS;
   type PbLegacy = PurchaseBillFormSettings & {
     detailPrint?: PlanListPrintSettings;
@@ -635,7 +640,8 @@ export const DEFAULT_SALES_BILL_FORM_SETTINGS: SalesBillFormSettings = {
   listPrint: { showPrintButton: false },
 };
 
-export function normalizeSalesBillFormSettings(raw: SalesBillFormSettings | null | undefined): SalesBillFormSettings {
+/** 入参是持久化 JSON，任意顶层字段都可能缺失，故按 Partial 兜底解析 */
+export function normalizeSalesBillFormSettings(raw: Partial<SalesBillFormSettings> | null | undefined): SalesBillFormSettings {
   const s = raw ?? DEFAULT_SALES_BILL_FORM_SETTINGS;
   const listNorm = normalizePlanListSlot(s.listPrint) ?? { showPrintButton: false };
   const rawIds = listNorm.allowedTemplateIds?.map(x => (x != null && x !== '' ? String(x).trim() : '')).filter(Boolean) ?? [];

@@ -318,7 +318,7 @@ export function isPurchaseBillDocType(docType: string): boolean {
 export function categoryUsesBatchManagement(
   cat: { hasBatchManagement?: boolean | null; hasColorSize?: boolean | null } | null | undefined,
 ): boolean {
-  return Boolean(cat?.hasBatchManagement) && !Boolean(cat?.hasColorSize);
+  return Boolean(cat?.hasBatchManagement) && !cat?.hasColorSize;
 }
 
 /** 协作派发/接受：颜色尺码等规格标签归一（NFKC + 折叠空白），前后端与协作 payload 共用 */

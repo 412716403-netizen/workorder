@@ -58,7 +58,7 @@ describe('acceptTransfer', () => {
         findFirst: vi.fn().mockResolvedValue(null),
       },
     };
-    vi.spyOn(prisma, '$transaction').mockImplementation(async (fn: (arg: typeof tx) => Promise<unknown>) => fn(tx as never));
+    vi.spyOn(prisma, '$transaction').mockImplementation(async (fn) => fn(tx as never));
 
     await expect(
       acceptTransfer('trecv', 'tr1', {
@@ -146,7 +146,7 @@ describe('acceptTransfer', () => {
       },
     };
 
-    vi.spyOn(prisma, '$transaction').mockImplementation(async (fn: (arg: typeof tx) => Promise<unknown>) => fn(tx as never));
+    vi.spyOn(prisma, '$transaction').mockImplementation(async (fn) => fn(tx as never));
 
     const res = await acceptTransfer('trecv', 'tr1', { dispatchIds: ['d1'] });
 

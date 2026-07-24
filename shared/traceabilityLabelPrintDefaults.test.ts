@@ -5,6 +5,7 @@ import {
   resolveTraceabilityDefaultItemLabelTemplateIds,
   TRACEABILITY_DEFAULT_BATCH_LABEL_PRINT_TEMPLATE_IDS,
   TRACEABILITY_DEFAULT_ITEM_LABEL_PRINT_TEMPLATE_IDS,
+  type PlanFormWithLabelPrint,
 } from './traceabilityLabelPrintDefaults';
 
 const tpl = (id: string, scope: 'planList' | 'planItemLabel' | 'planBatchLabel' | 'planLabel') => ({
@@ -37,7 +38,7 @@ describe('applyTraceabilityLabelPrintDefaults', () => {
   ];
 
   it('enables trace section and split whitelists when labelPrint is missing', () => {
-    const next = applyTraceabilityLabelPrintDefaults({}, templates);
+    const next = applyTraceabilityLabelPrintDefaults<PlanFormWithLabelPrint>({}, templates);
     expect(next.labelPrint?.showPlanDetailTraceSection).toBe(true);
     expect(next.labelPrint?.itemCodePrint?.allowedTemplateIds).toEqual([
       ...TRACEABILITY_DEFAULT_ITEM_LABEL_PRINT_TEMPLATE_IDS,
@@ -78,7 +79,7 @@ describe('applyTraceabilityLabelPrintDefaults', () => {
   });
 
   it('migrates legacy allowedTemplateIds to itemCodePrint when applying defaults', () => {
-    const next = applyTraceabilityLabelPrintDefaults(
+    const next = applyTraceabilityLabelPrintDefaults<PlanFormWithLabelPrint>(
       { labelPrint: { allowedTemplateIds: ['custom-lbl'], showPlanDetailTraceSection: true } },
       templates,
     );

@@ -1,39 +1,23 @@
 
 import React, { useState, useMemo, useEffect, useRef, useCallback, Suspense } from 'react';
-import { createPortal } from 'react-dom';
-import { 
-  Package, 
-  Plus, 
-  Settings2, 
-  Trash2, 
-  Save, 
+import {
+  Plus,
+  Trash2,
+  Save,
   ArrowLeft,
   X,
-  Tag,
   Check,
   FileText,
-  DollarSign,
-  ShoppingCart,
-  Maximize,
-  Palette,
   ClipboardCheck,
-  LayoutGrid,
   Boxes,
-  Zap,
-  Hash,
   Search,
-  Settings,
-  ArrowRight,
-  GripVertical,
   ImagePlus,
-  Image as ImageIcon,
   Download,
-  Upload,
   ListChecks,
   BookOpen,
   Lock,
 } from 'lucide-react';
-import { Product, GlobalNodeTemplate, ProductCategory, PartnerCategory, BOM, BOMItem, AppDictionaries, ProductVariant, DictionaryItem, Partner, ProductionLinkMode, ProductionOrder } from '../../types';
+import { Product, GlobalNodeTemplate, ProductCategory, PartnerCategory, BOM, BOMItem, AppDictionaries, ProductVariant, Partner, ProductionLinkMode, ProductionOrder } from '../../types';
 import { sortVariantsByColorThenSize } from '../../utils/sortVariantsByProduct';
 import BomVariantMatrix from '../../components/product/BomVariantMatrix';
 import { VariantNodeWeightSettingTrigger } from './VariantNodeWeightSection';
@@ -54,33 +38,21 @@ import { useConfirm } from '../../contexts/ConfirmContext';
 import { isProductProcessLocked, milestoneNodeIdsEqual } from '../../shared/productProcessLock';
 import { isProductEnabled } from '../../utils/productEnabled';
 import * as api from '../../services/api';
-import { compressImageFile, readFileAsDataUrl } from '../../utils/compressImageFile';
-import { SearchableProductSelect } from '../../components/SearchableProductSelect';
-import { SupplierSelect } from '../../components/SupplierSelect';
 import { useAuthOptional } from '../../contexts/AuthContext';
 import { hasSubPermission } from '../../utils/hasSubPermission';
 import BomEditorPortal, { useBomEditorPortalState } from './BomEditorPortal';
-import ReportCustomFieldsEditor from '../../components/ReportCustomFieldsEditor';
 import { PlanFormKnowledgeInput } from '../../components/PlanFormCustomFieldControls';
 import ProductCategoryInfoFields from '../../components/product/ProductCategoryInfoFields';
+import { MediaFilePreviewOverlay } from '../../components/MediaFilePreviewOverlay';
+import { useEscapeToClose } from '../../hooks/useEscapeToClose';
 import {
-  readLastUnitByCategoryMap,
   writeLastUnitForCategory,
   resolveDefaultUnitForNewProductCategory,
 } from '../../utils/productLastUnitByCategory';
 import { resolveProductSkuForSave } from '../../utils/productSkuAutoGen';
 import { validateProductCatalogUnique } from '../../utils/productCatalogUnique';
-import { findPartnerByName } from '../../utils/partnerNormalize';
 import {
   productArchiveFormCardClass,
-  productArchiveFormCategoryPillClass,
-  productArchiveFormControlClass,
-  productArchiveFormControlIconClass,
-  productArchiveFormGridGapClass,
-  productArchiveFormLabelClass,
-  productArchiveFormPartnerTriggerClass,
-  productArchiveFormQuickAddBtnClass,
-  productArchiveFormSpecPickerClass,
   productArchiveFormStickyBarClass,
   primaryToolbarButtonClass,
   sectionTitleClass,
@@ -90,10 +62,6 @@ import { lazyWithReloadOnChunkError } from '../../utils/lazyWithReloadOnChunkErr
 const LazyProductArchiveCreateModal = lazyWithReloadOnChunkError(() => import('../../components/ProductArchiveCreateModal'));
 
 // 产品名称(sku)保存前规范化，见 utils/productSkuAutoGen.ts（选填、不自动生成）
-
-function resolveDefaultPartnerCategoryId(categories: PartnerCategory[]): string {
-  return categories.find(c => c.name.includes('供应商'))?.id ?? categories[0]?.id ?? '';
-}
 
 // localStorage 偏好读写已外迁，见 utils/productLastUnitByCategory.ts
 
@@ -145,143 +113,48 @@ function omitUnchangedProductImageUrl(
   }
 }
 
-/** 附件预览挂到 document.body，且 z-index 极高，避免产品详情页（另一路 return）未渲染或 stacking 盖住 */
-function FilePreviewPortal({
-  preview,
-  onClose,
-}: {
-  preview: { src: string; kind: 'image' | 'pdf' } | null;
-  onClose: () => void;
-}) {
-  if (!preview || typeof document === 'undefined') return null;
-  return createPortal(
-    <div
-      className="fixed inset-0 flex items-center justify-center p-8 bg-slate-900/80 backdrop-blur-sm"
-      style={{ zIndex: 2147483000 }}
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-label="附件预览"
-    >
-      <button type="button" onClick={onClose} className="absolute top-6 right-6 z-10 p-2 rounded-full bg-white/20 hover:bg-white/40 text-white transition-all">
-        <X className="w-8 h-8" />
-      </button>
-      <div className="relative z-10 w-full max-w-4xl max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
-        {preview.kind === 'image' ? (
-          <img src={preview.src} alt="预览" className="w-full h-full max-h-[85vh] object-contain" />
-        ) : (
-          <iframe src={preview.src} title="PDF 预览" className="w-full h-[85vh] border-0" />
-        )}
-      </div>
-    </div>,
-    document.body
-  );
+/**
+ * 已落库产品保存时去掉未变更的大 JSON 字段：
+ * routeReportValues / routeReportDisplayValues / categoryCustomData 内的 file 值是
+ * data URL，改名改价也整包重传代价很高；后端未收到键即保持原值。
+ */
+function omitUnchangedProductJsonFields(
+  payload: {
+    routeReportValues?: unknown;
+    routeReportDisplayValues?: unknown;
+    categoryCustomData?: unknown;
+  },
+  initial: Product,
+  isPersisted: boolean,
+): void {
+  if (!isPersisted) return;
+  const same = (a: unknown, b: unknown) =>
+    JSON.stringify(a ?? {}) === JSON.stringify(b ?? {});
+  if (
+    'routeReportValues' in payload
+    && same(
+      normalizeRouteReportValuesFromApi(payload.routeReportValues),
+      normalizeRouteReportValuesFromApi(initial.routeReportValues),
+    )
+  ) {
+    delete payload.routeReportValues;
+  }
+  if (
+    'routeReportDisplayValues' in payload
+    && same(
+      normalizeRouteReportValuesFromApi(payload.routeReportDisplayValues),
+      normalizeRouteReportValuesFromApi(initial.routeReportDisplayValues),
+    )
+  ) {
+    delete payload.routeReportDisplayValues;
+  }
+  if (
+    'categoryCustomData' in payload
+    && same(payload.categoryCustomData, initial.categoryCustomData)
+  ) {
+    delete payload.categoryCustomData;
+  }
 }
-
-const SpecSelectorModal = ({
-  isOpen,
-  onClose,
-  title,
-  items,
-  selectedIds,
-  onToggle,
-  onAddNew,
-  type,
-  stackZClass = 'z-[10250]',
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  title: string;
-  items: DictionaryItem[];
-  selectedIds: string[];
-  onToggle: (id: string) => void;
-  onAddNew: (name: string) => void;
-  type: 'color' | 'size';
-  /** 嵌在 ProductArchiveCreateModal（z=10800）内时需更高，否则被外壳挡住 */
-  stackZClass?: string;
-}) => {
-  const [search, setSearch] = useState('');
-  const filteredItems = items.filter(item => {
-    const q = search.trim().toLowerCase();
-    if (!q) return true;
-    return item.name.toLowerCase().includes(q) || (item.value ?? '').toLowerCase().includes(q);
-  });
-  const exactMatch = items.find(item => item.name === search.trim());
-  if (!isOpen) return null;
-
-  return (
-    <div className={`fixed inset-0 ${stackZClass} flex items-center justify-center p-4`}>
-      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose}></div>
-      <div className="relative bg-white w-full max-w-xl rounded-[40px] shadow-2xl animate-in zoom-in-95 duration-200 overflow-hidden flex flex-col max-h-[90vh]">
-        <div className="px-8 py-6 border-b border-slate-50 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <h2 className="text-xl font-bold text-slate-800">{title}</h2>
-            <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">已选择 {selectedIds.length} 项</span>
-          </div>
-          <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-full transition-all"><X className="w-5 h-5" /></button>
-        </div>
-        <div className="p-6 space-y-4 flex-1 overflow-y-auto custom-scrollbar">
-          <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 flex flex-wrap gap-2 min-h-[60px]">
-            {selectedIds.map(id => {
-              const item = items.find(i => i.id === id);
-              return (
-                <div key={id} className="bg-indigo-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2 animate-in fade-in zoom-in-50">
-                  {item?.name}
-                  <button onClick={() => onToggle(id)}><X className="w-3 h-3" /></button>
-                </div>
-              );
-            })}
-            {selectedIds.length === 0 && <span className="text-slate-300 text-xs italic m-auto">暂未选择任何规格值</span>}
-          </div>
-          <div className="flex gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input 
-                autoFocus
-                type="text" 
-                placeholder={type === 'color' ? '搜索名称或色值…' : '搜索名称或编码…'}
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className={`${productArchiveFormControlIconClass} pl-9`}
-              />
-            </div>
-            {search.trim() && !exactMatch && (
-              <button 
-                onClick={() => { onAddNew(search.trim()); setSearch(''); }}
-                className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-2xl text-xs font-bold hover:bg-black transition-all shadow-lg"
-              >
-                <Plus className="w-4 h-4" /> 新增 "{search.trim()}"
-              </button>
-            )}
-          </div>
-          <div className="grid grid-cols-1 gap-2">
-            {filteredItems.map(item => {
-              const isSelected = selectedIds.includes(item.id);
-              return (
-                <button 
-                  key={item.id}
-                  onClick={() => onToggle(item.id)}
-                  className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all group ${
-                    isSelected ? 'border-indigo-600 bg-indigo-50 text-indigo-600' : 'border-slate-50 bg-white hover:border-slate-200 text-slate-600'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    {type === 'color' && <div className="w-4 h-4 rounded-full border border-slate-200" style={{backgroundColor: item.value}}></div>}
-                    <span className="text-sm font-bold">{item.name}</span>
-                  </div>
-                  {isSelected && <Check className="w-5 h-5 text-indigo-600" />}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        <div className="p-8 bg-slate-50/50 border-t border-slate-50">
-          <button onClick={onClose} className="w-full py-4 bg-indigo-600 text-white rounded-[20px] font-black text-sm shadow-xl shadow-indigo-100 hover:bg-indigo-700 active:scale-[0.98] transition-all">确认选择 ({selectedIds.length})</button>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 /** BOM 弹窗内：批量勾选产品后加入多行，再逐行填用量（与单行 SearchableProductSelect 互补） */
 const BomBatchAddPanel = ({
@@ -643,19 +516,6 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
     [productionLinkMode, initialProduct.id, processLockBaseline, ordersForProcessLock],
   );
 
-  const [modalType, setModalType] = useState<'color' | 'size' | null>(null);
-  const [quickAddSpecOpen, setQuickAddSpecOpen] = useState<'color' | 'size' | null>(null);
-  const [quickAddSpecName, setQuickAddSpecName] = useState('');
-  const [quickAddSpecBusy, setQuickAddSpecBusy] = useState(false);
-  const [quickAddUnitOpen, setQuickAddUnitOpen] = useState(false);
-  const [quickAddUnitName, setQuickAddUnitName] = useState('');
-  const [quickAddUnitBusy, setQuickAddUnitBusy] = useState(false);
-  const [quickAddSupplierOpen, setQuickAddSupplierOpen] = useState(false);
-  const [quickAddSupplierName, setQuickAddSupplierName] = useState('');
-  const [quickAddSupplierCategoryId, setQuickAddSupplierCategoryId] = useState(() => resolveDefaultPartnerCategoryId(partnerCategories));
-  const [quickAddSupplierBusy, setQuickAddSupplierBusy] = useState(false);
-  /** 产品主图：拖放高亮（整块上传区） */
-  const [productImageDragOver, setProductImageDragOver] = useState(false);
   const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null);
   const [filePreview, setFilePreview] = useState<{ src: string; kind: 'image' | 'pdf' } | null>(null);
   const filePreviewRevokeRef = useRef<(() => void) | undefined>(undefined);
@@ -680,23 +540,8 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
     setFilePreview(null);
   }, []);
 
-  const applyProductImageFile = useCallback((file: File | null | undefined) => {
-    if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      toast.error('请使用图片文件（JPG、PNG、GIF 等）');
-      return;
-    }
-    void (async () => {
-      try {
-        const compressed = await compressImageFile(file);
-        const dataUrl = await readFileAsDataUrl(compressed);
-        if (!dataUrl) return;
-        setWorkingProduct(wp => ({ ...wp, imageUrl: dataUrl, imageThumb: null }));
-      } catch {
-        toast.error('图片读取失败');
-      }
-    })();
-  }, []);
+  const closeLightbox = useCallback(() => setLightboxImageUrl(null), []);
+  useEscapeToClose(!!lightboxImageUrl, closeLightbox);
 
   useEffect(() => () => {
     filePreviewRevokeRef.current?.();
@@ -714,13 +559,10 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
     setActiveNodeIdForBOM,
     workingBOM,
     setWorkingBOM,
-    bomBatchOpen,
     setBomBatchOpen,
     copyBOMDropdownOpen,
     setCopyBOMDropdownOpen,
-    copyBOMDropdownStyle,
     setCopyBOMDropdownStyle,
-    bomSaving,
     setBomSaving,
   } = bomEditorState;
   const copyBOMTriggerRef = useRef<HTMLButtonElement>(null);
@@ -748,15 +590,6 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
   }, [copyBOMDropdownOpen]);
 
   const activeCategory = categories.find(c => c.id === workingProduct.categoryId);
-  const canQuickAddSupplier = useMemo(() => {
-    const tctx = auth?.tenantCtx;
-    if (!tctx) return false;
-    if (tctx.tenantRole === 'owner') return true;
-    return (
-      hasSubPermission(tctx.permissions, 'basic:partners:view') &&
-      hasSubPermission(tctx.permissions, 'basic:partners:create')
-    );
-  }, [auth]);
 
   /** 保存成功后与「新建时选手动单位」均写入，供下次同分类新建默认带出 */
   const persistLastUnitPreference = useCallback(
@@ -834,174 +667,6 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
     }
   }, [workingProduct?.colorIds, workingProduct?.sizeIds, activeCategory?.hasColorSize, activeCategory?.id]);
 
-  const [specRemovalCheckBusy, setSpecRemovalCheckBusy] = useState(false);
-
-  /**
-   * 取消勾选颜色/尺码即删除对应变体；已持久化的产品先查后端引用情况，
-   * 有业务数据（工单、报工、进销存等）则阻止取消。后端保存时还有同口径校验兜底。
-   */
-  const checkSpecRemovalAllowed = async (type: 'color' | 'size', id: string): Promise<boolean> => {
-    if (!isPersistedProduct || !workingProduct) return true;
-    const affectedIds = workingProduct.variants
-      .filter(v => (type === 'color' ? v.colorId === id : v.sizeId === id))
-      .map(v => v.id);
-    if (affectedIds.length === 0) return true;
-    try {
-      const res = await api.products.variantUsage(workingProduct.id, affectedIds);
-      const blocked = res.usages.filter(u => u.total > 0);
-      if (blocked.length === 0) return true;
-      const specName = (type === 'color' ? dictionaries.colors : dictionaries.sizes).find(i => i.id === id)?.name ?? '';
-      const detail = blocked
-        .map(u => `规格【${u.variantLabel}】有 ${u.details.map(d => `${d.count} 条${d.label}`).join('、')}`)
-        .join('；');
-      toast.error(`${type === 'color' ? '颜色' : '尺码'}【${specName}】已产生业务数据，无法删除：${detail}`);
-      return false;
-    } catch {
-      // 预检接口异常时放行，由后端保存时的引用校验兜底
-      return true;
-    }
-  };
-
-  const toggleAttribute = async (type: 'color' | 'size', id: string) => {
-    if (!workingProduct) return;
-    const key = type === 'color' ? 'colorIds' : 'sizeIds';
-    if (workingProduct[key].includes(id)) {
-      if (specRemovalCheckBusy) return;
-      setSpecRemovalCheckBusy(true);
-      try {
-        const allowed = await checkSpecRemovalAllowed(type, id);
-        if (!allowed) return;
-      } finally {
-        setSpecRemovalCheckBusy(false);
-      }
-      setWorkingProduct(wp => ({ ...wp, [key]: wp[key].filter(x => x !== id) }));
-    } else {
-      setWorkingProduct(wp => (wp[key].includes(id) ? wp : { ...wp, [key]: [...wp[key], id] }));
-    }
-  };
-
-  const handleAddNewSpec = async (type: 'colors' | 'sizes', name: string): Promise<boolean> => {
-    try {
-      const dictType = type === 'colors' ? 'color' : 'size';
-      const created = await api.dictionaries.create({ type: dictType, name, value: type === 'colors' ? '#ccc' : name }) as DictionaryItem;
-      await onRefreshDictionaries();
-      const key = type === 'colors' ? 'colorIds' : 'sizeIds';
-      setWorkingProduct(wp => ({ ...wp, [key]: [...wp[key], created.id] }));
-      return true;
-    } catch (err: any) {
-      toast.error(err.message || '操作失败');
-      return false;
-    }
-  };
-
-  const submitQuickAddSpec = async () => {
-    const kind = quickAddSpecOpen;
-    if (!kind) return;
-    const name = quickAddSpecName.trim();
-    if (!name) {
-      toast.error(kind === 'color' ? '请输入颜色名称' : '请输入尺码名称');
-      return;
-    }
-    const items = kind === 'color' ? dictionaries.colors : dictionaries.sizes;
-    const existing = items.find(i => i.name === name);
-    if (existing) {
-      const key = kind === 'color' ? 'colorIds' : 'sizeIds';
-      if (workingProduct[key].includes(existing.id)) {
-        toast.info(kind === 'color' ? '该颜色已在已选列表中' : '该尺码已在已选列表中');
-      } else {
-        setWorkingProduct({ ...workingProduct, [key]: [...workingProduct[key], existing.id] });
-        toast.info(kind === 'color' ? '该颜色已存在，已加入已选' : '该尺码已存在，已加入已选');
-      }
-      setQuickAddSpecOpen(null);
-      setQuickAddSpecName('');
-      return;
-    }
-    if (quickAddSpecBusy) return;
-    setQuickAddSpecBusy(true);
-    try {
-      const ok = await handleAddNewSpec(kind === 'color' ? 'colors' : 'sizes', name);
-      if (ok) {
-        toast.success(kind === 'color' ? '已添加颜色' : '已添加尺码');
-        setQuickAddSpecOpen(null);
-        setQuickAddSpecName('');
-      }
-    } finally {
-      setQuickAddSpecBusy(false);
-    }
-  };
-
-  const submitQuickAddUnit = async () => {
-    const name = quickAddUnitName.trim();
-    if (!name) {
-      toast.error('请输入单位名称');
-      return;
-    }
-    const units = dictionaries.units ?? [];
-    const existing = units.find(u => u.name === name);
-    if (existing) {
-      setWorkingProduct({ ...workingProduct, unitId: existing.id });
-      if (!isPersistedProduct) {
-        persistLastUnitPreference(workingProduct.categoryId, existing.id);
-      }
-      toast.info('该单位已存在，已为您选中');
-      setQuickAddUnitOpen(false);
-      setQuickAddUnitName('');
-      return;
-    }
-    if (quickAddUnitBusy) return;
-    setQuickAddUnitBusy(true);
-    try {
-      const created = await api.dictionaries.create({ type: 'unit', name, value: name }) as DictionaryItem;
-      await onRefreshDictionaries();
-      setWorkingProduct({ ...workingProduct, unitId: created.id });
-      if (!isPersistedProduct) {
-        persistLastUnitPreference(workingProduct.categoryId, created.id);
-      }
-      toast.success('已添加产品单位');
-      setQuickAddUnitOpen(false);
-      setQuickAddUnitName('');
-    } catch (err: any) {
-      toast.error(err.message || '添加失败');
-    } finally {
-      setQuickAddUnitBusy(false);
-    }
-  };
-
-  const submitQuickAddSupplier = async () => {
-    const name = quickAddSupplierName.trim();
-    if (!name) {
-      toast.error('请输入供应商名称');
-      return;
-    }
-    const existing = findPartnerByName(partners, name);
-    if (existing) {
-      setWorkingProduct(wp => ({ ...wp, supplierId: existing.id }));
-      toast.info('该供应商已存在，已为您选中');
-      setQuickAddSupplierOpen(false);
-      setQuickAddSupplierName('');
-      return;
-    }
-    if (quickAddSupplierBusy) return;
-    setQuickAddSupplierBusy(true);
-    try {
-      const created = await api.partners.create({
-        name,
-        categoryId: quickAddSupplierCategoryId || undefined,
-        contact: '',
-        customData: {},
-      }) as Partner;
-      await onRefreshPartners();
-      setWorkingProduct(wp => ({ ...wp, supplierId: created.id }));
-      toast.success('已添加供应商');
-      setQuickAddSupplierOpen(false);
-      setQuickAddSupplierName('');
-    } catch (err: any) {
-      toast.error(err.message || '添加失败');
-    } finally {
-      setQuickAddSupplierBusy(false);
-    }
-  };
-
   const validateProductForSave = (p: Product, catalog: Product[]): boolean => {
     const name = (p.name ?? '').trim();
     const sku = (p.sku ?? '').trim();
@@ -1070,6 +735,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
         initialThumb: initialProduct.imageThumb ?? '',
         initialFull: initialProduct.imageUrl ?? '',
       });
+      omitUnchangedProductJsonFields(payload, initialProduct, isPersistedProduct);
       const saved = await onUpdateProduct(payload);
       if (saved) {
         persistLastUnitPreference(saved.categoryId, saved.unitId);
@@ -1200,6 +866,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
         initialThumb: initialProduct.imageThumb ?? '',
         initialFull: initialProduct.imageUrl ?? '',
       });
+      omitUnchangedProductJsonFields(bomProductPayload, initialProduct, isPersistedProduct);
       const savedProduct = await onUpdateProduct(bomProductPayload);
       if (!savedProduct) return;
       persistLastUnitPreference(savedProduct.categoryId, savedProduct.unitId);
@@ -1658,15 +1325,15 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
         )}
         {/* 图片放大弹窗 */}
         {lightboxImageUrl && (
-          <div className={`fixed inset-0 ${embeddedInQuickCreateModal ? nestedOverlayZ : 'z-[110]'} flex items-center justify-center p-8`} onClick={() => setLightboxImageUrl(null)}>
+          <div className={`fixed inset-0 ${embeddedInQuickCreateModal ? nestedOverlayZ : 'z-[110]'} flex items-center justify-center p-8`} onClick={closeLightbox}>
             <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" />
-            <button onClick={() => setLightboxImageUrl(null)} className="absolute top-6 right-6 z-10 p-2 rounded-full bg-white/20 hover:bg-white/40 text-white transition-all">
+            <button onClick={closeLightbox} className="absolute top-6 right-6 z-10 p-2 rounded-full bg-white/20 hover:bg-white/40 text-white transition-all">
               <X className="w-8 h-8" />
             </button>
             <img src={lightboxImageUrl} alt="产品图片" className="relative z-10 max-w-full max-h-[90vh] object-contain rounded-2xl shadow-2xl" onClick={(e) => e.stopPropagation()} />
           </div>
         )}
-        <FilePreviewPortal preview={filePreview} onClose={closeFilePreview} />
+        <MediaFilePreviewOverlay preview={filePreview} onClose={closeFilePreview} />
       </div>
     );
 

@@ -17,7 +17,7 @@ import { TextStyle } from '@tiptap/extension-text-style';
 import Color from '@tiptap/extension-color';
 import { common, createLowlight } from 'lowlight';
 import { toast } from 'sonner';
-import { Loader2, X } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { isAllowedKnowledgeExternalUrl } from '../../shared/knowledgeLinkUrl';
 import { useMasterData } from '../../contexts/AppDataContext';
 import EditorInsertHandle from './EditorInsertHandle';
@@ -51,7 +51,7 @@ import { shouldApplyRemoteContentHydrate } from '../../utils/knowledgeEditorHydr
 import { useKnowledgeDocOutline } from '../../hooks/useKnowledgeDocOutline';
 import KnowledgeDocOutline from './KnowledgeDocOutline';
 import PlanProductDetail from '../plan-order-list/PlanProductDetail';
-import { ModalPortal } from '../../components/ModalPortal';
+import { MediaFilePreviewOverlay } from '../../components/MediaFilePreviewOverlay';
 import './knowledge-editor.css';
 
 const lowlight = createLowlight(common);
@@ -285,7 +285,8 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
     }
     titleRef.current = title;
     if (remoteContent !== current) {
-      editor.commands.setContent(remoteContent, false);
+      // TipTap v3：第二参为 SetContentOptions；旧写法 `false` 会被忽略导致误发 update 事件
+      editor.commands.setContent(remoteContent, { emitUpdate: false });
     }
     lastSavedRef.current = { title: titleRef.current, content: editor.getHTML() };
     hydratingRef.current = false;
@@ -593,31 +594,10 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
       )}
 
       {filePreview && (
-        <ModalPortal>
-        <div
-          className="fixed inset-0 z-[12100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/80 backdrop-blur-sm"
-          onClick={() => setFilePreview(null)}
-        >
-          <button
-            type="button"
-            onClick={() => setFilePreview(null)}
-            className="absolute top-6 right-6 z-10 p-2 rounded-full bg-white/20 hover:bg-white/40 text-white transition-all"
-            aria-label="关闭"
-          >
-            <X className="w-8 h-8" />
-          </button>
-          <div
-            className="relative z-10 w-full max-w-4xl max-h-[min(92vh,960px)] bg-white rounded-2xl shadow-2xl overflow-hidden"
-            onClick={e => e.stopPropagation()}
-          >
-            {filePreview.type === 'image' ? (
-              <img src={filePreview.url} alt="预览" className="w-full h-full max-h-[85vh] object-contain" />
-            ) : (
-              <iframe src={filePreview.url} title="PDF 预览" className="w-full h-[85vh] border-0" />
-            )}
-          </div>
-        </div>
-        </ModalPortal>
+        <MediaFilePreviewOverlay
+          preview={{ src: filePreview.url, kind: filePreview.type }}
+          onClose={() => setFilePreview(null)}
+        />
       )}
 
       <KnowledgeImagePreviewOverlay

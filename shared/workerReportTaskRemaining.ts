@@ -69,9 +69,11 @@ function getSeqRemainingForVariant(
 ): number {
   const items = order.items || [];
   const milestones = order.milestones || [];
+  // 单条明细仅在未带规格（历史工单未按规格拆分）时才回退共用总量；
+  // 明细已带规格时不能挪给其它规格，否则单规格下单会让全部颜色都显示可报总量。
   const item =
     items.find((i) => (i.variantId || '') === variantId) ??
-    (items.length === 1 ? items[0] : undefined);
+    (items.length === 1 && !items[0].variantId ? items[0] : undefined);
 
   const templateIdPath = milestones.map((m) => m.templateId);
   const tplIndex = milestones.findIndex((m) => m.templateId === milestoneTemplateId);

@@ -87,6 +87,16 @@ import ProductImageLightbox, {
 import { useAppActions } from '../contexts/AppDataContext';
 import { useRefreshReportScopeWhileActive } from '../hooks/useRefreshReportScopeWhileActive';
 import { ModalPortal } from '../components/ModalPortal';
+import { PdfPreviewViewer } from '../components/PdfPreviewViewer';
+import { PROCESS_LOCK_ORDER_STATUS_EXEMPT } from '../shared/productProcessLock';
+
+/**
+ * 「待配工序」是后端真实存在的工单状态（见 shared/productProcessLock.ts、
+ * backend products.service.ts），但 OrderStatus 枚举（shared/types.ts）未收录，
+ * 直接 === 比较会报 TS2367；枚举本次不可改，此处放宽为 string 比较。
+ */
+const isPendingProcessOrderStatus = (status: string): boolean =>
+  status === PROCESS_LOCK_ORDER_STATUS_EXEMPT;
 
 interface OrderListViewProps {
   productionLinkMode?: 'order' | 'product';
@@ -910,7 +920,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                  */
                 const productHasMilestoneTemplate = (product?.milestoneNodeIds?.length ?? 0) > 0;
                 const showConfigureProcessHint =
-                  order.status === 'PENDING_PROCESS' ||
+                  isPendingProcessOrderStatus(order.status) ||
                   (product != null && !productHasMilestoneTemplate);
                 const cardClass = isChild
                   ? 'bg-white px-5 py-2 rounded-2xl border border-l-4 border-l-slate-300 border-slate-200 hover:shadow-lg hover:border-slate-300 transition-all grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-3 lg:gap-4 items-center'
@@ -1260,7 +1270,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                 const pgProductHasMilestoneTemplate = (product?.milestoneNodeIds?.length ?? 0) > 0;
                 const pgShowConfigureProcessHint =
                   (product != null && !pgProductHasMilestoneTemplate) ||
-                  block.orders.some(o => o.status === 'PENDING_PROCESS');
+                  block.orders.some(o => isPendingProcessOrderStatus(o.status));
                 const pgHasMilestoneStrip = Array.from(byTemplate.entries()).length > 0;
                 return (
                   <div key={`productGroup-${block.productId}`}>
@@ -1773,8 +1783,20 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
           onUpdateReportProduct={onUpdateReportProduct}
           onDeleteReportProduct={onDeleteReportProduct}
           onUpdateProduct={onUpdateProduct}
-          onReportSubmit={onReportSubmit}
-          onReportSubmitProduct={onReportSubmitProduct}
+          onReportSubmit={
+            onReportSubmit
+              ? async (oId, mId, qty, data, vId, workerId, defectiveQty, equipmentId, reportBatchId, reportNo) => {
+                  onReportSubmit(oId, mId, qty, data, vId, workerId, defectiveQty, equipmentId, reportBatchId, reportNo);
+                }
+              : undefined
+          }
+          onReportSubmitProduct={
+            onReportSubmitProduct
+              ? async (pId, tplId, qty, data, vId, workerId, defectiveQty, equipmentId, reportBatchId, reportNo) => {
+                  onReportSubmitProduct(pId, tplId, qty, data, vId, workerId, defectiveQty, equipmentId, reportBatchId, reportNo);
+                }
+              : undefined
+          }
           hasOrderPerm={hasOrderPerm}
           partners={partners}
           partnerCategories={partnerCategories}
@@ -1878,7 +1900,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
             {filePreviewType === 'image' ? (
               <img src={filePreviewUrl} alt="预览" className="w-full h-full max-h-[85vh] object-contain" />
             ) : (
-              <iframe src={filePreviewUrl} title="PDF 预览" className="w-full h-[85vh] border-0" />
+              <PdfPreviewViewer src={filePreviewUrl} />
             )}
           </div>
         </div>
@@ -1925,7 +1947,10 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
           dictionaries={dictionaries}
           prodRecords={effectiveProdRecords}
           productMilestoneProgresses={productMilestoneProgresses}
-          reworkRemainingAtNode={reworkRemainingAtNode}
+          reworkRemainingAtNode={(r, nodeId) =>
+            // 原先直接传 4 参工具函数，弹窗按 2 参调用导致 processSequenceMode 为 undefined、顺序模式被当自由模式（真 bug）；补齐组件内的模式参数
+            reworkRemainingAtNode(r, nodeId, processSequenceMode, outOfSequenceTemplateIds)
+          }
         />
       )}
 

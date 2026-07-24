@@ -58,7 +58,7 @@ const PlanFormConfigModal: React.FC<PlanFormConfigModalProps> = ({
   }, [traceEnabled]);
 
   return (
-  <BusinessFormConfigModal
+  <BusinessFormConfigModal<PlanFormSettings>
     open={open}
     onClose={onClose}
     defaultTabId={defaultTabWhenOpen}

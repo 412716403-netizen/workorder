@@ -191,7 +191,7 @@ const KnowledgeBaseView: React.FC = () => {
     const ok = await confirm({
       title: '删除文件夹',
       message: `确定删除「${folder.name}」？`,
-      confirmLabel: '删除',
+      confirmText: '删除',
       danger: true,
     });
     if (!ok) return;
@@ -233,7 +233,7 @@ const KnowledgeBaseView: React.FC = () => {
     const ok = await confirm({
       title: '删除文档',
       message: `确定删除「${doc.title}」？`,
-      confirmLabel: '删除',
+      confirmText: '删除',
       danger: true,
     });
     if (!ok) return;

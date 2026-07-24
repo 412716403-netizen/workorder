@@ -486,7 +486,8 @@ function FinanceDetailModal({
                   {financeRec.workerId && <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">关联工人</span><p className="text-sm font-bold text-slate-800 mt-0.5">{workerMap.get(financeRec.workerId)?.name ?? financeRec.workerId}</p></div>}
                   {financeRec.relatedId && <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">关联工单</span><p className="text-sm font-bold text-slate-800 mt-0.5">{financeRec.relatedId}</p></div>}
                   {financeRec.paymentAccount && <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">收支账户</span><p className="text-sm font-bold text-slate-800 mt-0.5">{financeRec.paymentAccount}</p></div>}
-                  <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">业务金额</span><p className={`text-sm font-black mt-0.5 ${financeRec.type === 'RECEIPT' ? 'text-emerald-600' : 'text-slate-800'}`}>¥ {financeRec.amount.toLocaleString()}</p></div>
+                  <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">业务金额</span>{/* 此分支 type 已收窄为 RECONCILIATION | SETTLEMENT（RECEIPT/PAYMENT 走上方 Summary 分支），原 === 'RECEIPT' 判断恒为 false，为死代码 */}
+                  <p className="text-sm font-black mt-0.5 text-slate-800">¥ {financeRec.amount.toLocaleString()}</p></div>
                   <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">经办人</span><p className="text-sm font-bold text-slate-800 mt-0.5">{financeRec.operator}</p></div>
                 </div>
                 {(financeRec.note != null && financeRec.note !== '') && <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">备注</span><p className="text-sm text-slate-600 mt-0.5 whitespace-pre-wrap">{financeRec.note}</p></div>}

@@ -101,6 +101,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 import DocEntryTimeField from '../../components/DocEntryTimeField';
 import { ModalPortal } from '../../components/ModalPortal';
+import { PdfPreviewViewer } from '../../components/PdfPreviewViewer';
 import { defaultEntryDatetimeLocal, entryDatetimeLocalToTimestamp } from '../../utils/docEntryTime';
 import { buildOutsourceDispatchCollabSnapshot, outsourceCustomCollabPart } from '../../utils/productionOpCollab/outsource';
 import OutsourceFormConfigModal from './OutsourceFormConfigModal';
@@ -415,7 +416,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
       });
       const rows: { orderId?: string; orderNumber?: string; productId: string; productName: string; nodeId: string; milestoneName: string; orderTotalQty: number; reportedQty: number; dispatchedQty: number; availableQty: number }[] = [];
       const getDr = (oid: string, tid: string) =>
-        defectiveReworkByOrderForOutsource.get(`${oid}|${tid}`) ?? { defective: 0, rework: 0 };
+        defectiveReworkByOrderForOutsource.get(`${oid}|${tid}`) ?? { defective: 0, rework: 0, reworkByVariant: {} };
       const { productsById, ordersByProductId, nodesById, pmpByKey } = idx;
       for (const product of products) {
         const productId = String(product.id);
@@ -805,7 +806,8 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
     }
     if (onlyShowIncompleteOrders) {
       base = base.filter(item => {
-        if (!('orderId' in item) || item.orderId == null) return true;
+        // 联合类型经 `in` 收窄后 orderId 为 unknown，需显式确认是 string
+        if (!('orderId' in item) || typeof item.orderId !== 'string') return true;
         const order = idx.ordersById.get(item.orderId);
         return order ? shouldShowOrderInIncompleteListFilter(order, true) : true;
       });
@@ -822,7 +824,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
         const p = idx.productsById.get(pid);
         parts.push(p?.sku ?? '', p?.name ?? '');
       }
-      if (!isProductMode && 'orderId' in item && item.orderId) {
+      if (!isProductMode && 'orderId' in item && typeof item.orderId === 'string' && item.orderId) {
         const ord = idx.ordersById.get(item.orderId);
         parts.push(ord?.customer ?? '', ord?.productName ?? '', ord?.sku ?? '');
       }
@@ -1374,8 +1376,9 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
                 const pagedStats = displayOutsourceStats.slice((outsPage - 1) * OUTS_PAGE_SIZE, outsPage * OUTS_PAGE_SIZE);
                 return (<>
               {pagedStats.map((item) => {
-                const orderId = 'orderId' in item ? item.orderId : undefined;
-                const orderNumber = 'orderNumber' in item ? item.orderNumber : undefined;
+                // 联合类型经 `in` 收窄后为 unknown，需显式确认是 string
+                const orderId = 'orderId' in item && typeof item.orderId === 'string' ? item.orderId : undefined;
+                const orderNumber = 'orderNumber' in item && typeof item.orderNumber === 'string' ? item.orderNumber : undefined;
                 const productId = 'productId' in item ? item.productId : (item as { productId: string }).productId;
                 const productName = item.productName;
                 const ptnrs = item.partners;
@@ -1852,7 +1855,13 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
               userPermissions={userPermissions}
               tenantRole={tenantRole}
               onAddRecord={onAddRecord}
-              onAddRecordBatch={onAddRecordBatch}
+              onAddRecordBatch={
+                onAddRecordBatch
+                  ? async batch => {
+                      await onAddRecordBatch(batch);
+                    }
+                  : undefined
+              }
               onUpdateRecord={onUpdateRecord}
               onDeleteRecord={onDeleteRecord}
               onDeleteRecordBatch={onDeleteRecordBatch}
@@ -1960,7 +1969,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
             {filePreviewType === 'image' ? (
               <img src={filePreviewUrl} alt="预览" className="w-full h-full max-h-[85vh] object-contain" />
             ) : (
-              <iframe src={filePreviewUrl} title="PDF 预览" className="w-full h-[85vh] border-0" />
+              <PdfPreviewViewer src={filePreviewUrl} />
             )}
           </div>
         </div>

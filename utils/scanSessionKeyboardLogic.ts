@@ -8,11 +8,17 @@ export interface ScanSessionKeyboardBuffers {
   scanBurstActive: boolean;
 }
 
-export const DEFAULT_SCAN_SESSION_KEYBOARD_CONFIG = {
+export interface ScanSessionKeyboardConfig {
+  minScanLength: number;
+  fastIntervalMs: number;
+  weightIdleMs: number;
+}
+
+export const DEFAULT_SCAN_SESSION_KEYBOARD_CONFIG: Readonly<ScanSessionKeyboardConfig> = {
   minScanLength: 6,
   fastIntervalMs: 35,
   weightIdleMs: 280,
-} as const;
+};
 
 export type ScanSessionKeyOutcome =
   | { kind: 'ignore' }
@@ -84,7 +90,7 @@ function tryWeightFromBuffers(buffers: ScanSessionKeyboardBuffers): number | nul
  */
 export function handleScanSessionEnter(
   buffers: ScanSessionKeyboardBuffers,
-  config: typeof DEFAULT_SCAN_SESSION_KEYBOARD_CONFIG = DEFAULT_SCAN_SESSION_KEYBOARD_CONFIG,
+  config: Readonly<ScanSessionKeyboardConfig> = DEFAULT_SCAN_SESSION_KEYBOARD_CONFIG,
 ): ScanSessionKeyOutcome[] {
   const { scanBuffer, scaleBuffer, scanBurstActive } = buffers;
   const outcomes: ScanSessionKeyOutcome[] = [];
@@ -137,7 +143,7 @@ export function handleScanSessionPrintableChar(
   buffers: ScanSessionKeyboardBuffers,
   ch: string,
   nowMs: number,
-  config: typeof DEFAULT_SCAN_SESSION_KEYBOARD_CONFIG = DEFAULT_SCAN_SESSION_KEYBOARD_CONFIG,
+  config: Readonly<ScanSessionKeyboardConfig> = DEFAULT_SCAN_SESSION_KEYBOARD_CONFIG,
 ): ScanSessionKeyOutcome[] {
   const outcomes: ScanSessionKeyOutcome[] = [];
   let { scanBuffer, scaleBuffer, lastKeyTimeMs, scanBurstActive } = buffers;

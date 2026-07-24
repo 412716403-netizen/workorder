@@ -23,6 +23,9 @@ import {
 } from '../../utils/amountPermissionKeys';
 import { ModalPortal } from '../../components/ModalPortal';
 
+/** 常量是字面量联合的 as const 数组，`includes(p: string)` 需要 string[]；只读向上转型（零运行时影响） */
+const AMOUNT_FINE_GRAINED_PERM_KEY_LIST: readonly string[] = AMOUNT_FINE_GRAINED_PERM_KEYS;
+
 interface RoleEditModalProps {
   editingRole: RoleRow | null;
   onClose: () => void;
@@ -513,7 +516,7 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
     const hasAll = allKeys.every(k => rolePerms.includes(k));
     setRolePerms(prev => {
       if (hasAll) {
-        return prev.filter(p => !AMOUNT_FINE_GRAINED_PERM_KEYS.includes(p));
+        return prev.filter(p => !AMOUNT_FINE_GRAINED_PERM_KEY_LIST.includes(p));
       }
       const next = new Set(prev);
       for (const sm of PRICE_AMOUNT_SUB_MODULES) {
@@ -528,7 +531,7 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
 
   function togglePriceAmountGroupAll(group: string) {
     const items = PRICE_AMOUNT_SUB_MODULES.filter(sm => sm.group === group);
-    const keys = items.map(sm => sm.permKey);
+    const keys: string[] = items.map(sm => sm.permKey);
     const hasAll = keys.every(k => rolePerms.includes(k));
     setRolePerms(prev => {
       const without = prev.filter(p => !keys.includes(p));
@@ -588,7 +591,7 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
           return prev.filter(p => p !== modId && !p.startsWith('knowledge_base:'));
         }
         if (modId === 'price_amount') {
-          return prev.filter(p => p !== modId && !AMOUNT_FINE_GRAINED_PERM_KEYS.includes(p));
+          return prev.filter(p => p !== modId && !AMOUNT_FINE_GRAINED_PERM_KEY_LIST.includes(p));
         }
         return prev.filter(p => p !== modId);
       }

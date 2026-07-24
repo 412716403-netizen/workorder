@@ -426,7 +426,8 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
           (pg.partnerLabel || '').toLowerCase().includes(materialKw) ||
           (pg.partnerKey !== '__internal__' && (pg.partnerKey || '').toLowerCase().includes(materialKw));
         if (partnerHit) {
-          if (!onlyShowIncompleteOrders || productionLinkMode === 'product') return pg;
+          // onlyShowIncompleteOrders 为 true 时必然处于 order 模式（见其定义），无需再判 product
+          if (!onlyShowIncompleteOrders) return pg;
           const next = new Map<string, MatRow[]>();
           for (const [scopeKey, materials] of pg.data.entries()) {
             const order = idx.ordersById.get(scopeKey);

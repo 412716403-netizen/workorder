@@ -116,7 +116,11 @@ function validateProductForSave(product, catalog, category) {
   return null;
 }
 
-function buildProductSavePayload(product) {
+/**
+ * @param {object} [original] 编辑前详情；提供时省略未变更的大字段
+ *（imageUrl / routeReport* / categoryCustomData 内嵌 data URL，反复上传代价高；后端未收到键即保持原值）
+ */
+function buildProductSavePayload(product, original) {
   const resolved = {
     ...product,
     name: String(product.name || '').trim(),
@@ -130,6 +134,25 @@ function buildProductSavePayload(product) {
   delete payload.processLocked;
   delete payload.category;
   delete payload.boms;
+  // imageThumb 由服务端生成，客户端不回传
+  delete payload.imageThumb;
+  if (original) {
+    const same = (a, b) => JSON.stringify(a == null ? {} : a) === JSON.stringify(b == null ? {} : b);
+    if (String(payload.imageUrl || '').trim() === String(original.imageUrl || '').trim()) {
+      delete payload.imageUrl;
+    }
+    if (
+      same(payload.routeReportValues, normalizeRouteReportValuesFromApi(original.routeReportValues))
+    ) {
+      delete payload.routeReportValues;
+    }
+    if (same(payload.routeReportDisplayValues, original.routeReportDisplayValues || {})) {
+      delete payload.routeReportDisplayValues;
+    }
+    if (same(payload.categoryCustomData, original.categoryCustomData)) {
+      delete payload.categoryCustomData;
+    }
+  }
   return payload;
 }
 
@@ -149,12 +172,12 @@ function buildUnitPickerOptions(units, selectedId) {
   }));
 }
 
-function prepareProductForSave(product, catalog, category) {
+function prepareProductForSave(product, catalog, category, original) {
   let resolved = resolveProductSkuForSave(product, catalog);
   resolved = syncVariantsIfNeeded(resolved, category, { colors: [], sizes: [] });
   const err = validateProductForSave(resolved, catalog, category);
   if (err) return { error: err };
-  const payload = buildProductSavePayload(resolved);
+  const payload = buildProductSavePayload(resolved, original);
   return { product: resolved, payload };
 }
 

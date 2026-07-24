@@ -70,15 +70,24 @@ function validateDevStyleForSave(style, category) {
   return null;
 }
 
-function buildDevStyleSavePayload(style, partnerName) {
+/**
+ * @param {object} [opts]
+ * @param {string} [opts.originalImageUrl] 编辑前主图；与当前一致时省略 imageUrl（避免大 data URL 反复上传）
+ */
+function buildDevStyleSavePayload(style, partnerName, opts) {
   const syncedCustomer =
     partnerName ||
     (style.customerName ? String(style.customerName).trim() : undefined);
+  const nextImage = String(style.imageUrl || '').trim();
+  const imageUnchanged =
+    opts &&
+    typeof opts.originalImageUrl === 'string' &&
+    nextImage === String(opts.originalImageUrl || '').trim();
   return {
     code: String(style.code || '').trim(),
     name: String(style.name || '').trim(),
     categoryId: style.categoryId || undefined,
-    imageUrl: style.imageUrl || undefined,
+    imageUrl: imageUnchanged ? undefined : style.imageUrl || undefined,
     colorIds: style.colorIds || [],
     sizeIds: style.sizeIds || [],
     milestoneNodeIds: style.milestoneNodeIds || [],

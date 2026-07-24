@@ -107,7 +107,7 @@ export function buildPurchaseBillPrintContextFromPsiDoc(params: {
   dictionaries: AppDictionaries;
 }): PrintRenderContext {
   const { docNumber, docItems, productMap, warehouseMap, dictionaries } = params;
-  const main = docItems[0] ?? {};
+  const main: Partial<PsiRecord> = docItems[0] ?? {};
   const wid = main.warehouseId as string | undefined;
   const warehouseName = wid ? warehouseMap.get(wid)?.name ?? wid : '';
   const lines = buildPurchaseBillLinesFromPsiRecords(docItems);

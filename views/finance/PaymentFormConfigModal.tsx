@@ -42,7 +42,7 @@ const PaymentFormConfigModal: React.FC<Props> = ({
     [navigate],
   );
   return (
-    <BusinessFormConfigModal
+    <BusinessFormConfigModal<PaymentFormSettings>
       open={open}
       onClose={onClose}
       defaultTabId={defaultTabWhenOpen}

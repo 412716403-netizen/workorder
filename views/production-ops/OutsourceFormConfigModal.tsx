@@ -38,7 +38,7 @@ const OutsourceFormConfigModal: React.FC<OutsourceFormConfigModalProps> = ({
   orders,
   products,
 }) => (
-  <BusinessFormConfigModal
+  <BusinessFormConfigModal<OutsourceFormSettings>
     open={open}
     onClose={onClose}
     defaultTabId={defaultTabWhenOpen}

@@ -1,5 +1,8 @@
-import type { BOM, DevBomDto } from '../types';
+import type { BOM, BOMItem, DevBomDto, DevBomItemDto } from '../types';
 import { bomHasConfiguredItems } from './bomEffective';
+
+/** 开发 BOM 编辑态子项：在 BOMItem 基础上保留库中 DevBomItemDto 的 id / sortOrder，保存时回传 */
+export type DevWorkingBomItem = BOMItem & Partial<Pick<DevBomItemDto, 'id' | 'sortOrder'>>;
 
 /** 开发款式单 SKU 在 UI 中使用的虚拟变体 id */
 export function devSingleSkuVariantId(styleId: string): string {
@@ -42,7 +45,7 @@ export function workingBomToDevBom(
     variantId: isSingleSku ? undefined : wb.variantId,
     nodeId: wb.nodeId,
     name: wb.name,
-    items: wb.items.map((it) => ({
+    items: wb.items.map((it: DevWorkingBomItem) => ({
       id: it.id,
       categoryId: it.categoryId,
       productId: it.productId,

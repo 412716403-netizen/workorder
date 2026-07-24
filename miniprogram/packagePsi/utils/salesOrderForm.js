@@ -12,6 +12,7 @@ const {
   hydratePsiEntryFields,
   psiEntryTimestampsFromDatetime,
 } = require('../../utils/docEntryTime.js');
+const { localTodayYmd } = require('../../utils/dateYmd.js');
 
 function newLineId() {
   return `so-line-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

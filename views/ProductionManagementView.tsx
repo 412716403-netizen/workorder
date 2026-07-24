@@ -339,7 +339,9 @@ const ProductionManagementView: React.FC = () => {
             onDeleteReport={onDeleteReport}
             onUpdateProduct={onUpdateProduct}
             onAddRecord={onAddRecord}
-            onAddRecordBatch={onAddRecordBatch}
+            onAddRecordBatch={async (records) => {
+              await onAddRecordBatch(records);
+            }}
             onUpdateRecord={onUpdateRecord}
             onDeleteRecord={onDeleteRecord}
             productMilestoneProgresses={productMilestoneProgresses}
@@ -365,7 +367,9 @@ const ProductionManagementView: React.FC = () => {
             boms={boms}
             dictionaries={dictionaries}
             onAddRecord={onAddRecord}
-            onAddRecordBatch={onAddRecordBatch}
+            onAddRecordBatch={async (records) => {
+              await onAddRecordBatch(records);
+            }}
             onUpdateRecord={onUpdateRecord}
             onDeleteRecord={onDeleteRecord}
             onDeleteRecordBatch={onDeleteRecordBatch}

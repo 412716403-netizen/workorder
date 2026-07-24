@@ -5,6 +5,7 @@ import type {
 } from '../../types';
 import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
 import { toLocalDateYmd, formatCustomFieldDatetimeForPrint } from '../../utils/localDateTime';
+import { aggregatePurchaseBillRelatedProductListText } from '../../utils/purchaseBillRelatedProductPrint';
 
 /**
  * PSI 列表显示层纯函数与默认常量
@@ -51,7 +52,8 @@ export type PsiDocListMainRow = {
   customData?: Record<string, unknown>;
 };
 
-export { aggregatePurchaseBillRelatedProductListText } from '../../utils/purchaseBillRelatedProductPrint';
+// re-export 不会在本模块作用域引入名字，本文件函数体内也要用到，故上方以 import 引入后再导出（原写法会导致运行时 ReferenceError）
+export { aggregatePurchaseBillRelatedProductListText };
 
 /** 采购订单标准字段在列表中的显示文案（按 fieldId 分派） */
 export function purchaseOrderStandardListText(

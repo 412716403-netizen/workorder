@@ -368,7 +368,11 @@ const ProductQuickDetailBody: React.FC<ProductQuickDetailBodyProps> = ({
 
               const reportTpl = node.reportTemplate ?? [];
               const reportVals = p.routeReportValues?.[node.id] ?? {};
-              const archiveRows: { field: ReportFieldDefinition; cell: DispRow }[] = [];
+              // cell 来自 formatRouteReportArchiveValue，只有 file/text 两种形态（无 field、无 knowledge），与 DispRow 区分
+              const archiveRows: {
+                field: ReportFieldDefinition;
+                cell: { kind: 'file'; urls: string[] } | { kind: 'text'; text: string };
+              }[] = [];
               for (const field of reportTpl) {
                 const cell = formatRouteReportArchiveValue(field, reportVals[field.id]);
                 if (cell) archiveRows.push({ field, cell });

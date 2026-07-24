@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { ModalPortal } from '../../components/ModalPortal';
+import { PdfPreviewViewer } from '../../components/PdfPreviewViewer';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { PlanOrder, PrintTemplate, ProductionOpRecord } from '../../types';
@@ -236,7 +237,7 @@ const SalesOrderReferencedProductionDetailHost: React.FC<
             {filePreviewType === 'image' ? (
               <img src={filePreviewUrl} alt="预览" className="max-h-[85vh] w-full object-contain" />
             ) : (
-              <iframe src={filePreviewUrl} title="PDF 预览" className="h-[85vh] w-full border-0" />
+              <PdfPreviewViewer src={filePreviewUrl} />
             )}
           </div>
         </div>

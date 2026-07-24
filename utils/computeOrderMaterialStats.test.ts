@@ -65,7 +65,7 @@ describe('computeOrderFamilyMaterialStats', () => {
         reports: [{ id: 'r1', quantity: 5, timestamp: '2026-01-01', operator: 'op', customData: {} }],
       },
     ],
-  } as ProductionOrder;
+  } as unknown as ProductionOrder;
 
   it('BOM 理论耗材 = 完成量 × 单位用量', () => {
     const rows = computeOrderFamilyMaterialStats({

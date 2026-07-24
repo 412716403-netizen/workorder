@@ -16,7 +16,7 @@ interface WorkbenchGridProps {
 
 function mergeLayoutItems(
   items: WorkbenchLayoutItem[],
-  next: Layout[],
+  next: Layout,
 ): WorkbenchLayoutItem[] {
   const map = new Map(next.map(l => [l.i, l]));
   return items.map(it => {
@@ -27,7 +27,7 @@ function mergeLayoutItems(
 }
 
 /** 仅比较位置/尺寸，避免值未变时回写 state 造成无限渲染 */
-function isSameGeometry(items: WorkbenchLayoutItem[], next: Layout[]): boolean {
+function isSameGeometry(items: WorkbenchLayoutItem[], next: Layout): boolean {
   if (items.length !== next.length) return false;
   const map = new Map(next.map(l => [l.i, l]));
   return items.every(it => {

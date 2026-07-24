@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { Product } from '../types';
 import { compareProductsArchiveOrder, productSortTimeMs } from './productSort';
 
-const base = (over: Partial<Product>): Product =>
+// productSortTimeMs 兼容带 createdAt/updatedAt 元数据的产品（函数内部同样按此放宽）
+const base = (over: Partial<Product> & { createdAt?: string; updatedAt?: string }): Product =>
   ({
     id: 'p-1-x',
     sku: 'S',

@@ -29,7 +29,7 @@ export interface ProductionNodeStatsCardRow {
   progress: number;
 }
 
-export interface ProductionNodeStatsTheme extends WorkbenchStatsTheme {}
+export type ProductionNodeStatsTheme = WorkbenchStatsTheme;
 
 export interface ProductionNodeStatsLabels {
   title: string;

@@ -51,7 +51,7 @@ const MaterialFormConfigModal: React.FC<MaterialFormConfigModalProps> = ({
     [materialFormSettings, materialPanelSettings],
   );
   return (
-    <BusinessFormConfigModal
+    <BusinessFormConfigModal<MaterialFormConfigDraft>
       open={open}
       onClose={onClose}
       defaultTabId={defaultTabWhenOpen}

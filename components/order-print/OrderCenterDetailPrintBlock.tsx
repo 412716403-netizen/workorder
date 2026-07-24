@@ -63,7 +63,8 @@ export const OrderCenterDetailPrintBlock: React.FC<OrderCenterDetailPrintBlockPr
     let cancelled = false;
     const timer = setTimeout(() => {
       if (cancelled) return;
-      const maybePromise = handlePrintRef.current();
+      // handlePrint 当前签名返回 void（同步触发打印）；此处按 unknown 探测，兼容未来改为返回 Promise 的实现
+      const maybePromise: unknown = handlePrintRef.current();
       if (maybePromise && typeof (maybePromise as Promise<void>).then === 'function') {
         (maybePromise as Promise<void>).finally(() => {
           if (!cancelled) setPrintRun(null);

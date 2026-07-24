@@ -415,7 +415,8 @@ export function useFinanceReconciliation(p: UseFinanceReconciliationParams) {
         parts.push(row.docNo, row.docType, row.partner ?? '', row.operator ?? '', row.note ?? '', String(row.amount));
       } else {
         const r = row.rec;
-        parts.push(r.docNo ?? '', r.id, r.partner ?? '', r.note ?? '', String(r.amount));
+        // ProductionOpRecord 没有 note 字段，备注语义字段是 reason（原先误读 note 导致外协/返工收回行的备注搜不到）
+        parts.push(r.docNo ?? '', r.id, r.partner ?? '', r.reason ?? '', String(r.amount));
       }
       return parts.filter(Boolean).join('\0').toLowerCase().includes(q);
     });

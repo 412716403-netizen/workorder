@@ -30,6 +30,8 @@ export function devStyleToProductForBom(style: DevStyleDto): Product {
 }
 
 export function devBomsToProductBoms(rows: DevBomDto[]): BOM[] {
+  // 开发 BOM 没有 version 字段，BOM 编辑器链路也不读取它；items 上的 id/sortOrder 需保留
+  // 以便 workingBomToDevBom 保存时回传库中主键与排序。此处仅收敛类型，不改变运行时形状。
   return rows.map((b) => ({
     id: b.id,
     parentProductId: b.parentStyleId,
@@ -46,5 +48,5 @@ export function devBomsToProductBoms(rows: DevBomDto[]): BOM[] {
       excludeFromWeightShare: it.excludeFromWeightShare,
       sortOrder: it.sortOrder,
     })),
-  }));
+  })) as unknown as BOM[];
 }

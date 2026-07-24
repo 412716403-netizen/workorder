@@ -39,6 +39,7 @@ import PendingStockBatchModal from './pending-stock/PendingStockBatchModal';
 import PendingStockSingleModal from './pending-stock/PendingStockSingleModal';
 import { StockInFlowModal } from './StockInFlowModal';
 import { ModalPortal } from '../../components/ModalPortal';
+import { PdfPreviewViewer } from '../../components/PdfPreviewViewer';
 
 interface PendingStockPanelProps {
   open: boolean;
@@ -232,7 +233,7 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
             {stockInFilePreview.type === 'image' ? (
               <img src={stockInFilePreview.url} alt="预览" className="max-h-[85vh] w-full object-contain" />
             ) : (
-              <iframe src={stockInFilePreview.url} title="PDF 预览" className="h-[85vh] w-full border-0" sandbox="allow-same-origin" />
+              <PdfPreviewViewer src={stockInFilePreview.url} sandbox="allow-same-origin" />
             )}
           </div>
         </div>

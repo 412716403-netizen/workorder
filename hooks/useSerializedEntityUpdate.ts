@@ -21,7 +21,11 @@ export function useSerializedEntityUpdate<TUpdates extends object>(
     chainRef.current = chainRef.current
       .catch(() => undefined)
       .then(async () => {
-        const payload = { ...updates } as TUpdates & Record<string, unknown>;
+        const payload = { ...updates } as TUpdates & {
+          customFields?: unknown;
+          reportTemplate?: unknown;
+          reportDisplayTemplate?: unknown;
+        };
         if ('customFields' in payload) {
           payload.customFields = latestCustomFieldsRef.current.get(`${id}:customFields`) ?? payload.customFields;
         }

@@ -21,7 +21,7 @@ const order1: ProductionOrder = {
   ],
   customer: '',
   status: '进行中',
-} as ProductionOrder;
+} as unknown as ProductionOrder;
 
 const order2: ProductionOrder = {
   ...order1,
@@ -32,7 +32,7 @@ const order2: ProductionOrder = {
   milestones: [
     { id: 'm2', templateId: tid, name: '裁剪', status: '进行中', completedQuantity: 0, reportTemplate: [], reports: [] },
   ],
-} as ProductionOrder;
+} as unknown as ProductionOrder;
 
 describe('reportRowDerivations', () => {
   it('resolveOrdersForProductAtTemplate filters by product and template', () => {
@@ -74,7 +74,7 @@ describe('reportRowDerivations', () => {
       milestones: [
         { id: 'm1b', templateId: tid, name: '裁剪', status: '进行中', completedQuantity: 400, reportTemplate: [], reports: [] },
       ],
-    } as ProductionOrder;
+    } as unknown as ProductionOrder;
 
     const scoped = computeReportRowDerivations({
       productId: 'p1',
@@ -148,7 +148,7 @@ describe('reportRowDerivations', () => {
           milestoneTemplateId: tid,
           completedQuantity: 10,
           reports: [
-            { id: 'r2', quantity: 5, approvalStatus: ReportApprovalStatus.PENDING, timestamp: '', operator: '' },
+            { id: 'r2', quantity: 5, approvalStatus: ReportApprovalStatus.PENDING, timestamp: '', operator: '', customData: {} },
           ],
         },
       ],

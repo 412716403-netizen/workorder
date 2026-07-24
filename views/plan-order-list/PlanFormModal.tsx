@@ -207,7 +207,9 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
       return;
     }
     const product = products.find(p => p.id === draft.productId);
-    setForm({
+    // 保留 entryDatetime：此前直接整体 setForm 漏掉该字段，会把录入时间清成 undefined（真 bug）
+    setForm(prev => ({
+      ...prev,
       categoryId: product?.categoryId ?? '',
       productId: draft.productId,
       customer: draft.customer,
@@ -215,7 +217,7 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
       variantQuantities: { ...draft.variantQuantities },
       singleQuantity: draft.singleQuantity,
       customData: { ...draft.customData },
-    });
+    }));
     setSelectedSalesOrderLineId(lineId);
   };
 

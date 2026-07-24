@@ -16,9 +16,10 @@ import {
   adminTenants,
   type AdminTenantUsageDetail,
   type AdminTenantUsageResponse,
-  type PlatformAuditLogRow,
   type TenantHealth,
 } from '../../services/api';
+// services/api.ts 未再导出该类型；此处直接从来源模块引入（仅类型，不影响运行时）
+import type { PlatformAuditLogRow } from '../../services/api/auth';
 import { formatBytes } from '../../utils/formatBytes';
 
 const HEALTH_LABEL: Record<TenantHealth, string> = {

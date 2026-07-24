@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildMaterialStockDocPrintContext } from './buildMaterialStockDocPrintContext';
 import type { AppDictionaries, Product, ProductionOpRecord, ProductionOrder, Warehouse } from '../types';
+import { OrderStatus } from '../types';
 import { COLOR_SIZE_MATRIX_JSON_KEY } from './colorSizeMatrixPrint';
 
 const dict: AppDictionaries = {
@@ -29,7 +30,7 @@ describe('buildMaterialStockDocPrintContext', () => {
     customer: '',
     startDate: '',
     dueDate: '',
-    status: 'PRODUCING',
+    status: OrderStatus.PRODUCING,
     milestones: [],
     priority: 'Medium',
   };

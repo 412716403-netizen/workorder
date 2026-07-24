@@ -611,7 +611,7 @@ function splitFlowIntoBlocks(flowHtml, previewUrls, keyPrefix, maxContentWidthPx
 }
 
 function parseIntAttr(attrs, name) {
-  const re = new RegExp(`\\b${name}=([\"']?)(\\d+)\\1`, 'i');
+  const re = new RegExp(`\\b${name}=(["']?)(\\d+)\\1`, 'i');
   const m = String(attrs || '').match(re);
   const n = m ? Number(m[2]) : 1;
   return Number.isFinite(n) && n > 0 ? n : 1;

@@ -363,7 +363,7 @@ export function buildSalesBillPrintContextFromPsiDoc(params: {
   preBalance: { previousBalance: number };
 }): PrintRenderContext {
   const { docNumber, docItems, productMap, warehouseMap, dictionaries, preBalance } = params;
-  const main = docItems[0] ?? {};
+  const main: Partial<PsiRecord> = docItems[0] ?? {};
   const lines = buildSalesBillLinesFromPsiRecords(docItems);
   const createdAtRaw = (main.createdAt as string | undefined) ?? '';
   const createdAtYmd =

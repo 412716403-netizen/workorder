@@ -170,6 +170,7 @@ Page({
         style = buildEmptyDevStyle(defaultCategoryId);
       }
       this._working = JSON.parse(JSON.stringify(style));
+      this._originalImageUrl = String(style.imageUrl || '');
       this.applyUi();
     } catch (err) {
       wx.showToast({ title: (err && err.message) || '加载失败', icon: 'none' });
@@ -510,13 +511,16 @@ Page({
       return;
     }
     const partnerName = resolveDevStyleCustomerName(this._working, this._partners);
-    const payload = buildDevStyleSavePayload(this._working, partnerName);
     this.setData({ submitting: true });
     try {
       if (this._styleId) {
-        await updateDevStyle(this._styleId, { ...this._working, ...payload });
+        // 只发可写字段；主图未变时省略（_working 详情含 samples 附件大字段，不能整包上传）
+        const payload = buildDevStyleSavePayload(this._working, partnerName, {
+          originalImageUrl: this._originalImageUrl || '',
+        });
+        await updateDevStyle(this._styleId, payload);
       } else {
-        await createDevStyle(payload);
+        await createDevStyle(buildDevStyleSavePayload(this._working, partnerName));
       }
       try {
         const ec = this.getOpenerEventChannel && this.getOpenerEventChannel();

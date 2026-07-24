@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildOutsourceFlowPrintContext } from './buildOutsourceFlowPrintContext';
 import type { AppDictionaries, Product, ProductionOpRecord, ProductionOrder } from '../types';
+import { OrderStatus } from '../types';
 import { COLOR_SIZE_MATRIX_JSON_KEY } from './colorSizeMatrixPrint';
 
 const dict: AppDictionaries = {
@@ -36,7 +37,7 @@ describe('buildOutsourceFlowPrintContext', () => {
       customer: '',
       startDate: '',
       dueDate: '',
-      status: 'PRODUCING',
+      status: OrderStatus.PRODUCING,
       milestones: [],
       priority: 'Medium',
     };
@@ -107,7 +108,7 @@ describe('buildOutsourceFlowPrintContext', () => {
       customer: '',
       startDate: '',
       dueDate: '',
-      status: 'PRODUCING',
+      status: OrderStatus.PRODUCING,
       milestones: [],
       priority: 'Medium',
     };
@@ -159,7 +160,7 @@ describe('buildOutsourceFlowPrintContext', () => {
       customer: '',
       startDate: '',
       dueDate: '',
-      status: 'PRODUCING',
+      status: OrderStatus.PRODUCING,
       milestones: [],
       priority: 'Medium',
     };

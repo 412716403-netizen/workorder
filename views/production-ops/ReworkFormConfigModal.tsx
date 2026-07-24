@@ -38,7 +38,7 @@ const ReworkFormConfigModal: React.FC<ReworkFormConfigModalProps> = ({
   orders,
   products,
 }) => (
-  <BusinessFormConfigModal
+  <BusinessFormConfigModal<ReworkFormSettings>
     open={open}
     onClose={onClose}
     defaultTabId={defaultTabWhenOpen}

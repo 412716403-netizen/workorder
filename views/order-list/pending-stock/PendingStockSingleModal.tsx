@@ -10,6 +10,7 @@ import React from 'react';
 import { Check, Package, Warehouse as WarehouseIcon } from 'lucide-react';
 import type {
   AppDictionaries,
+  PlanFormFieldConfig,
   Warehouse,
   Product,
   ProductCategory,
@@ -37,7 +38,7 @@ interface Props {
   helper: Helper;
   warehouses: Warehouse[];
   dictionaries: AppDictionaries;
-  stockInCustomFieldDefs: { id: string; label: string; [k: string]: unknown }[];
+  stockInCustomFieldDefs: PlanFormFieldConfig[];
   productionLinkMode: 'order' | 'product';
   productMap: Map<string, Product>;
   categoryMap: Map<string, ProductCategory>;

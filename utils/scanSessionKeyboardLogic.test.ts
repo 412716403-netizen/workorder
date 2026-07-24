@@ -8,7 +8,16 @@ import {
   looksLikeScanContent,
   peekPendingWeightKg,
   splitScaleScanCombined,
+  type ScanSessionKeyOutcome,
+  type ScanSessionKeyboardBuffers,
 } from './scanSessionKeyboardLogic';
+
+/** 测试内的按键序列必然产生带 next 缓冲的 outcome；缺失时直接抛错让用例失败 */
+function lastNext(outcomes: ScanSessionKeyOutcome[]): ScanSessionKeyboardBuffers {
+  const last = outcomes[outcomes.length - 1]!;
+  if (!('next' in last)) throw new Error('expected outcome with next buffers');
+  return last.next;
+}
 
 describe('scanSessionKeyboardLogic', () => {
   it('detects scan-like content', () => {
@@ -21,7 +30,7 @@ describe('scanSessionKeyboardLogic', () => {
     let t = 1000;
     for (const ch of '0.192') {
       const outcomes = handleScanSessionPrintableChar(buf, ch, t);
-      buf = outcomes[outcomes.length - 1]!.next;
+      buf = lastNext(outcomes);
       t += 120;
     }
     const enter = handleScanSessionEnter(buf);
@@ -34,7 +43,7 @@ describe('scanSessionKeyboardLogic', () => {
     let t = 1000;
     for (const ch of '0.192') {
       const outcomes = handleScanSessionPrintableChar(buf, ch, t);
-      buf = outcomes[outcomes.length - 1]!.next;
+      buf = lastNext(outcomes);
       t += 10;
     }
     expect(isScaleCompleteBuffer(buf.scaleBuffer)).toBe(true);
@@ -47,7 +56,7 @@ describe('scanSessionKeyboardLogic', () => {
     let t = 1000;
     for (const ch of '0.192') {
       const outcomes = handleScanSessionPrintableChar(buf, ch, t);
-      buf = outcomes[outcomes.length - 1]!.next;
+      buf = lastNext(outcomes);
       t += 120;
     }
     const weights: number[] = [];
@@ -76,7 +85,7 @@ describe('scanSessionKeyboardLogic', () => {
     let t = 1000;
     for (const ch of '0.193') {
       const outcomes = handleScanSessionPrintableChar(buf, ch, t);
-      buf = outcomes[outcomes.length - 1]!.next;
+      buf = lastNext(outcomes);
       t += 100;
     }
     const idle = handleScanSessionWeightIdle(buf);
@@ -89,7 +98,7 @@ describe('scanSessionKeyboardLogic', () => {
     let t = 1000;
     for (const ch of '0.188') {
       const outcomes = handleScanSessionPrintableChar(buf, ch, t);
-      buf = outcomes[outcomes.length - 1]!.next;
+      buf = lastNext(outcomes);
       t += 8;
     }
     expect(peekPendingWeightKg(buf)).toBe(0.188);

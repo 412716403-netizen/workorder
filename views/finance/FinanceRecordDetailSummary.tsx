@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import type { FinanceCategory, FinanceRecord, PlanFormFieldConfig, Product, ReportFieldDefinition, Worker } from '../../types';
 import { normalizeReportFieldDefinition } from '../../utils/reportCustomDocField';
 import { PlanFormCustomFieldReadonly } from '../../components/PlanFormCustomFieldControls';
 import { fmtDT } from '../../utils/formatTime';
+import { useEscapeToClose } from '../../hooks/useEscapeToClose';
 
 function reportFieldToPlanFormField(field: ReportFieldDefinition): PlanFormFieldConfig {
   const f = normalizeReportFieldDefinition(field);
@@ -79,14 +80,7 @@ function FinanceRecordDetailSummary({
   );
 
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
-  useEffect(() => {
-    if (!previewSrc) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setPreviewSrc(null);
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [previewSrc]);
+  useEscapeToClose(!!previewSrc, () => setPreviewSrc(null));
 
   const amountClassName = financeRec.type === 'RECEIPT' ? 'text-emerald-600 font-black' : 'font-black';
 

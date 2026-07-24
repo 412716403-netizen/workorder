@@ -228,7 +228,7 @@ const InboxUtilityModals: React.FC<Props> = props => {
             activeCollabs={activeCollabs}
             partners={partners}
             partnerCategories={partnerCategories}
-            onRefreshPartners={onRefreshPartners}
+            onRefreshPartners={async () => { await onRefreshPartners?.(); }}
             onRefreshCollabs={() => refreshCollabs(true)}
           />
         </Shell>

@@ -57,8 +57,8 @@ const order: ProductionOrder = {
       reportDisplayTemplate: [],
       reportTemplate: [],
       reports: [
-        { variantId: 'v1', quantity: 20, defectiveQuantity: 0 },
-        { variantId: 'v2', quantity: 20, defectiveQuantity: 0 },
+        { id: 'rep1', timestamp: '', operator: '', customData: {}, variantId: 'v1', quantity: 20, defectiveQuantity: 0 },
+        { id: 'rep2', timestamp: '', operator: '', customData: {}, variantId: 'v2', quantity: 20, defectiveQuantity: 0 },
       ],
       weight: 1,
     },

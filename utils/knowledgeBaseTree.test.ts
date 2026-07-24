@@ -130,7 +130,7 @@ describe('planFolderMove', () => {
 
 describe('planDocumentMove', () => {
   it('reorders document before sibling in same folder', () => {
-    const moreDocs: KnowledgeDocumentDto[] = [
+    const moreDocs: KnowledgeDocumentSummaryDto[] = [
       ...documents,
       { id: 'd3', folderId: 'f2', title: 'SOP-缝制', sortOrder: 10, createdAt: '', updatedAt: '' },
     ];

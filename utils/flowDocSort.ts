@@ -37,7 +37,7 @@ export function recordDocLineTimeMs(
  * 编辑后续行通常不改变该值（若各行的 createdAt 一致则与单据时间一致）。
  */
 export function flowRecordsEarliestMs(
-  records: { timestamp?: string | null; createdAt?: string | Date | null; _savedAtMs?: number | null }[],
+  records: readonly { timestamp?: string | null; createdAt?: string | Date | null; _savedAtMs?: number | null }[],
 ): number {
   let m = 0;
   for (const r of records) {

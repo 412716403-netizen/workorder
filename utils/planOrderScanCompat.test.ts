@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PlanOrder } from '../types';
+import { PlanStatus } from '../types';
 import {
   arePlanOrdersInSamePlanTreeRoot,
   arePlanOrdersScanCompatible,
@@ -14,7 +15,8 @@ function plan(id: string, parentPlanId?: string): PlanOrder {
     productId: 'p1',
     items: [],
     startDate: '2026-01-01',
-    status: 'InProgress',
+    // 被测函数只读 id/parentPlanId，status 取合法枚举值即可
+    status: PlanStatus.APPROVED,
     customer: '',
     priority: 'Medium',
   };

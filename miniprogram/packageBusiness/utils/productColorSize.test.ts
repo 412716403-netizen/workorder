@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   validateProductColorSizeForSave,
   MSG_PRODUCT_COLOR_SIZE_REQUIRED_BOTH,
-} from '../../shared/productColorSize';
+} from './productColorSize.js';
 
 describe('validateProductColorSizeForSave (miniprogram parity)', () => {
   it('passes when category has no color size', () => {

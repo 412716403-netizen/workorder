@@ -53,7 +53,7 @@ describe('styleMatchesSyncFilter', () => {
 describe('styleMatchesDevSearch', () => {
   it('matches supplier partner name when partners provided', () => {
     const style = baseStyle({ supplierId: 'p1' });
-    const partners = [{ id: 'p1', name: '华联客户', categoryId: 'c1' }];
+    const partners = [{ id: 'p1', name: '华联客户', categoryId: 'c1', contact: '' }];
     expect(styleMatchesDevSearch(style, '华联', partners)).toBe(true);
     expect(styleMatchesDevSearch(style, '不存在', partners)).toBe(false);
   });
