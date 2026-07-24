@@ -45,8 +45,8 @@ export const MaterialStatsTable: React.FC<MaterialStatsTableProps> = ({
         {compact && (
           <colgroup>
             {selecting ? <col className="w-[5%]" /> : null}
-            <col className={selecting ? 'w-[10%]' : 'w-[15%]'} />
-            <col className="w-[17%]" /><col className="w-[17%]" /><col className="w-[17%]" /><col className="w-[17%]" /><col className="w-[17%]" />
+            <col className={selecting ? 'w-[22%]' : 'w-[26%]'} />
+            <col className="w-[14%]" /><col className="w-[14%]" /><col className="w-[14%]" /><col className="w-[14%]" /><col className="w-[14%]" />
           </colgroup>
         )}
         <thead>
@@ -93,41 +93,31 @@ export const MaterialStatsTable: React.FC<MaterialStatsTableProps> = ({
                   </td>
                 )}
                 <td className={compact ? `pl-4 pr-1 ${py} align-middle min-w-0` : `${px} ${py}`}>
-                  {compact ? (
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-bold text-slate-800" title={prod?.name}>
-                        {prod?.name ?? '未知物料'}
-                        {prod?.sku ? <span className="ml-2 text-[10px] font-medium text-slate-400">{prod.sku}</span> : null}
+                  <div className="min-w-0">
+                    <p
+                      className="truncate text-sm font-bold text-slate-800"
+                      title={prod?.name ?? '未知物料'}
+                    >
+                      {prod?.name ?? '未知物料'}
+                    </p>
+                    {prod?.sku ? (
+                      <p className="mt-0.5 truncate text-[10px] font-medium text-slate-400" title={prod.sku}>
+                        {prod.sku}
                       </p>
-                      <div className="mt-1 flex flex-wrap items-center gap-1">
-                        {customTags.map(({ field, display }) => (
-                          <span
-                            key={field.id}
-                            className="rounded bg-slate-50 px-1 py-px text-[8px] font-bold text-slate-500"
-                          >
+                    ) : null}
+                    {customTags.length > 0 ? (
+                      <p
+                        className={`mt-0.5 break-words font-bold text-slate-500 ${compact ? 'text-[8px]' : 'text-[9px]'}`}
+                      >
+                        {customTags.map(({ field, display }, i) => (
+                          <span key={field.id}>
+                            {i > 0 ? <span className="text-slate-300"> · </span> : null}
                             {field.label}: {display}
                           </span>
                         ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold text-slate-800">
-                        {prod?.name ?? '未知物料'}
-                        {prod?.sku ? <span className="ml-2 text-[10px] font-medium text-slate-400">{prod.sku}</span> : null}
                       </p>
-                      <div className="mt-1 flex flex-wrap items-center gap-1">
-                        {customTags.map(({ field, display }) => (
-                          <span
-                            key={field.id}
-                            className="rounded bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-500"
-                          >
-                            {field.label}: {display}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                    ) : null}
+                  </div>
                 </td>
                 {compact ? (
                   <>
