@@ -185,6 +185,32 @@ const ProductCategoryInfoFields: React.FC<ProductCategoryInfoFieldsProps> = ({
     })();
   }, [readOnly, setWorking]);
 
+  const applyProductImageFromClipboard = useCallback((clipboardData: DataTransfer | null | undefined) => {
+    if (readOnly || !clipboardData) return false;
+    const items = clipboardData.items;
+    if (items) {
+      for (let i = 0; i < items.length; i += 1) {
+        const item = items[i];
+        if (item?.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) {
+            applyProductImageFile(file);
+            return true;
+          }
+        }
+      }
+    }
+    const files = clipboardData.files;
+    if (files?.length) {
+      const file = files[0];
+      if (file?.type.startsWith('image/')) {
+        applyProductImageFile(file);
+        return true;
+      }
+    }
+    return false;
+  }, [readOnly, applyProductImageFile]);
+
   useEffect(() => () => {
     filePreviewRevokeRef.current?.();
   }, []);
@@ -549,9 +575,10 @@ const ProductCategoryInfoFields: React.FC<ProductCategoryInfoFieldsProps> = ({
           <div className="md:col-span-2 space-y-1">
             <label className={productArchiveFormLabelClass}>产品图片</label>
             <div
-              className={`flex items-center gap-4 rounded-2xl p-3 -m-1 transition-all ${
+              className={`flex items-center gap-4 rounded-2xl p-3 -m-1 transition-all outline-none ${
                 productImageDragOver ? 'bg-indigo-50/90 ring-2 ring-indigo-400' : ''
-              }`}
+              } ${readOnly ? '' : 'focus-within:ring-2 focus-within:ring-indigo-300 focus:ring-2 focus:ring-indigo-300'}`}
+              tabIndex={readOnly ? undefined : 0}
               onDragOver={(e) => {
                 if (readOnly) return;
                 e.preventDefault();
@@ -562,6 +589,25 @@ const ProductCategoryInfoFields: React.FC<ProductCategoryInfoFieldsProps> = ({
                 e.preventDefault();
                 setProductImageDragOver(false);
                 applyProductImageFile(e.dataTransfer.files?.[0]);
+              }}
+              onPaste={(e) => {
+                if (applyProductImageFromClipboard(e.clipboardData)) {
+                  e.preventDefault();
+                }
+              }}
+              onMouseEnter={(e) => {
+                if (readOnly) return;
+                const active = document.activeElement;
+                if (
+                  active &&
+                  (active.tagName === 'INPUT' ||
+                    active.tagName === 'TEXTAREA' ||
+                    active.tagName === 'SELECT' ||
+                    (active as HTMLElement).isContentEditable)
+                ) {
+                  return;
+                }
+                e.currentTarget.focus({ preventScroll: true });
               }}
             >
               <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center overflow-hidden border-2 border-dashed border-slate-200 shrink-0">
@@ -574,14 +620,26 @@ const ProductCategoryInfoFields: React.FC<ProductCategoryInfoFieldsProps> = ({
                 )}
               </div>
               {!readOnly && (
-                <div>
-                  <input id="pci-image-upload" type="file" accept="image/*" className="hidden" onChange={(e) => {
-                    applyProductImageFile(e.target.files?.[0]);
-                    e.target.value = '';
-                  }} />
-                  <label htmlFor="pci-image-upload" className="inline-flex items-center gap-1.5 h-9 px-3 bg-indigo-50 text-indigo-600 rounded-lg text-xs font-medium cursor-pointer">
-                    <ImagePlus className="w-3.5 h-3.5" /> 上传图片
-                  </label>
+                <div className="flex flex-col gap-1.5 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input id="pci-image-upload" type="file" accept="image/*" className="hidden" onChange={(e) => {
+                      applyProductImageFile(e.target.files?.[0]);
+                      e.target.value = '';
+                    }} />
+                    <label htmlFor="pci-image-upload" className="inline-flex items-center gap-1.5 h-9 px-3 bg-indigo-50 text-indigo-600 rounded-lg text-xs font-medium cursor-pointer">
+                      <ImagePlus className="w-3.5 h-3.5" /> 上传图片
+                    </label>
+                    {productThumbSrc(working) ? (
+                      <button
+                        type="button"
+                        onClick={() => setWorking((wp) => ({ ...wp, imageUrl: '', imageThumb: null }))}
+                        className="inline-flex items-center gap-1.5 h-9 px-3 bg-slate-50 text-slate-600 hover:bg-rose-50 hover:text-rose-600 rounded-lg text-xs font-medium"
+                      >
+                        <X className="w-3.5 h-3.5" /> 移除
+                      </button>
+                    ) : null}
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-snug">支持拖拽或 Ctrl/⌘+V 粘贴截图</p>
                 </div>
               )}
             </div>

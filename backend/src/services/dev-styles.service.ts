@@ -60,6 +60,7 @@ async function applyImageThumbFromUrl(
   if (!('imageUrl' in data)) return;
   const url = data.imageUrl;
   if (url == null || url === '') {
+    data.imageUrl = null;
     data.imageThumb = null;
     return;
   }
