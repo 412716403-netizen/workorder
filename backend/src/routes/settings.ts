@@ -23,7 +23,7 @@ const updateNameSchema = z.object({
   name: z.string().min(1, '名称不能为空').optional(),
 }).passthrough();
 
-const reorderNodesSchema = z.object({
+const reorderIdsSchema = z.object({
   orderedIds: z.array(z.string().min(1)).min(1),
 });
 
@@ -54,6 +54,7 @@ const updateConfigSchema = z.object({
 router.get('/categories',      requireTenantMemberRead(),   ctrl.listCategories);
 router.get('/categories/usage', requireSubPermission('settings:categories:view'),  ctrl.getCategoryUsage);
 router.post('/categories',     requireSubPermission('settings:categories:create'), validate(nameRequiredSchema), ctrl.createCategory);
+router.put('/categories/reorder', requireSubPermission('settings:categories:edit'), validate(reorderIdsSchema), ctrl.reorderCategories);
 router.put('/categories/:id',  requireSubPermission('settings:categories:edit'),   validate(updateNameSchema), ctrl.updateCategory);
 router.delete('/categories/:id', requireSubPermission('settings:categories:delete'), ctrl.deleteCategory);
 
@@ -67,7 +68,7 @@ router.delete('/partner-categories/:id', requireSubPermission('settings:partner_
 // 工序节点（列表读放宽给生产域用户：报工页工序名称 / 报工模板 / 设备与称重开关依赖节点库）
 router.get('/nodes',      requireSubPermissionOrProductionRead('settings:nodes:view'),   ctrl.listNodes);
 router.post('/nodes',     requireSubPermission('settings:nodes:create'), validate(nameRequiredSchema), ctrl.createNode);
-router.put('/nodes/reorder', requireSubPermission('settings:nodes:edit'), validate(reorderNodesSchema), ctrl.reorderNodes);
+router.put('/nodes/reorder', requireSubPermission('settings:nodes:edit'), validate(reorderIdsSchema), ctrl.reorderNodes);
 router.put('/nodes/:id',  requireSubPermission('settings:nodes:edit'),   validate(updateNameSchema), ctrl.updateNode);
 router.delete('/nodes/:id', requireSubPermission('settings:nodes:delete'), ctrl.deleteNode);
 

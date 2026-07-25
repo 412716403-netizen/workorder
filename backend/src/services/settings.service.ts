@@ -150,6 +150,26 @@ export async function updateCategory(
   return db.productCategory.update({ where: { id }, data });
 }
 
+export async function reorderCategories(db: TenantPrismaClient, orderedIds: string[]) {
+  const existing = await db.productCategory.findMany({ select: { id: true } });
+  if (orderedIds.length !== existing.length) {
+    throw new AppError(400, '排序列表与产品分类数量不一致');
+  }
+  if (new Set(orderedIds).size !== orderedIds.length) {
+    throw new AppError(400, '排序列表包含重复项');
+  }
+  const existingIds = new Set(existing.map((row) => row.id));
+  for (const id of orderedIds) {
+    if (!existingIds.has(id)) throw new AppError(400, '排序列表包含无效产品分类');
+  }
+  await db.$transaction(
+    orderedIds.map((id, index) =>
+      db.productCategory.update({ where: { id }, data: { sortOrder: index } }),
+    ),
+  );
+  return listCategories(db, { all: true });
+}
+
 export async function deleteCategory(db: TenantPrismaClient, id: string) {
   const existing = await db.productCategory.findFirst({ where: { id } });
   if (!existing) throw new AppError(404, '产品分类不存在');

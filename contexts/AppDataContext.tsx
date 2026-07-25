@@ -213,6 +213,8 @@ export interface AppDataContextValue {
   refreshPartners: () => Promise<void>;
   refreshPartnerCategories: () => Promise<void>;
   refreshCategories: () => Promise<void>;
+  /** 本地同步产品分类（避免排序后整页 refetch 闪烁） */
+  applyCategories: (list: ProductCategory[]) => void;
   refreshGlobalNodes: () => Promise<void>;
   /** 本地同步工序节点库（避免排序后整页 refetch 闪烁） */
   applyGlobalNodes: (list: GlobalNodeTemplate[]) => void;
@@ -659,6 +661,10 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const refreshPMP = useCallback(async () => setProductMilestoneProgresses(normalizeDecimals(await api.orders.listProductProgress())), []);
   const refreshCategories = useCallback(
     async () => setCategories(normalizeProductCategoriesFromApi(await api.settings.categories.list() as ProductCategory[])),
+    [],
+  );
+  const applyCategories = useCallback(
+    (list: ProductCategory[]) => setCategories(normalizeProductCategoriesFromApi(list)),
     [],
   );
   const refreshPartnerCategories = useCallback(
@@ -1244,7 +1250,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     onAddPSIRecord, onAddPSIRecordBatch, onReplacePSIRecords, onDeletePSIRecords,
     onAddFinanceRecord, onUpdateFinanceRecord, onDeleteFinanceRecord,
     refreshDictionaries, refreshWorkers, refreshEquipment, refreshPartners,
-    refreshPartnerCategories, refreshCategories, refreshGlobalNodes, applyGlobalNodes, refreshWarehouses,
+    refreshPartnerCategories, refreshCategories, applyCategories, refreshGlobalNodes, applyGlobalNodes, refreshWarehouses,
     refreshFinanceCategories, refreshFinanceAccountTypes,
     refreshProducts, refreshOrders, refreshPlans, refreshPMP,
     refreshPrintTemplates,
@@ -1266,7 +1272,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     onAddPSIRecord, onAddPSIRecordBatch, onReplacePSIRecords, onDeletePSIRecords,
     onAddFinanceRecord, onUpdateFinanceRecord, onDeleteFinanceRecord,
     refreshDictionaries, refreshWorkers, refreshEquipment, refreshPartners,
-    refreshPartnerCategories, refreshCategories, refreshGlobalNodes, applyGlobalNodes, refreshWarehouses,
+    refreshPartnerCategories, refreshCategories, applyCategories, refreshGlobalNodes, applyGlobalNodes, refreshWarehouses,
     refreshFinanceCategories, refreshFinanceAccountTypes,
     refreshProducts, refreshOrders, refreshPlans, refreshPMP,
     refreshPrintTemplates,

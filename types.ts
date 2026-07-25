@@ -566,6 +566,8 @@ export interface ProductCategory {
   hasColorSize: boolean;
   /** 是否启用批次管理：启用后相关产品在采购、出入库和生产入库中按批次记录 */
   hasBatchManagement?: boolean;
+  /** 排序权重，越小越靠前；设置页可拖拽调整 */
+  sortOrder?: number;
   customFields: ReportFieldDefinition[];
 }
 

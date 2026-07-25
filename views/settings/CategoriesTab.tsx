@@ -1,5 +1,20 @@
-import React, { useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { useAsyncSubmitLock } from '../../hooks/useAsyncSubmitLock';
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import {
   Tag,
   ArrowRight,
@@ -13,12 +28,12 @@ import {
   ListPlus,
   Trash2,
   Building2,
+  GripVertical,
 } from 'lucide-react';
 import { ProductCategory, type CustomDocFieldType, normalizeTenantIndustryKind } from '../../types';
 import { toast } from 'sonner';
 import * as api from '../../services/api';
 import { useAuthOptional } from '../../contexts/AuthContext';
-import { ExtFieldLabelInput } from './shared';
 import { ReportCustomFieldsConfigTable } from '../../components/form-config/CustomFieldsEditorTable';
 import { formStandardControlClass } from '../../styles/uiDensity';
 import { useFeaturePlugins } from '../../hooks/useFeaturePlugins';
@@ -29,20 +44,81 @@ import { useSerializedEntityUpdate } from '../../hooks/useSerializedEntityUpdate
 interface CategoriesTabProps {
   categories: ProductCategory[];
   onRefreshCategories: () => Promise<void>;
+  onApplyCategories: (list: ProductCategory[]) => void;
   canCreate: boolean;
+  canEdit: boolean;
   canDelete: boolean;
+}
+
+function SortableCategoryRow({
+  cat,
+  active,
+  canEdit,
+  onSelect,
+}: {
+  cat: ProductCategory;
+  active: boolean;
+  canEdit: boolean;
+  onSelect: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: cat.id,
+    disabled: !canEdit,
+    animateLayoutChanges: () => false,
+  });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      onClick={onSelect}
+      className={`flex items-center justify-between p-3.5 rounded-2xl border cursor-pointer group ${
+        active
+          ? 'border-indigo-600 bg-indigo-50/50 shadow-sm'
+          : 'border-slate-50 bg-slate-50 hover:bg-white hover:border-slate-200'
+      } ${isDragging ? 'z-10 shadow-md ring-2 ring-indigo-200 bg-white' : ''}`}
+    >
+      <div className="flex items-center gap-2 min-w-0">
+        {canEdit ? (
+          <button
+            type="button"
+            className="p-1 rounded-lg text-slate-300 hover:text-slate-500 hover:bg-white cursor-grab active:cursor-grabbing shrink-0"
+            aria-label="拖动排序"
+            onClick={(e) => e.stopPropagation()}
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="w-4 h-4" />
+          </button>
+        ) : null}
+        <span className={`text-sm font-bold truncate ${active ? 'text-indigo-900' : 'text-slate-600'}`}>
+          {cat.name}
+        </span>
+      </div>
+      <ArrowRight className={`w-4 h-4 transition-all shrink-0 ${active ? 'text-indigo-600 translate-x-1' : 'text-slate-200'}`} />
+    </div>
+  );
 }
 
 const CategoriesTab: React.FC<CategoriesTabProps> = ({
   categories,
   onRefreshCategories,
+  onApplyCategories,
   canCreate,
+  canEdit,
   canDelete,
 }) => {
   const [newCatName, setNewCatName] = useState('');
   const [editingCatId, setEditingCatId] = useState<string | null>(null);
   const [categoryNameDraft, setCategoryNameDraft] = useState('');
+  const reorderingRef = useRef(false);
   const addLock = useAsyncSubmitLock();
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const categoryIds = useMemo(() => categories.map((cat) => cat.id), [categories]);
   const usedIds = useSettingsUsedIds(api.settings.categories.usage);
   const { isPluginEnabled } = useFeaturePlugins();
   const auth = useAuthOptional();
@@ -57,6 +133,30 @@ const CategoriesTab: React.FC<CategoriesTabProps> = ({
     await api.settings.categories.update(id, updates);
     await onRefreshCategories();
   });
+
+  const handleReorder = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!canEdit || reorderingRef.current || !over || active.id === over.id) return;
+    const oldIndex = categoryIds.indexOf(String(active.id));
+    const newIndex = categoryIds.indexOf(String(over.id));
+    if (oldIndex < 0 || newIndex < 0) return;
+
+    const nextIds = arrayMove(categoryIds, oldIndex, newIndex);
+    const optimistic = nextIds
+      .map((id) => categories.find((cat) => cat.id === id))
+      .filter(Boolean) as ProductCategory[];
+    const previous = categories;
+    onApplyCategories(optimistic);
+    reorderingRef.current = true;
+    try {
+      await api.settings.categories.reorder(nextIds);
+    } catch (err: unknown) {
+      onApplyCategories(previous);
+      toast.error(err instanceof Error ? err.message : '排序保存失败');
+    } finally {
+      reorderingRef.current = false;
+    }
+  };
 
   const addCategory = async () => {
     if (!newCatName.trim()) return;
@@ -117,31 +217,33 @@ const CategoriesTab: React.FC<CategoriesTabProps> = ({
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
       <div className="lg:col-span-4 space-y-4">
         <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm p-6">
-          <h2 className="font-bold text-slate-800 mb-6 flex items-center gap-2 text-sm uppercase tracking-wider">
+          <h2 className="font-bold text-slate-800 mb-2 flex items-center gap-2 text-sm uppercase tracking-wider">
             <Tag className="w-4 h-4 text-indigo-600" />
             产品分类库
           </h2>
-          <div className="space-y-3 mb-8">
-            {categories.map(cat => (
-              <div 
-                key={cat.id} 
-                onClick={() => {
-                  setEditingCatId(cat.id);
-                  setCategoryNameDraft(cat.name);
-                }}
-                className={`flex items-center justify-between p-3.5 rounded-2xl border cursor-pointer transition-all group ${
-                  editingCatId === cat.id 
-                  ? 'border-indigo-600 bg-indigo-50/50 shadow-sm' 
-                  : 'border-slate-50 bg-slate-50 hover:bg-white hover:border-slate-200'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <span className={`text-sm font-bold ${editingCatId === cat.id ? 'text-indigo-900' : 'text-slate-600'}`}>{cat.name}</span>
-                </div>
-                <ArrowRight className={`w-4 h-4 transition-all ${editingCatId === cat.id ? 'text-indigo-600 translate-x-1' : 'text-slate-200'}`} />
+          {canEdit && categories.length > 1 ? (
+            <p className="text-[10px] text-slate-400 mb-4">拖动左侧手柄调整分类顺序</p>
+          ) : (
+            <div className="mb-4" />
+          )}
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(event) => void handleReorder(event)}>
+            <SortableContext items={categoryIds} strategy={verticalListSortingStrategy}>
+              <div className="space-y-3 mb-8">
+                {categories.map(cat => (
+                  <SortableCategoryRow
+                    key={cat.id}
+                    cat={cat}
+                    active={editingCatId === cat.id}
+                    canEdit={canEdit}
+                    onSelect={() => {
+                      setEditingCatId(cat.id);
+                      setCategoryNameDraft(cat.name);
+                    }}
+                  />
+                ))}
               </div>
-            ))}
-          </div>
+            </SortableContext>
+          </DndContext>
           {canCreate && (
           <div className="pt-6 border-t border-slate-50">
             <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">快速新增产品分类</h3>
@@ -213,6 +315,7 @@ const CategoriesTab: React.FC<CategoriesTabProps> = ({
                             }
                           }}
                           className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
+                          disabled={!canEdit}
                         />
                       </div>
                     </div>
@@ -241,7 +344,7 @@ const CategoriesTab: React.FC<CategoriesTabProps> = ({
                           (toggle.key === 'hasBatchManagement' && nextVal && cat.hasColorSize) ||
                           (toggle.key === 'linkPartner' && !nextVal && cat.hasPurchasePrice);
                         return (
-                        <div key={toggle.key} className={`bg-slate-50/50 p-4 rounded-2xl border border-slate-100 ${toggleBlocked ? 'opacity-60' : ''}`}>
+                        <div key={toggle.key} className={`bg-slate-50/50 p-4 rounded-2xl border border-slate-100 ${toggleBlocked || !canEdit ? 'opacity-60' : ''}`}>
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-2">
                               <toggle.icon className="w-4 h-4 text-indigo-400" />
@@ -256,12 +359,12 @@ const CategoriesTab: React.FC<CategoriesTabProps> = ({
                                     : '与另一项特性互斥，请先关闭对方开关'
                                   : undefined
                               }
-                              disabled={toggleBlocked}
+                              disabled={toggleBlocked || !canEdit}
                               onClick={() => {
-                                if (toggleBlocked) {
-                                  if (toggle.key === 'linkPartner') {
+                                if (!canEdit || toggleBlocked) {
+                                  if (toggle.key === 'linkPartner' && toggleBlocked) {
                                     toast.warning('已启用采购价时需保持关联合作单位');
-                                  } else {
+                                  } else if (toggleBlocked) {
                                     toast.warning('颜色尺码与批次管理互斥，请先关闭另一项后再开启');
                                   }
                                   return;

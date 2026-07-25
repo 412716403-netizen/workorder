@@ -5,6 +5,12 @@ export const settings = {
   categories: {
     ...crud('/settings/categories'),
     usage() { return request<{ usedIds: string[] }>('/settings/categories/usage'); },
+    reorder(orderedIds: string[]) {
+      return request<unknown>('/settings/categories/reorder', {
+        method: 'PUT',
+        body: JSON.stringify({ orderedIds }),
+      });
+    },
   },
   partnerCategories: {
     ...crud('/settings/partner-categories'),

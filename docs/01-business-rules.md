@@ -528,7 +528,7 @@
 
 | 子模块 | 管理实体 | 规则 |
 |--------|----------|------|
-| 产品分类管理 | `categories` | 支持 `customFields` 扩展；**名称租户内唯一**（新增/编辑，忽略首尾空白与大小写）；**「启用颜色尺码」开关仅毛衣工厂行业租户可见**（租户 `industryKind = sweater_factory`，由平台在企业管理中指定，经登录/选企业/租户列表接口透传到前端 `tenantCtx.industryKind`）；通用行业租户隐藏该开关，但已开启颜色尺码的分类仍显示开关便于关闭；**删除限制**：被产品（`Product.categoryId`）或开发款式（`DevStyle.categoryId`）引用时禁止删除，`deleteCategory` 返回 409 列明细；前端经 `GET /settings/categories/usage` 预检，被引用项删除按钮置灰并提示 |
+| 产品分类管理 | `categories` | 支持 `customFields` 扩展；**名称租户内唯一**（新增/编辑，忽略首尾空白与大小写）；左侧列表支持拖拽调整 `sortOrder`（`PUT /settings/categories/reorder`，需 `settings:categories:edit`），各选择器按该顺序展示；**「启用颜色尺码」开关仅毛衣工厂行业租户可见**（租户 `industryKind = sweater_factory`，由平台在企业管理中指定，经登录/选企业/租户列表接口透传到前端 `tenantCtx.industryKind`）；通用行业租户隐藏该开关，但已开启颜色尺码的分类仍显示开关便于关闭；**删除限制**：被产品（`Product.categoryId`）或开发款式（`DevStyle.categoryId`）引用时禁止删除，`deleteCategory` 返回 409 列明细；前端经 `GET /settings/categories/usage` 预检，被引用项删除按钮置灰并提示 |
 | 合作单位分类 | `partnerCategories` | 支持 `customFields` 扩展；名称租户内唯一；**删除限制**：被合作单位（`Partner.categoryId`）引用时禁止删除，`deletePartnerCategory` 返回 409；前端经 `GET /settings/partner-categories/usage` 预检，被引用项删除按钮置灰并提示 |
 | 工序节点库 | `globalNodes` | 维护工序名称、功能开关（含「不按顺序生产」`allowOutOfSequence`）、`reportDisplayTemplate`（报工页展示内容）等；`reportTemplate`（报工自定义单据内容）在 **工单中心 → 表单配置 → 字段配置** 按工序维护；工序名称租户内唯一；左侧列表支持拖拽调整 `sortOrder`，商品信息选工序时按该顺序自动排列；**工序被产品信息（生产路线 `Product.milestoneNodeIds`）引用时禁止删除**：后端 `deleteNode` 校验，若有产品引用返回 409；前端删除按钮置灰并提示，需先在相关产品信息中移除该工序后再删除 |
 

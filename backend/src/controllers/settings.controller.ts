@@ -20,6 +20,10 @@ export const updateCategory = asyncHandler(async (req, res) => {
 export const deleteCategory = asyncHandler(async (req, res) => {
   res.json(await settingsService.deleteCategory(getTenantPrisma(req.tenantId!), str(req.params.id)));
 });
+export const reorderCategories = asyncHandler(async (req, res) => {
+  const orderedIds = req.body.orderedIds as string[];
+  res.json(await settingsService.reorderCategories(getTenantPrisma(req.tenantId!), orderedIds));
+});
 export const getCategoryUsage = asyncHandler(async (req, res) => {
   res.json({ usedIds: await settingsService.getCategoryUsage(getTenantPrisma(req.tenantId!)) });
 });

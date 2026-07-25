@@ -79,6 +79,7 @@ const SettingsView: React.FC = () => {
   const weightTolerancePercent = c.weightTolerancePercent;
   const onUpdateWeightTolerancePercent = a.onUpdateWeightTolerancePercent;
   const onRefreshCategories = a.refreshCategories;
+  const onApplyCategories = a.applyCategories;
   const onRefreshPartnerCategories = a.refreshPartnerCategories;
   const onRefreshGlobalNodes = a.refreshGlobalNodes;
   const onApplyGlobalNodes = a.applyGlobalNodes;
@@ -181,7 +182,9 @@ const SettingsView: React.FC = () => {
           <CategoriesTab
             categories={categories}
             onRefreshCategories={onRefreshCategories}
+            onApplyCategories={onApplyCategories}
             canCreate={canCreate('categories')}
+            canEdit={canEdit('categories')}
             canDelete={canDelete('categories')}
           />
         )}

@@ -337,6 +337,7 @@ interface BOM {
 | `linkPartner` | 是否关联合作单位（产品档案首选供应商；开发款式 `customerName`） |
 | `hasColorSize` | 颜色尺码（与 `hasBatchManagement` 互斥） |
 | `hasBatchManagement` | 批次管理 |
+| `sortOrder` | 展示顺序（越小越靠前）；设置页拖拽排序写入 |
 | `customFields` | 分类扩展字段 |
 
 历史数据：`hasPurchasePrice=true` 的分类在 migration 中回填 `linkPartner=true`。
