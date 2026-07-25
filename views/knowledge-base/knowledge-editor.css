@@ -1339,6 +1339,55 @@
   background: #0f172a;
 }
 
+.kb-file-attachment-video-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  width: 100%;
+  min-height: 200px;
+  max-height: 360px;
+  margin: 0;
+  padding: 1.5rem;
+  border: 0;
+  background: linear-gradient(160deg, #0f172a 0%, #1e293b 100%);
+  color: #e2e8f0;
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+.kb-file-attachment-video-placeholder:hover {
+  filter: brightness(1.08);
+}
+
+.kb-file-attachment-video-placeholder:focus-visible {
+  outline: 2px solid #818cf8;
+  outline-offset: -2px;
+}
+
+.kb-file-attachment-video-placeholder-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+.kb-file-attachment-video-placeholder-text {
+  margin-top: 0.35rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.kb-file-attachment-video-placeholder-sub {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
 /* ── 附件全屏预览壳 ── */
 
 .kb-file-preview-overlay {

@@ -187,14 +187,10 @@ describe('knowledgeHtmlForMini', () => {
     expect(extractImageAssetIdsFromHtml(html)).toEqual(['ka-img']);
   });
 
-  it('builds video attachment with player localSrc and extracts player ids', () => {
-    const {
-      extractPlayerVideoAssetIdsFromHtml,
-    } = require('./knowledgeHtmlForMini.js');
+  it('builds video attachment with player display mode', () => {
     const html =
       '<div data-type="file-attachment" data-asset-url="/api/knowledge-base/assets/ka-v1" data-file-name="a.mp4" data-mime-type="video/mp4" data-size-bytes="1024" data-display-mode="player"></div>' +
       '<div data-type="file-attachment" data-asset-url="/api/knowledge-base/assets/ka-v2" data-file-name="b.mp4" data-mime-type="video/mp4" data-size-bytes="2048"></div>';
-    expect(extractPlayerVideoAssetIdsFromHtml(html)).toEqual(['ka-v1']);
     const { blocks } = buildKnowledgeDocBlocks(html, { 'ka-v1': 'wxfile://video1' });
     const player = blocks.find((b) => b.type === 'file' && b.assetId === 'ka-v1');
     const tag = blocks.find((b) => b.type === 'file' && b.assetId === 'ka-v2');

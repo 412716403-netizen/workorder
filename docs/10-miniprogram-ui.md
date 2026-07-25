@@ -964,7 +964,7 @@ npm run miniprogram:icons
 | [`utils/knowledgeHtmlForMini.js`](../miniprogram/packageBusiness/utils/knowledgeHtmlForMini.js) | 拆成 html/image/product/file/callout/table 渲染块；表格行内边框；鉴权图片 URL；附件节点 `div[data-type=file-attachment]` |
 | [`utils/knowledgeAttachmentForMini.js`](../miniprogram/packageBusiness/utils/knowledgeAttachmentForMini.js) | 附件类型判定、体积文案、`openDocument` 支持的扩展名 |
 
-**权限 / 插件**：入口需插件 `knowledge_base` 开启；页内校验 `knowledge_base:folders:view`（树）+ `knowledge_base:documents:view`（正文/图片/附件）。图片资源不可裸链，须 Bearer 下载后**写入本地临时文件**再引用路径（禁止 base64 塞进 `setData`，避免超大传输与渲染层错误）；正文内图片点按 `wx.previewImage`（按文档设定宽度展示，最大不超过页面宽）；关联产品芯片跳转只读产品快览（需 `basic:products:view`）。关联文档芯片跳转另一篇资料库文档详情。附件卡片点击后鉴权下载到临时文件：PDF/Excel/Word/PPT 用 `wx.openDocument({ showMenu: true })` 系统预览；附件为图片时用 `previewImage`；视频标签用 `previewMedia`；CAD 等不支持类型弹窗提示「无法预览，请在电脑端打开」。首屏预拉正文图片与内嵌播放视频，标签式附件按点击再下载。
+**权限 / 插件**：入口需插件 `knowledge_base` 开启；页内校验 `knowledge_base:folders:view`（树）+ `knowledge_base:documents:view`（正文/图片/附件）。图片资源不可裸链，须 Bearer 下载后**写入本地临时文件**再引用路径（禁止 base64 塞进 `setData`，避免超大传输与渲染层错误）；正文内图片点按 `wx.previewImage`（按文档设定宽度展示，最大不超过页面宽）；关联产品芯片跳转只读产品快览（需 `basic:products:view`）。关联文档芯片跳转另一篇资料库文档详情。附件卡片点击后鉴权下载到临时文件：PDF/Excel/Word/PPT 用 `wx.openDocument({ showMenu: true })` 系统预览；附件为图片时用 `previewImage`；视频标签用 `previewMedia`；CAD 等不支持类型弹窗提示「无法预览，请在电脑端打开」。首屏仅预拉正文图片；**内嵌播放视频改为点击「加载视频」后再下载**，标签式附件仍按点击再下载。
 
 **留 Web**：新建/编辑/上传；业务表单里 knowledge 类自定义字段仍「请在电脑端填写」。
 

@@ -86,7 +86,7 @@
                     >{{cellBlock.label}}</view>
 
                     <block wx:elif="{{cellBlock.type === 'file'}}">
-                      <template is="kbDocFile" data="{{file: cellBlock, extraClass: 'kb-doc-file--cell'}}" />
+                      <template is="kbDocFile" data="{{file: cellBlock, extraClass: 'kb-doc-file--cell', playerVideoSrc}}" />
                     </block>
 
                     <view
@@ -129,7 +129,7 @@
                           bindtap="onDocumentTap"
                         >{{cellCalloutBlock.label}}</view>
                         <block wx:elif="{{cellCalloutBlock.type === 'file'}}">
-                          <template is="kbDocFile" data="{{file: cellCalloutBlock, extraClass: 'kb-doc-file--callout'}}" />
+                          <template is="kbDocFile" data="{{file: cellCalloutBlock, extraClass: 'kb-doc-file--callout', playerVideoSrc}}" />
                         </block>
                       </block>
                     </view>
@@ -181,7 +181,7 @@
               >{{calloutBlock.label}}</view>
 
               <block wx:elif="{{calloutBlock.type === 'file'}}">
-                <template is="kbDocFile" data="{{file: calloutBlock, extraClass: 'kb-doc-file--callout'}}" />
+                <template is="kbDocFile" data="{{file: calloutBlock, extraClass: 'kb-doc-file--callout', playerVideoSrc}}" />
               </block>
             </block>
           </view>
@@ -226,7 +226,7 @@
           >{{block.label}}</view>
 
           <block wx:elif="{{block.type === 'file'}}">
-            <template is="kbDocFile" data="{{file: block, extraClass: ''}}" />
+            <template is="kbDocFile" data="{{file: block, extraClass: '', playerVideoSrc}}" />
           </block>
         </block>
       </view>
@@ -261,9 +261,9 @@
 
 <template name="kbDocFile">
   <video
-    wx:if="{{file.kind === 'video' && file.displayMode === 'player' && file.localSrc}}"
+    wx:if="{{file.kind === 'video' && file.displayMode === 'player' && (file.localSrc || playerVideoSrc[file.assetId])}}"
     class="kb-doc-video {{extraClass}}"
-    src="{{file.localSrc}}"
+    src="{{file.localSrc || playerVideoSrc[file.assetId]}}"
     controls
     show-center-play-btn
     enable-progress-gesture
@@ -272,8 +272,12 @@
   <view
     wx:elif="{{file.kind === 'video' && file.displayMode === 'player'}}"
     class="kb-doc-video kb-doc-video--loading {{extraClass}}"
+    data-asset-id="{{file.assetId}}"
+    data-file-name="{{file.fileName}}"
+    data-mime-type="{{file.mimeType}}"
+    bindtap="onLoadPlayerVideo"
   >
-    <text class="kb-doc-video__loading-text">视频加载中…</text>
+    <text class="kb-doc-video__loading-text">点击加载视频</text>
   </view>
   <view
     wx:else

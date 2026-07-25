@@ -92,19 +92,6 @@ function parseFileAttachmentTag(tag) {
   };
 }
 
-/** 内嵌播放模式的视频附件 id（首屏预拉，供 `<video src>`） */
-function extractPlayerVideoAssetIdsFromHtml(html) {
-  const ids = [];
-  String(html || '').replace(FILE_ATTACH_RE, (tag) => {
-    const f = parseFileAttachmentTag(tag);
-    if (f.kind === 'video' && f.displayMode === 'player' && f.assetId) {
-      ids.push(f.assetId);
-    }
-    return '';
-  });
-  return Array.from(new Set(ids));
-}
-
 function replaceKnowledgeAssetUrls(html, urlById) {
   const map = urlById && typeof urlById === 'object' ? urlById : {};
   return String(html || '').replace(ASSET_URL_RE, (match, id) => {
@@ -762,7 +749,6 @@ function assetBufferToDataUrl(buffer, mimeType) {
 module.exports = {
   extractKnowledgeAssetIdsFromHtml,
   extractImageAssetIdsFromHtml,
-  extractPlayerVideoAssetIdsFromHtml,
   stripFileAttachments,
   replaceKnowledgeAssetUrls,
   convertProductRefsToText,

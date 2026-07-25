@@ -48,6 +48,7 @@ import { tableDeleteShortcut } from './tableDeleteShortcut';
 import { KnowledgeTextAlign } from './knowledgeTextAlignExtension';
 import { focusDocumentTail, isClickBelowEditorContent } from './focusDocumentTail';
 import { shouldApplyRemoteContentHydrate } from '../../utils/knowledgeEditorHydrate';
+import { readImageNaturalSize } from '../../utils/imageNaturalSize';
 import { useKnowledgeDocOutline } from '../../hooks/useKnowledgeDocOutline';
 import KnowledgeDocOutline from './KnowledgeDocOutline';
 import PlanProductDetail from '../plan-order-list/PlanProductDetail';
@@ -57,6 +58,16 @@ import './knowledge-editor.css';
 const lowlight = createLowlight(common);
 
 const AUTO_SAVE_DELAY_MS = 1000;
+
+/** 正文可用宽度（扣掉编辑区左右内边距），用于把超宽原图等比缩到不溢出 */
+function editorContentWidth(ed: Editor): number | null {
+  const dom = ed.view.dom as HTMLElement;
+  if (!dom.clientWidth) return null;
+  const style = window.getComputedStyle(dom);
+  const inner =
+    dom.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0);
+  return inner > 0 ? Math.floor(inner) : null;
+}
 
 interface KnowledgeRichEditorProps {
   documentId: string;
@@ -121,8 +132,15 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
 
   const insertImageFromFile = useCallback(async (file: File, ed: Editor | null) => {
     if (!ed || !file.type.startsWith('image/')) return;
-    const url = await onUploadImage(file);
-    const attrs = buildKnowledgeImageInsertAttrs(url, ed.isActive('table'));
+    const [url, naturalSize] = await Promise.all([
+      onUploadImage(file),
+      readImageNaturalSize(file),
+    ]);
+    const attrs = buildKnowledgeImageInsertAttrs(url, {
+      inTable: ed.isActive('table'),
+      naturalSize,
+      maxWidth: editorContentWidth(ed),
+    });
     ed.chain().focus().setImage(attrs).run();
   }, [onUploadImage]);
 

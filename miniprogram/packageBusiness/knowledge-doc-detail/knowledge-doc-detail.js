@@ -10,7 +10,6 @@ const {
 } = require('../utils/knowledgeApi.js');
 const {
   extractImageAssetIdsFromHtml,
-  extractPlayerVideoAssetIdsFromHtml,
   buildKnowledgeDocBlocks,
   applyImageBlockLayout,
   collectKnowledgeOutlineFromHtml,
@@ -42,6 +41,8 @@ Page({
     menuRightInset: 96,
     headerBlockHeight: 64,
     scrollHeight: 600,
+    /** assetId → 本地临时路径；内嵌视频点击后再写入 */
+    playerVideoSrc: {},
   },
 
   onLoad(options) {
@@ -288,6 +289,33 @@ Page({
     }
   },
 
+  /** 内嵌播放窗口：点击后再下载到本地并赋 src */
+  async onLoadPlayerVideo(e) {
+    const ds = e.currentTarget.dataset || {};
+    const assetId = ds.assetId;
+    const fileName = ds.fileName || '视频';
+    const mimeType = ds.mimeType || 'video/mp4';
+    if (!assetId) {
+      wx.showToast({ title: '视频无效', icon: 'none' });
+      return;
+    }
+    const existing = (this.data.playerVideoSrc && this.data.playerVideoSrc[assetId])
+      || (this._fileTempByAssetId && this._fileTempByAssetId[assetId]);
+    if (existing) {
+      this.setData({ [`playerVideoSrc.${assetId}`]: existing });
+      return;
+    }
+    wx.showLoading({ title: '加载视频…', mask: true });
+    try {
+      const path = await this.ensureFileTempPath(assetId, fileName, mimeType);
+      this.setData({ [`playerVideoSrc.${assetId}`]: path });
+    } catch (err) {
+      wx.showToast({ title: (err && err.message) || '加载失败', icon: 'none' });
+    } finally {
+      wx.hideLoading();
+    }
+  },
+
   async ensureFileTempPath(assetId, fileName, mimeType) {
     const cached = this._fileTempByAssetId && this._fileTempByAssetId[assetId];
     if (cached) return cached;
@@ -320,13 +348,13 @@ Page({
       }
       this._loaded = true;
       const content = String(doc.content || '');
-      // 预拉正文图片 + 内嵌播放视频；标签式附件仍按点击再下载
+      // 仅预拉正文图片；内嵌播放视频改为点击后再下载，避免打开大文档卡顿
       const imageIds = extractImageAssetIdsFromHtml(content);
-      const playerVideoIds = extractPlayerVideoAssetIdsFromHtml(content);
-      const assetIds = Array.from(new Set(imageIds.concat(playerVideoIds)));
+      const assetIds = Array.from(new Set(imageIds));
       const urlById = {};
       const tempPaths = [];
       this._fileTempByAssetId = {};
+      this.setData({ playerVideoSrc: {} });
 
       await Promise.all(
         assetIds.map(async (assetId) => {

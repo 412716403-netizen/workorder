@@ -11,6 +11,7 @@ import {
   LayoutList,
   Loader2,
   MonitorPlay,
+  Play,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { downloadKnowledgeAsset } from '../../services/api/knowledgeBase';
@@ -30,6 +31,118 @@ const KIND_ICON = {
   word: { Icon: FileText, className: 'text-blue-600 bg-blue-50' },
   other: { Icon: File, className: 'text-slate-500 bg-slate-100' },
 } as const;
+
+/** 内嵌视频：点击后再赋 src，打开文档时不拉字节 */
+function LazyKnowledgeVideoPlayer({
+  assetUrl,
+  fileName,
+  sizeBytes,
+  selected,
+  editable,
+  downloading,
+  onSetTag,
+  onPreview,
+  onDownload,
+}: {
+  assetUrl: string;
+  fileName: string;
+  sizeBytes: number;
+  selected: boolean;
+  editable: boolean;
+  downloading: boolean;
+  onSetTag: () => void;
+  onPreview: () => void;
+  onDownload: (e: React.MouseEvent) => void;
+}) {
+  const [loaded, setLoaded] = useState(false);
+
+  const handleStart = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (assetUrl) setLoaded(true);
+  };
+
+  const autoPlayOnMount = (video: HTMLVideoElement | null) => {
+    void video?.play().catch(() => {
+      /* 自动播放可能被浏览器策略拦截，保留 controls 供手动播放 */
+    });
+  };
+
+  return (
+    <NodeViewWrapper
+      className={`kb-file-attachment-player${selected ? ' is-selected' : ''}`}
+      data-drag-handle
+    >
+      <div className="kb-file-attachment-player-toolbar">
+        <span className="kb-file-attachment-player-title" title={fileName}>
+          {fileName}
+          <span className="kb-file-attachment-player-size">{formatFileSize(sizeBytes)}</span>
+        </span>
+        <span className="kb-file-attachment-actions is-always-visible">
+          {editable && (
+            <button
+              type="button"
+              className="kb-file-attachment-action"
+              onClick={(e) => {
+                e.stopPropagation();
+                onSetTag();
+              }}
+              title="切换为标签展示"
+              aria-label="切换为标签展示"
+            >
+              <LayoutList className="h-4 w-4" />
+            </button>
+          )}
+          <button
+            type="button"
+            className="kb-file-attachment-action"
+            onClick={(e) => {
+              e.stopPropagation();
+              onPreview();
+            }}
+            title="全屏预览"
+            aria-label="全屏预览"
+          >
+            <Eye className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            className="kb-file-attachment-action"
+            onClick={onDownload}
+            title="下载"
+            aria-label="下载"
+          >
+            {downloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+          </button>
+        </span>
+      </div>
+      {loaded ? (
+        <video
+          ref={autoPlayOnMount}
+          className="kb-file-attachment-video"
+          src={assetUrl}
+          controls
+          preload="metadata"
+          playsInline
+          onClick={(e) => e.stopPropagation()}
+        />
+      ) : (
+        <button
+          type="button"
+          className="kb-file-attachment-video-placeholder"
+          onClick={handleStart}
+          title="点击加载并播放"
+          aria-label={`加载并播放 ${fileName}`}
+        >
+          <span className="kb-file-attachment-video-placeholder-icon">
+            <Play className="h-8 w-8" fill="currentColor" />
+          </span>
+          <span className="kb-file-attachment-video-placeholder-text">点击加载视频</span>
+          <span className="kb-file-attachment-video-placeholder-sub">{formatFileSize(sizeBytes)}</span>
+        </button>
+      )}
+    </NodeViewWrapper>
+  );
+}
 
 const KnowledgeFileAttachmentCard: React.FC<NodeViewProps> = ({
   node,
@@ -76,56 +189,17 @@ const KnowledgeFileAttachmentCard: React.FC<NodeViewProps> = ({
 
   if (isVideoPlayer) {
     return (
-      <NodeViewWrapper
-        className={`kb-file-attachment-player${selected ? ' is-selected' : ''}`}
-        data-drag-handle
-      >
-        <div className="kb-file-attachment-player-toolbar">
-          <span className="kb-file-attachment-player-title" title={fileName}>
-            {fileName}
-            <span className="kb-file-attachment-player-size">{formatFileSize(sizeBytes)}</span>
-          </span>
-          <span className="kb-file-attachment-actions is-always-visible">
-            {editable && (
-              <button
-                type="button"
-                className="kb-file-attachment-action"
-                onClick={(e) => { e.stopPropagation(); setDisplayMode('tag'); }}
-                title="切换为标签展示"
-                aria-label="切换为标签展示"
-              >
-                <LayoutList className="h-4 w-4" />
-              </button>
-            )}
-            <button
-              type="button"
-              className="kb-file-attachment-action"
-              onClick={(e) => { e.stopPropagation(); openPreview(); }}
-              title="全屏预览"
-              aria-label="全屏预览"
-            >
-              <Eye className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              className="kb-file-attachment-action"
-              onClick={handleDownload}
-              title="下载"
-              aria-label="下载"
-            >
-              {downloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-            </button>
-          </span>
-        </div>
-        <video
-          className="kb-file-attachment-video"
-          src={assetUrl}
-          controls
-          preload="metadata"
-          playsInline
-          onClick={(e) => e.stopPropagation()}
-        />
-      </NodeViewWrapper>
+      <LazyKnowledgeVideoPlayer
+        assetUrl={assetUrl}
+        fileName={fileName}
+        sizeBytes={sizeBytes}
+        selected={selected}
+        editable={editable}
+        downloading={downloading}
+        onSetTag={() => setDisplayMode('tag')}
+        onPreview={openPreview}
+        onDownload={handleDownload}
+      />
     );
   }
 

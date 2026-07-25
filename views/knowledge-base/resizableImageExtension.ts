@@ -1,6 +1,7 @@
 import Image from '@tiptap/extension-image';
 import { mergeAttributes, ResizableNodeView } from '@tiptap/core';
 import { NodeSelection } from '@tiptap/pm/state';
+import { knowledgeImagePlaceholderHeight } from './knowledgeTableImage';
 
 /**
  * 修复 Tiptap Image 可缩放节点视图的两处问题：
@@ -21,11 +22,13 @@ export const ResizableImage = Image.extend({
     return ({ node, getPos, HTMLAttributes, editor }) => {
       const el = document.createElement('img');
       el.draggable = false;
+      el.decoding = 'async';
 
       const mergedAttributes = mergeAttributes(this.options.HTMLAttributes, HTMLAttributes);
       Object.entries(mergedAttributes).forEach(([key, value]) => {
         if (value == null) return;
         if (key === 'width' || key === 'height') return;
+        if (key === 'src') return; // 延迟赋值，见下方 IntersectionObserver
         el.setAttribute(key, String(value));
       });
 
@@ -55,7 +58,13 @@ export const ResizableImage = Image.extend({
       const reveal = () => {
         dom.style.visibility = '';
         dom.style.pointerEvents = '';
+        el.style.minHeight = '';
       };
+
+      // 无 height attr 的历史图片未加载时高度为 0，整篇会同时进入视口；先占位撑开
+      if (!(Number(node.attrs.height) > 0)) {
+        el.style.minHeight = `${knowledgeImagePlaceholderHeight(Number(node.attrs.width))}px`;
+      }
 
       dom.style.visibility = 'hidden';
       dom.style.pointerEvents = 'none';
@@ -63,12 +72,34 @@ export const ResizableImage = Image.extend({
       el.addEventListener('load', reveal, { once: true });
       el.addEventListener('error', reveal, { once: true });
 
-      if (mergedAttributes.src != null) {
-        el.src = String(mergedAttributes.src);
-      }
+      const realSrc = mergedAttributes.src != null ? String(mergedAttributes.src) : '';
+      let io: IntersectionObserver | null = null;
+      let assigned = false;
+      const assignSrc = () => {
+        if (!realSrc || assigned) return;
+        assigned = true;
+        el.src = realSrc;
+        if (el.complete && el.naturalWidth > 0) {
+          reveal();
+        }
+      };
 
-      if (el.complete && el.naturalWidth > 0) {
+      if (!realSrc) {
         reveal();
+      } else if (typeof IntersectionObserver === 'undefined') {
+        assignSrc();
+      } else {
+        // 长文档一次性拉全部图片会拖慢打开；进入视口附近再请求
+        io = new IntersectionObserver(
+          (entries) => {
+            if (!entries.some((e) => e.isIntersecting)) return;
+            assignSrc();
+            io?.disconnect();
+            io = null;
+          },
+          { rootMargin: '320px 0px', threshold: 0.01 },
+        );
+        io.observe(dom);
       }
 
       const selectImage = (e: MouseEvent) => {
@@ -86,6 +117,16 @@ export const ResizableImage = Image.extend({
 
       dom.addEventListener('click', selectImage);
       el.addEventListener('click', selectImage);
+
+      // 覆盖实例方法而非展开对象：ResizableNodeView 的 dom / update 定义在原型上，展开会丢失
+      const baseDestroy = nodeView.destroy.bind(nodeView);
+      nodeView.destroy = () => {
+        io?.disconnect();
+        io = null;
+        dom.removeEventListener('click', selectImage);
+        el.removeEventListener('click', selectImage);
+        baseDestroy();
+      };
 
       return nodeView;
     };
