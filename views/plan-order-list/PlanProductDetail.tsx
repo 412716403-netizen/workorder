@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { X, Package } from 'lucide-react';
 import type {
   Product,
@@ -11,6 +11,10 @@ import type {
 import ProductQuickDetailBody from '../shared/ProductQuickDetailBody';
 import { productThumbSrc } from '../../utils/productImageSrc';
 import { ModalPortal } from '../../components/ModalPortal';
+import ProductImageLightbox, {
+  productPreviewFromProduct,
+  type ProductImagePreviewTarget,
+} from '../../components/ProductImageLightbox';
 
 interface PlanProductDetailProps {
   viewProductId: string;
@@ -26,6 +30,13 @@ interface PlanProductDetailProps {
   stackZClass?: string;
 }
 
+/** 灯箱需高于产品详情弹窗；从 stackZClass 解析数字并上浮 */
+function lightboxZAbove(stackZClass: string): string {
+  const m = /^z-\[(\d+)\]$/.exec(stackZClass.trim());
+  if (m) return `z-[${Number(m[1]) + 100}]`;
+  return 'z-[100]';
+}
+
 const PlanProductDetail: React.FC<PlanProductDetailProps> = ({
   viewProductId,
   products,
@@ -38,9 +49,13 @@ const PlanProductDetail: React.FC<PlanProductDetailProps> = ({
   onFilePreview,
   stackZClass = 'z-[95]',
 }) => {
+  const [imagePreview, setImagePreview] = useState<ProductImagePreviewTarget | null>(null);
+  const lightboxZClass = lightboxZAbove(stackZClass);
   const p = products.find(x => x.id === viewProductId);
   const cat = p && categories.find(c => c.id === p.categoryId);
   if (!p) return null;
+
+  const thumbSrc = productThumbSrc(p);
 
   return (
     <ModalPortal>
@@ -49,8 +64,22 @@ const PlanProductDetail: React.FC<PlanProductDetailProps> = ({
       <div className="relative z-10 bg-white w-full max-w-2xl rounded-[32px] shadow-2xl overflow-hidden max-h-[min(92vh,960px)] flex flex-col min-h-0" onClick={e => e.stopPropagation()}>
         <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-4 min-w-0">
-            {productThumbSrc(p) ? (
-              <img loading="lazy" decoding="async" src={productThumbSrc(p)} alt={p.name} className="w-16 h-16 rounded-2xl object-cover border border-slate-200 bg-white shrink-0" />
+            {thumbSrc ? (
+              <button
+                type="button"
+                onClick={() => setImagePreview(productPreviewFromProduct(p))}
+                className="w-16 h-16 rounded-2xl overflow-hidden border border-slate-200 bg-white shrink-0 focus:outline-none focus:ring-2 focus:ring-indigo-500 hover:opacity-90 transition-opacity cursor-pointer"
+                aria-label="查看产品图片"
+                title="点击放大查看"
+              >
+                <img
+                  loading="lazy"
+                  decoding="async"
+                  src={thumbSrc}
+                  alt={p.name}
+                  className="w-full h-full object-cover block"
+                />
+              </button>
             ) : (
               <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-400 shrink-0"><Package className="w-8 h-8" /></div>
             )}
@@ -74,6 +103,12 @@ const PlanProductDetail: React.FC<PlanProductDetailProps> = ({
         />
       </div>
     </div>
+    <ProductImageLightbox
+      target={imagePreview}
+      onClose={() => setImagePreview(null)}
+      zIndexClass={lightboxZClass}
+      alt={p.name}
+    />
     </ModalPortal>
   );
 };
