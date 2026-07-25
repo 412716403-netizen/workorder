@@ -21,6 +21,7 @@ import type {
   Product,
   ProductCategory,
   ProductionLinkMode,
+  ProductCodeRuleMap,
   ProductEconomicsSettings,
   ProductionOrder,
   PlanOrder,
@@ -77,6 +78,8 @@ import {
 import { mergePrintTemplatesForTenantConfig } from '../shared/systemPrintTemplates';
 import { parseFeaturePlugins, type FeaturePluginsConfig } from '../shared/workbench';
 import { DEFAULT_PRODUCT_ECONOMICS_SETTINGS, parseProductEconomicsSettings } from '../shared/types';
+import { PRODUCT_CODE_RULES_CONFIG_KEY } from '../shared/types';
+import { normalizeProductCodeRuleMap } from '../utils/productCodeRule';
 
 export function settledVal<T>(results: PromiseSettledResult<unknown>[], i: number): T | undefined {
   return results[i]?.status === 'fulfilled' ? (results[i] as PromiseFulfilledResult<unknown>).value as T : undefined;
@@ -101,6 +104,7 @@ export interface AppDataLoadCoreSetters {
   setAllowExceedMaxStockInQty: Dispatch<SetStateAction<boolean>>;
   setWeightTolerancePercent: Dispatch<SetStateAction<number>>;
   setProductEconomicsSettings: Dispatch<SetStateAction<ProductEconomicsSettings>>;
+  setProductCodeRules: Dispatch<SetStateAction<ProductCodeRuleMap>>;
   setPlanFormSettings: Dispatch<SetStateAction<PlanFormSettings>>;
   setOrderFormSettings: Dispatch<SetStateAction<OrderFormSettings>>;
   setPurchaseOrderFormSettings: Dispatch<SetStateAction<PurchaseOrderFormSettings>>;
@@ -192,6 +196,7 @@ async function loadCriticalBatch(
   s.setAllowExceedMaxOutsourceReceiveQty(cfg.allowExceedMaxOutsourceReceiveQty === true);
   s.setAllowExceedMaxStockInQty(cfg.allowExceedMaxStockInQty === true);
   s.setProductEconomicsSettings(parseProductEconomicsSettings(cfg.productEconomicsSettings));
+  s.setProductCodeRules(normalizeProductCodeRuleMap(cfg[PRODUCT_CODE_RULES_CONFIG_KEY]));
   {
     const raw = cfg.weightTolerancePercent;
     const n = typeof raw === 'number' ? raw : Number(raw);

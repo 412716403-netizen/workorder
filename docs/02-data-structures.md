@@ -96,6 +96,18 @@
 | | 设备管理 | equipment / Equipment |
 | | 公共数据字典 | dictionaries / DictionaryItem |
 
+### 1.5.1 产品编号规则（productCodeRules）
+
+| 存储 | Key | 形状 | 说明 |
+|------|-----|------|------|
+| `system_settings` | `productCodeRules` | `ProductCodeRuleMap`（分类 id → `ProductCodeRule`） | 产品编号自动生成规则，按产品分类各配一套；未配置分类为手动输入 |
+
+- 类型单一事实源：`shared/types.ts`（`ProductCodeRule` / `ProductCodeElement` / `ProductCodeAutoGen` 等）；纯函数（归一、前缀拼接、预览）在 `utils/productCodeRule.ts`。
+- `ProductCodeRule`：`mode`（auto/manual）+ `elements`（可增删，1~10 条：固定文本 / 产品字段；`none` 仅为历史配置保留）+ `serialLength`（1-10）+ `separator`（`-`/`_`/`/`/空）。
+- 产品字段取值：`sku`（产品名称）或 `custom:<ReportFieldDefinition.id>`（分类扩展字段，仅 text/select/date 参与）；select 可配「选项 → 编号」映射，date 按 `yyMMdd|yyMM|yy|yyyyMMdd` 格式化。
+- API：`GET /api/products/next-code?prefix=&serialLength=`（预取号，权限 `basic:products:create`）；`POST /api/products` 可带 `codeAutoGen: { prefix, serialLength }`，服务端在 `product_code:{prefix}` advisory lock 内取号 + 创建（同锁同事务，避免 race window）；号池匹配 `^{prefix}[0-9]+$` 取 max+1，位数溢出后仍单调递增。
+- 业务规则详见 `docs/01-business-rules.md` §1.4。
+
 ### 1.6 工作台配置
 
 | 存储 | Key / 字段 | 形状 | 说明 |

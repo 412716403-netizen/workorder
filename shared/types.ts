@@ -249,6 +249,69 @@ export type CustomDocFieldType = 'text' | 'date' | 'select' | 'file' | 'knowledg
 /** 历史持久化 JSON 中曾出现的 type，加载时应归一为 CustomDocFieldType */
 export type LegacyCustomDocFieldType = CustomDocFieldType | 'number' | 'boolean';
 
+// ── 产品编号自动生成规则（systemSetting key: productCodeRules）──
+
+/** 租户配置 key：产品分类 id -> ProductCodeRule */
+export const PRODUCT_CODE_RULES_CONFIG_KEY = 'productCodeRules';
+/** 元素数量可自定义增删的取值范围与新建规则的默认条数 */
+export const PRODUCT_CODE_ELEMENT_MIN_COUNT = 1;
+export const PRODUCT_CODE_ELEMENT_MAX_COUNT = 10;
+export const PRODUCT_CODE_ELEMENT_DEFAULT_COUNT = 2;
+/** 内建字段 key：产品名称（Product.sku，文本型） */
+export const PRODUCT_CODE_FIELD_SKU = 'sku';
+/** 分类扩展字段 key 前缀：`custom:<ReportFieldDefinition.id>` */
+export const PRODUCT_CODE_FIELD_CUSTOM_PREFIX = 'custom:';
+
+/** `none`（空值）已从配置界面移除，仅用于兼容历史配置，拼接时按空段跳过 */
+export type ProductCodeElementType = 'none' | 'fixedText' | 'field';
+/** 产品字段显示方式：文本内容 / 选项对应编号 / 日期 */
+export type ProductCodeFieldDisplay = 'text' | 'mapped' | 'date';
+export type ProductCodeDateFormat = 'yyMMdd' | 'yyMM' | 'yy' | 'yyyyMMdd';
+export type ProductCodeSeparator = '-' | '_' | '/' | '';
+
+export const PRODUCT_CODE_DATE_FORMATS: ProductCodeDateFormat[] = ['yyMMdd', 'yyMM', 'yy', 'yyyyMMdd'];
+export const PRODUCT_CODE_SEPARATORS: ProductCodeSeparator[] = ['-', '_', '/', ''];
+export const PRODUCT_CODE_SERIAL_LENGTH_MIN = 1;
+export const PRODUCT_CODE_SERIAL_LENGTH_MAX = 10;
+export const PRODUCT_CODE_DEFAULT_SERIAL_LENGTH = 3;
+
+export interface ProductCodeElement {
+  type: ProductCodeElementType;
+  /** type=fixedText：固定文本内容（每个分类一套规则，直接存单值） */
+  fixedText?: string;
+  /** type=field：'sku' 或 `custom:<ReportFieldDefinition.id>` */
+  fieldKey?: string;
+  /** type=field：显示方式，由字段类型决定可选项（text 字段仅 text；select 可 text/mapped，text 时同样可配 length；date 仅 date） */
+  display?: ProductCodeFieldDisplay;
+  /** display=text：截取字段值前 N 位；空 = 全取 */
+  length?: number;
+  /** display=mapped：选项文本 -> 编号 */
+  optionCodes?: Record<string, string>;
+  /** display=date */
+  dateFormat?: ProductCodeDateFormat;
+}
+
+/** 单个产品分类的编号规则 */
+export interface ProductCodeRule {
+  /** auto：新建产品时自动生成编号（仍可手改）；manual：完全手动输入 */
+  mode: 'auto' | 'manual';
+  /** 有序元素列表，条数由用户增删（PRODUCT_CODE_ELEMENT_MIN_COUNT ~ MAX_COUNT） */
+  elements: ProductCodeElement[];
+  /** 流水号位数（按前缀分组取号，左补零） */
+  serialLength: number;
+  separator: ProductCodeSeparator;
+}
+
+/** 产品分类 id -> 编号规则；未配置的分类走手动输入 */
+export type ProductCodeRuleMap = Record<string, ProductCodeRule>;
+
+/** POST /products 可选载荷：自动取号请求（前端传前缀，后端锁内取流水号覆盖 name） */
+export interface ProductCodeAutoGen {
+  /** 除流水号外已拼好的前缀（含末尾分隔符） */
+  prefix: string;
+  serialLength: number;
+}
+
 /** 与 `psi_records.batch_no` / `production_op_records.batch_no` 一致的最大长度 */
 export const BATCH_FIELD_MAX_LEN = 100;
 

@@ -34,6 +34,12 @@ export const variantUsage = asyncHandler(async (req, res) => {
   res.json(await productsService.getVariantUsage(db, str(req.params.id), variantIds));
 });
 
+export const nextProductCode = asyncHandler(async (req, res) => {
+  const prefix = String(req.query.prefix ?? '');
+  const serialLength = Number(req.query.serialLength ?? '');
+  res.json(await productsService.nextProductCode(req.tenantId!, prefix, serialLength));
+});
+
 export const createProduct = asyncHandler(async (req, res) => {
   res.status(201).json(await productsService.createProduct(getTenantPrisma(req.tenantId!), req.tenantId!, req.body));
 });

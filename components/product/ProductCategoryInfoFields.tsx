@@ -8,6 +8,8 @@ import {
   ShoppingCart,
   ImagePlus,
   Image as ImageIcon,
+  Settings,
+  RefreshCw,
 } from 'lucide-react';
 import type {
   Product,
@@ -17,6 +19,7 @@ import type {
   DictionaryItem,
   Partner,
   ProductVariant,
+  ProductCodeRuleMap,
 } from '../../types';
 import { productColorSizeEnabled } from '../../utils/productColorSize';
 import ReportCustomFieldsEditor from '../ReportCustomFieldsEditor';
@@ -25,6 +28,8 @@ import { UnitPriceInput } from '../UnitPriceInput';
 import SpecSelectorModal from './SpecSelectorModal';
 import ColorSizeSpecPickerTable from './ColorSizeSpecPickerTable';
 import { useAuthOptional } from '../../contexts/AuthContext';
+import { hasSubPermission } from '../../utils/hasSubPermission';
+import ProductCodeRuleModal from './ProductCodeRuleModal';
 import * as api from '../../services/api';
 import { toast } from 'sonner';
 import {
@@ -68,6 +73,14 @@ export interface ProductCategoryInfoFieldsProps {
   /** 是否使用卡片外框（产品档案 true；开发弹窗可 false） */
   useCardShell?: boolean;
   skuPlaceholder?: string;
+  /** 编号规则为自动生成且未手改（由 useProductCodeAutoFill 注入；显示重新取号按钮与提示） */
+  autoCodeActive?: boolean;
+  /** 自动生成模式下手动重新取号 */
+  onRefreshAutoCode?: () => void;
+  /** 产品编号规则（分类 id -> 规则）；与 onUpdateProductCodeRules 一起由外层注入（本组件不静态依赖 AppDataContext） */
+  productCodeRules?: ProductCodeRuleMap;
+  /** 保存编号规则；未传则不显示「配置编号规则」齿轮入口 */
+  onUpdateProductCodeRules?: (map: ProductCodeRuleMap) => Promise<void>;
 }
 
 /**
@@ -89,9 +102,20 @@ const ProductCategoryInfoFields: React.FC<ProductCategoryInfoFieldsProps> = ({
   sectionHeading = '1. 核心业务档案',
   useCardShell = true,
   skuPlaceholder = '选填',
+  autoCodeActive = false,
+  onRefreshAutoCode,
+  productCodeRules,
+  onUpdateProductCodeRules,
 }) => {
   const auth = useAuthOptional();
   const nestedOverlayZ = embeddedInQuickCreateModal ? 'z-[11200]' : 'z-[10250]';
+
+  // 编号规则配置入口：写 productCodeRules 走 PUT /settings/config，需 settings:config:edit
+  const canConfigCodeRule =
+    !readOnly &&
+    Boolean(onUpdateProductCodeRules) &&
+    hasSubPermission(auth?.tenantCtx?.permissions, 'settings:config:edit');
+  const [codeRuleModalOpen, setCodeRuleModalOpen] = useState(false);
 
   const [modalType, setModalType] = useState<'color' | 'size' | null>(null);
   const [quickAddSpecOpen, setQuickAddSpecOpen] = useState<'color' | 'size' | null>(null);
@@ -362,6 +386,16 @@ const ProductCategoryInfoFields: React.FC<ProductCategoryInfoFieldsProps> = ({
   return (
     <>
       <MediaFilePreviewOverlay preview={filePreview} onClose={closeFilePreview} />
+      {codeRuleModalOpen && onUpdateProductCodeRules && (
+        <ProductCodeRuleModal
+          categories={categories}
+          initialCategoryId={working.categoryId}
+          rules={productCodeRules ?? {}}
+          onSave={onUpdateProductCodeRules}
+          onClose={() => setCodeRuleModalOpen(false)}
+          overlayZClass={nestedOverlayZ}
+        />
+      )}
       {lightboxImageUrl && (
         <div
           className={`fixed inset-0 ${nestedOverlayZ} flex items-center justify-center p-8 bg-slate-900/80`}
@@ -484,14 +518,39 @@ const ProductCategoryInfoFields: React.FC<ProductCategoryInfoFieldsProps> = ({
             </div>
           </div>
           <div className="space-y-1">
-            <label className={productArchiveFormLabelClass}>
-              产品编号 <span className="text-rose-500">*</span>
-            </label>
+            <div className="flex items-center justify-between">
+              <label className={productArchiveFormLabelClass}>
+                产品编号 <span className="text-rose-500">*</span>
+              </label>
+              <div className="flex items-center gap-0.5">
+                {!readOnly && autoCodeActive && onRefreshAutoCode && (
+                  <button
+                    type="button"
+                    title="按编号规则重新取号"
+                    onClick={onRefreshAutoCode}
+                    className="p-1 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                {canConfigCodeRule && (
+                  <button
+                    type="button"
+                    title="配置编号规则"
+                    onClick={() => setCodeRuleModalOpen(true)}
+                    className="p-1 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
+                  >
+                    <Settings className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
             <input
               type="text"
               disabled={readOnly}
               value={working.name}
               onChange={(e) => setWorking({ ...working, name: e.target.value })}
+              placeholder={autoCodeActive ? '按编号规则自动生成' : undefined}
               className={productArchiveFormControlClass}
               autoComplete={embeddedInQuickCreateModal ? 'off' : undefined}
               name={embeddedInQuickCreateModal ? 'dev-style-product-name' : undefined}

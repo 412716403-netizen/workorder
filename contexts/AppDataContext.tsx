@@ -27,6 +27,8 @@ import type {
   FinanceAccountType,
   AppDictionaries,
   ProductCategory,
+  ProductCodeAutoGen,
+  ProductCodeRuleMap,
   ProductEconomicsSettings,
   PartnerCategory,
   GlobalNodeTemplate,
@@ -52,6 +54,7 @@ import {
   DEFAULT_OUTSOURCE_FORM_SETTINGS,
   DEFAULT_REWORK_FORM_SETTINGS,
   DEFAULT_PRODUCT_ECONOMICS_SETTINGS,
+  PRODUCT_CODE_RULES_CONFIG_KEY,
   OrderDispatchStatus,
 } from '../types';
 import { normalizePartnersFromApi } from '../utils/partnerNormalize';
@@ -135,6 +138,8 @@ export interface AppDataContextValue {
   allowExceedMaxStockInQty: boolean;
   weightTolerancePercent: number;
   productEconomicsSettings: ProductEconomicsSettings;
+  /** 产品编号自动生成规则（分类 id -> 规则） */
+  productCodeRules: ProductCodeRuleMap;
   productMilestoneProgresses: ProductMilestoneProgress[];
   // Config handlers
   onUpdateAllowExceedMaxReportQty: (v: boolean) => Promise<void>;
@@ -142,6 +147,7 @@ export interface AppDataContextValue {
   onUpdateAllowExceedMaxStockInQty: (v: boolean) => Promise<void>;
   onUpdateWeightTolerancePercent: (v: number) => Promise<void>;
   onUpdateProductEconomicsSettings: (v: ProductEconomicsSettings) => Promise<void>;
+  onUpdateProductCodeRules: (v: ProductCodeRuleMap) => Promise<void>;
   onUpdatePlanFormSettings: (v: PlanFormSettings) => Promise<void>;
   onUpdateOrderFormSettings: (v: OrderFormSettings) => Promise<void>;
   onUpdatePurchaseOrderFormSettings: (v: PurchaseOrderFormSettings) => Promise<void>;
@@ -161,8 +167,8 @@ export interface AppDataContextValue {
   onUpdateReworkFormSettings: (v: ReworkFormSettings) => Promise<void>;
   // Product / BOM
   /** 成功返回 true，失败已 toast 并返回 false */
-  /** 成功返回归一化后的产品实体，失败返回 null（已 toast） */
-  onUpdateProduct: (p: Product) => Promise<Product | null>;
+  /** 成功返回归一化后的产品实体，失败返回 null（已 toast）；新建时可带 codeAutoGen 让后端按编号规则锁内取号 */
+  onUpdateProduct: (p: Product & { codeAutoGen?: ProductCodeAutoGen }) => Promise<Product | null>;
   /** 成功返回 true，失败已 toast 并返回 false */
   onDeleteProduct: (id: string) => Promise<boolean>;
   /** 成功返回 true，失败已 toast 并返回 false */
@@ -238,7 +244,7 @@ export type AppDataState = Pick<AppDataContextValue,
   'financeCategories' | 'financeAccountTypes' |
   'planFormSettings' | 'orderFormSettings' | 'purchaseOrderFormSettings' | 'salesOrderFormSettings' | 'purchaseBillFormSettings' | 'salesBillFormSettings' | 'receiptFormSettings' | 'paymentFormSettings' | 'materialPanelSettings' | 'materialFormSettings' | 'outsourceFormSettings' | 'reworkFormSettings' |
   'printTemplates' |
-  'productionLinkMode' | 'processSequenceMode' | 'allowExceedMaxReportQty' | 'allowExceedMaxOutsourceReceiveQty' | 'allowExceedMaxStockInQty' | 'weightTolerancePercent' | 'productEconomicsSettings' | 'productMilestoneProgresses'
+  'productionLinkMode' | 'processSequenceMode' | 'allowExceedMaxReportQty' | 'allowExceedMaxOutsourceReceiveQty' | 'allowExceedMaxStockInQty' | 'weightTolerancePercent' | 'productEconomicsSettings' | 'productCodeRules' | 'productMilestoneProgresses'
 >;
 
 export type AppDataActions = Omit<AppDataContextValue, keyof AppDataState>;
@@ -271,6 +277,8 @@ export interface ConfigState {
   allowExceedMaxStockInQty: boolean;
   weightTolerancePercent: number;
   productEconomicsSettings: ProductEconomicsSettings;
+  /** 产品编号自动生成规则（分类 id -> 规则） */
+  productCodeRules: ProductCodeRuleMap;
   planFormSettings: PlanFormSettings;
   orderFormSettings: OrderFormSettings;
   purchaseOrderFormSettings: PurchaseOrderFormSettings;
@@ -472,6 +480,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [productEconomicsSettings, setProductEconomicsSettings] = useState<ProductEconomicsSettings>(
     DEFAULT_PRODUCT_ECONOMICS_SETTINGS,
   );
+  const [productCodeRules, setProductCodeRules] = useState<ProductCodeRuleMap>({});
   const [productMilestoneProgresses, setProductMilestoneProgresses] = useState<ProductMilestoneProgress[]>([]);
 
   const activeTenantId = tenantCtx?.tenantId;
@@ -503,6 +512,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       setAllowExceedMaxStockInQty,
       setWeightTolerancePercent,
       setProductEconomicsSettings,
+      setProductCodeRules,
       setPlanFormSettings,
       setOrderFormSettings,
       setPurchaseOrderFormSettings,
@@ -569,6 +579,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         setAllowExceedMaxStockInQty,
         setWeightTolerancePercent,
         setProductEconomicsSettings,
+        setProductCodeRules,
         setPlanFormSettings,
         setOrderFormSettings,
         setPurchaseOrderFormSettings,
@@ -722,6 +733,10 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     await api.settings.updateConfig('productEconomicsSettings', value);
     setProductEconomicsSettings(value);
   }, []);
+  const onUpdateProductCodeRules = useCallback(async (value: ProductCodeRuleMap) => {
+    await api.settings.updateConfig(PRODUCT_CODE_RULES_CONFIG_KEY, value);
+    setProductCodeRules(value);
+  }, []);
   /**
    * 统一的 *FormSettings 保存 handler：
    * normalize → api.settings.updateConfig(key, next) → setter(next)。
@@ -812,7 +827,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const norm1 = <T,>(item: T): T => normalizeDecimals([item])[0];
 
   // ── Product / BOM handlers ──
-  const onUpdateProduct = useCallback(async (p: Product): Promise<Product | null> => {
+  const onUpdateProduct = useCallback(async (p: Product & { codeAutoGen?: ProductCodeAutoGen }): Promise<Product | null> => {
     try {
       const exists = products.some(px => px.id === p.id);
       const saved = (exists ? await api.products.update(p.id, p) : await api.products.create(p)) as Product;
@@ -1217,11 +1232,11 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }), [categories, partnerCategories, dictionaries, globalNodes, partners, workers, equipment, warehouses, products, boms, masterDataReady]);
 
   const configValue: ConfigState = useMemo(() => ({
-    productionLinkMode, processSequenceMode, allowExceedMaxReportQty, allowExceedMaxOutsourceReceiveQty, allowExceedMaxStockInQty, weightTolerancePercent, productEconomicsSettings,
+    productionLinkMode, processSequenceMode, allowExceedMaxReportQty, allowExceedMaxOutsourceReceiveQty, allowExceedMaxStockInQty, weightTolerancePercent, productEconomicsSettings, productCodeRules,
     planFormSettings, orderFormSettings, purchaseOrderFormSettings, salesOrderFormSettings, purchaseBillFormSettings, salesBillFormSettings,
     receiptFormSettings, paymentFormSettings,
     materialPanelSettings, materialFormSettings, outsourceFormSettings, reworkFormSettings, printTemplates, featurePlugins,
-  }), [productionLinkMode, processSequenceMode, allowExceedMaxReportQty, allowExceedMaxOutsourceReceiveQty, allowExceedMaxStockInQty, weightTolerancePercent, productEconomicsSettings, planFormSettings, orderFormSettings, purchaseOrderFormSettings, salesOrderFormSettings, purchaseBillFormSettings, salesBillFormSettings, receiptFormSettings, paymentFormSettings, materialPanelSettings, materialFormSettings, outsourceFormSettings, reworkFormSettings, printTemplates, featurePlugins]);
+  }), [productionLinkMode, processSequenceMode, allowExceedMaxReportQty, allowExceedMaxOutsourceReceiveQty, allowExceedMaxStockInQty, weightTolerancePercent, productEconomicsSettings, productCodeRules, planFormSettings, orderFormSettings, purchaseOrderFormSettings, salesOrderFormSettings, purchaseBillFormSettings, salesBillFormSettings, receiptFormSettings, paymentFormSettings, materialPanelSettings, materialFormSettings, outsourceFormSettings, reworkFormSettings, printTemplates, featurePlugins]);
 
   const ordersValue: OrdersState = useMemo(() => ({
     orders, plans, productMilestoneProgresses,
@@ -1235,6 +1250,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
   const actionsValue: AppDataActions = useMemo(() => ({
     onUpdateAllowExceedMaxReportQty, onUpdateAllowExceedMaxOutsourceReceiveQty, onUpdateAllowExceedMaxStockInQty, onUpdateWeightTolerancePercent, onUpdateProductEconomicsSettings,
+    onUpdateProductCodeRules,
     onUpdatePlanFormSettings, onUpdateOrderFormSettings,
     onUpdatePurchaseOrderFormSettings, onUpdateSalesOrderFormSettings,
     onUpdatePurchaseBillFormSettings, onUpdateSalesBillFormSettings,
@@ -1257,6 +1273,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     ensureDeferredLoaded,
   }), [
     onUpdateAllowExceedMaxReportQty, onUpdateAllowExceedMaxOutsourceReceiveQty, onUpdateAllowExceedMaxStockInQty, onUpdateWeightTolerancePercent,
+    onUpdateProductCodeRules,
     onUpdatePlanFormSettings, onUpdateOrderFormSettings,
     onUpdatePurchaseOrderFormSettings, onUpdateSalesOrderFormSettings,
     onUpdatePurchaseBillFormSettings, onUpdateSalesBillFormSettings,

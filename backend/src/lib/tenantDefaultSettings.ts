@@ -112,6 +112,8 @@ export const TENANT_DEFAULT_SETTINGS: Record<string, unknown> = {
   },
   featurePlugins: null as unknown,
   productEconomicsSettings: { materialCostMode: 'consumable', materialPriceRule: { mode: 'all_time' } },
+  /** 产品编号自动生成规则（分类 id -> ProductCodeRule）；空 = 全部手动输入 */
+  productCodeRules: {},
 };
 
 type SettingsDb = {

@@ -17,7 +17,8 @@ import {
   BookOpen,
   Lock,
 } from 'lucide-react';
-import { Product, GlobalNodeTemplate, ProductCategory, PartnerCategory, BOM, BOMItem, AppDictionaries, ProductVariant, Partner, ProductionLinkMode, ProductionOrder } from '../../types';
+import { Product, GlobalNodeTemplate, ProductCategory, PartnerCategory, BOM, BOMItem, AppDictionaries, ProductVariant, Partner, ProductionLinkMode, ProductionOrder, ProductCodeAutoGen, ProductCodeRuleMap } from '../../types';
+import { useProductCodeAutoFill } from '../../hooks/useProductCodeAutoFill';
 import { sortVariantsByColorThenSize } from '../../utils/sortVariantsByProduct';
 import BomVariantMatrix from '../../components/product/BomVariantMatrix';
 import { VariantNodeWeightSettingTrigger } from './VariantNodeWeightSection';
@@ -414,7 +415,7 @@ export interface ProductEditFormProps {
   dictionaries: AppDictionaries;
   partners: Partner[];
   partnerCategories: PartnerCategory[];
-  onUpdateProduct: (product: Product) => Promise<Product | null>;
+  onUpdateProduct: (product: Product & { codeAutoGen?: ProductCodeAutoGen }) => Promise<Product | null>;
   onDeleteProduct?: (id: string) => Promise<boolean>;
   onUpdateBOM: (bom: BOM) => Promise<boolean>;
   onRefreshDictionaries: () => Promise<void>;
@@ -429,6 +430,10 @@ export interface ProductEditFormProps {
   /** 工序锁定推算：由外层传入，避免本组件静态依赖 AppDataContext（防循环依赖 / HMR 整页重载） */
   productionLinkMode?: ProductionLinkMode;
   ordersForProcessLock?: ReadonlyArray<Pick<ProductionOrder, 'productId' | 'status'>>;
+  /** 产品编号规则（分类 id -> 规则）；由外层传入，同上避免静态依赖 AppDataContext */
+  productCodeRules?: ProductCodeRuleMap;
+  /** 保存编号规则；未传则不显示「配置编号规则」入口 */
+  onUpdateProductCodeRules?: (map: ProductCodeRuleMap) => Promise<void>;
 }
 
 const ProductEditForm: React.FC<ProductEditFormProps> = ({
@@ -452,6 +457,8 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
   onProductPersisted,
   productionLinkMode = 'order',
   ordersForProcessLock = [],
+  productCodeRules,
+  onUpdateProductCodeRules,
 }) => {
   const confirm = useConfirm();
   const { weightEnabled } = useTraceabilityPlugin();
@@ -459,6 +466,18 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
   /** 嵌在「新增产品」全屏弹窗（z=10800）内时，子层须更高，避免颜色/尺码等二级弹窗被挡住 */
   const nestedOverlayZ = embeddedInQuickCreateModal ? 'z-[11200]' : 'z-[10250]';
   const [workingProduct, setWorkingProduct] = useState<Product>(() => JSON.parse(JSON.stringify(initialProduct)));
+
+  // 编号规则为 auto 时新建产品自动预取号填入；保存时未手改则由后端锁内重新取号
+  const {
+    autoMode: autoCodeActive,
+    refreshAutoCode,
+    buildCodeAutoGenPayload,
+  } = useProductCodeAutoFill({
+    enabled: !isPersistedProduct,
+    working: workingProduct,
+    setWorking: setWorkingProduct,
+    rules: productCodeRules ?? {},
+  });
 
   /** 打开编辑时从 API 拉取工序锁定基线（列表缓存可能缺 processLocked / 工序） */
   const [processLockBaseline, setProcessLockBaseline] = useState(() => ({
@@ -737,7 +756,8 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
         initialFull: initialProduct.imageUrl ?? '',
       });
       omitUnchangedProductJsonFields(payload, initialProduct, isPersistedProduct);
-      const saved = await onUpdateProduct(payload);
+      const codeAutoGen = !isPersistedProduct ? buildCodeAutoGenPayload() : null;
+      const saved = await onUpdateProduct(codeAutoGen ? { ...payload, codeAutoGen } : payload);
       if (saved) {
         persistLastUnitPreference(saved.categoryId, saved.unitId);
         onProductPersisted?.(saved);
@@ -1001,6 +1021,10 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
           onRefreshDictionaries={onRefreshDictionaries}
           onRefreshPartners={onRefreshPartners}
           embeddedInQuickCreateModal={embeddedInQuickCreateModal}
+          autoCodeActive={autoCodeActive}
+          onRefreshAutoCode={refreshAutoCode}
+          productCodeRules={productCodeRules}
+          onUpdateProductCodeRules={onUpdateProductCodeRules}
         />
 
         {/* 3. 生产工序与工艺 BOM */}

@@ -11,6 +11,11 @@ const createProductSchema = z.object({
   /** 产品名称：选填，不自动生成 */
   sku: z.string().optional(),
   variants: z.array(z.object({}).passthrough()).optional(),
+  /** 编号规则自动取号：传前缀 + 流水号位数，后端锁内取号覆盖 name */
+  codeAutoGen: z.object({
+    prefix: z.string().max(180, '编号前缀过长'),
+    serialLength: z.number().int().min(1).max(10),
+  }).optional(),
 }).passthrough();
 
 const updateProductSchema = z.object({
@@ -45,6 +50,8 @@ const updateBomSchema = z.object({
 
 // GET 读端点：本企业任意成员可只读（单据/报工选商品）；增删改仍要细粒度权限
 router.get('/',    requireTenantMemberRead(),   ctrl.listProducts);
+// 产品编号规则预取号（必须先于 GET /:id 注册，否则被 :id 吞掉）
+router.get('/next-code', requireSubPermission('basic:products:create'), ctrl.nextProductCode);
 router.post('/import', requireSubPermission('basic:products:create'), validate(importProductsSchema), ctrl.importProducts);
 router.get('/:id/receive-unit-weight-averages', requireTenantMemberRead(), ctrl.receiveUnitWeightAverages);
 router.get('/:id/variant-usage', requireTenantMemberRead(), ctrl.variantUsage);

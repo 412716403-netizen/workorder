@@ -7,7 +7,12 @@ import { isProductBlockedAsBomMaterialDb } from '../utils/productBomMaterial.js'
 import { sanitizeUpdate, sanitizeCreate, sanitizeItems } from '../utils/request.js';
 import { validateProductColorSizeForSave } from '../../../shared/productColorSize.js';
 import { getProductionLinkMode, milestoneNodeIdsEqual, productionOrderWhereCountsForProcessLock } from '../utils/productionLinkMode.js';
-import type { ProductionLinkMode } from '../types/index.js';
+import { withDocNoAdvisoryLock } from '../utils/docNumberLock.js';
+import type { ProductionLinkMode, ProductCodeAutoGen } from '../types/index.js';
+import {
+  PRODUCT_CODE_SERIAL_LENGTH_MIN,
+  PRODUCT_CODE_SERIAL_LENGTH_MAX,
+} from '../types/index.js';
 import { redisGetJson, redisSetJson } from '../lib/redis.js';
 import { buildImageThumb } from '../lib/imageThumb.js';
 
@@ -464,12 +469,79 @@ export async function getProduct(db: TenantPrismaClient, tenantId: string, id: s
   return attachProcessLocked(product, mode, activeOrderProductIds);
 }
 
+// ── 产品编号自动生成（编号规则见 shared/types.ts ProductCodeRule；流水号按前缀分组）──
+
+/** name 为 VarChar(200)，给流水号留出空间 */
+const PRODUCT_CODE_PREFIX_MAX_LEN = 180;
+
+function productCodeAdvisoryScope(prefix: string): string {
+  return `product_code:${prefix}`;
+}
+
+function clampSerialLength(n: number): number {
+  if (!Number.isInteger(n)) return PRODUCT_CODE_SERIAL_LENGTH_MIN;
+  return Math.min(Math.max(n, PRODUCT_CODE_SERIAL_LENGTH_MIN), PRODUCT_CODE_SERIAL_LENGTH_MAX);
+}
+
+/** 解析 POST /products 的 codeAutoGen 载荷；非法时返回 null（按手动编号处理） */
+function parseProductCodeAutoGen(raw: unknown): ProductCodeAutoGen | null {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null;
+  const { prefix, serialLength } = raw as Record<string, unknown>;
+  if (typeof prefix !== 'string' || prefix.length > PRODUCT_CODE_PREFIX_MAX_LEN) return null;
+  const len = Number(serialLength);
+  if (!Number.isInteger(len)) return null;
+  return { prefix, serialLength: clampSerialLength(len) };
+}
+
+/**
+ * 读同前缀号池（`^{prefix}[0-9]+$`）的最大流水号。
+ * 匹配任意位数数字而非固定 serialLength 位，保证号池溢出（如 3 位配到 1000）后仍单调递增不重号。
+ * 必须在持有 `product_code:{prefix}` advisory lock 的事务内调用。
+ */
+async function readMaxProductCodeSerial(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  prefix: string,
+): Promise<number> {
+  const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const rows = await tx.$queryRawUnsafe<Array<{ max: bigint | number | null }>>(
+    `SELECT MAX(CAST(SUBSTRING(name FROM LENGTH($2::text) + 1) AS BIGINT)) AS max
+     FROM products WHERE tenant_id = $1::uuid AND name ~ $3`,
+    tenantId,
+    prefix,
+    `^${escaped}[0-9]+$`,
+  );
+  const max = rows?.[0]?.max;
+  return max == null ? 0 : Number(max);
+}
+
+function buildProductCode(prefix: string, serial: number, serialLength: number): string {
+  return `${prefix}${String(serial).padStart(serialLength, '0')}`;
+}
+
+/** 表单预取号（仅预览；保存时 createProduct 会在锁内重新取号，最终号可能不同） */
+export async function nextProductCode(
+  tenantId: string,
+  prefix: string,
+  serialLength: number,
+): Promise<{ code: string; serial: number }> {
+  if (prefix.length > PRODUCT_CODE_PREFIX_MAX_LEN) {
+    throw new AppError(400, '编号前缀过长');
+  }
+  const len = clampSerialLength(serialLength);
+  return withDocNoAdvisoryLock(tenantId, productCodeAdvisoryScope(prefix), async tx => {
+    const serial = (await readMaxProductCodeSerial(tx, tenantId, prefix)) + 1;
+    return { code: buildProductCode(prefix, serial, len), serial };
+  });
+}
+
 export async function createProduct(
   db: TenantPrismaClient,
   tenantId: string,
   body: Record<string, unknown>,
 ) {
-  const { variants, category, boms: _boms, ...rest } = body;
+  const { variants, category, boms: _boms, codeAutoGen: codeAutoGenRaw, ...rest } = body;
+  const codeAutoGen = parseProductCodeAutoGen(codeAutoGenRaw);
   const data = sanitizeCreate(rest);
   if (!data.id) data.id = genId('prod');
   stripClientImageThumb(data);
@@ -487,8 +559,11 @@ export async function createProduct(
   await assertProductCategoryIdForWrite(db, data, 'create');
   await assertProductColorSizeForWrite(db, data, 'create');
 
-  const dupName = await basePrisma.product.findFirst({ where: { tenantId, name } });
-  if (dupName) throw new AppError(409, '产品编号已存在');
+  // 自动取号时不校验前端传来的预览号（锁内重新取号必然唯一）；手动编号才查重。
+  if (!codeAutoGen) {
+    const dupName = await basePrisma.product.findFirst({ where: { tenantId, name } });
+    if (dupName) throw new AppError(409, '产品编号已存在');
+  }
 
   let cleanVariants: any[] | undefined;
   if (variants && Array.isArray(variants) && variants.length > 0) {
@@ -502,8 +577,21 @@ export async function createProduct(
       };
     });
   }
+  const createData = { ...data, variants: cleanVariants ? { create: cleanVariants } : undefined };
+
+  if (codeAutoGen) {
+    // 取号 + create 同锁同事务：advisory lock 覆盖到写入完成，杜绝取号后的 race window。
+    return withDocNoAdvisoryLock(tenantId, productCodeAdvisoryScope(codeAutoGen.prefix), async tx => {
+      const serial = (await readMaxProductCodeSerial(tx, tenantId, codeAutoGen.prefix)) + 1;
+      return tx.product.create({
+        data: { ...createData, name: buildProductCode(codeAutoGen.prefix, serial, codeAutoGen.serialLength) },
+        include: { variants: true },
+      });
+    });
+  }
+
   return db.product.create({
-    data: { ...data, variants: cleanVariants ? { create: cleanVariants } : undefined },
+    data: createData,
     include: { variants: true },
   });
 }
@@ -514,7 +602,8 @@ export async function updateProduct(
   productId: string,
   body: Record<string, unknown>,
 ) {
-  const { variants, category, boms: _boms, ...rest } = body;
+  // codeAutoGen 仅用于新建取号；更新时剥掉，避免透传给 Prisma
+  const { variants, category, boms: _boms, codeAutoGen: _codeAutoGen, ...rest } = body;
   const data = sanitizeUpdate(rest);
   stripClientImageThumb(data);
   const existing = await db.product.findUnique({ where: { id: productId } });

@@ -20,7 +20,7 @@ import { getProductCategoryCustomFieldEntries } from '../utils/reportCustomDocFi
 import { productMatchesSearchQuery } from '../utils/productSearchMatch';
 import { compareProductsArchiveOrder } from '../utils/productSort';
 import { isProductEnabled } from '../utils/productEnabled';
-import { useConfigData, useMasterData, useOrdersData } from '../contexts/AppDataContext';
+import { useConfigData, useMasterData, useOrdersData, useAppActions } from '../contexts/AppDataContext';
 import { useClientPagination } from '../hooks/useClientPagination';
 import ListPageControls from '../components/ListPageControls';
 import * as api from '../services/api';
@@ -77,7 +77,8 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   initialProductId,
   onClearInitialProductId,
 }) => {
-  const { productionLinkMode } = useConfigData();
+  const { productionLinkMode, productCodeRules } = useConfigData();
+  const { onUpdateProductCodeRules } = useAppActions();
   const { masterDataReady } = useMasterData();
   const [imagePreview, setImagePreview] = useState<ProductImagePreviewTarget | null>(null);
   const { orders } = useOrdersData();
@@ -228,6 +229,8 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
         isPersistedProduct={products.some(p => p.id === editingProduct.id)}
         productionLinkMode={productionLinkMode}
         ordersForProcessLock={orders}
+        productCodeRules={productCodeRules}
+        onUpdateProductCodeRules={onUpdateProductCodeRules}
       />
     );
   }

@@ -25,6 +25,11 @@ export const products = {
     ),
   import: (data: { categoryId: string; products: unknown[]; newDictionaryItems?: unknown[] }) =>
     request('/products/import', { method: 'POST', body: JSON.stringify(data) }),
+  /** 编号规则预取号（仅预览；保存时后端会在锁内重新取号） */
+  nextCode: (params: { prefix: string; serialLength: number }) =>
+    request<{ code: string; serial: number }>(
+      `/products/next-code${buildQs({ prefix: params.prefix, serialLength: String(params.serialLength) })}`,
+    ),
 };
 
 export const boms = {
