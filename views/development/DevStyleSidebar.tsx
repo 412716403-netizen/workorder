@@ -7,6 +7,7 @@ import {
   Users,
   Clock,
   Filter,
+  Building2,
 } from 'lucide-react';
 import type { DevStageTemplateDto, DevStyleDto, Partner, ProductCategory } from '../../types';
 import { DevStyleStatus } from '../../types';
@@ -16,6 +17,8 @@ import {
   type DevStyleListFilters,
 } from '../../utils/devStyleListFilter';
 import { getDevSampleSidebarProgress, resolveDevStyleCustomerName } from '../../utils/devStyleDisplay';
+import { buildPartnerNameById, resolveProductPartnerName } from '../../utils/productPartnerDisplay';
+import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 import { devStyleThumbSrc } from '../../utils/devStyleImageSrc';
 import {
   formStandardCategoryPillClass,
@@ -52,14 +55,22 @@ interface DevStyleSidebarProps {
 
 function StyleListCard({
   style,
+  category,
+  partnerNameById,
   selected,
   onSelect,
 }: {
   style: DevStyleDto;
+  category: ProductCategory | undefined;
+  partnerNameById: ReadonlyMap<string, string>;
   selected: boolean;
   onSelect: () => void;
 }) {
   const hasError = style.samples.some((s) => s.stages.some((st) => st.status === 'exception'));
+  const productName = (style.code ?? '').trim();
+  const partnerName = resolveProductPartnerName(style, category, partnerNameById);
+  const customTags = getProductCategoryCustomFieldEntries(style, category, { includeFile: false });
+  const showMetaRow = Boolean(partnerName) || customTags.length > 0;
 
   return (
     <button
@@ -81,14 +92,37 @@ function StyleListCard({
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-1 mb-0.5">
-            <h4 className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900">{style.name}</h4>
+          <div className="flex items-start justify-between gap-1 mb-0.5">
+            <h4 className="min-w-0 flex-1 text-sm font-semibold text-slate-900 leading-snug">
+              <span className="break-all">{style.name}</span>
+              {productName ? (
+                <span className="ml-1.5 font-medium text-slate-500 break-all">{productName}</span>
+              ) : null}
+            </h4>
             {style.status === DevStyleStatus.PUBLISHED && (
-              <span className="shrink-0 rounded bg-emerald-500 px-1.5 py-0.5 text-[10px] font-medium text-white">已发布</span>
+              <span className="shrink-0 rounded bg-emerald-500 px-1.5 py-0.5 text-[10px] font-medium text-white mt-0.5">已发布</span>
             )}
           </div>
-          <p className="mb-2 truncate text-xs font-medium text-slate-500">{style.code}</p>
-          <div className="flex flex-col gap-1.5">
+          {showMetaRow && (
+            <div className="mb-2 flex flex-wrap items-center gap-1">
+              {partnerName && (
+                <span className="inline-flex max-w-full items-center gap-0.5 rounded bg-slate-50 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">
+                  <Building2 className="w-2.5 h-2.5 shrink-0 text-slate-400" />
+                  <span className="truncate">{partnerName}</span>
+                </span>
+              )}
+              {customTags.map(({ field, display }) => (
+                <span
+                  key={field.id}
+                  className="max-w-full truncate rounded bg-slate-50 px-1.5 py-0.5 text-[10px] font-bold text-slate-500"
+                  title={`${field.label}: ${display}`}
+                >
+                  {field.label}: {display}
+                </span>
+              ))}
+            </div>
+          )}
+          <div className={`flex flex-col gap-1.5 ${showMetaRow ? '' : 'mt-1'}`}>
             {style.samples.map((sample) => {
               const progress = getDevSampleSidebarProgress(sample);
               const dotClass =
@@ -143,6 +177,9 @@ const DevStyleSidebar: React.FC<DevStyleSidebarProps> = ({
 }) => {
   const [filterOpen, setFilterOpen] = useState(false);
   const [expandedCustomers, setExpandedCustomers] = useState<Set<string>>(new Set());
+
+  const categoryById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
+  const partnerNameById = useMemo(() => buildPartnerNameById(partners), [partners]);
 
   const stageFilterOptions = useMemo(
     () => collectDevStageFilterOptions(templates, styles),
@@ -389,6 +426,8 @@ const DevStyleSidebar: React.FC<DevStyleSidebarProps> = ({
                       <StyleListCard
                         key={s.id}
                         style={s}
+                        category={categoryById.get(s.categoryId)}
+                        partnerNameById={partnerNameById}
                         selected={selectedId === s.id}
                         onSelect={() => onSelect(s.id)}
                       />
@@ -403,6 +442,8 @@ const DevStyleSidebar: React.FC<DevStyleSidebarProps> = ({
             <StyleListCard
               key={s.id}
               style={s}
+              category={categoryById.get(s.categoryId)}
+              partnerNameById={partnerNameById}
               selected={selectedId === s.id}
               onSelect={() => onSelect(s.id)}
             />

@@ -176,9 +176,9 @@ function fetchProductsAll() {
   const { cachedFetch } = require('./masterDataCache.js');
   return cachedFetch(
     'products:all',
-    () => request({ path: '/products?all=true&lite=true', method: 'GET', timeout: 60000 }).catch(() => []),
+    () => request({ path: '/products?all=true&lite=true', method: 'GET', timeout: 60000 }),
     90 * 1000,
-  );
+  ).catch(() => []);
 }
 
 function fetchCategoriesAll() {

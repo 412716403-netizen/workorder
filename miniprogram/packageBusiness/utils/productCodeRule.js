@@ -7,6 +7,8 @@ const PRODUCT_CODE_ELEMENT_MIN_COUNT = 1;
 const PRODUCT_CODE_ELEMENT_MAX_COUNT = 10;
 const PRODUCT_CODE_ELEMENT_DEFAULT_COUNT = 2;
 const PRODUCT_CODE_FIELD_SKU = 'sku';
+/** 内建字段：合作单位（分类开启 linkPartner 时可用，取名称） */
+const PRODUCT_CODE_FIELD_PARTNER = 'partner';
 const PRODUCT_CODE_FIELD_CUSTOM_PREFIX = 'custom:';
 const PRODUCT_CODE_DATE_FORMATS = ['yyMMdd', 'yyMM', 'yy', 'yyyyMMdd'];
 const PRODUCT_CODE_SEPARATORS = ['-', '_', '/', ''];
@@ -123,8 +125,10 @@ function truncateChars(s, n) {
   return Array.from(s).slice(0, n).join('');
 }
 
-function fieldRawValue(product, fieldKey) {
+/** @param {{ partnerName?: string | null }} [ctx] 产品自身字段之外的取值（合作单位名称由页面解析后传入） */
+function fieldRawValue(product, fieldKey, ctx) {
   if (fieldKey === PRODUCT_CODE_FIELD_SKU) return String((product && product.sku) || '').trim();
+  if (fieldKey === PRODUCT_CODE_FIELD_PARTNER) return String((ctx && ctx.partnerName) || '').trim();
   if (fieldKey.indexOf(PRODUCT_CODE_FIELD_CUSTOM_PREFIX) === 0) {
     const id = fieldKey.slice(PRODUCT_CODE_FIELD_CUSTOM_PREFIX.length);
     const v = product && product.categoryCustomData ? product.categoryCustomData[id] : undefined;
@@ -133,11 +137,11 @@ function fieldRawValue(product, fieldKey) {
   return '';
 }
 
-function productCodeElementSegment(el, product) {
+function productCodeElementSegment(el, product, ctx) {
   if (!el || el.type === 'none') return '';
   if (el.type === 'fixedText') return String(el.fixedText || '').trim();
   if (!el.fieldKey) return '';
-  const raw = fieldRawValue(product, el.fieldKey);
+  const raw = fieldRawValue(product, el.fieldKey, ctx);
   if (!raw) return '';
   if (el.display === 'mapped') {
     return String((el.optionCodes && el.optionCodes[raw]) || '').trim();
@@ -146,9 +150,9 @@ function productCodeElementSegment(el, product) {
   return truncateChars(raw, el.length);
 }
 
-function buildProductCodePrefix(rule, product) {
+function buildProductCodePrefix(rule, product, ctx) {
   const segments = (rule.elements || [])
-    .map((el) => productCodeElementSegment(el, product))
+    .map((el) => productCodeElementSegment(el, product, ctx))
     .filter((s) => s.length > 0);
   if (segments.length === 0) return '';
   return segments.join(rule.separator) + rule.separator;
@@ -157,6 +161,7 @@ function buildProductCodePrefix(rule, product) {
 module.exports = {
   PRODUCT_CODE_RULES_CONFIG_KEY,
   PRODUCT_CODE_FIELD_SKU,
+  PRODUCT_CODE_FIELD_PARTNER,
   PRODUCT_CODE_FIELD_CUSTOM_PREFIX,
   DEFAULT_PRODUCT_CODE_RULE,
   normalizeProductCodeRule,

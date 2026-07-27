@@ -164,12 +164,13 @@ export function buildPrintFieldOptions(opts: {
     { group: '工单', value: '工单.priority', label: '优先级' },
     { group: '工单', value: '工单.status', label: '工单状态' },
     { group: '工单', value: '工单.productName', label: '产品编号' },
-    { group: '工单', value: '工单.sku', label: 'SKU' },
+    { group: '工单', value: '工单.sku', label: '产品名称' },
     { group: '工单', value: '工单.createdAt', label: '创建日期' },
   ];
   const productStatic: PrintFieldOption[] = [
     { group: '产品', value: '产品.name', label: '产品编号' },
-    { group: '产品', value: '产品.sku', label: 'SKU' },
+    { group: '产品', value: '产品.sku', label: '产品名称' },
+    { group: '产品', value: '产品.partner', label: '合作单位' },
     { group: '产品', value: '产品.processNodes', label: '产品工序' },
     { group: '产品', value: '产品.imageUrl', label: '产品主图', isFileOrImageField: true },
     { group: '产品', value: '产品.description', label: '描述' },
@@ -585,7 +586,7 @@ export function buildPrintFieldOptions(opts: {
     { group: '批次码', value: '批次.planNumber', label: '计划单号' },
     { group: '批次码', value: '批次.orderNumbers', label: '关联工单号' },
     { group: '批次码', value: '批次.productName', label: '产品编号' },
-    { group: '批次码', value: '批次.sku', label: 'SKU' },
+    { group: '批次码', value: '批次.sku', label: '产品名称' },
     { group: '批次码', value: '批次.status', label: '批次状态' },
   ];
   return [

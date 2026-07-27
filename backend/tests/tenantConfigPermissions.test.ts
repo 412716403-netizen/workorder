@@ -27,6 +27,11 @@ describe('tenant config permissions', () => {
     expect(canReadTenantConfig(['development:styles:view'])).toBe(false);
   });
 
+  it('canReadTenantConfig allows production plans roles to read planFormSettings', () => {
+    expect(canReadTenantConfig(['production:plans:view'])).toBe(true);
+    expect(canReadTenantConfig(['production:plans:create'])).toBe(true);
+  });
+
   it('canReadTenantConfig denies unrelated production permissions', () => {
     expect(canReadTenantConfig(['production:outsource_list:allow'])).toBe(false);
   });

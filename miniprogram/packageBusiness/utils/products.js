@@ -7,6 +7,10 @@ const {
   listProductThumbFromProduct,
   DEFAULT_PRODUCT_PLACEHOLDER_ICON,
 } = require('../../utils/listProductThumb.js');
+const {
+  buildPartnerNameById,
+  resolveProductPartnerName,
+} = require('./productPartnerDisplay.js');
 
 function buildCategoryMap(categories) {
   const map = new Map();
@@ -33,8 +37,9 @@ function buildCategoryTabs(categories, products, activeCategoryId) {
   return tabs;
 }
 
-function filterProducts(products, categories, activeCategoryId, searchQuery) {
+function filterProducts(products, categories, activeCategoryId, searchQuery, partnerNameById) {
   const categoryMap = buildCategoryMap(categories);
+  const nameById = partnerNameById || buildPartnerNameById([]);
   const inCategory = activeCategoryId === PRODUCT_ARCHIVE_ALL
     ? (products || [])
     : (products || []).filter((p) => p.categoryId === activeCategoryId);
@@ -43,7 +48,8 @@ function filterProducts(products, categories, activeCategoryId, searchQuery) {
     ? inCategory
     : inCategory.filter((p) => {
       const cat = categoryMap.get(p.categoryId) || null;
-      return productMatchesSearchQuery(p, cat, q);
+      const partnerName = resolveProductPartnerName(p, cat, nameById);
+      return productMatchesSearchQuery(p, cat, q, { partnerName });
     });
   return [...searched].sort(compareProductsArchiveOrder);
 }
@@ -77,12 +83,17 @@ function formatPriceText(product) {
   };
 }
 
-function buildProductListRow(product, category) {
+function buildProductListRow(product, category, partnerNameById) {
   const enabled = isProductEnabled(product);
   const thumb = listProductThumbFromProduct(product);
   const price = formatPriceText(product);
   const customTags = mapProductCustomTags(product, category, { includeFile: false }).slice(0, 2);
   const variantCount = ((product && product.variants) || []).length;
+  const partnerName = resolveProductPartnerName(
+    product,
+    category,
+    partnerNameById || buildPartnerNameById([]),
+  );
 
   return {
     id: product.id,
@@ -96,6 +107,8 @@ function buildProductListRow(product, category) {
     placeholderIconSrc: thumb.placeholderIconSrc || DEFAULT_PRODUCT_PLACEHOLDER_ICON,
     categoryName: category ? category.name : '',
     showCategory: Boolean(category),
+    partnerName: partnerName || '',
+    showPartner: Boolean(partnerName),
     variantCountText: String(variantCount),
     ...price,
     enabled,
@@ -109,13 +122,14 @@ function buildProductListRow(product, category) {
   };
 }
 
-function buildProductListRows(products, categories, activeCategoryId, searchQuery, page, pageSize) {
+function buildProductListRows(products, categories, activeCategoryId, searchQuery, page, pageSize, partners) {
   const categoryMap = buildCategoryMap(categories);
-  const filtered = filterProducts(products, categories, activeCategoryId, searchQuery);
+  const partnerNameById = buildPartnerNameById(partners);
+  const filtered = filterProducts(products, categories, activeCategoryId, searchQuery, partnerNameById);
   const paged = paginateList(filtered, page, pageSize);
   const rows = paged.items.map((p) => {
     const cat = categoryMap.get(p.categoryId);
-    return buildProductListRow(p, cat);
+    return buildProductListRow(p, cat, partnerNameById);
   });
   return {
     ...paged,

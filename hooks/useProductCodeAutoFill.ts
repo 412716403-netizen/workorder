@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import * as api from '../services/api';
 import type { Product, ProductCodeAutoGen, ProductCodeRuleMap } from '../types';
 import { buildProductCodePrefix, getProductCodeRule } from '../utils/productCodeRule';
+import { useMasterDataOptional } from '../contexts/AppDataContext';
+import { buildPartnerNameById, resolveProductPartnerName } from '../utils/productPartnerDisplay';
 
 interface UseProductCodeAutoFillOptions {
   /** 仅未持久化的新建产品启用（编辑已有产品不自动改号） */
@@ -45,7 +47,17 @@ export function useProductCodeAutoFill({
 }: UseProductCodeAutoFillOptions): UseProductCodeAutoFillResult {
   const rule = getProductCodeRule(rules, working.categoryId);
   const autoMode = enabled && rule.mode === 'auto' && Boolean(working.categoryId);
-  const prefix = autoMode ? buildProductCodePrefix(rule, working) : '';
+
+  // 规则可含「合作单位」元素，需把 supplierId 解析成名称后再拼段；换合作单位会触发重新取号
+  const masterData = useMasterDataOptional();
+  const partnerNameById = useMemo(
+    () => buildPartnerNameById(masterData?.partners ?? []),
+    [masterData?.partners],
+  );
+  const category = masterData?.categories.find((c) => c.id === working.categoryId);
+  const partnerName = resolveProductPartnerName(working, category, partnerNameById);
+
+  const prefix = autoMode ? buildProductCodePrefix(rule, working, { partnerName }) : '';
 
   const lastAutoRef = useRef<LastAutoFill | null>(null);
   const fetchSeqRef = useRef(0);

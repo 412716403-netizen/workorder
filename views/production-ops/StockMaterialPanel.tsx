@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { formatMaterialQtyDisplay } from '../../utils/formatMaterialQtyDisplay';
+import { ProductListMetaTags } from '../../components/ProductListMetaTags';
+import { buildPartnerNameById } from '../../utils/productPartnerDisplay';
 import type {
   ProductionOpRecord,
   ProductionOrder,
@@ -36,7 +38,8 @@ import { PanelProps, hasOpsPerm, getOrderFamilyIds, type StockDocDetail } from '
 import { orderCreatedMs } from '../../utils/orderCenterSort';
 import { shouldShowOrderInIncompleteListFilter } from '../../utils/orderDispatchListFilter';
 import { buildMaterialStockCustomCollabPayload } from '../../utils/productionOpCollab/material';
-import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
+import { ProductListMetaTags } from '../../components/ProductListMetaTags';
+import { buildPartnerNameById } from '../../utils/productPartnerDisplay';
 import { categoryUsesBatchManagement, BATCH_NO_UNTAGGED } from '../../types';
 import { clampBatchNoInput } from '../../hooks/useBatchPicker';
 import * as api from '../../services/api';
@@ -101,6 +104,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
   orders,
   products,
   categories,
+  partners = [],
   warehouses,
   boms,
   dictionaries,
@@ -210,22 +214,12 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
 
   const idx = useDataIndexes(orders, products, boms, [] /* no globalNodes needed */, productMilestoneProgresses);
   const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
+  const partnerNameById = useMemo(() => buildPartnerNameById(partners), [partners]);
   /**
    * 工序当前是否开启"称重报工"。报工/外协收回记录里的 materialBreakdown 是写入时按工序当时配置固化的快照，
    * 工序后续改回"非称重"会让这份快照变得不准（同物料数量却显示极小的实际重量），所以面板按当前开关决定是否信任快照。
    */
   const nodeWeightEnabledMap = useMemo(() => buildNodeWeightEnabledMap(globalNodes), [globalNodes]);
-  const renderProductCustomTags = useCallback((product: Product | undefined) => {
-    if (!product) return null;
-    return getProductCategoryCustomFieldEntries(product, categoryMap.get(product.categoryId), {
-      includeFile: false,
-    }).map(({ field, display }) => (
-      <span key={field.id} className="rounded bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-500">
-        {field.label}: {display}
-      </span>
-    ));
-  }, [categoryMap]);
-
   const resolveConfirmDefaultWarehouse = useCallback(
     (mode: 'stock_out' | 'stock_return') => {
       const kind =
@@ -935,7 +929,14 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                                       <p className="text-sm font-bold text-slate-800 truncate">
                                         {fp?.name ?? '—'}
                                         {fp?.sku ? <span className="ml-2 text-xs font-medium text-slate-400">{fp.sku}</span> : null}
-                                        <span className="ml-1 inline-flex items-center gap-1 align-middle">{renderProductCustomTags(fp)}</span>
+                                        <span className="ml-1 inline-flex items-center gap-1 align-middle">
+                                          <ProductListMetaTags
+                                            product={fp}
+                                            category={fp ? categoryMap.get(fp.categoryId) : undefined}
+                                            partnerNameById={partnerNameById}
+                                            className=""
+                                          />
+                                        </span>
                                       </p>
                                     </div>
                                   </div>
@@ -979,7 +980,12 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                                           <span className="ml-2 text-xs font-medium text-slate-400">{product?.sku ?? order.sku}</span>
                                         ) : null}
                                       </p>
-                                      <div className="mt-1 flex flex-wrap items-center gap-1">{renderProductCustomTags(product) ?? null}</div>
+                                      <ProductListMetaTags
+                                        product={product}
+                                        category={product ? categoryMap.get(product.categoryId) : undefined}
+                                        partnerNameById={partnerNameById}
+                                        className="mt-1 flex flex-wrap items-center gap-1"
+                                      />
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-2">
@@ -1089,7 +1095,14 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                           <p className="mt-0.5 text-base font-bold text-slate-900">
                             {fp?.name ?? '—'}
                             {fp?.sku ? <span className="ml-2 text-sm font-medium text-slate-400">{fp.sku}</span> : null}
-                            <span className="ml-1 inline-flex items-center gap-1 align-middle">{renderProductCustomTags(fp)}</span>
+                            <span className="ml-1 inline-flex items-center gap-1 align-middle">
+                              <ProductListMetaTags
+                                product={fp}
+                                category={fp ? categoryMap.get(fp.categoryId) : undefined}
+                                partnerNameById={partnerNameById}
+                                className=""
+                              />
+                            </span>
                           </p>
                         </div>
                       </div>
@@ -1202,7 +1215,12 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                             <span className="ml-2 text-sm font-medium text-slate-400">{product?.sku ?? order.sku}</span>
                           ) : null}
                         </p>
-                        <div className="mt-1 flex flex-wrap items-center gap-1">{renderProductCustomTags(product) ?? null}</div>
+                        <ProductListMetaTags
+                          product={product}
+                          category={product ? categoryMap.get(product.categoryId) : undefined}
+                          partnerNameById={partnerNameById}
+                          className="mt-1 flex flex-wrap items-center gap-1"
+                        />
                       </div>
                     </div>
                     <div className="flex items-center gap-2">

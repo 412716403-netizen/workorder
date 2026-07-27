@@ -98,11 +98,12 @@ function getProduct(id) {
 
 function fetchProductsAll() {
   const { cachedFetch } = require('./masterDataCache.js');
+  // 失败不要 .catch([]) 后再进缓存，否则会把空列表缓存 90s，列表产品名全变「—」
   return cachedFetch(
     'products:all',
-    () => request({ path: '/products?all=true&lite=true', method: 'GET', timeout: 60000 }).catch(() => []),
+    () => request({ path: '/products?all=true&lite=true', method: 'GET', timeout: 60000 }),
     90 * 1000,
-  );
+  ).catch(() => []);
 }
 
 function fetchCategoriesAll() {

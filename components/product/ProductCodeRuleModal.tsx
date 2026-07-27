@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
-import type { ProductCategory, ProductCodeRule, ProductCodeRuleMap, ProductCodeSeparator } from '../../types';
+import type { Partner, PartnerCategory, ProductCategory, ProductCodeRule, ProductCodeRuleMap, ProductCodeSeparator } from '../../types';
 import {
   PRODUCT_CODE_ELEMENT_MAX_COUNT,
   PRODUCT_CODE_ELEMENT_MIN_COUNT,
@@ -31,6 +31,10 @@ const SEPARATOR_LABELS: Record<ProductCodeSeparator, string> = {
 
 interface ProductCodeRuleModalProps {
   categories: ProductCategory[];
+  /** 租户合作单位；分类开启「关联合作单位」时作为该字段的可映射选项 */
+  partners: Partner[];
+  /** 合作单位分类；映射弹窗内做分类 Tab 筛选 */
+  partnerCategories: PartnerCategory[];
   /** 打开时默认编辑的分类（产品表单当前分类） */
   initialCategoryId?: string;
   rules: ProductCodeRuleMap;
@@ -46,6 +50,8 @@ interface ProductCodeRuleModalProps {
  */
 const ProductCodeRuleModal: React.FC<ProductCodeRuleModalProps> = ({
   categories,
+  partners,
+  partnerCategories,
   initialCategoryId,
   rules,
   onSave,
@@ -143,6 +149,8 @@ const ProductCodeRuleModal: React.FC<ProductCodeRuleModalProps> = ({
                   index={i}
                   element={el}
                   category={activeCategory}
+                  partners={partners}
+                  partnerCategories={partnerCategories}
                   // 选项编号二级弹窗须高于本规则弹窗（含快速新建嵌套场景）
                   overlayZClass="z-[12000]"
                   onChange={(next) => {

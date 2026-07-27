@@ -388,7 +388,7 @@ function buildKnowledgeProductDetailView(ctx) {
   if (purchaseText) rows.push({ rowKey: 'purchase', label: '采购单价', value: `${purchaseText} / ${unitName}` });
 
   if (supplier && supplier.name) {
-    rows.push({ rowKey: 'supplier', label: '默认供应商', value: supplier.name });
+    rows.push({ rowKey: 'supplier', label: '合作单位', value: supplier.name });
   }
 
   if (product.description && String(product.description).trim()) {

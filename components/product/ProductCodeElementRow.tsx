@@ -1,13 +1,15 @@
-import React, { useState } from 'react';
-import { Trash2, X } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Search, Trash2, X } from 'lucide-react';
 import type {
+  Partner,
+  PartnerCategory,
   ProductCategory,
   ProductCodeDateFormat,
   ProductCodeElement,
   ProductCodeElementType,
   ProductCodeFieldDisplay,
 } from '../../types';
-import { PRODUCT_CODE_DATE_FORMATS } from '../../types';
+import { PRODUCT_CODE_DATE_FORMATS, PRODUCT_CODE_FIELD_PARTNER } from '../../types';
 import {
   listProductCodeFieldOptions,
   resolveProductCodeFieldOption,
@@ -45,6 +47,10 @@ interface ProductCodeElementRowProps {
   element: ProductCodeElement;
   /** 当前配置的产品分类（决定可选字段） */
   category: ProductCategory | undefined;
+  /** 租户合作单位；分类开启「关联合作单位」时作为该字段的可映射选项 */
+  partners?: readonly Partner[];
+  /** 合作单位分类；映射弹窗内做分类 Tab 筛选 */
+  partnerCategories?: readonly PartnerCategory[];
   onChange: (el: ProductCodeElement) => void;
   /** 删除本元素；未传或已达数量下限时不显示删除按钮 */
   onRemove?: () => void;
@@ -69,13 +75,38 @@ function countMappedOptions(optionCodes: Record<string, string> | undefined, opt
   return options.filter((o) => (optionCodes[o] ?? '').trim().length > 0).length;
 }
 
+/** 合作单位字段专用：按分类 Tab + 搜索浏览，映射键仍是合作单位名称 */
+interface PartnerBrowseContext {
+  partners: readonly Partner[];
+  categories: readonly PartnerCategory[];
+}
+
 interface OptionCodesModalProps {
   fieldLabel: string;
   options: string[];
   optionCodes: Record<string, string>;
+  /** 无选项时的引导文案（扩展字段指向分类库，合作单位指向合作单位管理） */
+  emptyHint: string;
+  /** 传入后启用合作单位分类 Tab + 常驻搜索（对齐 SearchablePartnerSelect） */
+  partnerBrowse?: PartnerBrowseContext;
   onChange: (codes: Record<string, string>) => void;
   onClose: () => void;
   overlayZClass: string;
+}
+
+/** 普通扩展字段选项超过该值时显示搜索框 */
+const OPTION_SEARCH_THRESHOLD = 8;
+
+function uniquePartnerNames(list: readonly Partner[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const p of list) {
+    const name = (p.name ?? '').trim();
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    out.push(name);
+  }
+  return out;
 }
 
 /** 「选项对应编号」二级弹窗：主表单保持一行，映射细节收进弹窗 */
@@ -83,54 +114,142 @@ const OptionCodesModal: React.FC<OptionCodesModalProps> = ({
   fieldLabel,
   options,
   optionCodes,
+  emptyHint,
+  partnerBrowse,
   onChange,
   onClose,
   overlayZClass,
-}) => (
-  <ModalPortal>
-    <div className={`fixed inset-0 ${overlayZClass} flex items-center justify-center p-4`}>
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 flex flex-col max-h-[min(80vh,560px)]">
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/80 shrink-0">
-          <div className="min-w-0">
-            <h3 className="text-sm font-bold text-slate-800 truncate">设置分类对应的编号</h3>
-            <p className="text-[10px] text-slate-400 mt-0.5 truncate">字段「{fieldLabel}」</p>
+}) => {
+  const [search, setSearch] = useState('');
+  const [activePartnerTab, setActivePartnerTab] = useState('all');
+  const q = search.trim().toLowerCase();
+  const isPartnerMode = Boolean(partnerBrowse);
+
+  const visibleOptions = useMemo(() => {
+    if (partnerBrowse) {
+      const filtered = partnerBrowse.partners.filter((p) => {
+        const name = (p.name ?? '').trim();
+        if (!name) return false;
+        const matchesCategory = activePartnerTab === 'all' || p.categoryId === activePartnerTab;
+        if (!matchesCategory) return false;
+        if (!q) return true;
+        const hay = [
+          name,
+          p.contact || '',
+          ...Object.values(p.customData ?? {}).map((v) =>
+            v == null || typeof v === 'object' ? '' : String(v),
+          ),
+        ]
+          .join(' ')
+          .toLowerCase();
+        return hay.includes(q);
+      });
+      return uniquePartnerNames(filtered);
+    }
+    return q ? options.filter((o) => o.toLowerCase().includes(q)) : options;
+  }, [partnerBrowse, activePartnerTab, q, options]);
+
+  const showSearch = isPartnerMode || options.length > OPTION_SEARCH_THRESHOLD;
+  const totalCount = isPartnerMode ? uniquePartnerNames(partnerBrowse!.partners).length : options.length;
+  const emptyFilterHint = isPartnerMode
+    ? q
+      ? `没有匹配「${search.trim()}」的合作单位`
+      : activePartnerTab === 'all'
+        ? emptyHint
+        : '该分类下暂无合作单位'
+    : `没有匹配「${search.trim()}」的选项`;
+
+  const partnerTabCls = (active: boolean) =>
+    `shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap ${
+      active ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+    }`;
+
+  return (
+    <ModalPortal>
+      <div className={`fixed inset-0 ${overlayZClass} flex items-center justify-center p-4`}>
+        <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+        <div className="relative z-10 bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 flex flex-col max-h-[min(80vh,560px)]">
+          <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/80 shrink-0">
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold text-slate-800 truncate">设置选项对应的编号</h3>
+              <p className="text-[10px] text-slate-400 mt-0.5 truncate">字段「{fieldLabel}」</p>
+            </div>
+            <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-white transition-all shrink-0">
+              <X className="w-4 h-4" />
+            </button>
           </div>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-white transition-all shrink-0">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-        <div className="p-4 overflow-y-auto flex-1 space-y-2">
-          {options.length === 0 ? (
-            <p className="py-8 text-center text-xs text-slate-400">该字段暂无选项，请先在产品分类库中配置选项</p>
-          ) : (
-            options.map((opt) => (
-              <div key={opt} className="grid grid-cols-[1fr_120px] items-center gap-3">
-                <span className="text-xs text-slate-600 truncate" title={opt}>{opt}</span>
+          {showSearch && (
+            <div className="px-4 pt-3 shrink-0 space-y-2.5">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
                 <input
-                  type="text"
-                  value={optionCodes[opt] ?? ''}
-                  onChange={(e) => onChange({ ...optionCodes, [opt]: e.target.value })}
-                  placeholder="编号，如 01"
-                  className={`${formStandardControlClass} w-full`}
+                  type="search"
+                  name={isPartnerMode ? 'partner-code-map-q' : 'option-code-map-q'}
+                  autoComplete="off"
+                  autoFocus={isPartnerMode}
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder={isPartnerMode ? '搜索单位名称、联系人…' : '搜索选项…'}
+                  className={`${formStandardControlClass} w-full pl-8`}
                 />
               </div>
-            ))
+              {isPartnerMode && partnerBrowse!.categories.length > 0 && (
+                <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setActivePartnerTab('all')}
+                    className={partnerTabCls(activePartnerTab === 'all')}
+                  >
+                    全部
+                  </button>
+                  {partnerBrowse!.categories.map((cat) => (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setActivePartnerTab(cat.id)}
+                      className={partnerTabCls(activePartnerTab === cat.id)}
+                    >
+                      {cat.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
-        </div>
-        <div className="px-5 py-3 border-t border-slate-100 flex justify-end bg-slate-50/50 shrink-0">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-all"
-          >
-            完成
-          </button>
+          <div className="p-4 overflow-y-auto flex-1 space-y-2">
+            {totalCount === 0 ? (
+              <p className="py-8 text-center text-xs text-slate-400">{emptyHint}</p>
+            ) : visibleOptions.length === 0 ? (
+              <p className="py-8 text-center text-xs text-slate-400">{emptyFilterHint}</p>
+            ) : (
+              visibleOptions.map((opt) => (
+                <div key={opt} className="grid grid-cols-[1fr_120px] items-center gap-3">
+                  <span className="text-xs text-slate-600 truncate" title={opt}>{opt}</span>
+                  <input
+                    type="text"
+                    value={optionCodes[opt] ?? ''}
+                    onChange={(e) => onChange({ ...optionCodes, [opt]: e.target.value })}
+                    placeholder="编号，如 01"
+                    className={`${formStandardControlClass} w-full`}
+                  />
+                </div>
+              ))
+            )}
+          </div>
+          <div className="px-5 py-3 border-t border-slate-100 flex justify-end bg-slate-50/50 shrink-0">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-all"
+            >
+              完成
+            </button>
+          </div>
         </div>
       </div>
-    </div>
-  </ModalPortal>
-);
+    </ModalPortal>
+  );
+};
 
 /**
  * 编号规则弹窗里的单个元素：强制单行
@@ -140,12 +259,16 @@ const ProductCodeElementRow: React.FC<ProductCodeElementRowProps> = ({
   index,
   element,
   category,
+  partners,
+  partnerCategories,
   onChange,
   onRemove,
   overlayZClass = 'z-[10300]',
 }) => {
-  const fieldOptions = listProductCodeFieldOptions(category);
-  const activeField = resolveProductCodeFieldOption(category, element.fieldKey);
+  const partnerNames = useMemo(() => uniquePartnerNames(partners ?? []), [partners]);
+  const fieldCtx = useMemo(() => ({ partnerNames }), [partnerNames]);
+  const fieldOptions = listProductCodeFieldOptions(category, fieldCtx);
+  const activeField = resolveProductCodeFieldOption(category, element.fieldKey, fieldCtx);
   const [mapModalOpen, setMapModalOpen] = useState(false);
 
   const handleTypeChange = (type: ProductCodeElementType) => {
@@ -262,6 +385,19 @@ const ProductCodeElementRow: React.FC<ProductCodeElementRowProps> = ({
           fieldLabel={activeField.label}
           options={activeField.options ?? []}
           optionCodes={element.optionCodes ?? {}}
+          emptyHint={
+            activeField.key === PRODUCT_CODE_FIELD_PARTNER
+              ? '暂无合作单位，请先在合作单位管理中添加'
+              : '该字段暂无选项，请先在产品分类库中配置选项'
+          }
+          partnerBrowse={
+            activeField.key === PRODUCT_CODE_FIELD_PARTNER
+              ? {
+                  partners: partners ?? [],
+                  categories: partnerCategories ?? [],
+                }
+              : undefined
+          }
           onChange={(codes) =>
             onChange({
               type: 'field',

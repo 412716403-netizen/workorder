@@ -124,6 +124,20 @@ describe('listProductCodeFieldOptions', () => {
   it('无分类时只有产品名称', () => {
     expect(listProductCodeFieldOptions(undefined)).toHaveLength(1);
   });
+
+  it('分类开启 linkPartner 时插入合作单位（选项型，可映射编号）', () => {
+    const opts = listProductCodeFieldOptions(makeCategory({ linkPartner: true }), {
+      partnerNames: ['甲纺织', '乙印染'],
+    });
+    expect(opts.map((o) => o.key)).toEqual(['sku', 'partner', 'custom:f-spec', 'custom:f-grade', 'custom:f-date']);
+    expect(opts[1]).toMatchObject({ label: '合作单位', fieldType: 'select', options: ['甲纺织', '乙印染'] });
+  });
+
+  it('未开启 linkPartner 时不出现合作单位；开启但未传清单时选项为空', () => {
+    expect(listProductCodeFieldOptions(makeCategory()).some((o) => o.key === 'partner')).toBe(false);
+    const opts = listProductCodeFieldOptions(makeCategory({ linkPartner: true }));
+    expect(opts.find((o) => o.key === 'partner')?.options).toEqual([]);
+  });
 });
 
 describe('formatProductCodeDate', () => {
@@ -183,6 +197,31 @@ describe('productCodeElementSegment / buildProductCodePrefix', () => {
   it('空分隔符直接连拼', () => {
     expect(buildProductCodePrefix({ ...autoRule, separator: '' }, product)).toBe('WL32支双01');
   });
+
+  it('合作单位按上下文取名称，支持截位与选项映射', () => {
+    const ctx = { partnerName: '甲纺织有限公司' };
+    expect(productCodeElementSegment({ type: 'field', fieldKey: 'partner', display: 'text' }, product, ctx)).toBe('甲纺织有限公司');
+    expect(productCodeElementSegment({ type: 'field', fieldKey: 'partner', display: 'text', length: 2 }, product, ctx)).toBe('甲纺');
+    expect(
+      productCodeElementSegment(
+        { type: 'field', fieldKey: 'partner', display: 'mapped', optionCodes: { 甲纺织有限公司: 'JF' } },
+        product,
+        ctx,
+      ),
+    ).toBe('JF');
+  });
+
+  it('未关联合作单位（未传上下文 / 分类未开关联）时为空段', () => {
+    const el: ProductCodeElement = { type: 'field', fieldKey: 'partner', display: 'text' };
+    expect(productCodeElementSegment(el, product)).toBe('');
+    expect(productCodeElementSegment(el, product, { partnerName: null })).toBe('');
+    const rule: ProductCodeRule = {
+      ...autoRule,
+      elements: [{ type: 'fixedText', fixedText: 'WL' }, el],
+    };
+    expect(buildProductCodePrefix(rule, product)).toBe('WL-');
+    expect(buildProductCodePrefix(rule, product, { partnerName: '甲纺织' })).toBe('WL-甲纺织-');
+  });
 });
 
 describe('buildProductCodePreview / listProductCodeFormulaParts', () => {
@@ -203,5 +242,13 @@ describe('buildProductCodePreview / listProductCodeFormulaParts', () => {
 
   it('公式条按元素顺序输出标签并以流水号收尾', () => {
     expect(listProductCodeFormulaParts(autoRule, makeCategory())).toEqual(['WL', '产品规格', '等级', '流水号']);
+  });
+
+  it('公式条能解析合作单位标签（无需合作单位清单）', () => {
+    const rule: ProductCodeRule = {
+      ...autoRule,
+      elements: [{ type: 'field', fieldKey: 'partner', display: 'mapped', optionCodes: {} }],
+    };
+    expect(listProductCodeFormulaParts(rule, makeCategory({ linkPartner: true }))).toEqual(['合作单位', '流水号']);
   });
 });

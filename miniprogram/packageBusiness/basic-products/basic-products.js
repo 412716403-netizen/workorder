@@ -5,7 +5,7 @@ const _require4 = require('../utils/products.js'),buildProductListRows = _requir
 const _require5 = require('../utils/productApi.js'),fetchProductsAll = _require5.fetchProductsAll,updateProduct = _require5.updateProduct;
 const _require6 =
 
-  require('../../utils/planApi.js'),fetchCategoriesAll = _require6.fetchCategoriesAll;
+  require('../../utils/planApi.js'),fetchCategoriesAll = _require6.fetchCategoriesAll,fetchPartnersAll = _require6.fetchPartnersAll;
 const _require7 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require7.readNavBarMetrics,readWindowMetrics = _require7.readWindowMetrics;
 const _require8 = require('../../utils/saveNavigation.js'),shouldHubListRefetch = _require8.shouldHubListRefetch,trackHubListHidden = _require8.trackHubListHidden,LIST_ROUTES = _require8.LIST_ROUTES;
 const _require9 = require('../utils/productEnabled.js'),isProductEnabled = _require9.isProductEnabled;
@@ -69,6 +69,7 @@ Page({
     this._initialized = false;
     this._products = [];
     this._categories = [];
+    this._partners = [];
   },
 
   onShow() {
@@ -208,10 +209,13 @@ Page({
     try {
       const _await$Promise$all = await Promise.all([
         fetchProductsAll(),
-        fetchCategoriesAll()]
-        ),products = _await$Promise$all[0],categories = _await$Promise$all[1];
+        fetchCategoriesAll(),
+        fetchPartnersAll().catch(() => []),
+      ]
+        ),products = _await$Promise$all[0],categories = _await$Promise$all[1],partners = _await$Promise$all[2];
       this._products = products || [];
       this._categories = categories || [];
+      this._partners = partners || [];
       this.reloadList();
     } catch {
       this.setData({ loading: false, rows: [], emptyText: '加载失败' });
@@ -229,7 +233,8 @@ Page({
       this.data.activeCategoryId,
       this.data.searchKeyword,
       this.data.page,
-      this.data.pageSize
+      this.data.pageSize,
+      this._partners
     );
 
     const emptyText = inCategoryCount === 0 ?

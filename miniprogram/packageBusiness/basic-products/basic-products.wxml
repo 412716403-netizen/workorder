@@ -12,7 +12,7 @@
           class="plan-search__input"
           value="{{searchKeyword}}"
           bindinput="onSearchInput"
-          placeholder="搜索名称、编号、备注…"
+          placeholder="搜索名称、编号、合作单位…"
           confirm-type="search"
           placeholder-class="plan-search__ph"
         />
@@ -93,8 +93,9 @@
               </view>
             </view>
 
-            <view wx:if="{{item.showCategory}}" class="basic-products-row__cat">
-              <text class="basic-products-row__cat-pill">{{item.categoryName}}</text>
+            <view wx:if="{{item.showCategory || item.showPartner}}" class="basic-products-row__meta">
+              <text wx:if="{{item.showCategory}}" class="basic-products-row__cat-pill">{{item.categoryName}}</text>
+              <text wx:if="{{item.showPartner}}" class="basic-products-row__partner">{{item.partnerName}}</text>
             </view>
 
             <view wx:if="{{item.showCustomTags}}" class="basic-products-row__tags">

@@ -18,12 +18,17 @@ const _require6 =
 
 
 
-  require('../../utils/planApi.js'),listPlansPaginated = _require6.listPlansPaginated,fetchPlansPurchaseProgress = _require6.fetchPlansPurchaseProgress,fetchTenantConfig = _require6.fetchTenantConfig,fetchProductsAll = _require6.fetchProductsAll,fetchCategoriesAll = _require6.fetchCategoriesAll,convertPlan = _require6.convertPlan;
+  require('../../utils/planApi.js'),listPlansPaginated = _require6.listPlansPaginated,fetchPlansPurchaseProgress = _require6.fetchPlansPurchaseProgress,fetchTenantConfig = _require6.fetchTenantConfig,fetchProductsAll = _require6.fetchProductsAll,fetchCategoriesAll = _require6.fetchCategoriesAll,fetchPartnersAll = _require6.fetchPartnersAll,getProduct = _require6.getProduct,convertPlan = _require6.convertPlan;
 const _require7 = require('../utils/planOrderSort.js'),sortPlansNewestFirst = _require7.sortPlansNewestFirst;
 const _require8 = require('../../utils/reportCustomDocField.js'),mapProductCustomTags = _require8.mapProductCustomTags;
 const _require9 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require9.readNavBarMetrics,readWindowMetrics = _require9.readWindowMetrics;
 const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../../utils/planFilterPanel.js');
 const _require10 = require('../utils/pendingStockBadge.js'),fetchAllOrdersPaginated = _require10.fetchAllOrdersPaginated;
+const { mapPlanListCustomTags } = require('../../utils/planFormCustomField.js');
+const {
+  buildPartnerNameById,
+  resolveProductPartnerName,
+} = require('../utils/productPartnerDisplay.js');
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
@@ -37,11 +42,18 @@ function isFilterActive(statusFilter, excludeCompleted) {
 
 /** 列表 setData 用精简行，避免多余字段进入视图层 */
 function slimPlanListRow(row) {
-  const tags = (row.productCustomTags || []).slice(0, 3).map((t) => ({
+  const productTags = (row.productCustomTags || []).slice(0, 3).map((t) => ({
     id: t.id,
     label: t.label,
     display: String(t.display || '').slice(0, 48)
   }));
+  const planTags = (row.planCustomTags || []).slice(0, 4).map((t) => ({
+    id: t.id,
+    label: t.label,
+    display: String(t.display || '').slice(0, 48)
+  }));
+  const partnerName = row.partnerName ? String(row.partnerName).slice(0, 48) : '';
+  const showMetaTags = Boolean(partnerName) || productTags.length > 0 || planTags.length > 0;
   return {
     id: row.id,
     planNumber: row.planNumber,
@@ -50,8 +62,11 @@ function slimPlanListRow(row) {
     showProductSku: row.showProductSku,
     productImageUrl: row.productImageUrl,
     showProductImage: row.showProductImage,
-    productCustomTags: tags,
-    showProductCustomTags: tags.length > 0,
+    partnerName,
+    showPartner: Boolean(partnerName),
+    productCustomTags: productTags,
+    planCustomTags: planTags,
+    showProductCustomTags: showMetaTags,
     placeholderIconSrc: row.placeholderIconSrc,
     customer: row.customer,
     showCustomer: row.showCustomer,
@@ -173,6 +188,7 @@ Page({
       canEdit: hasPermission(ctx.permissions || [], 'production:plans:edit'),
       canViewOrderDetail: hasPermission(ctx.permissions || [], 'production:orders_detail:view')
     });
+    if (this._bootstrapping) return;
     if (!this._initialized) {
       this.bootstrap();
     } else if (!this._loadingDetail) {
@@ -373,17 +389,34 @@ Page({
   },
 
   productMetaForPlan(plan) {
-    const product = this._productMap.get(plan.productId);
-    if (!product) return { name: '', sku: '', showSku: false, imageUrl: '', customTags: [], categoryLabel: '' };
+    const productId = plan && plan.productId ? String(plan.productId) : '';
+    const product = productId && this._productMap ? this._productMap.get(productId) : null;
+    if (!product) {
+      return {
+        name: '',
+        sku: '',
+        showSku: false,
+        imageUrl: '',
+        customTags: [],
+        partnerName: '',
+        categoryLabel: ''
+      };
+    }
     const category = product.categoryId ? this._categoryMap.get(product.categoryId) : null;
     const customTags = mapProductCustomTags(product, category, { includeFile: false });
     const display = productNameSkuParts(product);
+    const partnerName = resolveProductPartnerName(
+      product,
+      category,
+      this._partnerNameById || buildPartnerNameById([])
+    );
     return {
       name: display.name,
       sku: display.sku,
       showSku: display.showSku,
       imageUrl: (product.imageThumb || product.imageUrl) || '',
       customTags,
+      partnerName: partnerName || '',
       categoryLabel: category && category.name ? category.name : ''
     };
   },
@@ -393,6 +426,7 @@ Page({
     const orders = this._orders || [];
     const canEdit = this.data.canEdit;
     const canViewOrderDetail = this.data.canViewOrderDetail;
+    const planFormSettings = this._planFormSettings || {};
     return (plans || []).map((plan) => {
       const meta = this.productMetaForPlan(plan);
       const row = mapPlanListRow(plan, {
@@ -411,7 +445,12 @@ Page({
         canEdit,
         canViewOrderDetail
       });
-      return slimPlanListRow({ ...row, ...actions });
+      return slimPlanListRow({
+        ...row,
+        ...actions,
+        partnerName: meta.partnerName,
+        planCustomTags: mapPlanListCustomTags(plan, planFormSettings)
+      });
     });
   },
 
@@ -424,13 +463,41 @@ Page({
     this.setData({ rows });
   },
 
+  /** 列表页产品未命中时按 id 补齐（全量 products 失败/缓存空时兜底） */
+  async ensureProductsForPlans(plans) {
+    if (!this._productMap) this._productMap = new Map();
+    const ids = [...new Set((plans || []).map((p) => p && p.productId).filter(Boolean).map(String))];
+    const missing = ids.filter((id) => !this._productMap.has(id));
+    if (!missing.length) return;
+
+    if (this._productMap.size === 0) {
+      const products = normalizeMasterList(await fetchProductsAll());
+      products.forEach((p) => {
+        if (p && p.id) this._productMap.set(String(p.id), p);
+      });
+    }
+
+    const stillMissing = missing.filter((id) => !this._productMap.has(id)).slice(0, 30);
+    if (!stillMissing.length) return;
+
+    await Promise.all(
+      stillMissing.map(async (id) => {
+        const product = await getProduct(id).catch(() => null);
+        if (product && product.id) this._productMap.set(String(product.id), product);
+      })
+    );
+  },
+
   async bootstrap() {
-    this._initialized = true;
+    this._bootstrapping = true;
     this._productMap = new Map();
     this._categoryMap = new Map();
+    this._partnerNameById = buildPartnerNameById([]);
+    this._planFormSettings = {};
     try {
       const config = await fetchTenantConfig();
       const planFormSettings = config.planFormSettings || {};
+      this._planFormSettings = planFormSettings;
       const listDisplay = planFormSettings.listDisplay || {};
       const productionLinkMode = config.productionLinkMode || 'order';
       this._productionLinkMode = productionLinkMode;
@@ -446,21 +513,32 @@ Page({
           !!listDisplay.onlyShowNotCompleted
         )
       });
-      const _await$Promise$all = await Promise.all([
+      const results = await Promise.all([
         fetchProductsAll(),
-        fetchCategoriesAll()]
-        ),productsRaw = _await$Promise$all[0],categoriesRaw = _await$Promise$all[1];
-      const products = normalizeMasterList(productsRaw);
-      const categories = normalizeMasterList(categoriesRaw);
-      this._productMap = new Map(products.map((p) => [p.id, p]));
-      this._categoryMap = new Map(categories.map((c) => [c.id, c]));
+        fetchCategoriesAll(),
+        fetchPartnersAll().catch(() => [])
+      ]);
+      const products = normalizeMasterList(results[0]);
+      const categories = normalizeMasterList(results[1]);
+      const partners = normalizeMasterList(results[2]);
+      this._productMap = new Map(
+        products.filter((p) => p && p.id).map((p) => [String(p.id), p])
+      );
+      this._categoryMap = new Map(
+        categories.filter((c) => c && c.id).map((c) => [String(c.id), c])
+      );
+      this._partnerNameById = buildPartnerNameById(partners);
       this._orders = await fetchAllOrdersPaginated({}).catch(() => []);
     } catch {
       this._productionLinkMode = 'order';
       this._showPurchaseProgress = false;
+      this._planFormSettings = {};
       this._categoryMap = new Map();
+      this._partnerNameById = buildPartnerNameById([]);
       this._orders = [];
     }
+    this._initialized = true;
+    this._bootstrapping = false;
     await this.reloadList();
   },
 
@@ -513,6 +591,7 @@ Page({
         this._progressMap = new Map();
       }
 
+      await this.ensureProductsForPlans(pagePlans);
       const pageRows = this.mapRowsFromPlans(this._allPlans);
 
       const loaded = pageRows.length;

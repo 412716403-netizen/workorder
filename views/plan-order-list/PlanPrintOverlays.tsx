@@ -3,6 +3,7 @@ import { ModalPortal } from '../../components/ModalPortal';
 import { FileDown, Plus, Printer, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
+import { useMasterDataOptional } from '../../contexts/AppDataContext';
 import { buildPrintListRowsFromItemCodes, type ItemCodePrintContext } from '../../utils/printItemCodeRows';
 import { buildVirtualBatchPrintRow } from '../../utils/printVirtualBatch';
 import { mergeTenantPrintContext } from '../../utils/mergeTenantPrintContext';
@@ -90,6 +91,7 @@ const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
   setBatchPrintModal,
 }) => {
   const { tenantCtx } = useAuth();
+  const masterData = useMasterDataOptional();
   const [itemCodePdfExportingId, setItemCodePdfExportingId] = useState<string | null>(null);
 
   const buildItemCodeLabelRows = useCallback(
@@ -154,6 +156,10 @@ const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
                   labelPerRow: true,
                 },
                 tenantCtx?.tenantName,
+                {
+                  partners: masterData?.partners,
+                  productCategories: masterData?.categories,
+                },
               ),
               filename: buildPlanPrintPdfFilename(pickerPlan.planNumber, pickerProduct?.name, '单品码标签'),
               onProgress: (done, total) => {

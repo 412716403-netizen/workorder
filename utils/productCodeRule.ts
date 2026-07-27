@@ -23,20 +23,33 @@ import {
   PRODUCT_CODE_ELEMENT_MAX_COUNT,
   PRODUCT_CODE_ELEMENT_MIN_COUNT,
   PRODUCT_CODE_FIELD_CUSTOM_PREFIX,
+  PRODUCT_CODE_FIELD_PARTNER,
   PRODUCT_CODE_FIELD_SKU,
   PRODUCT_CODE_SEPARATORS,
   PRODUCT_CODE_SERIAL_LENGTH_MAX,
   PRODUCT_CODE_SERIAL_LENGTH_MIN,
 } from '../types';
 
-/** 字段下拉候选项：内建「产品名称」+ 当前分类的 text/select/date 扩展字段 */
+/** 字段下拉候选项：内建「产品名称」「合作单位」+ 当前分类的 text/select/date 扩展字段 */
 export interface ProductCodeFieldOption {
-  /** 'sku' 或 `custom:<ReportFieldDefinition.id>` */
+  /** 'sku' / 'partner' / `custom:<ReportFieldDefinition.id>` */
   key: string;
   label: string;
   fieldType: 'text' | 'select' | 'date';
   /** fieldType=select：选项列表（配「选项对应编号」映射用） */
   options?: string[];
+}
+
+/** 列字段候选时的外部数据：合作单位属租户主数据，不在分类定义里 */
+export interface ProductCodeFieldOptionContext {
+  /** 可选的合作单位名称（配「选项对应编号」映射用）；不传时合作单位项仍出现，只是没有可映射选项 */
+  partnerNames?: readonly string[];
+}
+
+/** 拼编号段时的外部取值：产品自身字段之外的数据 */
+export interface ProductCodeValueContext {
+  /** 产品关联的合作单位名称；分类未开 `linkPartner` 或未关联时传空（见 `resolveProductPartnerName`） */
+  partnerName?: string | null;
 }
 
 /** 新增元素的初始形态（「空值」类型已从可选项移除，仅历史配置中存在） */
@@ -140,11 +153,25 @@ function customFieldOptionType(f: ReportFieldDefinition): ProductCodeFieldOption
   return null; // file / knowledge 不参与编号
 }
 
-/** 当前分类可选的产品字段：产品名称 + 分类专属扩展字段（text/select/date） */
-export function listProductCodeFieldOptions(category: ProductCategory | undefined): ProductCodeFieldOption[] {
+/**
+ * 当前分类可选的产品字段：产品名称 +（分类开启 `linkPartner` 时）合作单位 + 分类专属扩展字段（text/select/date）。
+ * 合作单位按选项型处理，可选「文本内容」或「选项对应编号」。
+ */
+export function listProductCodeFieldOptions(
+  category: ProductCategory | undefined,
+  ctx?: ProductCodeFieldOptionContext,
+): ProductCodeFieldOption[] {
   const out: ProductCodeFieldOption[] = [
     { key: PRODUCT_CODE_FIELD_SKU, label: '产品名称', fieldType: 'text' },
   ];
+  if (category?.linkPartner) {
+    out.push({
+      key: PRODUCT_CODE_FIELD_PARTNER,
+      label: '合作单位',
+      fieldType: 'select',
+      options: [...(ctx?.partnerNames ?? [])],
+    });
+  }
   for (const f of category?.customFields ?? []) {
     const fieldType = customFieldOptionType(f);
     if (!fieldType) continue;
@@ -162,9 +189,10 @@ export function listProductCodeFieldOptions(category: ProductCategory | undefine
 export function resolveProductCodeFieldOption(
   category: ProductCategory | undefined,
   fieldKey: string | undefined,
+  ctx?: ProductCodeFieldOptionContext,
 ): ProductCodeFieldOption | undefined {
   if (!fieldKey) return undefined;
-  return listProductCodeFieldOptions(category).find((o) => o.key === fieldKey);
+  return listProductCodeFieldOptions(category, ctx).find((o) => o.key === fieldKey);
 }
 
 /** 把日期字符串（'2026-07-10' / ISO / 带时间）格式化为编号段；解析失败返回 '' */
@@ -188,8 +216,13 @@ function truncateChars(s: string, n: number | undefined): string {
 }
 
 /** 取产品字段原始值（string）；取不到返回 '' */
-function fieldRawValue(product: Pick<Product, 'sku' | 'categoryCustomData'>, fieldKey: string): string {
+function fieldRawValue(
+  product: Pick<Product, 'sku' | 'categoryCustomData'>,
+  fieldKey: string,
+  ctx?: ProductCodeValueContext,
+): string {
   if (fieldKey === PRODUCT_CODE_FIELD_SKU) return (product.sku ?? '').trim();
+  if (fieldKey === PRODUCT_CODE_FIELD_PARTNER) return (ctx?.partnerName ?? '').trim();
   if (fieldKey.startsWith(PRODUCT_CODE_FIELD_CUSTOM_PREFIX)) {
     const id = fieldKey.slice(PRODUCT_CODE_FIELD_CUSTOM_PREFIX.length);
     const v = product.categoryCustomData?.[id];
@@ -202,11 +235,12 @@ function fieldRawValue(product: Pick<Product, 'sku' | 'categoryCustomData'>, fie
 export function productCodeElementSegment(
   el: ProductCodeElement,
   product: Pick<Product, 'sku' | 'categoryCustomData'>,
+  ctx?: ProductCodeValueContext,
 ): string {
   if (el.type === 'none') return '';
   if (el.type === 'fixedText') return (el.fixedText ?? '').trim();
   if (!el.fieldKey) return '';
-  const raw = fieldRawValue(product, el.fieldKey);
+  const raw = fieldRawValue(product, el.fieldKey, ctx);
   if (!raw) return '';
   if (el.display === 'mapped') return (el.optionCodes?.[raw] ?? '').trim();
   if (el.display === 'date') return formatProductCodeDate(raw, el.dateFormat ?? 'yyMMdd');
@@ -220,9 +254,10 @@ export function productCodeElementSegment(
 export function buildProductCodePrefix(
   rule: ProductCodeRule,
   product: Pick<Product, 'sku' | 'categoryCustomData'>,
+  ctx?: ProductCodeValueContext,
 ): string {
   const segments = rule.elements
-    .map((el) => productCodeElementSegment(el, product))
+    .map((el) => productCodeElementSegment(el, product, ctx))
     .filter((s) => s.length > 0);
   if (segments.length === 0) return '';
   return segments.join(rule.separator) + rule.separator;

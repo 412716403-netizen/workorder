@@ -389,6 +389,8 @@ const ProductCategoryInfoFields: React.FC<ProductCategoryInfoFieldsProps> = ({
       {codeRuleModalOpen && onUpdateProductCodeRules && (
         <ProductCodeRuleModal
           categories={categories}
+          partners={partners}
+          partnerCategories={partnerCategories}
           initialCategoryId={working.categoryId}
           rules={productCodeRules ?? {}}
           onSave={onUpdateProductCodeRules}

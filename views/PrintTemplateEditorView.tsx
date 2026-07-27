@@ -73,7 +73,7 @@ export default function PrintTemplateEditorView() {
   const { id: routeId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { products, categories, globalNodes } = useMasterData();
+  const { products, categories, partners, globalNodes } = useMasterData();
   const {
     printTemplates,
     planFormSettings,
@@ -228,12 +228,14 @@ export default function PrintTemplateEditorView() {
       order,
       product,
       globalNodes,
+      partners,
+      productCategories: categories,
       milestoneName: '示例工序',
       completedQuantity: 12,
       tenantName: tenantCtx?.tenantName?.trim() || undefined,
     };
     return augmentPrintPreviewContext(base, template, psiCustomSamples);
-  }, [plans, orders, products, globalNodes, template, psiCustomSamples, productCategoryCustomPreviewSamples, tenantCtx?.tenantName]);
+  }, [plans, orders, products, partners, categories, globalNodes, template, psiCustomSamples, productCategoryCustomPreviewSamples, tenantCtx?.tenantName]);
 
   const fieldOptionsAll = useMemo(
     () =>

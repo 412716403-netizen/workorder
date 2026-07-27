@@ -53,7 +53,8 @@ import {
   productOutsourceDispatchUsesAggregateVariantPool,
   sumOutsourceableByVariantProductMatrix,
 } from '../../utils/outsourceDispatchVariantCaps';
-import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
+import { ProductListMetaTags } from '../../components/ProductListMetaTags';
+import { buildPartnerNameById } from '../../utils/productPartnerDisplay';
 import {
   milestoneIndexInOrder,
   milestoneIndexInProduct,
@@ -149,6 +150,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
   const { currentUser, tenantCtx, userId } = useAuth();
   const docOperator = currentOperatorDisplayName(currentUser);
   const outOfSequenceTemplateIds = useMemo(() => buildOutOfSequenceTemplateIds(globalNodes), [globalNodes]);
+  const partnerNameById = useMemo(() => buildPartnerNameById(partners), [partners]);
   const onlyShowIncompleteOrders =
     productionLinkMode === 'order' && outsourceFormSettings.onlyShowNotCompletedOrder === true;
   const canViewMainList = hasOpsPerm(tenantRole, userPermissions, 'production:outsource_list:allow');
@@ -1415,21 +1417,12 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
                         </button>
                         {product?.sku && <span className="text-[10px] font-bold text-slate-500">{product.sku}</span>}
                       </div>
-                      <div className="mb-1 flex flex-wrap items-center gap-1">
-                        {product &&
-                          getProductCategoryCustomFieldEntries(
-                            product,
-                            categories.find(c => c.id === product.categoryId),
-                            { includeFile: false },
-                          ).map(({ field, display }) => (
-                            <span
-                              key={field.id}
-                              className="text-[9px] font-bold text-slate-500 px-1.5 py-0.5 rounded bg-slate-50"
-                            >
-                              {field.label}: {display}
-                            </span>
-                          ))}
-                      </div>
+                      <ProductListMetaTags
+                        product={product}
+                        category={product ? categories.find(c => c.id === product.categoryId) : undefined}
+                        partnerNameById={partnerNameById}
+                        className="mb-1 flex flex-wrap items-center gap-1"
+                      />
                       <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                         {productionLinkMode !== 'product' && order?.customer && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {order.customer}</span>}
                         {productionLinkMode !== 'product' && <span className="flex items-center gap-1"><Layers className="w-3 h-3" /> 总数: {orderTotalQty}</span>}

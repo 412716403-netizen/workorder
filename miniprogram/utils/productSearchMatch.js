@@ -51,13 +51,15 @@ function buildProductSearchHaystackLower(product, category) {
   return parts.filter(Boolean).join('\u0001').toLowerCase();
 }
 
-function productMatchesSearchQuery(product, category, qRaw) {
+function productMatchesSearchQuery(product, category, qRaw, extra) {
   const q = String(qRaw || '').trim().toLowerCase();
   if (!q) return true;
   const n = String((product && product.name) || '').toLowerCase();
   const s = String((product && product.sku) || '').toLowerCase();
   const d = String((product && product.description) || '').toLowerCase();
   if (n.indexOf(q) >= 0 || s.indexOf(q) >= 0 || d.indexOf(q) >= 0) return true;
+  const partner = String((extra && extra.partnerName) || '').toLowerCase();
+  if (partner && partner.indexOf(q) >= 0) return true;
   return buildProductSearchHaystackLower(product, category).indexOf(q) >= 0;
 }
 

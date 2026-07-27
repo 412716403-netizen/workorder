@@ -55,7 +55,8 @@ import ReworkReportSubmitModal from './ReworkReportSubmitModal';
 import ReworkFormConfigModal from './ReworkFormConfigModal';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { orderBelongsToProductInList } from '../../utils/reworkMergeBucketOrderId';
-import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
+import { ProductListMetaTags } from '../../components/ProductListMetaTags';
+import { buildPartnerNameById } from '../../utils/productPartnerDisplay';
 import PlanProductDetail from '../plan-order-list/PlanProductDetail';
 import { productThumbSrc } from '../../utils/productImageSrc';
 import { ModalPortal } from '../../components/ModalPortal';
@@ -210,18 +211,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
 
   const idx = useDataIndexes(orders, products, boms, globalNodes, productMilestoneProgresses);
   const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
-  const renderProductCustomTags = useCallback((product: Product | undefined) => {
-    if (!product) return null;
-    return getProductCategoryCustomFieldEntries(
-      product,
-      categoryMap.get(product.categoryId),
-      { includeFile: false },
-    ).map(({ field, display }) => (
-      <span key={field.id} className="rounded bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-500">
-        {field.label}: {display}
-      </span>
-    ));
-  }, [categoryMap]);
+  const partnerNameById = useMemo(() => buildPartnerNameById(partners), [partners]);
 
   /** 父工单列表（无 parentOrderId 的为父工单） */
   const parentOrders = useMemo(() => orders.filter(o => !o.parentOrderId), [orders]);
@@ -753,7 +743,12 @@ const ReworkPanel: React.FC<PanelProps> = ({
                           </button>
                           {order.sku && <span className="text-[10px] font-bold text-slate-500">{order.sku}</span>}
                         </div>
-                        <div className="mb-1 flex flex-wrap items-center gap-1">{renderProductCustomTags(product) ?? null}</div>
+                        <ProductListMetaTags
+                          product={product}
+                          category={product ? categoryMap.get(product.categoryId) : undefined}
+                          partnerNameById={partnerNameById}
+                          className="mb-1 flex flex-wrap items-center gap-1"
+                        />
                         <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                           {productionLinkMode !== 'product' && order.customer && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {order.customer}</span>}
                           <span className="flex items-center gap-1"><Layers className="w-3 h-3" /> 总数: {orderTotalQty}</span>
@@ -876,7 +871,12 @@ const ReworkPanel: React.FC<PanelProps> = ({
                           <span className="font-bold text-slate-800 text-base">{fp?.name ?? '未知产品'}</span>
                           {fp?.sku && <span className="text-[10px] font-bold text-slate-500">{fp.sku}</span>}
                         </div>
-                        <div className="mb-1 flex flex-wrap items-center gap-1">{renderProductCustomTags(fp) ?? null}</div>
+                        <ProductListMetaTags
+                          product={fp}
+                          category={fp ? categoryMap.get(fp.categoryId) : undefined}
+                          partnerNameById={partnerNameById}
+                          className="mb-1 flex flex-wrap items-center gap-1"
+                        />
                         <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                           <span className="flex items-center gap-1">
                             <Layers className="w-3 h-3" /> 合计件数: {totalQtyAll}

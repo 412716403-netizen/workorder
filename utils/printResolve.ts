@@ -14,6 +14,7 @@ import type {
 import { formatCustomFieldDatetimeForPrint } from './localDateTime';
 import { formatProductProcessNodesText } from './productProcessNodesPrint';
 import { productThumbSrc } from './productImageSrc';
+import { buildPartnerNameById, resolveProductPartnerName } from './productPartnerDisplay';
 
 const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   PLANNING: '计划中',
@@ -115,6 +116,19 @@ function productField(product: Product, key: string, ctx: PrintRenderContext): u
   switch (key) {
     case 'name': return product.name;
     case 'sku': return product.sku;
+    case 'partner': {
+      const partners = ctx.partners ?? [];
+      const nameById = buildPartnerNameById(partners);
+      const categories = ctx.productCategories;
+      if (categories) {
+        const category = categories.find((c) => c.id === product.categoryId);
+        return resolveProductPartnerName(product, category, nameById) ?? '';
+      }
+      // 未注入分类清单时：有关联即输出名称，避免部分打印入口漏传导致空白
+      const id = (product.supplierId ?? '').trim();
+      if (!id) return '';
+      return nameById.get(id)?.trim() || '';
+    }
     case 'processNodes':
       return formatProductProcessNodesText(product, ctx.globalNodes);
     case 'description': return product.description ?? '';

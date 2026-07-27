@@ -60,7 +60,8 @@ import {
   pmpCompletedAtTemplate,
   productGroupMaxReportableSum,
 } from '../utils/productReportAggregates';
-import { getProductCategoryCustomFieldEntries } from '../utils/reportCustomDocField';
+import { ProductListMetaTags } from '../components/ProductListMetaTags';
+import { buildPartnerNameById } from '../utils/productPartnerDisplay';
 import { computePendingStockOrders } from '../utils/pendingStockCompute';
 import { buildDefectiveReworkByOrderMilestone } from '../utils/defectiveReworkByOrderMilestone';
 import { toLocalDateYmd } from '../utils/localDateTime';
@@ -270,6 +271,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   const confirm = useConfirm();
   const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
   const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
+  const partnerNameById = useMemo(() => buildPartnerNameById(partners), [partners]);
   /** 「不按顺序生产」工序 id 集合：全局恒按顺序，这些工序例外，可按工单总量报工 */
   const outOfSequenceTemplateIds = useMemo(() => buildOutOfSequenceTemplateIds(globalNodes), [globalNodes]);
 
@@ -1000,19 +1002,12 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                           </button>
                           <span className="text-[10px] font-bold text-slate-500">{order.sku}</span>
                         </div>
-                        <div className="mb-1 flex flex-wrap items-center gap-1">
-                          {product &&
-                            getProductCategoryCustomFieldEntries(product, categoryMap.get(product.categoryId), {
-                              includeFile: false,
-                            }).map(({ field, display }) => (
-                              <span
-                                key={field.id}
-                                className="text-[9px] font-bold text-slate-500 px-1.5 py-0.5 rounded bg-slate-50"
-                              >
-                                {field.label}: {display}
-                              </span>
-                            ))}
-                        </div>
+                        <ProductListMetaTags
+                          product={product}
+                          category={product ? categoryMap.get(product.categoryId) : undefined}
+                          partnerNameById={partnerNameById}
+                          className="mb-1 flex flex-wrap items-center gap-1"
+                        />
                         <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                           {productionLinkMode !== 'product' &&
                             (order.customer ?? '').trim() !== '' &&
@@ -1293,19 +1288,12 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                 </button>
                                 <span className="text-[10px] font-bold text-slate-500">{product?.sku || block.orders[0]?.sku}</span>
                               </div>
-                              <div className="mb-1 flex flex-wrap items-center gap-1">
-                                {product &&
-                                  getProductCategoryCustomFieldEntries(product, categoryMap.get(product.categoryId), {
-                                    includeFile: false,
-                                  }).map(({ field, display }) => (
-                                    <span
-                                      key={field.id}
-                                      className="text-[9px] font-bold text-slate-500 px-1.5 py-0.5 rounded bg-slate-50"
-                                    >
-                                      {field.label}: {display}
-                                    </span>
-                                  ))}
-                              </div>
+                              <ProductListMetaTags
+                                product={product}
+                                category={product ? categoryMap.get(product.categoryId) : undefined}
+                                partnerNameById={partnerNameById}
+                                className="mb-1 flex flex-wrap items-center gap-1"
+                              />
                               <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                                 <span className="flex items-center gap-1"><Layers className="w-3 h-3" /> 合计 {totalQty} 件</span>
                               </div>

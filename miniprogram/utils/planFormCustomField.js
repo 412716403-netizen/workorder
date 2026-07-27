@@ -72,6 +72,46 @@ function buildPlanDetailCustomFields(planFormSettings) {
     });
 }
 
+/** 列表展示用：planFormSettings.customFields 中 showInList 的字段 */
+function buildPlanListCustomFields(planFormSettings) {
+  const raw = normalizePlanFormFieldConfigArray(
+    planFormSettings && planFormSettings.customFields,
+  );
+  return raw
+    .filter((f) => f && f.showInList)
+    .map((f) => {
+      const type = effectivePlanFormFieldType(f);
+      return {
+        id: f.id,
+        label: f.label,
+        type,
+        isFile: type === 'file',
+        desktopOnly: type === 'knowledge',
+      };
+    });
+}
+
+/**
+ * 计划单列表自定义内容标签（对齐 Web PlanOrderListView customListFields）
+ * @returns {{ id: string, label: string, display: string }[]}
+ */
+function mapPlanListCustomTags(plan, planFormSettings) {
+  const fields = buildPlanListCustomFields(planFormSettings);
+  const out = [];
+  for (let i = 0; i < fields.length; i += 1) {
+    const f = fields[i];
+    if (f.desktopOnly) continue;
+    const display = customFieldDisplayValue(f, plan && plan.customData);
+    if (!display) continue;
+    out.push({
+      id: f.id,
+      label: f.label || f.id,
+      display: String(display).slice(0, 48),
+    });
+  }
+  return out;
+}
+
 function buildPlanCreateCustomFields(planFormSettings) {
   const raw = normalizePlanFormFieldConfigArray(
     planFormSettings && planFormSettings.customFields,
@@ -147,6 +187,8 @@ module.exports = {
   standardFieldShowInDetail,
   buildPlanCreateCustomFields,
   buildPlanDetailCustomFields,
+  buildPlanListCustomFields,
+  mapPlanListCustomTags,
   buildInitialPlanCustomData,
   getProductUnitName,
   buildCustomDataPayload,

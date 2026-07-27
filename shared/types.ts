@@ -259,6 +259,11 @@ export const PRODUCT_CODE_ELEMENT_MAX_COUNT = 10;
 export const PRODUCT_CODE_ELEMENT_DEFAULT_COUNT = 2;
 /** 内建字段 key：产品名称（Product.sku，文本型） */
 export const PRODUCT_CODE_FIELD_SKU = 'sku';
+/**
+ * 内建字段 key：合作单位（Product.supplierId 对应的名称，选项型）。
+ * 仅在分类开启 `linkPartner` 时可选，取值为合作单位名称，可按文本或选项映射入号。
+ */
+export const PRODUCT_CODE_FIELD_PARTNER = 'partner';
 /** 分类扩展字段 key 前缀：`custom:<ReportFieldDefinition.id>` */
 export const PRODUCT_CODE_FIELD_CUSTOM_PREFIX = 'custom:';
 

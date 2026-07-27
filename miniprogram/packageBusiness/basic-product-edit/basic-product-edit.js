@@ -185,6 +185,7 @@ Page({
       if (this._codeAutoFill) {
         this._codeAutoFill.setRules(normalizeProductCodeRuleMap(rulesRaw));
       }
+      this.syncAutoCodeMasterData();
 
       let product;
       if (this._productId) {
@@ -225,6 +226,15 @@ Page({
         this.isNewRecord(),
       ),
       namePlaceholder: state.autoMode ? '按编号规则自动生成' : '请填写',
+    });
+  },
+
+  /** 编号规则可含「合作单位」元素，取号前需把最新分类/合作单位清单交给取号器 */
+  syncAutoCodeMasterData() {
+    if (!this._codeAutoFill) return;
+    this._codeAutoFill.setMasterData({
+      categories: this._categories || [],
+      partners: this._partners || [],
     });
   },
 
@@ -406,10 +416,12 @@ Page({
     const detail = e.detail || {};
     this._workingProduct.supplierId = detail.id || undefined;
     this.setData({ supplierName: detail.name || '' });
+    this.scheduleAutoCode();
   },
 
   onPartnerCreated(e) {
     applyPartnerCreatedOnPage(this, e, { cacheKey: '_partners' });
+    this.syncAutoCodeMasterData();
   },
 
   onCustomFieldInput(e) {

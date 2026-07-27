@@ -46,10 +46,16 @@ export function buildProductSearchHaystackLower(product: Product, category: Prod
   return parts.filter(Boolean).join('\u0001').toLowerCase();
 }
 
+export interface ProductSearchExtraFields {
+  /** 分类开启 `linkPartner` 时产品关联的合作单位名称（见 `resolveProductPartnerName`） */
+  partnerName?: string | null;
+}
+
 export function productMatchesSearchQuery(
   product: Product,
   category: ProductCategory | null | undefined,
   qRaw: string,
+  extra?: ProductSearchExtraFields,
 ): boolean {
   const q = qRaw.trim().toLowerCase();
   if (!q) return true;
@@ -57,5 +63,7 @@ export function productMatchesSearchQuery(
   const s = (product.sku ?? '').toLowerCase();
   const d = (product.description ?? '').toLowerCase();
   if (n.includes(q) || s.includes(q) || d.includes(q)) return true;
+  const partner = (extra?.partnerName ?? '').toLowerCase();
+  if (partner && partner.includes(q)) return true;
   return buildProductSearchHaystackLower(product, category).includes(q);
 }

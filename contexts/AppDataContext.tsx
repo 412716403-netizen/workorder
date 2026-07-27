@@ -1351,6 +1351,11 @@ export function useMasterData(): MasterDataState {
   return ctx;
 }
 
+/** 无 Provider 时返回 null；供 SearchableProductSelect 等可能在独立渲染环境使用的通用组件读取 */
+export function useMasterDataOptional(): MasterDataState | null {
+  return useContext(MasterDataCtx);
+}
+
 export function useConfigData(): ConfigState {
   const ctx = useContext(ConfigCtx);
   if (!ctx) throw new Error('useConfigData must be used within AppDataProvider');

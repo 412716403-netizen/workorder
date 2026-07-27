@@ -148,7 +148,7 @@ const ProductQuickDetailBody: React.FC<ProductQuickDetailBodyProps> = ({
             )}
             {supplier && (
               <div className="col-span-2 sm:col-span-1">
-                <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5">默认供应商</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5">合作单位</p>
                 <p className="text-sm font-bold text-slate-800">{supplier.name}</p>
               </div>
             )}

@@ -37,9 +37,9 @@ function listMyReportHistory(params) {
 function fetchProductsAll() {
   return cachedFetch(
     'products:all',
-    () => request({ path: '/products?all=true&lite=true', method: 'GET', timeout: 60000 }).catch(() => []),
+    () => request({ path: '/products?all=true&lite=true', method: 'GET', timeout: 60000 }),
     MASTER_TTL_MS,
-  );
+  ).catch(() => []);
 }
 
 function fetchDictionaries() {

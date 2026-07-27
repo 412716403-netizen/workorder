@@ -82,7 +82,8 @@ import {
 import { nextSalesBillDocNumber } from '../utils/partnerDocNumber';
 import { effectiveAllocatedQuantity, isSalesOrderLineFullyShipped } from '../utils/psiAllocationDisplay';
 import { effectivePlanFormFieldType } from '../utils/planFormCustomField';
-import { getProductCategoryCustomFieldEntries } from '../utils/reportCustomDocField';
+import { ProductListMetaTags } from '../components/ProductListMetaTags';
+import { buildPartnerNameById } from '../utils/productPartnerDisplay';
 import { toLocalDateYmd, formatCustomFieldDatetimeForPrint } from '../utils/localDateTime';
 import { hasModulePerm } from '../utils/hasModulePerm';
 import { PSI_DOC_TYPE_AMOUNT_KEY, canViewAmount } from '../utils/canViewAmount';
@@ -265,6 +266,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
   const productMapPSI = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
   const warehouseMapPSI = useMemo(() => new Map(warehouses.map(w => [w.id, w])), [warehouses]);
   const categoryMapPSI = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
+  const partnerNameByIdPSI = useMemo(() => buildPartnerNameById(partners), [partners]);
   const getUnitName = (productId: string) => {
     const p = productMapPSI.get(productId);
     const u = (dictionaries.units ?? []).find(x => x.id === p?.unitId);
@@ -1647,11 +1649,6 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                             const lineCategory = product ? categoryMapPSI.get(product.categoryId) : undefined;
                             const rowProductName = product?.name || (first as any)?.productName;
                             const rowProductSku = product?.sku || (first as any)?.productSku;
-                            const productCustomTags = getProductCategoryCustomFieldEntries(
-                              product,
-                              product ? categoryMapPSI.get(product.categoryId) : undefined,
-                              { includeFile: false },
-                            );
                             const warehouse = warehouseMapPSI.get(first.warehouseId);
                             const orderQty = grp.reduce((s, i) => s + (Number(i.quantity) || 0), 0);
                             const allocatedQty = type === 'SALES_ORDER' ? grp.reduce((s, i) => s + (i.allocatedQuantity ?? 0), 0) : 0;
@@ -1762,18 +1759,12 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                                           </span>
                                         )}
                                       </div>
-                                      {productCustomTags.length > 0 && (
-                                        <div className="mt-1 flex flex-wrap items-center gap-1">
-                                          {productCustomTags.map(({ field, display }) => (
-                                            <span
-                                              key={field.id}
-                                              className="rounded bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-500"
-                                            >
-                                              {field.label}: {display}
-                                            </span>
-                                          ))}
-                                        </div>
-                                      )}
+                                      <ProductListMetaTags
+                                        product={product}
+                                        category={lineCategory}
+                                        partnerNameById={partnerNameByIdPSI}
+                                        className="mt-1 flex flex-wrap items-center gap-1"
+                                      />
                                     </div>
                                   </div>
                                 </td>
@@ -1850,16 +1841,27 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                                 )}
                                 {type === 'SALES_ORDER' && (
                                   <td className="py-2.5 px-3">
-                                    <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden w-full flex">
-                                      {orderQty <= 0 ? null : (
-                                        <>
-                                          <div className="h-full bg-sky-500 shrink-0 transition-all" title="已发" style={{ width: `${soBarShipPct}%` }} />
-                                          <div className="h-full bg-indigo-500 shrink-0 transition-all" title="待发（已配−已发）" style={{ width: `${soBarAllocPct}%` }} />
-                                          {soBarRosePct > 0 && (
-                                            <div className="h-full bg-rose-500 shrink-0" title="超配" style={{ width: `${soBarRosePct}%` }} />
-                                          )}
-                                        </>
-                                      )}
+                                    <div className="flex flex-col gap-2">
+                                      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden w-full flex">
+                                        {orderQty <= 0 ? null : (
+                                          <>
+                                            <div className="h-full bg-sky-500 shrink-0 transition-all" title="已发" style={{ width: `${soBarShipPct}%` }} />
+                                            <div className="h-full bg-indigo-500 shrink-0 transition-all" title="待发（已配−已发）" style={{ width: `${soBarAllocPct}%` }} />
+                                            {soBarRosePct > 0 && (
+                                              <div className="h-full bg-rose-500 shrink-0" title="超配" style={{ width: `${soBarRosePct}%` }} />
+                                            )}
+                                          </>
+                                        )}
+                                      </div>
+                                      <span className="text-[10px] font-bold text-slate-500 leading-snug">
+                                        <span className="text-sky-600">已发 {shippedQty}</span>
+                                        <span className="text-slate-300 mx-1">/</span>
+                                        <span className="text-indigo-600">待发 {allocPendingQty}</span>
+                                        {allocatedQty > orderQty && <span className="text-rose-600 ml-1">（超配）</span>}
+                                        {orderQty > 0 && shippedQty >= orderQty && (
+                                          <span className="text-emerald-600 ml-1">· 已发齐</span>
+                                        )}
+                                      </span>
                                     </div>
                                   </td>
                                 )}
@@ -1969,19 +1971,9 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                                           <PackageCheck className="w-3.5 h-3.5 shrink-0" /> 已发齐
                                         </span>
                                       )}
-                                      <span className="text-[10px] font-bold text-slate-800 leading-snug whitespace-nowrap">
-                                        <span>已发 {shippedQty}</span>
-                                        <span className="text-slate-400 mx-1">/</span>
-                                        <span>待发 {allocPendingQty}</span>
-                                        {allocatedQty > orderQty && <span className="text-rose-600 ml-1">（超配）</span>}
-                                      </span>
                                     </div>
                                     ) : (
-                                      <span className="text-[10px] font-bold text-slate-800 leading-snug whitespace-nowrap">
-                                        <span>已发 {shippedQty}</span>
-                                        <span className="text-slate-400 mx-1">/</span>
-                                        <span>待发 {allocPendingQty}</span>
-                                      </span>
+                                      <span className="text-[10px] text-slate-300">—</span>
                                     )}
                                   </td>
                                 )}

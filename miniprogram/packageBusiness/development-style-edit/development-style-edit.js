@@ -50,6 +50,8 @@ function styleAsProductForCode(style) {
     name: (style && style.name) || '',
     sku: (style && style.code) || '',
     categoryId: (style && style.categoryId) || '',
+    // 编号规则可含「合作单位」元素，需带上产品档案同名字段
+    supplierId: (style && style.supplierId) || '',
     categoryCustomData: (style && style.categoryCustomData) || {},
   };
 }
@@ -177,6 +179,15 @@ Page({
     return !this._styleId;
   },
 
+  /** 编号规则可含「合作单位」元素，取号前需把最新分类/合作单位清单交给取号器 */
+  syncAutoCodeMasterData() {
+    if (!this._codeAutoFill) return;
+    this._codeAutoFill.setMasterData({
+      categories: this._categories || [],
+      partners: this._partners || [],
+    });
+  },
+
   scheduleAutoCode() {
     if (!this._codeAutoFill || !this._working) return;
     this._codeAutoFill.schedule(styleAsProductForCode(this._working), this.isNewRecord());
@@ -227,6 +238,7 @@ Page({
       if (this._codeAutoFill) {
         this._codeAutoFill.setRules(normalizeProductCodeRuleMap(rulesRaw));
       }
+      this.syncAutoCodeMasterData();
 
       let style;
       if (this._styleId) {
@@ -439,10 +451,12 @@ Page({
     this._working.supplierId = detail.id || undefined;
     this._working.customerName = detail.name || undefined;
     this.setData({ supplierName: detail.name || '' });
+    this.scheduleAutoCode();
   },
 
   onPartnerCreated(e) {
     applyPartnerCreatedOnPage(this, e.detail);
+    this.syncAutoCodeMasterData();
   },
 
   onCustomFieldInput(e) {

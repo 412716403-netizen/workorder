@@ -153,6 +153,7 @@ PrintRenderContext.virtualBatch
 - `{{计划.dueDate}}`（计划交货日期；打印编辑器「插入字段」是否在「计划」分组中显示该项，与计划表单配置「列表显示 → 显示交货日期」开关一致）
 - `{{工单.orderNumber}}`
 - `{{产品.name}}`
+- `{{产品.partner}}`（产品档案关联的合作单位名称；分类开启 `linkPartner` 时有值，见 `Product.supplierId`）
 - `{{产品.processNodes}}`（计划单数据源：按产品 `milestoneNodeIds` 与工序节点库解析为路线文案，如「横机 → 套口 → 后道」）
 - `{{系统.pageCurrent}}`
 - `{{行.scanUrl}}`

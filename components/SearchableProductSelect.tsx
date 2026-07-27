@@ -1,9 +1,11 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback, Suspense } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, Package, ChevronRight, Plus } from 'lucide-react';
+import { Search, Package, ChevronRight, Plus, Building2 } from 'lucide-react';
 import type { Product, ProductCategory } from '../types';
 import { useAuthOptional } from '../contexts/AuthContext';
+import { useMasterDataOptional } from '../contexts/AppDataContext';
 import { hasSubPermission } from '../utils/hasSubPermission';
+import { buildPartnerNameById, resolveProductPartnerName } from '../utils/productPartnerDisplay';
 import {
   effectiveCustomDocFieldType,
   formatReportCustomDataForList,
@@ -77,6 +79,13 @@ export function SearchableProductSelect({
 
   const selectedProduct = options.find(p => p.id === value);
 
+  /** 合作单位来自全局主数据：避免为「显示/搜索合作单位」改动全部调用点 */
+  const masterData = useMasterDataOptional();
+  const partnerNameById = useMemo(
+    () => buildPartnerNameById(masterData?.partners ?? []),
+    [masterData?.partners],
+  );
+
   const selectableOptions = useMemo(
     () => (includeDisabled ? options : filterSelectableProducts(options, value)),
     [options, value, includeDisabled],
@@ -87,12 +96,13 @@ export function SearchableProductSelect({
     return selectableOptions
       .filter(p => {
         const cat = categories.find(c => c.id === p.categoryId) ?? null;
-        const matchesSearch = productMatchesSearchQuery(p, cat, q);
+        const partnerName = resolveProductPartnerName(p, cat, partnerNameById);
+        const matchesSearch = productMatchesSearchQuery(p, cat, q, { partnerName });
         const matchesCategory = activeTab === 'all' || p.categoryId === activeTab;
         return matchesSearch && matchesCategory;
       })
       .sort(compareProductsArchiveOrder);
-  }, [selectableOptions, search, activeTab, categories]);
+  }, [selectableOptions, search, activeTab, categories, partnerNameById]);
 
   const updatePanelPosition = useCallback(() => {
     const el = triggerRef.current;
@@ -206,7 +216,7 @@ export function SearchableProductSelect({
             autoFocus
             type="text"
             className={searchInputCls}
-            placeholder="名称、SKU 或自定义字段内容…"
+            placeholder="名称、SKU、合作单位或自定义字段内容…"
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
@@ -243,6 +253,7 @@ export function SearchableProductSelect({
       <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar space-y-0">
         {filteredOptions.map(p => {
           const cat = categories.find(c => c.id === p.categoryId);
+          const partnerName = resolveProductPartnerName(p, cat, partnerNameById);
           const duplicateUnavailable = unavailableSet.has(p.id) && p.id !== value;
           const policyDisabled = disabledProductSet.has(p.id) && p.id !== value;
           const unavailable = duplicateUnavailable || policyDisabled;
@@ -283,6 +294,14 @@ export function SearchableProductSelect({
                     {(p.sku ?? '').trim()}
                   </p>
                 ) : null}
+                {partnerName && (
+                  <span
+                    className={`inline-flex items-center gap-0.5 font-bold text-slate-500 rounded bg-slate-50 leading-tight ${compact ? 'text-[10px] px-1.5 py-0.5' : 'text-[11px] px-1.5 py-0.5'}`}
+                  >
+                    <Building2 className="w-2.5 h-2.5 shrink-0 text-slate-400" />
+                    {partnerName}
+                  </span>
+                )}
                 {getShowInFormCategoryFields(cat).map(f => {
                   const val = p.categoryCustomData?.[f.id];
                   if (val == null || val === '') return null;

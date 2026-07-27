@@ -530,6 +530,11 @@ export function canReadTenantConfig(perms: string[]): boolean {
   if (Object.values(TENANT_CONFIG_KEY_FORM_CONFIG_ALLOW).some(p => hasSubPermission(perms, p))) {
     return true;
   }
+  // 生产计划列表/新建依赖 planFormSettings（列表展示、自定义内容、交期开关等）。
+  // planFormSettings 未挂入 TENANT_CONFIG_KEY_FORM_CONFIG_ALLOW，故按 plans 子权限放行。
+  if (perms.some(p => p === 'production:plans' || p.startsWith('production:plans:'))) {
+    return true;
+  }
   // 进销存 / 财务单据页依赖表单配置开关（销售/采购/收付款表单设置等）；无 settings:config:view 时也需可读。
   // 注意：本端点整包返回租户所有配置 key，放宽一个模块等于放开全部配置，
   // 因此产品新建 / 开发录入所需的 productCodeRules 走专用只读端点 `GET /products/code-rules`，不在此放宽。

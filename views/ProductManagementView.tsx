@@ -8,6 +8,7 @@ import {
   X,
   Upload,
   Loader2,
+  Building2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Product, GlobalNodeTemplate, ProductCategory, PartnerCategory, BOM, AppDictionaries, Partner } from '../types';
@@ -20,6 +21,7 @@ import { getProductCategoryCustomFieldEntries } from '../utils/reportCustomDocFi
 import { productMatchesSearchQuery } from '../utils/productSearchMatch';
 import { compareProductsArchiveOrder } from '../utils/productSort';
 import { isProductEnabled } from '../utils/productEnabled';
+import { buildPartnerNameById, resolveProductPartnerName } from '../utils/productPartnerDisplay';
 import { useConfigData, useMasterData, useOrdersData, useAppActions } from '../contexts/AppDataContext';
 import { useClientPagination } from '../hooks/useClientPagination';
 import ListPageControls from '../components/ListPageControls';
@@ -118,6 +120,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   }, [boms]);
 
   const categoryMapPM = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
+  const partnerNameById = useMemo(() => buildPartnerNameById(partners), [partners]);
 
   useEffect(() => {
     if (activeCategoryFilter === PRODUCT_ARCHIVE_ALL) return;
@@ -187,10 +190,11 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
         ? inCategory
         : inCategory.filter(p => {
             const cat = categoryMapPM.get(p.categoryId ?? '') ?? null;
-            return productMatchesSearchQuery(p, cat, q);
+            const partnerName = resolveProductPartnerName(p, cat, partnerNameById);
+            return productMatchesSearchQuery(p, cat, q, { partnerName });
           });
     return [...searched].sort(compareProductsArchiveOrder);
-  }, [products, activeCategoryFilter, debouncedProductSearch, categoryMapPM]);
+  }, [products, activeCategoryFilter, debouncedProductSearch, categoryMapPM, partnerNameById]);
 
   const productListResetKey = `${activeCategoryFilter}|${debouncedProductSearch}`;
   const {
@@ -298,7 +302,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
           <div className="relative w-full sm:max-w-sm sm:shrink-0">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
             <input type="search" value={productArchiveSearch} onChange={e => setProductArchiveSearch(e.target.value)}
-              placeholder="搜索名称、编号、备注或分类自定义内容…"
+              placeholder="搜索名称、编号、合作单位、备注或分类自定义内容…"
               className={`${formStandardControlIconClass} bg-white pr-10 shadow-sm`}
               aria-label="搜索产品" />
             {productArchiveSearch.trim() !== '' && (
@@ -365,6 +369,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                     const displayPrice = sales > 0 ? sales : purchase;
                     const priceLabel = sales > 0 ? '销售' : '采购';
                     const customTags = getProductCategoryCustomFieldEntries(product, category, { includeFile: false });
+                    const partnerName = resolveProductPartnerName(product, category, partnerNameById);
                     const enabled = isProductEnabled(product);
                     return (
                       <tr
@@ -393,8 +398,14 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                             )}
                           </p>
                           <p className="sm:hidden text-[10px] text-slate-400 font-medium mt-0.5">{product.sku}</p>
-                          {customTags.length > 0 && (
+                          {(partnerName || customTags.length > 0) && (
                             <div className="mt-1 flex flex-wrap items-center gap-1">
+                              {partnerName && (
+                                <span className="inline-flex items-center gap-0.5 rounded bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-500">
+                                  <Building2 className="w-2.5 h-2.5 shrink-0 text-slate-400" />
+                                  {partnerName}
+                                </span>
+                              )}
                               {customTags.map(({ field, display }) => (
                                 <span key={field.id} className="rounded bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-500">
                                   {field.label}: {display}

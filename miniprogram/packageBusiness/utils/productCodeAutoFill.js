@@ -14,6 +14,8 @@ const AUTO_FILL_DEBOUNCE_MS = 400;
 function createProductCodeAutoFill(options) {
   const onFill = options && options.onFill;
   let rules = {};
+  let categories = [];
+  let partners = [];
   /** @type {{ code: string, prefix: string, serialLength: number } | null} */
   let lastAuto = null;
   let fetchSeq = 0;
@@ -23,10 +25,29 @@ function createProductCodeAutoFill(options) {
     rules = map || {};
   }
 
+  /** 规则可含「合作单位」元素时需要主数据把 supplierId 解析成名称 */
+  function setMasterData(data) {
+    categories = (data && data.categories) || [];
+    partners = (data && data.partners) || [];
+  }
+
+  /** 对齐 Web utils/productPartnerDisplay.ts：仅分类开启 linkPartner 时视为有效 */
+  function resolvePartnerName(product) {
+    const categoryId = (product && product.categoryId) || '';
+    const category = categories.find((c) => c.id === categoryId);
+    if (!category || !category.linkPartner) return '';
+    const supplierId = String((product && product.supplierId) || '').trim();
+    if (!supplierId) return '';
+    const partner = partners.find((p) => p.id === supplierId);
+    return partner ? String(partner.name || '').trim() : '';
+  }
+
   function getAutoState(product, isNew) {
     const rule = getProductCodeRule(rules, product && product.categoryId);
     const autoMode = Boolean(isNew && rule.mode === 'auto' && product && product.categoryId);
-    const prefix = autoMode ? buildProductCodePrefix(rule, product) : '';
+    const prefix = autoMode
+      ? buildProductCodePrefix(rule, product, { partnerName: resolvePartnerName(product) })
+      : '';
     return {
       autoMode,
       prefix,
@@ -132,6 +153,7 @@ function createProductCodeAutoFill(options) {
 
   return {
     setRules,
+    setMasterData,
     getAutoState,
     schedule,
     refresh,

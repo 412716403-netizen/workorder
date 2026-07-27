@@ -57,6 +57,7 @@ export {
   PRODUCT_CODE_ELEMENT_MAX_COUNT,
   PRODUCT_CODE_ELEMENT_DEFAULT_COUNT,
   PRODUCT_CODE_FIELD_SKU,
+  PRODUCT_CODE_FIELD_PARTNER,
   PRODUCT_CODE_FIELD_CUSTOM_PREFIX,
   PRODUCT_CODE_DATE_FORMATS,
   PRODUCT_CODE_SEPARATORS,
@@ -1440,6 +1441,13 @@ export interface PrintRenderContext {
   product?: Product;
   /** 解析 {{产品.processNodes}} 等工序名称时按 id 查表；计划单打印等场景由调用方注入 */
   globalNodes?: GlobalNodeTemplate[];
+  /**
+   * 解析 {{产品.partner}}（合作单位名称）时按 `Product.supplierId` 查表；
+   * 与 `productCategories` 联用时仅分类开启 `linkPartner` 才输出名称。
+   */
+  partners?: Partner[];
+  /** 与 partners 联用：判定产品分类是否开启关联合作单位 */
+  productCategories?: ProductCategory[];
   milestoneName?: string;
   completedQuantity?: number;
   page?: { current: number; total: number };

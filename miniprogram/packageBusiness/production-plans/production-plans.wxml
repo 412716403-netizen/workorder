@@ -107,12 +107,19 @@
             <text wx:if="{{item.showProductSku}}" class="plan-list-row__sku">{{item.productSku}}</text>
           </view>
           <view wx:if="{{item.showProductCustomTags}}" class="plan-list-row__custom-tags">
+            <text wx:if="{{item.showPartner}}" class="plan-list-row__tag plan-list-row__tag--partner">{{item.partnerName}}</text>
             <text
               wx:for="{{item.productCustomTags}}"
               wx:for-item="tag"
               wx:key="id"
               class="plan-list-row__tag"
             >{{tag.label}}: {{tag.display}}</text>
+            <text
+              wx:for="{{item.planCustomTags}}"
+              wx:for-item="ptag"
+              wx:key="id"
+              class="plan-list-row__tag"
+            >{{ptag.label}}: {{ptag.display}}</text>
           </view>
           <view wx:if="{{item.showSubRow}}" class="plan-list-row__sub">
             <view wx:if="{{item.showCustomer}}" class="plan-list-row__sub-customer">

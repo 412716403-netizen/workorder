@@ -78,7 +78,8 @@ import { plans as plansApi } from '../services/api';
 import { usePlanPurchaseProgress, type PlanPurchaseProgress } from '../hooks/usePlanPurchaseProgress';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { formatPlanOrderCreatedAtForList, toLocalDateYmd } from '../utils/localDateTime';
-import { getProductCategoryCustomFieldEntries } from '../utils/reportCustomDocField';
+import { ProductListMetaTags } from '../components/ProductListMetaTags';
+import { buildPartnerNameById } from '../utils/productPartnerDisplay';
 import { resolvePrimaryOrderIdForPlan } from '../utils/resolvePrimaryOrderIdForPlan';
 import { getPlanSourceSalesOrderDocNumber } from '../utils/planFromSalesOrder';
 import { hasOpsPerm, getOrderFamilyIds } from './production-ops/types';
@@ -456,19 +457,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
   }, [plansForView, plans]);
   const purchaseProgressByPlan = usePlanPurchaseProgress(plansForPurchaseProgress, plans);
   const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
-  const renderProductCustomTags = useCallback(
-    (product: Product | undefined) => {
-      if (!product) return null;
-      return getProductCategoryCustomFieldEntries(product, categoryMap.get(product.categoryId), {
-        includeFile: false,
-      }).map(({ field, display }) => (
-        <span key={field.id} className="text-[9px] font-bold text-slate-500 px-1.5 py-0.5 rounded bg-slate-50">
-          {field.label}: {display}
-        </span>
-      ));
-    },
-    [categoryMap],
-  );
+  const partnerNameById = useMemo(() => buildPartnerNameById(partners), [partners]);
   const totalPlanPages = Math.max(1, Math.ceil(totalPlans / PLAN_PAGE_SIZE));
 
   /** 从计划单号解析拆分组：仅当单号形如「原单-1」「原单-2」…「原单-99」时视为拆分单（本系统拆分生成），避免把 PLN-327611 等普通编号误判为拆分组 */
@@ -541,8 +530,11 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
           labelPerVirtualBatch: (planListPrintRun.plan as any)._labelPerVirtualBatch ?? undefined,
         }
       : idlePlanPrintCtx;
-    return mergeTenantPrintContext(raw, tenantCtx?.tenantName);
-  }, [planListPrintRun, idlePlanPrintCtx, products, globalNodes, tenantCtx?.tenantName]);
+    return mergeTenantPrintContext(raw, tenantCtx?.tenantName, {
+      partners,
+      productCategories: categories,
+    });
+  }, [planListPrintRun, idlePlanPrintCtx, products, globalNodes, partners, categories, tenantCtx?.tenantName]);
 
   const planListPrintDocumentTitle = useMemo(() => {
     if (!planListPrintRun) return undefined;
@@ -798,7 +790,12 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                           {showInList('product') && <span className="text-[10px] font-bold text-slate-500">{product?.sku ?? ''}</span>}
                           {showInList('assignedCount') && assignedCount > 0 && <span className="text-[9px] font-black bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded">已派发 {assignedCount} 工序</span>}
                       </div>
-                        <div className="mb-1 flex flex-wrap items-center gap-1">{renderProductCustomTags(product)}</div>
+                        <ProductListMetaTags
+                          product={product}
+                          category={product ? categoryMap.get(product.categoryId) : undefined}
+                          partnerNameById={partnerNameById}
+                          className="mb-1 flex flex-wrap items-center gap-1"
+                        />
                         <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                           {showInList('customer') && productionLinkMode !== 'product' && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {plan.customer}</span>}
                           {renderPlanSourceSalesOrderMeta(plan)}
@@ -902,7 +899,12 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                                   {showInList('product') && <span className="text-[10px] font-bold text-slate-500">{product?.sku ?? ''}</span>}
                                   {showInList('assignedCount') && assignedCount > 0 && <span className="text-[9px] font-black bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded">已派发 {assignedCount} 工序</span>}
                                 </div>
-                                <div className="mb-1 flex flex-wrap items-center gap-1">{renderProductCustomTags(product)}</div>
+                                <ProductListMetaTags
+                          product={product}
+                          category={product ? categoryMap.get(product.categoryId) : undefined}
+                          partnerNameById={partnerNameById}
+                          className="mb-1 flex flex-wrap items-center gap-1"
+                        />
                                 <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                                   {showInList('customer') && productionLinkMode !== 'product' && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {plan.customer}</span>}
                           {renderPlanSourceSalesOrderMeta(plan)}
@@ -1012,7 +1014,12 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                                 {showInList('product') && <span className="text-[10px] font-bold text-slate-500">{product?.sku ?? ''}</span>}
                                 {showInList('assignedCount') && assignedCount > 0 && <span className="text-[9px] font-black bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded">已派发 {assignedCount} 工序</span>}
                               </div>
-                              <div className="mb-1 flex flex-wrap items-center gap-1">{renderProductCustomTags(product)}</div>
+                              <ProductListMetaTags
+                          product={product}
+                          category={product ? categoryMap.get(product.categoryId) : undefined}
+                          partnerNameById={partnerNameById}
+                          className="mb-1 flex flex-wrap items-center gap-1"
+                        />
                               <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                                 {showInList('customer') && productionLinkMode !== 'product' && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {plan.customer}</span>}
                           {renderPlanSourceSalesOrderMeta(plan)}

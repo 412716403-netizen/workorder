@@ -396,7 +396,7 @@ npm run miniprogram:icons
 
 | 页面 | 路径 | 职责 |
 |------|------|------|
-| 计划列表 | [`packageBusiness/production-plans/`](../miniprogram/packageBusiness/production-plans/) | 分页列表、搜索/派发状态筛选、采购到货进度条、下拉刷新 |
+| 计划列表 | [`packageBusiness/production-plans/`](../miniprogram/packageBusiness/production-plans/) | 分页列表、搜索/派发状态筛选、采购到货进度条、下拉刷新；行内展示产品编号/名称、合作单位（分类 `linkPartner`）、产品分类扩展字段、计划表单「自定义内容」（`showInList`） |
 | 计划详情 | [`packageBusiness/production-plan-detail/`](../miniprogram/packageBusiness/production-plan-detail/) | 对齐 Web：基础信息/数量/工序/BOM 横向表格（可左右滑动）；下达工单；点产品编号打开只读商品信息（与资料库共用 `product-quick-detail`） |
 | 新建计划 | [`packageBusiness/production-plan-create/`](../miniprogram/packageBusiness/production-plan-create/) | 简化新建（产品+数量+客户+交期） |
 
@@ -868,7 +868,7 @@ npm run miniprogram:icons
 
 | 页面 | 路径 | 职责 |
 |------|------|------|
-| 档案列表 | [`packageBusiness/basic-products/`](../miniprogram/packageBusiness/basic-products/) | 分类 Tab、搜索、客户端分页、启用/禁用、创建入口 |
+| 档案列表 | [`packageBusiness/basic-products/`](../miniprogram/packageBusiness/basic-products/) | 分类 Tab、搜索（含合作单位名称）、客户端分页、启用/禁用、创建入口；分类开启 `linkPartner` 且产品已关联时行内展示合作单位 |
 | 产品编辑 | [`packageBusiness/basic-product-edit/`](../miniprogram/packageBusiness/basic-product-edit/) | 核心业务档案（分类/编号/名称/单位/图片/价格/合作单位/扩展字段/颜色尺码） |
 
 | 工具 / 组件 | 作用 |
@@ -880,7 +880,7 @@ npm run miniprogram:icons
 | [`packageBusiness/utils/productCodeAutoFill.js`](../miniprogram/packageBusiness/utils/productCodeAutoFill.js) | 新建自动取号 / 手改判定 / 保存 `codeAutoGen` |
 | [`packageBusiness/components/color-size-spec-picker/`](../miniprogram/packageBusiness/components/color-size-spec-picker/) | 颜色/尺码勾选 + 快捷新增字典 |
 
-**产品编号自动取号**：新建产品时优先专用只读端点 `GET /products/code-rules` 读取 `productCodeRules`（与网页同源，租户任意成员可读；该端点未部署时回退整包 `GET /settings/config`，但后者需 psi/finance 或 `settings:config:view`，细粒度产品/开发角色会退化为手动输入）；若当前分类规则为 `auto`，则按规则拼前缀并调用 `GET /products/next-code` 预填编号，分类 / 产品名称 / 参与拼接的扩展字段变化时实时重取；未手改保存时带 `codeAutoGen`（与网页同口径）。支持「重新取号」；**不提供**编号规则配置入口（齿轮 / 弹窗），规则仍在网页维护。
+**产品编号自动取号**：新建产品时优先专用只读端点 `GET /products/code-rules` 读取 `productCodeRules`（与网页同源，租户任意成员可读；该端点未部署时回退整包 `GET /settings/config`，但后者需 psi/finance 或 `settings:config:view`，细粒度产品/开发角色会退化为手动输入）；若当前分类规则为 `auto`，则按规则拼前缀并调用 `GET /products/next-code` 预填编号，分类 / 产品名称 / 合作单位 / 参与拼接的扩展字段变化时实时重取（规则含「合作单位」元素时，页面通过 `setMasterData({ categories, partners })` 把主数据交给取号器解析 `supplierId` → 名称）；未手改保存时带 `codeAutoGen`（与网页同口径）。支持「重新取号」；**不提供**编号规则配置入口（齿轮 / 弹窗），规则仍在网页维护。
 
 **字段口径**：产品编号 = `name`（必填唯一）；产品名称 = `sku`（选填可重复）。
 
