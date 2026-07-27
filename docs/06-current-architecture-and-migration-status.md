@@ -88,6 +88,7 @@
 - `auth`、`adminUsers` 已出现 service 层
 - 大多数业务域逻辑仍集中在 controller
 - 权限校验存在模块级、子权限级、局部自定义逻辑并存的情况
+- 工作台域已按职责细分：`dashboard.service.ts`（工作台/快捷入口/统计）、`dashboardMessages.service.ts`（消息 feed + 已读 + 平台公告）、`featurePlugins.service.ts`、`tenantMembership.service.ts`（共享的成员/`preferences` 读取）；`dashboard.controller.ts` 分别按域引用，避免 service 间循环依赖
 
 ### 3.4 Prisma schema 比文档更接近真实状态
 
@@ -229,7 +230,7 @@
   - **权限缓存**：`buildTenantPayload` TTL 5s→30s + 进程内 singleflight；`invalidateAuthTenantCache / invalidateAuthCacheForTenant` 同步清 in-flight。权限写路径仍主动失效，30s 只是漏调 invalidate 时的兜底窗口。
   - **启动请求去重**：`useFeaturePlugins` 用 getConfig 已带的 `featurePlugins` 作 React Query `initialData`（getConfig 403 时回退正常请求）；`AuthContext.syncTenantPermissions` 首屏延后 2.5s。
   - **product 模式工序锁定标记缓存**：`getProductIdsWithActiveOrders` 加 60s Redis 缓存（key `cache:products:active-order-product-ids:<tenantId>`）；仅影响 `processLocked` 展示标记，写保护 `assertProcessRouteEditableIfNeeded` 实时查库。
-  - **索引**：`production_orders(plan_order_id)`、`production_orders(tenant_id, dispatch_status)`（migration `20260714090000_production_order_plan_dispatch_indexes`）。
+  - **索引**：`production_orders(plan_order_id)`、`production_orders(tenant_id, dispatch_status)`（migration `20260714090000_production_order_plan_dispatch_indexes`）；`products(tenant_id, name varchar_pattern_ops)`、`dev_styles(tenant_id, name varchar_pattern_ops)`（migration `20260726010000_product_code_pool_pattern_indexes`，供产品编号取号号池的前缀扫描，见 `docs/02` §1.5.1）。
   - 部署提醒：生产环境须配 `REDIS_URL`（无 Redis 时权限/锁定标记缓存自动降级为直查 DB）并执行 `prisma migrate deploy`。
 - **Phase 3.G（已完成）产品经营弹窗提速**（`dashboard/product-economics` 列表 + `:productId` 明细）：
   - **明细接口按 productId 下推过滤**：`loadProductionAggregates`（报工/外协/返工/报废聚合）与 `loadPsiAggregates`（销售/库存）加可选 `productId`；`computeMaterialSurplusLossByProduct` 加 `{ scoped: true }` 模式——先按成品找工单家族（生产该成品的工单 + 沿 `parentOrderId` 向上补祖先 + 向下补子孙，`loadScopedOrderIds`），再只拉家族内工单（嵌套报工）与相关领退料流水（`sourceProductId in ids OR orderId in 家族`）。此前点单个产品明细会全量拉全租户报工重算一遍。列表接口传全部产品时行为不变（不走 scoped）。

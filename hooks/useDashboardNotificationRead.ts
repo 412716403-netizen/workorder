@@ -1,8 +1,9 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import {
-  markDashboardNotificationRead,
+  markDashboardNotificationReadAndSync,
   readDashboardNotificationIds,
+  syncDashboardNotificationReads,
 } from '../utils/dashboardNotificationRead';
 
 export function useDashboardNotificationRead() {
@@ -11,6 +12,17 @@ export function useDashboardNotificationRead() {
   const userId = currentUser?.id != null ? String(currentUser.id) : undefined;
 
   const [readRevision, setReadRevision] = useState(0);
+
+  useEffect(() => {
+    if (!tenantId) return;
+    let cancelled = false;
+    void syncDashboardNotificationReads(tenantId, userId).then(() => {
+      if (!cancelled) setReadRevision(v => v + 1);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantId, userId]);
 
   const readIds = useMemo(() => {
     void readRevision;
@@ -24,7 +36,7 @@ export function useDashboardNotificationRead() {
 
   const markRead = useCallback(
     (messageId: string) => {
-      markDashboardNotificationRead(tenantId, userId, messageId);
+      markDashboardNotificationReadAndSync(tenantId, userId, messageId);
       setReadRevision(v => v + 1);
     },
     [tenantId, userId],

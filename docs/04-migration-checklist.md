@@ -155,8 +155,8 @@
 | **返工管理** | **部分落地（P2+）** | Hub 主列表 + 待处理不良 + 处理/报工 + 流水编辑删除 + 详情 + 返工领料；`packageBusiness/production-rework` 及子页 | 表单配置/打印留 Web |
 | **报工 Tab** | **已落地** | TabBar 居中「报工」=`pages/scan`：可报任务 + 我的报工；`selfReport` 提交 PENDING；工单中心筛选面板「报工审核」 | 原生 tabBar 无法按权限隐藏项（无 `process_report` 时页内空态） |
 | **扫码会话** | **部分落地** | 分包 `scan-session` 连续扫码；报工/返工页内选工序；外协可选加工厂 | 产品关联模式外协/外协返工；待入库合并行 `orderIds` |
-| **消息 Tab** | **部分落地** | 聊天式 UI：会话列表（系统消息/待办事项/协作合作单位）+ 聊天详情气泡（`pages/messages-chat`）；融合 `/dashboard/notifications` + `/todos` + `/collaboration/subcontract-transfers`；本地已读；Tab 角标 | 协作单据详情/操作仍依赖电脑端 |
-| **产品与 BOM** | **部分落地** | 档案列表（分类 Tab/搜索/分页/启用切换）+ 产品编辑（基本信息/颜色尺码）；`packageBusiness/basic-products` / `basic-product-edit`；**不含**工序/BOM 配置、批量导入 | 工序路线、工价、BOM、分类/报工 file·knowledge 附件上传留 Web |
+| **消息 Tab** | **部分落地** | 聊天式 UI：会话列表（系统消息/待办事项/协作合作单位）+ 详情列表；融合 `/dashboard/notifications` + `/todos` + `/collaboration/subcontract-transfers`；已读经 `GET/POST /dashboard/notification-reads` 与网页同步；Tab 角标 | 协作单据详情/操作仍依赖电脑端 |
+| **产品与 BOM** | **部分落地** | 档案列表（分类 Tab/搜索/分页/启用切换）+ 产品编辑（基本信息/颜色尺码）；新建时消费网页 `productCodeRules` 自动取号（`GET /products/code-rules` + `next-code`）；`packageBusiness/basic-products` / `basic-product-edit`；**不含**工序/BOM 配置、批量导入、编号规则配置 UI | 工序路线、工价、BOM、分类/报工 file·knowledge 附件上传、编号规则配置留 Web |
 | **合作单位** | **部分落地** | 档案列表（分类 Tab/搜索/分页）+ 单位编辑（名称/分类/扩展字段）；`packageBusiness/basic-partners` / `basic-partner-edit`；**不含**批量导入 | 协作租户绑定、file/knowledge 附件上传留 Web |
 | **成员管理** | **部分落地** | Hub 三 Tab（成员列表/待审核/邀请码）+ 分配角色 + 工序分配 + 移除成员；`packageBusiness/basic-members`；对齐 Web `MemberManagementView`（**不含**角色 CRUD） | 角色权限树编辑、直接编辑成员 permissions 留 Web |
 | **公共数据字典** | **已落地** | 列表（类型 Tab/搜索/分页）+ 字典项编辑（颜色/尺码/单位 CRUD）；`packageBusiness/basic-dictionaries` / `basic-dictionary-edit`；应用中心**不含**设备管理入口 | — |

@@ -1,0 +1,14 @@
+<page-header title="消息详情" theme="primary" show-back="{{true}}" center="{{true}}" bind:back="onHeaderBack" />
+
+<scroll-view class="msg-detail-scroll" style="height: {{scrollHeight}}px;" scroll-y show-scrollbar="{{false}}">
+  <view class="msg-detail-body">
+    <view class="msg-detail-card">
+      <view class="msg-detail-card__head">
+        <text wx:if="{{tagLabel}}" class="msg-detail-tag msg-detail-tag--{{tagTone}}">{{tagLabel}}</text>
+        <text class="msg-detail-time">{{timeText}}</text>
+      </view>
+      <text class="msg-detail-title">{{title}}</text>
+      <text class="msg-detail-content">{{body}}</text>
+    </view>
+  </view>
+</scroll-view>

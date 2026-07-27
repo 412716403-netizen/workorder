@@ -36,6 +36,23 @@ const {
   buildDevStyleSavePayload,
 } = require('../utils/devStyleForm.js');
 const { resolveDevStyleCustomerName, canDeleteDevStyle } = require('../utils/devStyleDisplay.js');
+const {
+  fetchProductCodeRules,
+} = require('../utils/productApi.js');
+const {
+  createProductCodeAutoFill,
+} = require('../utils/productCodeAutoFill.js');
+const { normalizeProductCodeRuleMap } = require('../utils/productCodeRule.js');
+
+/** 开发款式 → 产品取号形状（name=产品编号，sku=款号/产品名称） */
+function styleAsProductForCode(style) {
+  return {
+    name: (style && style.name) || '',
+    sku: (style && style.code) || '',
+    categoryId: (style && style.categoryId) || '',
+    categoryCustomData: (style && style.categoryCustomData) || {},
+  };
+}
 
 function computeScrollHeight(nav) {
   const win = readWindowMetrics();
@@ -77,6 +94,8 @@ Page({
     nodeSelectedCount: 0,
     selectedStageRows: [],
     selectedNodeRows: [],
+    autoCodeActive: false,
+    namePlaceholder: '请填写',
     statusBarHeight: 20,
     navBarHeight: 44,
     headerBlockHeight: 88,
@@ -93,6 +112,19 @@ Page({
     });
     this._styleId = options.id ? decodeURIComponent(options.id) : '';
     this._initialized = false;
+    this._codeAutoFill = createProductCodeAutoFill({
+      onFill: (code, prevAutoCode) => {
+        if (!this._working || this._styleId) return;
+        const cur = String(this._working.name || '').trim();
+        if (cur && cur !== prevAutoCode && cur !== code) return;
+        this._working.name = code;
+        this.setData({
+          'form.name': code,
+          autoCodeActive: true,
+          namePlaceholder: '按编号规则自动生成',
+        });
+      },
+    });
   },
 
   onShow() {
@@ -137,11 +169,45 @@ Page({
     wx.navigateBack();
   },
 
+  onUnload() {
+    if (this._codeAutoFill) this._codeAutoFill.dispose();
+  },
+
+  isNewRecord() {
+    return !this._styleId;
+  },
+
+  scheduleAutoCode() {
+    if (!this._codeAutoFill || !this._working) return;
+    this._codeAutoFill.schedule(styleAsProductForCode(this._working), this.isNewRecord());
+    this.syncAutoCodeUi();
+  },
+
+  syncAutoCodeUi() {
+    if (!this._codeAutoFill || !this._working) return;
+    const autoCodeActive = this._codeAutoFill.isAutoCodeActive(
+      styleAsProductForCode(this._working),
+      this.isNewRecord(),
+    );
+    this.setData({
+      autoCodeActive,
+      namePlaceholder: autoCodeActive ? '按编号规则自动生成' : '请填写',
+    });
+  },
+
+  onRefreshAutoCode() {
+    if (!this._codeAutoFill || !this._working || !this.isNewRecord()) return;
+    this._codeAutoFill.refresh(styleAsProductForCode(this._working), true);
+    this.syncAutoCodeUi();
+  },
+
   async bootstrap() {
     this._initialized = true;
     this.setData({ loading: true });
     try {
-      const [categories, dictionariesRaw, partners, partnerCategories, templates, nodesRaw] =
+      if (this._codeAutoFill) this._codeAutoFill.reset();
+
+      const [categories, dictionariesRaw, partners, partnerCategories, templates, nodesRaw, rulesRaw] =
         await Promise.all([
           fetchCategoriesAll(),
           fetchDictionaries(),
@@ -149,6 +215,7 @@ Page({
           fetchPartnerCategoriesAll(),
           listDevStageTemplates().catch(() => []),
           request({ path: '/settings/nodes?all=true', method: 'GET', timeout: 60000 }).catch(() => []),
+          fetchProductCodeRules().catch(() => ({})),
         ]);
       this._categories = categories || [];
       this._dictionaries = normalizeAppDictionaries(dictionariesRaw);
@@ -156,6 +223,10 @@ Page({
       this._partnerCategories = partnerCategories || [];
       this._templates = templates || [];
       this._globalNodes = Array.isArray(nodesRaw) ? nodesRaw : [];
+
+      if (this._codeAutoFill) {
+        this._codeAutoFill.setRules(normalizeProductCodeRuleMap(rulesRaw));
+      }
 
       let style;
       if (this._styleId) {
@@ -172,6 +243,7 @@ Page({
       this._working = JSON.parse(JSON.stringify(style));
       this._originalImageUrl = String(style.imageUrl || '');
       this.applyUi();
+      this.scheduleAutoCode();
     } catch (err) {
       wx.showToast({ title: (err && err.message) || '加载失败', icon: 'none' });
       this.setData({ loading: false });
@@ -290,6 +362,7 @@ Page({
       partnerCategories: this._partnerCategories,
       dictionaries: this._dictionaries,
     });
+    this.syncAutoCodeUi();
   },
 
   onCategoryTap(e) {
@@ -304,16 +377,23 @@ Page({
       variants: cat.hasColorSize ? this._working.variants || [] : [],
     };
     this.applyUi();
+    this.scheduleAutoCode();
   },
 
   onNameInput(e) {
     this._working.name = e.detail.value || '';
     this.setData({ 'form.name': this._working.name });
+    if (!String(this._working.name).trim()) {
+      this.scheduleAutoCode();
+    } else {
+      this.syncAutoCodeUi();
+    }
   },
 
   onCodeInput(e) {
     this._working.code = e.detail.value || '';
     this.setData({ 'form.code': this._working.code });
+    this.scheduleAutoCode();
   },
 
   onUnitChange(e) {
@@ -370,6 +450,7 @@ Page({
     const value = e.detail.value || '';
     this._working = applyCategoryCustomFieldValue(this._working, id, value);
     this.applyUi();
+    this.scheduleAutoCode();
   },
 
   onCustomSelectChange(e) {
@@ -380,6 +461,7 @@ Page({
     const value = (field.options || [])[idx] || '';
     this._working = applyCategoryCustomFieldValue(this._working, id, value);
     this.applyUi();
+    this.scheduleAutoCode();
   },
 
   onColorSizeChange(e) {

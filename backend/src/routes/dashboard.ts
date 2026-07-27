@@ -137,6 +137,12 @@ router.patch(
 
 router.get('/finance-partner-stats', ctrl.getFinancePartnerStats);
 router.get('/notifications', ctrl.getNotifications);
+router.get('/notification-reads', ctrl.getNotificationReads);
+router.post(
+  '/notification-reads',
+  validate(z.object({ ids: z.array(z.string().trim().min(1)).min(1).max(100) })),
+  ctrl.markNotificationReads,
+);
 router.get('/messages', ctrl.listPublishedMessages);
 router.post('/messages', validate(publishMessageSchema), ctrl.publishMessage);
 router.delete('/messages/:id', ctrl.deleteMessage);

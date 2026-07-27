@@ -1,6 +1,6 @@
 /**
- * 消息聊天构建器：把消息中心、待办事项、协作转交融合为「会话列表 + 气泡」
- * 对齐 Web 协作管理（CollaborationInboxView）的聊天式 UI。
+ * 消息列表构建器：把消息中心、待办事项、协作转交融合为「会话列表 + 详情列表行」
+ * 会话首页对齐微信会话列表；详情页为全宽列表行（非气泡）。
  */
 
 const _require = require('./collabInboxHelpers.js'),peerBindingsForTransfer = _require.peerBindingsForTransfer,sumItems = _require.sumItems;
@@ -81,15 +81,17 @@ function avatarText(name) {
 }
 
 /**
- * 把 notifications 转为「系统消息」会话的气泡列表
+ * 把 notifications 转为「消息中心」列表项
  */
-function buildNotificationBubbles(notifications, { excludeTodoType = false } = {}) {
+function buildNotificationBubbles(notifications, { excludeTodoType = false, readIdSet } = {}) {
+  const readSet = readIdSet instanceof Set ? readIdSet : null;
   return (Array.isArray(notifications) ? notifications : []).
   filter((n) => !(excludeTodoType && n.type === 'todo')).
   map((n) => {
     const meta = NOTIF_TYPE_META[n.type] || { label: '消息', tone: 'muted' };
+    const id = n.id;
     return {
-      id: n.id,
+      id,
       kind: 'notification',
       side: 'left',
       title: n.title || meta.label,
@@ -99,48 +101,60 @@ function buildNotificationBubbles(notifications, { excludeTodoType = false } = {
       timeText: formatChatTime(n.createdAt),
       at: new Date(n.createdAt).getTime() || 0,
       preview: n.title || '',
+      // 无 readSet 时视为未读；有则按是否在已读集合判定
+      unread: Boolean(id) && !(readSet && readSet.has(String(id))),
       raw: n
     };
   });
 }
 
 /**
- * 消息中心 + 待办事项合并为同一聊天时间轴（按时间升序，最新在底部）
+ * 是否已到点提醒（对齐后端 dashboard 注入条件：remindEnabled + remindAt <= now）
  */
-function buildInboxBubbles(notifications, todos) {
-  const notifBubbles = buildNotificationBubbles(notifications, { excludeTodoType: true });
-  const todoBubbles = buildTodoBubbles(todos);
-  return [...notifBubbles, ...todoBubbles].sort((a, b) => a.at - b.at);
+function isDueReminderTodo(todo, nowMs) {
+  if (!todo || todo.remindEnabled !== true) return false;
+  if (!todo.remindAt) return false;
+  const at = new Date(todo.remindAt).getTime();
+  if (!Number.isFinite(at)) return false;
+  const now = typeof nowMs === 'number' ? nowMs : Date.now();
+  return at <= now;
+}
+
+/** 仅保留已到点提醒的待办（含已完成；删除后才从消息中消失） */
+function filterDueReminderTodos(todos, nowMs) {
+  const now = typeof nowMs === 'number' ? nowMs : Date.now();
+  return (Array.isArray(todos) ? todos : []).filter((t) => isDueReminderTodo(t, now));
 }
 
 /**
- * 把 todos 转为「待办事项」会话的气泡列表
+ * 把已到点提醒的 todos 转为「待办事项」列表项（标题 / 备注 / 元信息分层，避免重复）
  */
-function buildTodoBubbles(todos) {
-  return (Array.isArray(todos) ? todos : []).
-  map((t) => {
+function buildTodoBubbles(todos, nowMs) {
+  return filterDueReminderTodos(todos, nowMs).map((t) => {
     const sourceLabel = TODO_SOURCE_LABELS[t.sourceType] || t.sourceType || '待办';
     const done = t.status === 'done';
-    const title = t.sourceTitle || t.note || sourceLabel;
-    const bodyParts = [t.note || ''];
-    if (t.sourceDocNo) bodyParts.push(`单号：${t.sourceDocNo}`);
-    if (t.remindAt) bodyParts.push(`提醒：${formatChatTime(t.remindAt)}`);
+    const note = String(t.note || '').trim();
+    const title = String(t.sourceTitle || '').trim() || note || sourceLabel;
+    const body = note && note !== title ? note : '';
+    const atMs = new Date(t.remindAt || t.updatedAt || t.createdAt).getTime() || 0;
     return {
       id: t.id,
       kind: 'todo',
       side: 'right',
       title,
-      body: bodyParts.filter(Boolean).join('\n'),
+      body,
       tagLabel: done ? '已完成' : '待处理',
       tagTone: done ? 'muted' : 'warning',
+      done,
       sourceLabel,
       sourceDocNo: t.sourceDocNo || '',
+      remindText: t.remindAt ? formatChatTime(t.remindAt) : '',
       href: t.href || '',
       sourceType: t.sourceType || '',
-      timeText: formatChatTime(t.updatedAt || t.createdAt),
-      at: new Date(t.updatedAt || t.createdAt).getTime() || 0,
+      timeText: formatChatTime(t.remindAt || t.updatedAt || t.createdAt),
+      at: atMs,
       preview: `${done ? '[已完成] ' : ''}${title}`,
-      raw: t
+      raw: t,
     };
   });
 }
@@ -410,6 +424,7 @@ function buildConversationEntry({
   title,
   avatarText,
   avatarTone,
+  avatarIcon,
   bubbles,
   badge
 }) {
@@ -421,6 +436,7 @@ function buildConversationEntry({
     title,
     avatarText,
     avatarTone,
+    avatarIcon: avatarIcon || '',
     lastTimeText: (latest == null ? void 0 : latest.timeText) || '',
     lastSummary: (latest == null ? void 0 : latest.preview) || (sorted.length === 0 ? '暂无内容' : ''),
     unread: badge,
@@ -434,9 +450,6 @@ function buildConversationEntry({
  * @returns { conversations: Conversation[], unreadCount: number, collabPendingCount: number }
  */
 function buildConversations({ notifications, todos, transfers, tenantId, userId }) {
-  const notifBubbles = buildNotificationBubbles(notifications, { excludeTodoType: true });
-  const todoBubbles = buildTodoBubbles(todos);
-
   const readIdSet = (() => {
     try {
       const _require3 = require('./notificationRead.js'),getReadIdSet = _require3.getReadIdSet;
@@ -446,10 +459,15 @@ function buildConversations({ notifications, todos, transfers, tenantId, userId 
     }
   })();
 
-  const unreadNotifCount = notifBubbles.filter(
-    (b) => b.kind === 'notification' && b.id && !readIdSet.has(b.id)
-  ).length;
-  const openTodoCount = todoBubbles.filter((b) => b.tagTone !== 'muted').length;
+  const notifBubbles = buildNotificationBubbles(notifications, {
+    excludeTodoType: true,
+    readIdSet,
+  });
+  // 消息 Tab 仅展示已到点提醒的待办；未到点不出现「待办事项」会话
+  const todoBubbles = buildTodoBubbles(todos);
+
+  const unreadNotifCount = notifBubbles.filter((b) => b.unread).length;
+  const openTodoCount = todoBubbles.filter((b) => !b.done).length;
 
   const myTenantId = (() => {
     try {
@@ -465,24 +483,32 @@ function buildConversations({ notifications, todos, transfers, tenantId, userId 
   const collabPendingCount = collabPeers.reduce((s, p) => s + p.pending, 0);
 
   const conversations = [
-  buildConversationEntry({
-    kind: 'notifications',
-    id: 'notifications',
-    title: '消息中心',
-    avatarText: '讯',
-    avatarTone: unreadNotifCount > 0 ? 'info' : 'muted',
-    bubbles: notifBubbles,
-    badge: unreadNotifCount
-  }),
-  buildConversationEntry({
-    kind: 'todos',
-    id: 'todos',
-    title: '待办事项',
-    avatarText: '办',
-    avatarTone: openTodoCount > 0 ? 'warning' : 'muted',
-    bubbles: todoBubbles,
-    badge: openTodoCount
-  })];
+    buildConversationEntry({
+      kind: 'notifications',
+      id: 'notifications',
+      title: '消息中心',
+      avatarText: '讯',
+      avatarTone: unreadNotifCount > 0 ? 'info' : 'muted',
+      avatarIcon: '/assets/icons/inbox.png',
+      bubbles: notifBubbles,
+      badge: unreadNotifCount,
+    }),
+  ];
+
+  if (todoBubbles.length > 0) {
+    conversations.push(
+      buildConversationEntry({
+        kind: 'todos',
+        id: 'todos',
+        title: '待办事项',
+        avatarText: '办',
+        avatarTone: openTodoCount > 0 ? 'warning' : 'muted',
+        avatarIcon: '/assets/icons/clipboard-list.png',
+        bubbles: todoBubbles,
+        badge: openTodoCount,
+      }),
+    );
+  }
 
 
   collabPeers.forEach((p) => {
@@ -512,12 +538,13 @@ function buildConversations({ notifications, todos, transfers, tenantId, userId 
 
 module.exports = {
   buildConversations,
-  buildInboxBubbles,
   buildNotificationBubbles,
   buildTodoBubbles,
+  filterDueReminderTodos,
+  isDueReminderTodo,
   buildCollabConversations,
   buildPeerTimelineBubbles,
   formatChatTime,
   NOTIF_TYPE_META,
-  TODO_SOURCE_LABELS
+  TODO_SOURCE_LABELS,
 };

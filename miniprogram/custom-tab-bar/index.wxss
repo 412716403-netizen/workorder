@@ -56,6 +56,10 @@
   line-height: 28rpx;
 }
 
+.tab-bar__item--active .tab-bar__text {
+  color: #2f6bff;
+}
+
 .tab-bar__badge {
   position: absolute;
   top: -8rpx;

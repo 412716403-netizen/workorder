@@ -96,7 +96,7 @@ RBAC 字段单一事实源：[`shared/workbenchShortcuts.ts`](../shared/workbenc
 | 首页 | **蓝色顶栏**：头像 + 用户名 + 企业名；单行白色快捷图标；**白色圆角内容区**含数据看板；下拉刷新 |
 | 应用 | `tab-shell`：标题「应用」+ 分组宫格卡片（左侧色条分区标题） |
 | 报工 | `tab-shell`：需 `process_report`；双段「可报任务 / 我的报工」；**可报任务**按工序 Chip 筛选 + 分组（**工序顺序 = 系统设置工序节点库 sortOrder**；**产品模式**卡片为产品×工序、无工单号）；**我的报工**按审核状态 Chip 筛选（「全部」及单状态均为按报工时间倒序平铺，不按状态分组标题）；列表含产品缩略图；右下扫码 FAB → `worker-report-scan` → `worker-report-confirm`；无权限空态 |
-| 消息 | 蓝色顶栏（标题+未读数）+ 全宽搜索框；微信风格会话列表；详情页 `messages-chat` |
+| 消息 | 蓝色顶栏（标题+未读数）+ 全宽搜索框；微信风格会话列表；详情页全宽列表行 |
 | 我的 | `tab-shell` 自定义顶栏（头像 + 用户/企业）+ 菜单白卡片 + 退出按钮 |
 
 **报工审核**（审核员）：[`packageBusiness/production-report-pending/`](../miniprogram/packageBusiness/production-report-pending/)，入口在**工单中心**筛选面板（与「待入库清单」并列），需 `production:orders_report_records:edit`；有待审时显示角标。连续扫码会话仍在 [`packageBusiness/scan-session/`](../miniprogram/packageBusiness/scan-session/)。
@@ -365,26 +365,30 @@ npm run miniprogram:icons
 | 页面 | 路径 | 职责 |
 |------|------|------|
 | 会话列表 | [`pages/messages/`](../miniprogram/pages/messages/) | 类微信聊天列表：消息中心 / 待办事项 / 各协作合作单位 |
-| 聊天详情 | [`pages/messages-chat/`](../miniprogram/pages/messages-chat/) | 时间轴气泡布局，左右对齐 |
+| 详情列表 | [`pages/messages-chat/`](../miniprogram/pages/messages-chat/) | 对齐工单中心：蓝顶栏内嵌搜索 + 右侧操作；全宽列表行（最新在上） |
+| — | 消息中心详情 | 未读圆点、进入即已读、「全部已读」、下拉刷新；点行进入 [`message-detail`](../miniprogram/pages/message-detail/) |
+| — | 待办事项详情 | 「管理」跳转完整待办页；点行进入 [`todo-edit`](../miniprogram/packageBusiness/todo-edit/) 待办详情 |
+| — | 协作会话详情 | 同列表行；操作仍提示电脑端处理 |
 
 | 会话类型 | 数据源 | 气泡方向 |
 |----------|--------|----------|
 | 消息中心 | `/dashboard/notifications`（排除待办类通知） | 系统消息左侧 |
-| 待办事项 | `/todos` | 待办右侧 |
+| 待办事项 | `/todos` 中**已到点提醒**（`remindEnabled` 且 `remindAt <= now`，对齐 Web 消息中心注入）；未到点不展示该会话 | 待办右侧 |
 | 协作合作单位 | `/collaboration/subcontract-transfers` | 派发/转发按发送方右侧、接收方左侧；回传反向 |
 
 | 工具 | 作用 |
 |------|------|
-| [`utils/messagesChatBuilder.js`](../miniprogram/utils/messagesChatBuilder.js) | 构建会话列表 + 时间轴气泡（融合三类数据源） |
+| [`utils/messagesChatBuilder.js`](../miniprogram/utils/messagesChatBuilder.js) | 构建会话列表 + 详情列表行（融合三类数据源） |
 | [`utils/collabInboxHelpers.js`](../miniprogram/utils/collabInboxHelpers.js) | `peerBindingsForTransfer`（对齐 Web） |
 | [`utils/collabStatusLabels.js`](../miniprogram/utils/collabStatusLabels.js) | 派发/回传/转发状态文案 |
-| [`utils/notificationRead.js`](../miniprogram/utils/notificationRead.js) | 本地已读 |
+| [`utils/notificationRead.js`](../miniprogram/utils/notificationRead.js) | 本地已读缓存 + `GET/POST /dashboard/notification-reads` 与网页同步（GET 有 30s TTL 与在途请求复用；只上报本地新增 id） |
+| [`utils/messagesLoad.js`](../miniprogram/utils/messagesLoad.js) | 同步已读 → 拉取三类数据源 → 构建会话 → 落缓存 + 刷 Tab 角标；会话列表/详情/首页角标共用 |
 | [`utils/messagesCache.js`](../miniprogram/utils/messagesCache.js) | 跨页面数据缓存 |
 | [`utils/messagesTabBadge.js`](../miniprogram/utils/messagesTabBadge.js) | Tab 角标 |
 
-进入「消息中心」会话时自动标记系统消息已读；Tab 角标 = 未读消息 + 未完成待办 + 协作待处理。点击气泡可查看详情（待办气泡经 [`utils/todoNavigate.js`](../miniprogram/utils/todoNavigate.js) 深链到小程序详情）；协作操作提示去电脑端处理。
+进入「消息中心」列表即视为已阅读：本地全部标已读并上报服务端，清除会话/Tab 红点角标。「全部已读」仍保留。Tab 角标 = 未读消息 + **已到点且未完成**的待办提醒 + 协作待处理。打开消息 Tab / 首页时会先同步服务端已读（网页已读后小程序不再提示未读）。点消息行进入 [`message-detail`](../miniprogram/pages/message-detail/)；点待办行进入 [`todo-edit`](../miniprogram/packageBusiness/todo-edit/)（可再点关联单据深链）；协作操作提示去电脑端处理。
 
-完整待办管理（对齐 Web `TodoPanelModal`）见下方「待办提醒」节；消息 Tab 内「待办事项」会话为快捷时间轴视图。
+完整待办管理（对齐 Web `TodoPanelModal`）见下方「待办提醒」节；消息 Tab 内「待办事项」仅在有到点提醒时出现，可点「管理」进入完整待办页（含未到点项）。
 
 ## 生产计划
 
@@ -860,23 +864,29 @@ npm run miniprogram:icons
 
 ## 产品档案
 
-对齐 Web [`ProductManagementView`](../views/ProductManagementView.tsx) / [`ProductEditForm`](../views/product-management/ProductEditForm.tsx)（**不含** [`ProductImportModal`](../views/ProductImportModal.tsx) 批量导入；**不含**工序路线、工价、BOM 配置）：
+对齐 Web [`ProductManagementView`](../views/ProductManagementView.tsx) / [`ProductEditForm`](../views/product-management/ProductEditForm.tsx)（**不含** [`ProductImportModal`](../views/ProductImportModal.tsx) 批量导入；**不含**工序路线、工价、BOM 配置；**不含**产品编号规则配置 UI）：
 
 | 页面 | 路径 | 职责 |
 |------|------|------|
 | 档案列表 | [`packageBusiness/basic-products/`](../miniprogram/packageBusiness/basic-products/) | 分类 Tab、搜索、客户端分页、启用/禁用、创建入口 |
-| 产品编辑 | [`packageBusiness/basic-product-edit/`](../miniprogram/packageBusiness/basic-product-edit/) | 基本信息、颜色尺码、分类自定义字段 |
+| 产品编辑 | [`packageBusiness/basic-product-edit/`](../miniprogram/packageBusiness/basic-product-edit/) | 核心业务档案（分类/编号/名称/单位/图片/价格/合作单位/扩展字段/颜色尺码） |
 
 | 工具 / 组件 | 作用 |
 |-------------|------|
-| [`utils/productApi.js`](../miniprogram/utils/productApi.js) | `/products` CRUD + variant-usage |
-| [`utils/products.js`](../miniprogram/utils/products.js) | 列表筛选、分页 UI 模型 |
-| [`utils/productForm.js`](../miniprogram/utils/productForm.js) | 保存校验、变体生成、自定义字段 |
-| [`components/color-size-spec-picker/`](../miniprogram/components/color-size-spec-picker/) | 颜色/尺码勾选 + 快捷新增字典 |
+| [`packageBusiness/utils/productApi.js`](../miniprogram/packageBusiness/utils/productApi.js) | `/products` CRUD、`next-code`、variant-usage |
+| [`packageBusiness/utils/products.js`](../miniprogram/packageBusiness/utils/products.js) | 列表筛选、分页 UI 模型 |
+| [`packageBusiness/utils/productForm.js`](../miniprogram/packageBusiness/utils/productForm.js) | 保存校验、变体生成、自定义字段 |
+| [`packageBusiness/utils/productCodeRule.js`](../miniprogram/packageBusiness/utils/productCodeRule.js) | 编号规则纯函数（消费网页配置） |
+| [`packageBusiness/utils/productCodeAutoFill.js`](../miniprogram/packageBusiness/utils/productCodeAutoFill.js) | 新建自动取号 / 手改判定 / 保存 `codeAutoGen` |
+| [`packageBusiness/components/color-size-spec-picker/`](../miniprogram/packageBusiness/components/color-size-spec-picker/) | 颜色/尺码勾选 + 快捷新增字典 |
 
-**权限**：`basic:products:view`（列表/读）· `basic:products:create`（新建）· `basic:products:edit`（编辑/启用）· `basic:products:delete`（删除）
+**产品编号自动取号**：新建产品时优先专用只读端点 `GET /products/code-rules` 读取 `productCodeRules`（与网页同源，租户任意成员可读；该端点未部署时回退整包 `GET /settings/config`，但后者需 psi/finance 或 `settings:config:view`，细粒度产品/开发角色会退化为手动输入）；若当前分类规则为 `auto`，则按规则拼前缀并调用 `GET /products/next-code` 预填编号，分类 / 产品名称 / 参与拼接的扩展字段变化时实时重取；未手改保存时带 `codeAutoGen`（与网页同口径）。支持「重新取号」；**不提供**编号规则配置入口（齿轮 / 弹窗），规则仍在网页维护。
 
-**留 Web**：批量导入产品；工序路线、工价、BOM 矩阵；产品分类/报工展示 **file/knowledge** 类型附件上传（小程序只读 + 提示电脑端）。
+**字段口径**：产品编号 = `name`（必填唯一）；产品名称 = `sku`（选填可重复）。
+
+**权限**：`basic:products:view`（列表/读）· `basic:products:create`（新建 / 预取号）· `basic:products:edit`（编辑/启用）· `basic:products:delete`（删除）
+
+**留 Web**：批量导入产品；产品编号规则配置；工序路线、工价、BOM 矩阵；产品分类/报工展示 **file/knowledge** 类型附件上传（小程序只读 + 提示电脑端）。
 
 入口：[`menus.js`](../miniprogram/config/menus.js) `basic-products` → `/packageBusiness/basic-products/basic-products`。
 
@@ -1001,7 +1011,7 @@ npm run miniprogram:icons
 |------|------|------|
 | 款式列表 | [`packageBusiness/development-styles/`](../miniprogram/packageBusiness/development-styles/) | 开发中 / 已归档 Tab、搜索、进度节点或同步状态筛选、按时间/客户排序、录入新产品、节点库入口 |
 | 款式详情 | [`development-style-detail/`](../miniprogram/packageBusiness/development-style-detail/) | 基本信息、归档/还原/发布大货/删除、样品区标题同行靠右入口（日志 / 开发物料 / BOM）、节点时间线、加删样品、版本日志、深链 `styleId` + `devStageId` / `devSampleId` |
-| 创建/编辑 | [`development-style-edit/`](../miniprogram/packageBusiness/development-style-edit/) | 分类商品字段、开发流程节点（新建默认不勾选，须手动选择）、大货工序；保存回列表 |
+| 创建/编辑 | [`development-style-edit/`](../miniprogram/packageBusiness/development-style-edit/) | 分类商品字段（产品编号可按分类规则自动取号，与产品档案同口径；产品名称/款号选填）、开发流程节点（新建默认不勾选，须手动选择）、大货工序；保存回列表 |
 | 节点登记 | [`development-stage-register/`](../miniprogram/packageBusiness/development-stage-register/) | 四态 + 模板自定义字段；`todo_reminder` 开启时可加待办 |
 | BOM 录入 | [`development-bom-edit/`](../miniprogram/packageBusiness/development-bom-edit/) | **格子下钻**（变体×工序 → 物料行），非 Web 整表矩阵；同数据源 `dev_boms` + `syncVariantNodeBoms` |
 | 开发领/退料 | [`development-material-operation/`](../miniprogram/packageBusiness/development-material-operation/) | `mode=issue|return`；试制 BOM / 可退行；仓库与批次；写 `/dev/styles/:id/material-issues|returns/batch` |

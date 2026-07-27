@@ -3,6 +3,8 @@ const { getProductUnitName } = require('../utils/productionOrders.js');
 const {
   effectiveCustomDocFieldType,
   formatReportCustomDataForList,
+  formatFileItemsLabel,
+  parseCustomFileItems,
   parseKnowledgeFieldValue,
   getProductCategoryCustomFieldEntries,
 } = require('../../utils/reportCustomDocField.js');
@@ -13,6 +15,33 @@ const HEAVY_DATA_URL_CHARS = 64 * 1024;
 
 function isHeavyDataUrl(s) {
   return typeof s === 'string' && s.indexOf('data:') === 0 && s.length > HEAVY_DATA_URL_CHARS;
+}
+
+function encodeMpFilePlaceholder(items) {
+  return JSON.stringify({
+    __mpFile: true,
+    label: formatFileItemsLabel(items) || '附件已上传',
+    count: items.length,
+  });
+}
+
+function parseMpFilePlaceholder(raw) {
+  if (raw === '__file__') return { label: '附件已上传', count: 1 };
+  if (typeof raw !== 'string') return null;
+  const s = raw.trim();
+  if (!s || s.indexOf('{') !== 0) return null;
+  try {
+    const obj = JSON.parse(s);
+    if (obj && obj.__mpFile === true) {
+      return {
+        label: typeof obj.label === 'string' && obj.label ? obj.label : '附件已上传',
+        count: Number(obj.count) > 0 ? Number(obj.count) : 1,
+      };
+    }
+  } catch (_) {
+    /* ignore */
+  }
+  return null;
 }
 
 /**
@@ -34,7 +63,7 @@ function resolveSafeProductImageUrl(product) {
 
 /**
  * 剥离 getProduct 返回体中的大体积字段，避免误入 setData。
- * 返回可安全持有的产品副本；若需保留原图写本地，见 imageDataUrlForTemp。
+ * 返回可安全持有的产品副本；附件 data URL 挪到 `_fileFieldsById` 供点击打开。
  */
 function sanitizeProductForMiniView(product) {
   if (!product || typeof product !== 'object') return product;
@@ -44,7 +73,6 @@ function sanitizeProductForMiniView(product) {
     imageDataUrlForTemp = next.imageUrl;
     delete next.imageUrl;
   } else if (typeof next.imageUrl === 'string' && next.imageUrl.indexOf('data:') === 0) {
-    // 中等体积 data URL：展示优先用 thumb，原图仍可预览时再写临时文件
     if (!next.imageThumb) imageDataUrlForTemp = next.imageUrl;
     delete next.imageUrl;
   }
@@ -52,10 +80,21 @@ function sanitizeProductForMiniView(product) {
     if (!imageDataUrlForTemp) imageDataUrlForTemp = next.imageThumb;
     delete next.imageThumb;
   }
+  const fileFieldsById = {};
   if (next.categoryCustomData && typeof next.categoryCustomData === 'object') {
     const cleaned = {};
     Object.keys(next.categoryCustomData).forEach((k) => {
       const v = next.categoryCustomData[k];
+      const fileItems = parseCustomFileItems(v).map((it) => ({
+        url: it.url,
+        name: it.name || '',
+        isImage: typeof it.url === 'string' && it.url.indexOf('data:image/') === 0,
+      }));
+      if (fileItems.length > 0) {
+        fileFieldsById[k] = fileItems;
+        cleaned[k] = encodeMpFilePlaceholder(fileItems);
+        return;
+      }
       if (typeof v === 'string' && v.indexOf('data:') === 0) {
         cleaned[k] = v.indexOf('data:image/') === 0 ? '__image__' : '__file__';
       } else {
@@ -65,6 +104,7 @@ function sanitizeProductForMiniView(product) {
     next.categoryCustomData = cleaned;
   }
   next._imageDataUrlForTemp = imageDataUrlForTemp;
+  next._fileFieldsById = fileFieldsById;
   return next;
 }
 
@@ -89,10 +129,11 @@ function formatMoney(n) {
 /**
  * 对齐 Web ProductQuickDetailBody：展示分类全部扩展字段（含空值「未填写」）。
  * showInForm 只影响列表，不影响商品详情。
- * knowledge 类型带 docId，供小程序跳转资料库详情。
+ * knowledge / file 类型可点击；图片附件在有 localPath 时展示缩略图。
  */
 function buildCustomFieldRows(product, category) {
   const defs = (category && category.customFields) || [];
+  const fileFieldsById = (product && product._fileFieldsById) || {};
   return defs.map((f) => {
     const raw = product && product.categoryCustomData ? product.categoryCustomData[f.id] : undefined;
     const fieldType = effectiveCustomDocFieldType(f);
@@ -101,13 +142,51 @@ function buildCustomFieldRows(product, category) {
     let isKnowledgeLink = false;
     let knowledgeDocId = '';
     let knowledgeTitle = '';
+    let isFileLink = false;
+    let fileFieldId = '';
+    let showImageThumbs = false;
+    let imageThumbs = [];
+    let fileLinkLabel = '';
 
+    const filePh = parseMpFilePlaceholder(raw);
     if (raw === '__image__') {
       display = '图片已上传';
       empty = false;
-    } else if (raw === '__file__') {
-      display = '附件已上传';
-      empty = false;
+    } else if (filePh || fieldType === 'file') {
+      const items = fileFieldsById[f.id] || (fieldType === 'file' ? parseCustomFileItems(raw) : []);
+      if (filePh || items.length) {
+        display = filePh ? filePh.label : formatFileItemsLabel(items);
+        empty = false;
+        fileFieldId = f.id;
+
+        const thumbs = [];
+        const otherItems = [];
+        items.forEach((it, index) => {
+          // localPath 由详情页落临时文件后写入；有路径即可作缩略图（不必再依赖 isImage）
+          if (it && it.localPath) {
+            thumbs.push({
+              key: `${f.id}-${index}`,
+              src: it.localPath,
+              index,
+            });
+          } else if (it) {
+            otherItems.push(it);
+          }
+        });
+        showImageThumbs = thumbs.length > 0;
+        imageThumbs = thumbs;
+        if (otherItems.length > 0) {
+          isFileLink = true;
+          fileLinkLabel = formatFileItemsLabel(otherItems);
+          if (!showImageThumbs) display = fileLinkLabel;
+        } else if (showImageThumbs) {
+          display = '';
+        } else if (items.length > 0) {
+          // 图片尚未落本地时仍可点文字打开
+          isFileLink = true;
+          fileLinkLabel = display;
+        }
+      }
     } else if (fieldType === 'knowledge') {
       const ref = parseKnowledgeFieldValue(raw);
       if (ref && ref.id) {
@@ -138,6 +217,11 @@ function buildCustomFieldRows(product, category) {
       isKnowledgeLink,
       knowledgeDocId,
       knowledgeTitle,
+      isFileLink,
+      fileFieldId,
+      showImageThumbs,
+      imageThumbs,
+      fileLinkLabel,
     };
   });
 }

@@ -38,7 +38,16 @@
         >
           <view class="conv-avatar-wrap">
             <view class="conv-avatar conv-avatar--{{item.avatarTone}} {{item.kind === 'notifications' ? 'conv-avatar--notify' : ''}} {{item.kind === 'todos' ? 'conv-avatar--todo' : ''}}">
-              <text class="conv-avatar__text {{item.avatarText.length > 1 ? 'conv-avatar__text--compact' : ''}}">{{item.avatarText}}</text>
+              <image
+                wx:if="{{item.avatarIcon}}"
+                class="conv-avatar__icon"
+                src="{{item.avatarIcon}}"
+                mode="aspectFit"
+              />
+              <text
+                wx:else
+                class="conv-avatar__text {{item.avatarText.length > 1 ? 'conv-avatar__text--compact' : ''}}"
+              >{{item.avatarText}}</text>
             </view>
             <view wx:if="{{item.badge > 0}}" class="conv-avatar-badge">
               {{item.badge > 99 ? '99+' : item.badge}}

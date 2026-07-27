@@ -33,8 +33,28 @@
         </view>
 
         <view class="plan-form-cell plan-form-cell--input">
-          <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>产品编号</text>
-          <input class="plan-form-cell__input" value="{{form.name}}" bindinput="onNameInput" placeholder="请填写" placeholder-class="plan-form-cell__ph" />
+          <view class="basic-product-edit__name-label-row">
+            <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>产品编号</text>
+            <view
+              wx:if="{{autoCodeActive}}"
+              class="basic-product-edit__refresh-code"
+              bindtap="onRefreshAutoCode"
+              hover-class="basic-product-edit__refresh-code--hover"
+            >
+              <image
+                class="basic-product-edit__refresh-code-icon"
+                src="/assets/icons/rotate-ccw.png"
+                mode="aspectFit"
+              />
+            </view>
+          </view>
+          <input
+            class="plan-form-cell__input"
+            value="{{form.name}}"
+            bindinput="onNameInput"
+            placeholder="{{namePlaceholder}}"
+            placeholder-class="plan-form-cell__ph"
+          />
         </view>
 
         <view class="plan-form-cell plan-form-cell--input">
@@ -43,6 +63,7 @@
         </view>
 
         <unit-select
+          label="产品单位"
           units="{{dictionaries.units}}"
           value-id="{{form.unitId}}"
           value-name="{{unitName}}"
@@ -53,31 +74,38 @@
         />
 
         <view class="plan-form-cell">
-          <text class="plan-form-cell__label">产品主图</text>
-          <view class="basic-product-edit__image" bindtap="onPickImage">
-            <image wx:if="{{form.imageUrl}}" class="basic-product-edit__image-img" src="{{form.imageUrl}}" mode="aspectFill" />
-            <view wx:else class="basic-product-edit__image-placeholder">点击上传</view>
+          <text class="plan-form-cell__label">产品图片</text>
+          <view class="basic-product-edit__image-row">
+            <view class="basic-product-edit__image" bindtap="onPickImage">
+              <image wx:if="{{form.imageUrl}}" class="basic-product-edit__image-img" src="{{form.imageUrl}}" mode="aspectFill" />
+              <view wx:else class="basic-product-edit__image-placeholder">点击上传</view>
+            </view>
+            <view
+              wx:if="{{form.imageUrl}}"
+              class="basic-product-edit__image-clear"
+              bindtap="onClearImage"
+            >移除</view>
           </view>
         </view>
 
         <view wx:if="{{showSalesPrice}}" class="plan-form-cell plan-form-cell--input">
-          <text class="plan-form-cell__label">销售价</text>
+          <text class="plan-form-cell__label">标准销售单价</text>
           <input class="plan-form-cell__input" type="digit" value="{{form.salesPriceText}}" bindinput="onSalesPriceInput" placeholder="0" />
         </view>
 
         <view wx:if="{{showPurchasePrice}}" class="plan-form-cell plan-form-cell--input">
-          <text class="plan-form-cell__label">采购价</text>
+          <text class="plan-form-cell__label">参考采购单价</text>
           <input class="plan-form-cell__input" type="digit" value="{{form.purchasePriceText}}" bindinput="onPurchasePriceInput" placeholder="0" />
         </view>
 
         <searchable-partner-select
           wx:if="{{showSupplier}}"
           cell="{{true}}"
-          label="供应商"
+          label="合作单位"
           partners="{{partners}}"
           categories="{{partnerCategories}}"
           value="{{supplierName}}"
-          placeholder="请选择"
+          placeholder="未关联合作单位"
           bind:change="onSupplierChange"
           bind:created="onPartnerCreated"
         />
@@ -89,8 +117,8 @@
           </view>
           <view wx:elif="{{item.type === 'select'}}" class="plan-form-cell plan-form-cell--input">
             <text class="plan-form-cell__label">{{item.label}}</text>
-            <picker mode="selector" range="{{item.options}}" value="{{item.pickerIndex}}" data-id="{{item.id}}" bindchange="onCustomSelectChange">
-              <view class="plan-form-cell__value">{{item.value || '请选择'}}</view>
+            <picker class="plan-form-cell__picker" mode="selector" range="{{item.options}}" value="{{item.pickerIndex}}" data-id="{{item.id}}" bindchange="onCustomSelectChange">
+              <view class="plan-form-cell__value {{item.value ? '' : 'plan-form-cell__value--ph'}}">{{item.value || '请选择'}}</view>
             </picker>
           </view>
           <view wx:else class="plan-form-cell plan-form-cell--input">

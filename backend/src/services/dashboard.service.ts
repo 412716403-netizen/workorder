@@ -3,6 +3,7 @@ import { getTenantPrisma, type TenantPrismaClient } from '../lib/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { isTenantElevatedRole, hasSubPermission, canViewDocList } from '../types/index.js';
 import { loadEffectivePermissions } from '../services/auth.service.js';
+import { getMembership } from './tenantMembership.service.js';
 import * as settingsService from './settings.service.js';
 import * as productionService from './production.service.js';
 import {
@@ -10,31 +11,17 @@ import {
   WORKBENCH_HOME_PAGE_ID,
   WORKBENCH_BUILTIN_DEFAULT,
   WORKBENCH_WIDGET_CATALOG,
-  defaultFeaturePlugins,
   parseFeaturePlugins,
   isWorkbenchHomePage,
   type WorkbenchConfig,
   type WorkbenchPage,
   type FeaturePluginsConfig,
 } from '../../../shared/workbench.js';
-import { applyTraceabilityLabelPrintDefaults } from '../../../shared/traceabilityLabelPrintDefaults.js';
 import {
   DEFAULT_DASHBOARD_SHORTCUT_IDS,
   normalizeShortcutIds,
   resolveShortcutItems,
 } from '../../../shared/workbenchShortcuts.js';
-import {
-  DASHBOARD_PLATFORM_PUBLISHER,
-  MAX_PLATFORM_ANNOUNCEMENTS,
-  publishedMessageToNotification,
-  type DashboardPublishedMessage,
-} from '../../../shared/dashboardMessages.js';
-import {
-  buildTenantExpiryReminderContent,
-  resolveTenantExpiryReminderDay,
-  tenantExpiryReminderId,
-  DASHBOARD_SYSTEM_PUBLISHER,
-} from '../../../shared/tenantExpiryReminder.js';
 import {
   filterWorkbenchByAccess,
   normalizeWorkbenchConfig,
@@ -49,7 +36,6 @@ import {
   DASHBOARD_REWORK_STATS_NODES_KEY,
   MAX_DASHBOARD_ORDER_STATS_NODES,
   normalizeOrderStatsNodeIds,
-  resolveWorkbenchStatsPeriodRange,
   resolveWorkbenchStatsQuery,
   type WorkbenchCustomRange,
   type WorkbenchOrderStatsPeriod,
@@ -63,14 +49,6 @@ import { computeReworkTemplateStats } from './reworkDashboardStats.service.js';
 function parseWorkbenchConfig(value: unknown): WorkbenchConfig | null {
   if (value == null) return null;
   return normalizeWorkbenchConfig(value);
-}
-
-async function getMembership(userId: string, tenantId: string) {
-  const m = await basePrisma.tenantMembership.findUnique({
-    where: { userId_tenantId: { userId, tenantId } },
-  });
-  if (!m) throw new AppError(403, '非本企业成员');
-  return m;
 }
 
 function readUserWorkbench(preferences: unknown): WorkbenchConfig | null {
@@ -845,48 +823,6 @@ export async function getReworkStats(
   return { period, customRange, rows };
 }
 
-export async function getFeaturePlugins(tenantId: string) {
-  const config = await settingsService.getConfig(tenantId);
-  return parseFeaturePlugins(config[DASHBOARD_SETTING_KEYS.featurePlugins]);
-}
-
-export async function updateFeaturePlugins(tenantId: string, body: unknown) {
-  const current = await getFeaturePlugins(tenantId);
-  if (!body || typeof body !== 'object') {
-    throw new AppError(400, '无效的功能插件配置');
-  }
-  const patch = body as FeaturePluginsConfig;
-  const next = { ...current, ...patch };
-  await settingsService.updateConfig(tenantId, DASHBOARD_SETTING_KEYS.featurePlugins, next);
-
-  if (patch.traceability === true && current.traceability === false) {
-    const config = await settingsService.getConfig(tenantId);
-    const printTemplates = Array.isArray(config.printTemplates)
-      ? (config.printTemplates as Array<{ id: string | number; printTemplateManageScope?: string | null }>)
-      : [];
-    const rawPlan = (config.planFormSettings ?? {}) as Record<string, unknown>;
-    const updatedPlan = applyTraceabilityLabelPrintDefaults(rawPlan, printTemplates, {
-      forceEnableTraceSection: true,
-    });
-    if (JSON.stringify(updatedPlan.labelPrint) !== JSON.stringify(rawPlan.labelPrint)) {
-      await settingsService.updateConfig(tenantId, 'planFormSettings', updatedPlan);
-    }
-  }
-
-  return next;
-}
-
-export async function assertCanManageFeaturePlugins(
-  tenantRole: string | undefined,
-  permissions: string[],
-  userRole?: string,
-) {
-  if (userRole === 'admin') return;
-  if (isTenantElevatedRole(tenantRole)) return;
-  if (hasSubPermission(permissions, 'settings:config:edit')) return;
-  throw new AppError(403, '仅管理员可操作');
-}
-
 export async function getStats(
   db: TenantPrismaClient,
   permissions: string[],
@@ -1031,224 +967,6 @@ export async function getStats(
   }
 
   return result;
-}
-
-export type DashboardNotification = {
-  id: string;
-  type: 'system' | 'announcement' | 'expiry_reminder' | 'todo';
-  title: string;
-  body: string;
-  createdAt: string;
-  href?: string;
-  publisherName?: string;
-  /** 待办类消息的完成状态（前端用复选框/按钮展示，标题不再追加「已完成」） */
-  done?: boolean;
-};
-
-const MAX_PLATFORM_ANNOUNCEMENTS_STORE = MAX_PLATFORM_ANNOUNCEMENTS;
-
-/** 平台公告表需 prisma generate + migrate；旧进程未重启时 delegate 可能为 undefined */
-function getPlatformAnnouncementDelegate() {
-  type PlatformAnnouncementDelegate = {
-    findMany: (args: object) => Promise<Array<{ id: string; title: string; body: string; createdAt: Date }>>;
-    findUnique: (args: object) => Promise<{ id: string; title: string; body: string; createdAt: Date } | null>;
-    create: (args: object) => Promise<unknown>;
-    delete: (args: object) => Promise<unknown>;
-    deleteMany: (args: object) => Promise<unknown>;
-  };
-  const delegate = (basePrisma as unknown as { platformAnnouncement?: PlatformAnnouncementDelegate })
-    .platformAnnouncement;
-  if (!delegate) {
-    throw new AppError(
-      503,
-      '平台公告功能尚未就绪，请在 backend 目录执行 npx prisma generate && npx prisma migrate deploy，并重启 API 服务',
-    );
-  }
-  return delegate;
-}
-
-async function loadPlatformAnnouncements(): Promise<DashboardPublishedMessage[]> {
-  const rows = await getPlatformAnnouncementDelegate().findMany({
-    orderBy: { createdAt: 'desc' },
-    take: MAX_PLATFORM_ANNOUNCEMENTS_STORE,
-  });
-  return rows.map(row => ({
-    id: row.id,
-    title: row.title,
-    body: row.body,
-    createdAt: row.createdAt.toISOString(),
-    publisherName: DASHBOARD_PLATFORM_PUBLISHER,
-  }));
-}
-
-function assertPlatformAdmin(userRole?: string) {
-  if (userRole !== 'admin') throw new AppError(403, '仅平台管理员可操作');
-}
-
-async function buildExpiryReminderNotification(
-  tenantId: string,
-): Promise<DashboardNotification | null> {
-  const tenant = await basePrisma.tenant.findUnique({
-    where: { id: tenantId },
-    select: { expiresAt: true },
-  });
-  if (!tenant?.expiresAt) return null;
-  const now = new Date();
-  const daysLeft = resolveTenantExpiryReminderDay(now, tenant.expiresAt);
-  if (!daysLeft) return null;
-  const { title, body } = buildTenantExpiryReminderContent(daysLeft, tenant.expiresAt);
-  return {
-    id: tenantExpiryReminderId(tenantId, daysLeft),
-    type: 'expiry_reminder',
-    title,
-    body,
-    createdAt: now.toISOString(),
-    publisherName: DASHBOARD_SYSTEM_PUBLISHER,
-  };
-}
-
-function toAnnouncementNotification(msg: DashboardPublishedMessage): DashboardNotification {
-  return {
-    ...publishedMessageToNotification(msg),
-    publisherName: msg.publisherName,
-  };
-}
-
-const TODO_REMINDER_PUBLISHER = '待办提醒';
-
-/** todo_reminder 插件：当前用户到点未完成的待办，注入消息流 */
-async function buildTodoReminderNotifications(
-  tenantId: string,
-  userId: string,
-): Promise<DashboardNotification[]> {
-  const plugins = await getFeaturePlugins(tenantId);
-  if (plugins.todo_reminder !== true) return [];
-
-  const db = getTenantPrisma(tenantId);
-  const now = new Date();
-  // 到点的待办（含已完成）都保留在消息中心：完成后不消失，完成状态用 done 字段返回
-  type TodoReminderRow = {
-    id: string;
-    note: string;
-    sourceDocNo: string | null;
-    sourceTitle: string | null;
-    href: string | null;
-    remindAt: Date | null;
-    status: string;
-  };
-  let rows: TodoReminderRow[];
-  try {
-    rows = (await db.todoItem.findMany({
-      where: {
-        userId,
-        remindEnabled: true,
-        remindAt: { lte: now },
-      },
-      select: { id: true, note: true, sourceDocNo: true, sourceTitle: true, href: true, remindAt: true, status: true },
-      orderBy: { remindAt: 'desc' },
-      take: 20,
-    })) as TodoReminderRow[];
-  } catch {
-    // 待办表尚未迁移（todo migration 未执行）或查询异常时，降级为空，
-    // 避免一个插件特性拖垮整个工作台消息中心接口。
-    return [];
-  }
-
-  return rows.map(row => {
-    const docLabel = [row.sourceDocNo, row.sourceTitle].filter(Boolean).join(' ');
-    // 标题只放固定提示 + 关联单据；完成状态由 done 字段驱动，不再追加「已完成」
-    const title = docLabel ? `待办提醒 · ${docLabel}` : '待办提醒';
-    return {
-      id: `todo-${row.id}`,
-      type: 'todo' as const,
-      title,
-      body: row.note,
-      createdAt: (row.remindAt ?? now).toISOString(),
-      href: row.href ?? undefined,
-      publisherName: TODO_REMINDER_PUBLISHER,
-      done: row.status === 'done',
-    };
-  });
-}
-
-/** 工作台消息 feed：全平台公告 + 到期提醒 + 待办提醒 */
-export async function getNotifications(
-  tenantId: string,
-  userId: string,
-  _tenantRole: string | undefined,
-  _permissions: string[],
-  opts: { limit?: number } = {},
-) {
-  const limit = Math.min(Math.max(1, opts.limit ?? 20), 50);
-  const [platformMsgs, expiryReminder, todoReminders] = await Promise.all([
-    loadPlatformAnnouncements(),
-    buildExpiryReminderNotification(tenantId),
-    buildTodoReminderNotifications(tenantId, userId),
-  ]);
-
-  const items: DashboardNotification[] = platformMsgs.map(toAnnouncementNotification);
-  if (expiryReminder) items.push(expiryReminder);
-  items.push(...todoReminders);
-
-  items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-
-  if (items.length === 0) {
-    items.push({
-      id: 'system-welcome',
-      type: 'system',
-      title: '欢迎使用工作台',
-      body: '系统通知与到期提醒将在此展示',
-      createdAt: new Date().toISOString(),
-      publisherName: DASHBOARD_SYSTEM_PUBLISHER,
-    });
-  }
-
-  return items.slice(0, limit);
-}
-
-/** 平台 admin 管理全平台公告列表 */
-export async function listPlatformAnnouncements(userRole?: string) {
-  assertPlatformAdmin(userRole);
-  return loadPlatformAnnouncements();
-}
-
-export async function publishPlatformAnnouncement(
-  input: { title: string; body: string },
-  userRole?: string,
-) {
-  assertPlatformAdmin(userRole);
-
-  const title = input.title.trim();
-  const body = input.body.trim();
-  if (!title) throw new AppError(400, '标题不能为空');
-  if (!body) throw new AppError(400, '内容不能为空');
-  if (title.length > 80) throw new AppError(400, '标题最多 80 字');
-  if (body.length > 2000) throw new AppError(400, '内容最多 2000 字');
-
-  const platformAnnouncement = getPlatformAnnouncementDelegate();
-  await platformAnnouncement.create({
-    data: { title, body },
-  });
-  const all = await platformAnnouncement.findMany({
-    orderBy: { createdAt: 'desc' },
-  });
-  if (all.length > MAX_PLATFORM_ANNOUNCEMENTS_STORE) {
-    const toRemove = all.slice(MAX_PLATFORM_ANNOUNCEMENTS_STORE);
-    await platformAnnouncement.deleteMany({
-      where: { id: { in: toRemove.map(r => r.id) } },
-    });
-  }
-  return loadPlatformAnnouncements();
-}
-
-export async function deletePlatformAnnouncement(messageId: string, userRole?: string) {
-  assertPlatformAdmin(userRole);
-
-  const platformAnnouncement = getPlatformAnnouncementDelegate();
-  const existing = await platformAnnouncement.findUnique({ where: { id: messageId } });
-  if (!existing) throw new AppError(404, '消息不存在');
-  await platformAnnouncement.delete({ where: { id: messageId } });
-  return loadPlatformAnnouncements();
 }
 
 export async function resolveUserPermissions(userId: string, tenantId: string) {

@@ -10,6 +10,7 @@ import { getProductionLinkMode, milestoneNodeIdsEqual, productionOrderWhereCount
 import { withDocNoAdvisoryLock } from '../utils/docNumberLock.js';
 import type { ProductionLinkMode, ProductCodeAutoGen } from '../types/index.js';
 import {
+  PRODUCT_CODE_RULES_CONFIG_KEY,
   PRODUCT_CODE_SERIAL_LENGTH_MIN,
   PRODUCT_CODE_SERIAL_LENGTH_MAX,
 } from '../types/index.js';
@@ -471,6 +472,14 @@ export async function getProduct(db: TenantPrismaClient, tenantId: string, id: s
 
 // ── 产品编号自动生成（编号规则见 shared/types.ts ProductCodeRule；流水号按前缀分组）──
 
+/** 供新建产品页消费网页配置的编号规则（只读；配置 UI 仍在网页） */
+export async function getProductCodeRules(tenantId: string): Promise<{ rules: unknown }> {
+  const row = await basePrisma.systemSetting.findUnique({
+    where: { tenantId_key: { tenantId, key: PRODUCT_CODE_RULES_CONFIG_KEY } },
+  });
+  return { rules: row?.value ?? {} };
+}
+
 /** name 为 VarChar(200)，给流水号留出空间 */
 const PRODUCT_CODE_PREFIX_MAX_LEN = 180;
 
@@ -493,23 +502,63 @@ function parseProductCodeAutoGen(raw: unknown): ProductCodeAutoGen | null {
   return { prefix, serialLength: clampSerialLength(len) };
 }
 
+/** 纯函数：正则元字符转义（用于 `name ~ '^{prefix}[0-9]{1,n}$'`），导出供单测 */
+export function escapeRegexLiteral(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /**
- * 读同前缀号池（`^{prefix}[0-9]+$`）的最大流水号。
- * 匹配任意位数数字而非固定 serialLength 位，保证号池溢出（如 3 位配到 1000）后仍单调递增不重号。
+ * 号池只统计不超过 15 位的流水号。品名可手工录入任意数字串（如粘贴条码），不设上限时：
+ * - 19 位以上会让 `CAST(... AS BIGINT)` 抛 22003，整个前缀家族的取号直接 500；
+ * - 16~18 位虽能转成 BIGINT，但超出 JS 安全整数范围，`max + 1` 可能因精度丢失取到重复号。
+ * 规则可配的 `serialLength` 上限为 10（`PRODUCT_CODE_SERIAL_LENGTH_MAX`），15 位已留足溢出空间；
+ * 被排除的超长编号不参与 max，但仍受 `(tenant_id, name)` 唯一约束保护，不会被覆盖。
+ */
+const PRODUCT_CODE_SERIAL_MAX_DIGITS = 15;
+
+/** 纯函数：号池匹配正则，导出供单测 */
+export function buildProductCodePoolRegex(prefix: string): string {
+  return `^${escapeRegexLiteral(prefix)}[0-9]{1,${PRODUCT_CODE_SERIAL_MAX_DIGITS}}$`;
+}
+
+/**
+ * 纯函数：LIKE 通配符转义，配合 `ESCAPE '\'`，导出供单测。
+ * 编号规则的分隔符可配 `_`，不转义会让 LIKE 退化成单字符通配（虽仍被正则挡住不致漏号，
+ * 但前缀不再是常量，索引扫描会失效）。
+ */
+export function escapeLikeLiteral(s: string): string {
+  return s.replace(/[\\%_]/g, '\\$&');
+}
+
+/**
+ * 读同前缀号池（`^{prefix}[0-9]{1,15}$`）的最大流水号。
+ * 匹配变长数字而非固定 serialLength 位，保证号池溢出（如 3 位配到 1000）后仍单调递增不重号；
+ * 位数上限见 `PRODUCT_CODE_SERIAL_MAX_DIGITS`。
  * 必须在持有 `product_code:{prefix}` advisory lock 的事务内调用。
+ *
+ * 除正则外再加一层 `name LIKE '{prefix}%'`：正则匹配即蕴含前缀匹配，故不会漏号，
+ * 但 LIKE 前缀能命中 `*_tenant_id_name_pattern_idx`（varchar_pattern_ops）走索引扫描，
+ * 避免逐行正则扫遍该租户的 products + dev_styles（锁内耗时直接决定同前缀取号的排队时间）。
  */
 async function readMaxProductCodeSerial(
   tx: Prisma.TransactionClient,
   tenantId: string,
   prefix: string,
 ): Promise<number> {
-  const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // 号池同时覆盖产品档案与开发款式品名，避免开发录入占用的编号被产品再次预取
   const rows = await tx.$queryRawUnsafe<Array<{ max: bigint | number | null }>>(
     `SELECT MAX(CAST(SUBSTRING(name FROM LENGTH($2::text) + 1) AS BIGINT)) AS max
-     FROM products WHERE tenant_id = $1::uuid AND name ~ $3`,
+     FROM (
+       SELECT name FROM products
+        WHERE tenant_id = $1::uuid AND name LIKE $4 ESCAPE '\\' AND name ~ $3
+       UNION ALL
+       SELECT name FROM dev_styles
+        WHERE tenant_id = $1::uuid AND name LIKE $4 ESCAPE '\\' AND name ~ $3
+     ) AS codes`,
     tenantId,
     prefix,
-    `^${escaped}[0-9]+$`,
+    buildProductCodePoolRegex(prefix),
+    `${escapeLikeLiteral(prefix)}%`,
   );
   const max = rows?.[0]?.max;
   return max == null ? 0 : Number(max);

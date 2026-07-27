@@ -1,4 +1,6 @@
 import * as dashboardService from '../services/dashboard.service.js';
+import * as dashboardMessagesService from '../services/dashboardMessages.service.js';
+import * as featurePluginsService from '../services/featurePlugins.service.js';
 import * as productEconomicsService from '../services/productEconomicsStats.service.js';
 import * as materialPurchasePriceService from '../services/materialPurchasePrice.service.js';
 import * as processEconomicsPriceService from '../services/processEconomicsPrice.service.js';
@@ -62,7 +64,7 @@ export const saveShortcuts = asyncHandler(async (req, res) => {
 });
 
 export const getFeaturePlugins = asyncHandler(async (req, res) => {
-  res.json(await dashboardService.getFeaturePlugins(req.tenantId!));
+  res.json(await featurePluginsService.getFeaturePlugins(req.tenantId!));
 });
 
 export const updateFeaturePlugins = asyncHandler(async (req, res) => {
@@ -70,8 +72,8 @@ export const updateFeaturePlugins = asyncHandler(async (req, res) => {
   const tenantId = req.tenantId!;
   const tenantRole = req.user!.tenantRole;
   const permissions = await dashboardService.resolveUserPermissions(userId, tenantId);
-  await dashboardService.assertCanManageFeaturePlugins(tenantRole, permissions, req.user!.role);
-  res.json(await dashboardService.updateFeaturePlugins(tenantId, req.body));
+  await featurePluginsService.assertCanManageFeaturePlugins(tenantRole, permissions, req.user!.role);
+  res.json(await featurePluginsService.updateFeaturePlugins(tenantId, req.body));
 });
 
 export const getStats = asyncHandler(async (req, res) => {
@@ -95,21 +97,34 @@ export const getNotifications = asyncHandler(async (req, res) => {
   const tenantRole = req.user!.tenantRole;
   const permissions = await dashboardService.resolveUserPermissions(userId, tenantId);
   const limit = req.query.limit ? Number(req.query.limit) : undefined;
-  res.json(await dashboardService.getNotifications(tenantId, userId, tenantRole, permissions, { limit }));
+  res.json(await dashboardMessagesService.getNotifications(tenantId, userId, tenantRole, permissions, { limit }));
+});
+
+export const getNotificationReads = asyncHandler(async (req, res) => {
+  const userId = req.user!.userId;
+  const tenantId = req.tenantId!;
+  res.json(await dashboardMessagesService.getNotificationReads(userId, tenantId));
+});
+
+export const markNotificationReads = asyncHandler(async (req, res) => {
+  const userId = req.user!.userId;
+  const tenantId = req.tenantId!;
+  const ids = Array.isArray(req.body?.ids) ? (req.body.ids as string[]) : [];
+  res.json(await dashboardMessagesService.markNotificationsRead(userId, tenantId, ids));
 });
 
 export const listPublishedMessages = asyncHandler(async (req, res) => {
-  const messages = await dashboardService.listPlatformAnnouncements(req.user!.role);
+  const messages = await dashboardMessagesService.listPlatformAnnouncements(req.user!.role);
   res.json({ messages });
 });
 
 export const publishMessage = asyncHandler(async (req, res) => {
-  const messages = await dashboardService.publishPlatformAnnouncement(req.body, req.user!.role);
+  const messages = await dashboardMessagesService.publishPlatformAnnouncement(req.body, req.user!.role);
   res.status(201).json({ messages });
 });
 
 export const deleteMessage = asyncHandler(async (req, res) => {
-  const messages = await dashboardService.deletePlatformAnnouncement(
+  const messages = await dashboardMessagesService.deletePlatformAnnouncement(
     String(req.params.id),
     req.user!.role,
   );

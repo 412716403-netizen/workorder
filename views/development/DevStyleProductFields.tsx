@@ -10,6 +10,8 @@ import type {
   ProductCategory,
 } from '../../types';
 import ProductCategoryInfoFields from '../../components/product/ProductCategoryInfoFields';
+import { useProductCodeAutoFill } from '../../hooks/useProductCodeAutoFill';
+import { useAppActions, useConfigData } from '../../contexts/AppDataContext';
 import { devStyleToProductInfo, patchDevStyleFromProduct, resolveDevStyleWithPublishedProduct } from '../../utils/productInfoDevStyleBridge';
 import DevFlowNodePicker from './DevFlowNodePicker';
 import DevCreateSectionCard from './DevCreateSectionCard';
@@ -58,6 +60,8 @@ const DevStyleProductFields: React.FC<DevStyleProductFieldsProps> = ({
   setStageNames,
   onOpenTemplateSettings,
 }) => {
+  const { productCodeRules } = useConfigData();
+  const { onUpdateProductCodeRules } = useAppActions();
   const styleForProductFields = useMemo(
     () => resolveDevStyleWithPublishedProduct(working, products),
     [working, products],
@@ -77,6 +81,13 @@ const DevStyleProductFields: React.FC<DevStyleProductFieldsProps> = ({
     },
     [setWorking, partners],
   );
+
+  const { autoMode: autoCodeActive, refreshAutoCode } = useProductCodeAutoFill({
+    enabled: Boolean(isNewRecord),
+    working: productWorking,
+    setWorking: setProductWorking,
+    rules: productCodeRules ?? {},
+  });
 
   const stageOptions = useMemo(
     () => templates.map((t) => ({ id: t.name, label: t.name })),
@@ -112,6 +123,10 @@ const DevStyleProductFields: React.FC<DevStyleProductFieldsProps> = ({
       sectionHeading={embeddedInModal ? '' : '款式 / 商品信息'}
       useCardShell={!embeddedInModal}
       skuPlaceholder="款号（产品名称），选填；发布大货前须填写"
+      autoCodeActive={autoCodeActive}
+      onRefreshAutoCode={refreshAutoCode}
+      productCodeRules={productCodeRules}
+      onUpdateProductCodeRules={onUpdateProductCodeRules}
     />
   );
 

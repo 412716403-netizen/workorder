@@ -36,6 +36,12 @@
   margin-right: 4rpx;
 }
 
+/* picker 包一层时须占满剩余宽度，否则内层 text-align:right 仍贴在标签旁 */
+.plan-form-cell__picker {
+  flex: 1;
+  min-width: 0;
+}
+
 .plan-form-cell__value {
   flex: 1;
   min-width: 0;

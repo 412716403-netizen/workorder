@@ -19,9 +19,6 @@ function loadHomeDeps() {
   const period = require('../../utils/workbenchPeriodFilter.js');
   const shortcuts = require('../../utils/workbenchShortcuts.js');
   const workbench = require('../../utils/workbenchHome.js');
-  const notifications = require('../../utils/notificationRead.js');
-  const collab = require('../../utils/collaborationPending.js');
-  const badge = require('../../utils/messagesTabBadge.js');
   return {
     PERIOD_TABS: period.PERIOD_TABS,
     buildPeriodFilter: period.buildPeriodFilter,
@@ -32,9 +29,6 @@ function loadHomeDeps() {
     resolveActiveWorkbenchPageId: workbench.resolveActiveWorkbenchPageId,
     loadPageStatCards: workbench.loadPageStatCards,
     loadHomeStatCards: workbench.loadHomeStatCards,
-    countUnread: notifications.countUnread,
-    buildCollabPendingSections: collab.buildCollabPendingSections,
-    updateMessagesTabBadge: badge.updateMessagesTabBadge,
   };
 }
 
@@ -400,27 +394,9 @@ Page({
   },
 
   refreshMessagesBadge(ctx) {
-    if (!this._deps) return Promise.resolve();
-
-    const deps = this._deps;
-    return Promise.all([
-      request({ path: '/dashboard/notifications?limit=50', method: 'GET' }).catch(() => []),
-      request({ path: '/collaboration/subcontract-transfers?all=true', method: 'GET' }).catch(
-        () => [],
-      ),
-    ])
-      .then((results) => {
-        const notifications = results[0];
-        const transfers = results[1];
-        const notifList = Array.isArray(notifications) ? notifications : [];
-        const unreadNotifCount = deps.countUnread(ctx.tenantId, readCurrentUserId(), notifList);
-        const collabTotal = deps.buildCollabPendingSections(
-          Array.isArray(transfers) ? transfers : [],
-        ).totalCount;
-        deps.updateMessagesTabBadge(unreadNotifCount + collabTotal);
-      })
-      .catch(() => {
-        /* ignore */
-      });
+    const { loadMessagesData } = require('../../utils/messagesLoad.js');
+    return loadMessagesData(ctx.tenantId, readCurrentUserId()).catch(() => {
+      /* 角标刷新失败不影响首页 */
+    });
   },
 });

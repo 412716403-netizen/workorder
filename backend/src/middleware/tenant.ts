@@ -307,6 +307,18 @@ export function requireSubPermissionOrProductionRead(required: string): RequestH
   return guardAny(perms => canReadWithProductionReport(perms, required));
 }
 
+/** 产品编号预取号：产品档案新建，或开发管理录入款式均可。 */
+export function canPrefetchProductCode(perms: string[]): boolean {
+  return (
+    hasSubPermission(perms, 'basic:products:create') ||
+    hasSubPermission(perms, 'development:styles:create')
+  );
+}
+
+export function requireProductCodePrefetch(): RequestHandler {
+  return guardAny(canPrefetchProductCode);
+}
+
 /**
  * 财务表单只读依赖（收付款类型、产品、合作单位、工人、收支账户类型等）。
  *
@@ -518,7 +530,9 @@ export function canReadTenantConfig(perms: string[]): boolean {
   if (Object.values(TENANT_CONFIG_KEY_FORM_CONFIG_ALLOW).some(p => hasSubPermission(perms, p))) {
     return true;
   }
-  // 进销存 / 财务单据页依赖表单配置开关（销售/采购/收付款表单设置等）；无 settings:config:view 时也需可读
+  // 进销存 / 财务单据页依赖表单配置开关（销售/采购/收付款表单设置等）；无 settings:config:view 时也需可读。
+  // 注意：本端点整包返回租户所有配置 key，放宽一个模块等于放开全部配置，
+  // 因此产品新建 / 开发录入所需的 productCodeRules 走专用只读端点 `GET /products/code-rules`，不在此放宽。
   return hasAnyPermUnder(perms, ['psi', 'finance']);
 }
 

@@ -453,6 +453,9 @@ model Product {
   @@index([tenantId])
   @@index([tenantId, sku])
   @@index([categoryId])
+  /// 产品编号取号号池按 `name LIKE '{prefix}%'` 扫描；库为 en_US.UTF-8，默认 opclass 的
+  /// (tenant_id, name) 唯一索引无法用于 LIKE 前缀，故另建 varchar_pattern_ops 索引。
+  @@index([tenantId, name(ops: raw("varchar_pattern_ops"))], map: "products_tenant_id_name_pattern_idx", type: BTree)
   @@map("products")
 }
 
@@ -1152,6 +1155,8 @@ model DevStyle {
   @@index([categoryId])
   @@index([status])
   @@index([tenantId, createdByUserId])
+  /// 开发款式品名同属产品编号号池（见 products 上的同名索引说明）
+  @@index([tenantId, name(ops: raw("varchar_pattern_ops"))], map: "dev_styles_tenant_id_name_pattern_idx", type: BTree)
   @@map("dev_styles")
 }
 

@@ -16,6 +16,12 @@ const {
   sanitizeProductForMiniView,
   slimProductsForBomLookup,
 } = require('../utils/knowledgeProductDetailView.js');
+const {
+  resolveOpenDocumentFileType,
+  formatUnpreviewableMessage,
+  getFileExtension,
+} = require('../utils/knowledgeAttachmentForMini.js');
+const { isImageDataUrl } = require('../utils/fileBase64.js');
 
 function computeHeaderBlockHeight(nav) {
   return nav.statusBarHeight + nav.navBarHeight;
@@ -24,6 +30,11 @@ function computeHeaderBlockHeight(nav) {
 function computeScrollHeight(nav) {
   const win = readWindowMetrics();
   return Math.max(200, (win.windowHeight || 667) - computeHeaderBlockHeight(nav));
+}
+
+function mimeFromDataUrl(url) {
+  const m = /^data:([^;,]+)/i.exec(String(url || '').trim());
+  return (m && m[1] ? m[1] : '').trim().toLowerCase();
 }
 
 /** 将 data URL 写到本地临时路径，供 image / previewImage 使用（避免大 base64 进 setData） */
@@ -67,6 +78,53 @@ function writeDataUrlTempFile(dataUrl, productId) {
   });
 }
 
+/** data URL → 临时文件，供 wx.openDocument / previewImage */
+function writeAttachDataUrlTempFile(dataUrl, fileName) {
+  const raw = String(dataUrl || '');
+  const comma = raw.indexOf(',');
+  if (comma < 0 || raw.indexOf('data:') !== 0) {
+    return Promise.reject(new Error('无效附件'));
+  }
+  const meta = raw.slice(0, comma);
+  const payload = raw.slice(comma + 1);
+  if (!/;base64/i.test(meta)) {
+    return Promise.reject(new Error('仅支持 base64 附件'));
+  }
+  const mime = mimeFromDataUrl(raw);
+  const ext =
+    getFileExtension(fileName) ||
+    (mime === 'application/pdf'
+      ? 'pdf'
+      : mime.indexOf('png') >= 0
+        ? 'png'
+        : mime.indexOf('jpeg') >= 0 || mime.indexOf('jpg') >= 0
+          ? 'jpg'
+          : mime.indexOf('spreadsheetml') >= 0
+            ? 'xlsx'
+            : mime === 'application/vnd.ms-excel'
+              ? 'xls'
+              : mime.indexOf('wordprocessingml') >= 0
+                ? 'docx'
+                : mime === 'application/msword'
+                  ? 'doc'
+                  : 'bin');
+  const base = (typeof wx !== 'undefined' && wx.env && wx.env.USER_DATA_PATH) || '';
+  if (!base) return Promise.reject(new Error('无法写入临时文件'));
+  const safe = String(fileName || 'attach')
+    .replace(/[^a-zA-Z0-9._\u4e00-\u9fa5-]/g, '_')
+    .slice(0, 40);
+  const filePath = `${base}/kb-prod-file-${Date.now()}-${safe}.${ext}`;
+  return new Promise((resolve, reject) => {
+    wx.getFileSystemManager().writeFile({
+      filePath,
+      data: payload,
+      encoding: 'base64',
+      success: () => resolve(filePath),
+      fail: reject,
+    });
+  });
+}
+
 Page({
   data: {
     loading: true,
@@ -104,13 +162,20 @@ Page({
   },
 
   onUnload() {
-    const path = this._imageTempPath;
-    if (!path || typeof wx === 'undefined' || !wx.getFileSystemManager) return;
-    try {
-      wx.getFileSystemManager().unlinkSync(path);
-    } catch {
-      // ignore
-    }
+    const paths = [];
+    if (this._imageTempPath) paths.push(this._imageTempPath);
+    (this._fileTempPaths || []).forEach((p) => {
+      if (p) paths.push(p);
+    });
+    if (!paths.length || typeof wx === 'undefined' || !wx.getFileSystemManager) return;
+    const fs = wx.getFileSystemManager();
+    paths.forEach((path) => {
+      try {
+        fs.unlinkSync(path);
+      } catch {
+        // ignore
+      }
+    });
   },
 
   onShow() {
@@ -157,6 +222,115 @@ Page({
     wx.navigateTo({
       url: `/packageBusiness/knowledge-doc-detail/knowledge-doc-detail?id=${encodeURIComponent(id)}&title=${encodeURIComponent(title)}`,
     });
+  },
+
+  onCustomFileTap(e) {
+    const fieldId = e.detail && e.detail.fieldId;
+    if (!fieldId) return;
+    const items = ((this._fileFieldsById && this._fileFieldsById[fieldId]) || []).filter(
+      (it) => it && !it.isImage,
+    );
+    const fallback = (this._fileFieldsById && this._fileFieldsById[fieldId]) || [];
+    const list = items.length ? items : fallback;
+    if (!list.length) {
+      wx.showToast({ title: '附件不可用', icon: 'none' });
+      return;
+    }
+    if (list.length === 1) {
+      this.openCustomFileItem(list[0], fieldId);
+      return;
+    }
+    wx.showActionSheet({
+      itemList: list.map((it, idx) => it.name || `附件 ${idx + 1}`),
+      success: (res) => {
+        const item = list[res.tapIndex];
+        if (item) this.openCustomFileItem(item, fieldId);
+      },
+    });
+  },
+
+  onCustomFileThumbTap(e) {
+    const fieldId = e.detail && e.detail.fieldId;
+    const index = e.detail && e.detail.index;
+    if (!fieldId) return;
+    const items = (this._fileFieldsById && this._fileFieldsById[fieldId]) || [];
+    const imageItems = items.filter((it) => it && it.isImage && it.localPath);
+    if (!imageItems.length) {
+      const item = items[index];
+      if (item) this.openCustomFileItem(item, fieldId);
+      return;
+    }
+    const urls = imageItems.map((it) => it.localPath);
+    const currentItem = items[index];
+    const current =
+      currentItem && currentItem.localPath && urls.indexOf(currentItem.localPath) >= 0
+        ? currentItem.localPath
+        : urls[0];
+    wx.previewImage({ current, urls });
+  },
+
+  openCustomFileItem(item, fieldId) {
+    if (!item || !item.url) return;
+    if (item.isImage || isImageDataUrl(item.url)) {
+      const fieldItems = (this._fileFieldsById && this._fileFieldsById[fieldId]) || [item];
+      const withPath = fieldItems.filter((it) => it && it.isImage && it.localPath);
+      if (withPath.length) {
+        const urls = withPath.map((it) => it.localPath);
+        const current = item.localPath && urls.indexOf(item.localPath) >= 0 ? item.localPath : urls[0];
+        wx.previewImage({ current, urls });
+        return;
+      }
+      wx.showLoading({ title: '打开中…', mask: true });
+      writeAttachDataUrlTempFile(item.url, item.name || 'image.jpg')
+        .then((filePath) => {
+          wx.previewImage({
+            current: filePath,
+            urls: [filePath],
+          });
+        })
+        .catch(() => {
+          wx.showToast({ title: '无法预览图片', icon: 'none' });
+        })
+        .finally(() => wx.hideLoading());
+      return;
+    }
+
+    const fileName = item.name || '附件';
+    const mimeType = mimeFromDataUrl(item.url);
+    const fileType = resolveOpenDocumentFileType(fileName, mimeType);
+    if (!fileType) {
+      wx.showModal({
+        title: fileName,
+        content: `${formatUnpreviewableMessage(fileName)}，请在电脑端查看。`,
+        showCancel: false,
+      });
+      return;
+    }
+
+    wx.showLoading({ title: '打开中…', mask: true });
+    writeAttachDataUrlTempFile(item.url, fileName)
+      .then(
+        (filePath) =>
+          new Promise((resolve, reject) => {
+            wx.openDocument({
+              filePath,
+              fileType,
+              showMenu: true,
+              success: resolve,
+              fail: reject,
+            });
+          }),
+      )
+      .catch(() => {
+        wx.showModal({
+          title: '无法打开',
+          content: '请在电脑端查看该文件。',
+          showCancel: false,
+        });
+      })
+      .finally(() => {
+        wx.hideLoading();
+      });
   },
 
   applyView() {
@@ -233,7 +407,10 @@ Page({
       }
       const product = sanitizeProductForMiniView(productRaw);
       const dataUrlForTemp = product._imageDataUrlForTemp || '';
+      const fileFieldsById = product._fileFieldsById || {};
       delete product._imageDataUrlForTemp;
+      this._fileFieldsById = fileFieldsById;
+      this._fileTempPaths = [];
 
       if (dataUrlForTemp) {
         const localPath = await writeDataUrlTempFile(dataUrlForTemp, id);
@@ -242,6 +419,33 @@ Page({
           this._imageTempPath = localPath;
         }
       }
+
+      // 图片类扩展附件落本地，供缩略图直接展示（禁止大 base64 进 setData）
+      const fieldIds = Object.keys(fileFieldsById);
+      for (let fi = 0; fi < fieldIds.length; fi += 1) {
+        const fieldId = fieldIds[fi];
+        const items = fileFieldsById[fieldId] || [];
+        for (let i = 0; i < items.length; i += 1) {
+          const it = items[i];
+          if (!it || !it.url) continue;
+          const asImage = it.isImage || isImageDataUrl(it.url);
+          if (!asImage) continue;
+          it.isImage = true;
+          try {
+            const localPath = await writeAttachDataUrlTempFile(
+              it.url,
+              it.name || `img-${fi}-${i}.jpg`,
+            );
+            if (localPath) {
+              it.localPath = localPath;
+              this._fileTempPaths.push(localPath);
+            }
+          } catch {
+            // 写失败则仍可点文字打开
+          }
+        }
+      }
+      product._fileFieldsById = fileFieldsById;
 
       this._loaded = true;
       this._product = product;

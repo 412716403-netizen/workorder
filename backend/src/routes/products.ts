@@ -1,7 +1,11 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import * as ctrl from '../controllers/products.controller.js';
-import { requireSubPermission, requireTenantMemberRead } from '../middleware/tenant.js';
+import {
+  requireProductCodePrefetch,
+  requireSubPermission,
+  requireTenantMemberRead,
+} from '../middleware/tenant.js';
 import { validate } from '../middleware/validate.js';
 
 const router = Router();
@@ -50,8 +54,9 @@ const updateBomSchema = z.object({
 
 // GET 读端点：本企业任意成员可只读（单据/报工选商品）；增删改仍要细粒度权限
 router.get('/',    requireTenantMemberRead(),   ctrl.listProducts);
-// 产品编号规则预取号（必须先于 GET /:id 注册，否则被 :id 吞掉）
-router.get('/next-code', requireSubPermission('basic:products:create'), ctrl.nextProductCode);
+// 产品编号规则 / 预取号（必须先于 GET /:id 注册，否则被 :id 吞掉）
+router.get('/code-rules', requireTenantMemberRead(), ctrl.getProductCodeRules);
+router.get('/next-code', requireProductCodePrefetch(), ctrl.nextProductCode);
 router.post('/import', requireSubPermission('basic:products:create'), validate(importProductsSchema), ctrl.importProducts);
 router.get('/:id/receive-unit-weight-averages', requireTenantMemberRead(), ctrl.receiveUnitWeightAverages);
 router.get('/:id/variant-usage', requireTenantMemberRead(), ctrl.variantUsage);

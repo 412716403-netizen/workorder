@@ -39,5 +39,21 @@ Component({
       const title = e.currentTarget.dataset.title || '资料库文件';
       this.triggerEvent('customknowledgetap', { id, title });
     },
+
+    onCustomFileTap(e) {
+      const fieldId = e.currentTarget.dataset.id;
+      if (!fieldId) return;
+      this.triggerEvent('customfiletap', { fieldId });
+    },
+
+    onCustomFileThumbTap(e) {
+      const fieldId = e.currentTarget.dataset.fieldId;
+      const index = Number(e.currentTarget.dataset.index);
+      if (!fieldId) return;
+      this.triggerEvent('customfilethumbtap', {
+        fieldId,
+        index: Number.isFinite(index) ? index : 0,
+      });
+    },
   },
 });

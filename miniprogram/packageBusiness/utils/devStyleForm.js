@@ -52,9 +52,7 @@ function syncDevStyleVariants(style, category, dictionaries) {
 
 function validateDevStyleForSave(style, category) {
   const name = String((style && style.name) || '').trim();
-  const code = String((style && style.code) || '').trim();
-  if (!name) return '品名不能为空';
-  if (!code) return '款号不能为空';
+  if (!name) return '产品编号不能为空';
   if (!String((style && style.categoryId) || '').trim()) return '请选择产品分类';
   const stageNames = (style && style.defaultStageNames) || [];
   if (!stageNames.length) return '请至少选择一个开发流程节点';

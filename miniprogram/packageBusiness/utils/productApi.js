@@ -1,5 +1,7 @@
 const { request } = require('../../utils/request.js');
 const { normalizeListBody } = require('../../utils/listResponse.js');
+const { fetchSettingsConfig } = require('../../utils/settingsApi.js');
+const { PRODUCT_CODE_RULES_CONFIG_KEY } = require('./productCodeRule.js');
 
 function buildQs(params) {
   const parts = [];
@@ -92,6 +94,36 @@ function fetchReceiveUnitWeightAverages(productId) {
   }).catch(() => ({ averages: {} }));
 }
 
+/** 预取下一产品编号（对齐 Web api.products.nextCode） */
+function nextCode(params) {
+  const qs = buildQs({
+    prefix: params && params.prefix != null ? params.prefix : '',
+    serialLength: params && params.serialLength != null ? String(params.serialLength) : '',
+  });
+  return request({
+    path: `/products/next-code${qs}`,
+    method: 'GET',
+  });
+}
+
+/**
+ * 读取网页配置的产品编号规则（与 settings productCodeRules 同源）。
+ * 优先专用只读端点（租户任意成员可读）；该端点未部署时回退整包 GET /settings/config
+ * （后者需 psi/finance 或 settings:config:view，细粒度产品/开发角色会拿不到，退化为手动输入）。
+ */
+function fetchProductCodeRules() {
+  return request({ path: '/products/code-rules', method: 'GET' })
+    .then((body) => (body && body.rules != null ? body.rules : {}))
+    .catch(() =>
+      fetchSettingsConfig()
+        .then((cfg) => {
+          const rules = cfg ? cfg[PRODUCT_CODE_RULES_CONFIG_KEY] : null;
+          return rules != null ? rules : {};
+        })
+        .catch(() => ({})),
+    );
+}
+
 module.exports = {
   buildQs,
   fetchProductsAll,
@@ -106,4 +138,6 @@ module.exports = {
   updateBom,
   deleteBom,
   fetchReceiveUnitWeightAverages,
+  nextCode,
+  fetchProductCodeRules,
 };

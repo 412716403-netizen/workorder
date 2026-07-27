@@ -34,23 +34,37 @@
         </view>
 
         <view class="plan-form-cell plan-form-cell--input">
-          <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>品名</text>
+          <view class="dev-style-edit__name-label-row">
+            <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>产品编号</text>
+            <view
+              wx:if="{{autoCodeActive}}"
+              class="dev-style-edit__refresh-code"
+              bindtap="onRefreshAutoCode"
+              hover-class="dev-style-edit__refresh-code--hover"
+            >
+              <image
+                class="dev-style-edit__refresh-code-icon"
+                src="/assets/icons/rotate-ccw.png"
+                mode="aspectFit"
+              />
+            </view>
+          </view>
           <input
             class="plan-form-cell__input"
             value="{{form.name}}"
             bindinput="onNameInput"
-            placeholder="请填写品名"
+            placeholder="{{namePlaceholder}}"
             placeholder-class="plan-form-cell__ph"
           />
         </view>
 
         <view class="plan-form-cell plan-form-cell--input">
-          <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>款号</text>
+          <text class="plan-form-cell__label">产品名称</text>
           <input
             class="plan-form-cell__input"
             value="{{form.code}}"
             bindinput="onCodeInput"
-            placeholder="请填写款号"
+            placeholder="款号，选填；发布大货前须填写"
             placeholder-class="plan-form-cell__ph"
           />
         </view>

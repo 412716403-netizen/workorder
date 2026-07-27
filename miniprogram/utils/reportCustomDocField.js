@@ -1,8 +1,10 @@
 /**
  * 产品分类自定义字段展示（对齐 Web utils/reportCustomDocField.ts）
+ * 附件解析逻辑与 packageBusiness/utils/devStageFileValue.js 同口径（主包不可依赖分包，故内联轻量版）。
  */
 
 const DEFAULT_BOOLEAN_OPTIONS = ['是', '否'];
+const FILE_ITEM_MAX = 9;
 
 function parseKnowledgeFieldValue(raw) {
   if (raw == null) return null;
@@ -80,6 +82,69 @@ function normalizeReportCustomDataValue(field, raw) {
   return raw;
 }
 
+function sanitizeFileName(name) {
+  return String(name || '')
+    .trim()
+    .replace(/[/\\?%*:|"<>]/g, '_')
+    .slice(0, 200);
+}
+
+function coerceFileItem(entry) {
+  if (typeof entry === 'string') {
+    const url = String(entry).trim();
+    if (url.indexOf('data:') !== 0) return null;
+    return { url, name: '' };
+  }
+  if (!entry || typeof entry !== 'object') return null;
+  const url = String(entry.url || entry.dataUrl || '').trim();
+  if (url.indexOf('data:') !== 0) return null;
+  return {
+    url,
+    name: sanitizeFileName(entry.name || entry.fileName || entry.filename || ''),
+  };
+}
+
+/** 兼容裸 data URL / URL 数组 / [{url,name}]（对齐 parseDevStageFileItems） */
+function parseCustomFileItems(raw) {
+  if (raw == null) return [];
+  const coerceList = (list) => {
+    const out = [];
+    for (let i = 0; i < (list || []).length; i += 1) {
+      const item = coerceFileItem(list[i]);
+      if (item) out.push(item);
+      if (out.length >= FILE_ITEM_MAX) break;
+    }
+    return out;
+  };
+  if (Array.isArray(raw)) return coerceList(raw);
+  if (typeof raw !== 'string') return [];
+  const s = String(raw).trim();
+  if (!s) return [];
+  if (s.indexOf('[') === 0) {
+    try {
+      const parsed = JSON.parse(s);
+      if (Array.isArray(parsed)) return coerceList(parsed);
+    } catch (_) {
+      /* ignore */
+    }
+  }
+  if (s.indexOf('data:') === 0) return [{ url: s, name: '' }];
+  return [];
+}
+
+function isCustomFileValueFilled(raw) {
+  return parseCustomFileItems(raw).length > 0;
+}
+
+function formatFileItemsLabel(items) {
+  if (!items || !items.length) return '';
+  if (items.length === 1) {
+    const name = items[0] && items[0].name ? String(items[0].name).trim() : '';
+    return name || '[附件]';
+  }
+  return `[附件×${items.length}]`;
+}
+
 function formatReportCustomDataForList(field, raw) {
   const f = normalizeReportFieldDefinition(field);
   const eff = effectiveCustomDocFieldType(f);
@@ -87,10 +152,12 @@ function formatReportCustomDataForList(field, raw) {
   if (eff === 'select' && typeof raw === 'boolean') {
     return String(normalizeReportCustomDataValue(f, raw));
   }
-  if (eff === 'file' && typeof raw === 'string' && raw.indexOf('data:') === 0) return '已上传';
+  if (eff === 'file') {
+    return formatFileItemsLabel(parseCustomFileItems(raw));
+  }
   if (eff === 'knowledge') {
     const ref = parseKnowledgeFieldValue(raw);
-    return ref ? (ref.title || '资料库文件') : '';
+    return ref ? (ref.title || '[资料库文件]') : '';
   }
   if (typeof raw === 'boolean') return raw ? '是' : '否';
   return String(raw);
@@ -113,7 +180,10 @@ function getProductCategoryCustomFieldEntries(product, category, options) {
   for (let i = 0; i < defs.length; i += 1) {
     const f = defs[i];
     const value = product && product.categoryCustomData ? product.categoryCustomData[f.id] : undefined;
-    const empty = value == null || value === '';
+    const empty =
+      effectiveCustomDocFieldType(f) === 'file'
+        ? !isCustomFileValueFilled(value)
+        : value == null || value === '';
     if (empty && !includeEmpty) continue;
     out.push({
       field: f,
@@ -141,6 +211,9 @@ module.exports = {
   normalizeReportFieldDefinitions,
   normalizeFinanceCategoriesFromApi,
   formatReportCustomDataForList,
+  formatFileItemsLabel,
+  parseCustomFileItems,
+  isCustomFileValueFilled,
   getShowInFormCategoryFields,
   getProductCategoryCustomFieldEntries,
   mapProductCustomTags,

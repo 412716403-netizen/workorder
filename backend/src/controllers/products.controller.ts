@@ -40,6 +40,10 @@ export const nextProductCode = asyncHandler(async (req, res) => {
   res.json(await productsService.nextProductCode(req.tenantId!, prefix, serialLength));
 });
 
+export const getProductCodeRules = asyncHandler(async (req, res) => {
+  res.json(await productsService.getProductCodeRules(req.tenantId!));
+});
+
 export const createProduct = asyncHandler(async (req, res) => {
   res.status(201).json(await productsService.createProduct(getTenantPrisma(req.tenantId!), req.tenantId!, req.body));
 });

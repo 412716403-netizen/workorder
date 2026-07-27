@@ -131,26 +131,6 @@
   overflow: hidden;
 }
 
-.conv-avatar--notify {
-  background: linear-gradient(135deg, #5b8cff, #2f6bff);
-}
-
-.conv-avatar--notify .conv-avatar__text {
-  color: #fff;
-  font-size: 36rpx;
-  font-weight: 700;
-}
-
-.conv-avatar--todo {
-  background: linear-gradient(135deg, #ffb340, #ff9500);
-}
-
-.conv-avatar--todo .conv-avatar__text {
-  color: #fff;
-  font-size: 36rpx;
-  font-weight: 700;
-}
-
 .conv-avatar--info {
   background: var(--color-primary-light);
 }
@@ -169,6 +149,26 @@
 
 .conv-avatar--success {
   background: var(--color-success-bg);
+}
+
+/* 消息中心 / 待办：固定品牌色底 + 白图标（覆盖 tone） */
+.conv-avatar--notify {
+  background: linear-gradient(135deg, #5b8cff, #2f6bff);
+}
+
+.conv-avatar--todo {
+  background: linear-gradient(135deg, #ffb340, #ff9500);
+}
+
+.conv-avatar__icon {
+  width: 52rpx;
+  height: 52rpx;
+}
+
+.conv-avatar--notify .conv-avatar__icon,
+.conv-avatar--todo .conv-avatar__icon,
+.conv-avatar--danger .conv-avatar__icon {
+  filter: brightness(0) invert(1);
 }
 
 .conv-avatar__text {
@@ -194,6 +194,13 @@
 
 .conv-avatar--danger .conv-avatar__text {
   color: #fff;
+}
+
+.conv-avatar--notify .conv-avatar__text,
+.conv-avatar--todo .conv-avatar__text {
+  color: #fff;
+  font-size: 36rpx;
+  font-weight: 700;
 }
 
 .conv-avatar-badge {

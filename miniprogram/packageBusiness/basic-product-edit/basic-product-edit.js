@@ -1,36 +1,46 @@
-const _require = require('../../utils/session.js'),readTenantCtx = _require.readTenantCtx;
-const _require2 = require('../../utils/permissions.js'),hasPermission = _require2.hasPermission;
-const _require3 =
-
-
-
-
-
-
-  require('../utils/productApi.js'),fetchProductsAll = _require3.fetchProductsAll,getProduct = _require3.getProduct,createProduct = _require3.createProduct,updateProduct = _require3.updateProduct,deleteProduct = _require3.deleteProduct,fetchVariantUsage = _require3.fetchVariantUsage;
-const _require4 =
-
-
-
-
-  require('../../utils/planApi.js'),fetchCategoriesAll = _require4.fetchCategoriesAll,fetchDictionaries = _require4.fetchDictionaries,fetchPartnersAll = _require4.fetchPartnersAll,fetchPartnerCategoriesAll = _require4.fetchPartnerCategoriesAll;
-const _require5 = require('../utils/dictionaryApi.js'),createDictionaryItem = _require5.createDictionaryItem;
-const _require6 = require('../../utils/productionPlans.js'),normalizeAppDictionaries = _require6.normalizeAppDictionaries;
-const _require7 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require7.readNavBarMetrics,readWindowMetrics = _require7.readWindowMetrics,computePlanCreateHeaderHeight = _require7.computePlanCreateHeaderHeight;
-const _require8 = require('../../utils/saveNavigation.js'),LIST_ROUTES = _require8.LIST_ROUTES,afterSaveReturnToList = _require8.afterSaveReturnToList;
+const { readTenantCtx } = require('../../utils/session.js');
+const { hasPermission } = require('../../utils/permissions.js');
+const {
+  fetchProductsAll,
+  getProduct,
+  createProduct,
+  updateProduct,
+  deleteProduct,
+  fetchVariantUsage,
+  fetchProductCodeRules,
+} = require('../utils/productApi.js');
+const {
+  fetchCategoriesAll,
+  fetchDictionaries,
+  fetchPartnersAll,
+  fetchPartnerCategoriesAll,
+} = require('../../utils/planApi.js');
+const { createDictionaryItem } = require('../utils/dictionaryApi.js');
+const { normalizeAppDictionaries } = require('../../utils/productionPlans.js');
+const {
+  readNavBarMetrics,
+  readWindowMetrics,
+  computePlanCreateHeaderHeight,
+} = require('../../utils/windowMetrics.js');
+const { LIST_ROUTES, afterSaveReturnToList } = require('../../utils/saveNavigation.js');
 const { applyPartnerCreatedOnPage } = require('../../utils/mergePartnerList.js');
-const _require9 = require('../utils/fileBase64.js'),chooseProductImageAsDataUrl = _require9.chooseProductImageAsDataUrl;
-const _require0 = require('../utils/productLastUnitByCategory.js'),writeLastUnitForCategory = _require0.writeLastUnitForCategory,resolveDefaultUnitForNewProductCategory = _require0.resolveDefaultUnitForNewProductCategory;
-const _require1 = require('../utils/productColorSize.js'),productColorSizeEnabled = _require1.productColorSizeEnabled;
-const _require10 = require('../../utils/unsavedFormDrafts.js'),clearUnsavedFormDrafts = _require10.clearUnsavedFormDrafts;
-const _require11 =
-
-
-
-
-
-
-  require('../utils/productForm.js'),buildEmptyProduct = _require11.buildEmptyProduct,syncVariantsIfNeeded = _require11.syncVariantsIfNeeded,prepareProductForSave = _require11.prepareProductForSave,buildCategoryCustomFieldsForForm = _require11.buildCategoryCustomFieldsForForm,applyCategoryCustomFieldValue = _require11.applyCategoryCustomFieldValue,generateVariants = _require11.generateVariants;
+const { chooseProductImageAsDataUrl } = require('../utils/fileBase64.js');
+const {
+  writeLastUnitForCategory,
+  resolveDefaultUnitForNewProductCategory,
+} = require('../utils/productLastUnitByCategory.js');
+const { productColorSizeEnabled } = require('../utils/productColorSize.js');
+const { clearUnsavedFormDrafts } = require('../../utils/unsavedFormDrafts.js');
+const {
+  buildEmptyProduct,
+  syncVariantsIfNeeded,
+  prepareProductForSave,
+  buildCategoryCustomFieldsForForm,
+  applyCategoryCustomFieldValue,
+  generateVariants,
+} = require('../utils/productForm.js');
+const { normalizeProductCodeRuleMap } = require('../utils/productCodeRule.js');
+const { createProductCodeAutoFill } = require('../utils/productCodeAutoFill.js');
 
 function computeScrollHeight(nav) {
   const win = readWindowMetrics();
@@ -64,11 +74,13 @@ Page({
     showPurchasePrice: false,
     showSupplier: false,
     showColorSize: false,
+    autoCodeActive: false,
+    namePlaceholder: '请填写',
     statusBarHeight: 20,
     navBarHeight: 44,
     headerBlockHeight: 88,
     scrollHeight: 500,
-    pickerSheetOpen: false
+    pickerSheetOpen: false,
   },
 
   onLoad(options) {
@@ -77,10 +89,24 @@ Page({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
       headerBlockHeight: computePlanCreateHeaderHeight(nav),
-      scrollHeight: computeScrollHeight(nav)
+      scrollHeight: computeScrollHeight(nav),
     });
     this._productId = options.id ? decodeURIComponent(options.id) : '';
     this._initialized = false;
+    this._codeAutoFill = createProductCodeAutoFill({
+      onFill: (code, prevAutoCode) => {
+        if (!this._workingProduct || this._productId) return;
+        const cur = String(this._workingProduct.name || '').trim();
+        // 竞态兜底：请求飞行中被手改则不覆盖
+        if (cur && cur !== prevAutoCode && cur !== code) return;
+        this._workingProduct.name = code;
+        this.setData({
+          'form.name': code,
+          autoCodeActive: true,
+          namePlaceholder: '按编号规则自动生成',
+        });
+      },
+    });
     if (!this._productId) {
       clearUnsavedFormDrafts();
     }
@@ -103,7 +129,7 @@ Page({
     }
     this._tenantCtx = ctx;
     this.setData({
-      canDelete: hasPermission(ctx.permissions || [], 'basic:products:delete')
+      canDelete: hasPermission(ctx.permissions || [], 'basic:products:delete'),
     });
     if (this._clearedOnHide) {
       this._clearedOnHide = false;
@@ -125,6 +151,7 @@ Page({
   },
 
   onUnload() {
+    if (this._codeAutoFill) this._codeAutoFill.dispose();
     clearUnsavedFormDrafts();
   },
 
@@ -132,24 +159,32 @@ Page({
     this._initialized = true;
     this.setData({ loading: true });
     try {
-      const _await$Promise$all =
+      if (this._codeAutoFill) this._codeAutoFill.reset();
 
-
-
-
-
-        await Promise.all([
+      const results = await Promise.all([
         fetchProductsAll(),
         fetchCategoriesAll(),
         fetchDictionaries(),
         fetchPartnersAll(),
-        fetchPartnerCategoriesAll()]
-        ),products = _await$Promise$all[0],categories = _await$Promise$all[1],dictionariesRaw = _await$Promise$all[2],partners = _await$Promise$all[3],partnerCategories = _await$Promise$all[4];
+        fetchPartnerCategoriesAll(),
+        fetchProductCodeRules(),
+      ]);
+      const products = results[0];
+      const categories = results[1];
+      const dictionariesRaw = results[2];
+      const partners = results[3];
+      const partnerCategories = results[4];
+      const rulesRaw = results[5];
+
       this._products = products || [];
       this._categories = categories || [];
       this._dictionaries = normalizeAppDictionaries(dictionariesRaw);
       this._partners = partners || [];
       this._partnerCategories = partnerCategories || [];
+
+      if (this._codeAutoFill) {
+        this._codeAutoFill.setRules(normalizeProductCodeRuleMap(rulesRaw));
+      }
 
       let product;
       if (this._productId) {
@@ -160,17 +195,49 @@ Page({
           return;
         }
       } else {
-        const defaultCategoryId = categories[0] && categories[0].id || '';
+        const defaultCategoryId = (categories[0] && categories[0].id) || '';
         product = buildEmptyProduct(defaultCategoryId);
       }
 
       this._workingProduct = JSON.parse(JSON.stringify(product));
       this._originalProduct = this._productId ? product : null;
       this.applyUiFromWorking();
+      this.scheduleAutoCode();
     } catch (err) {
-      wx.showToast({ title: err && err.message || '加载失败', icon: 'none' });
+      wx.showToast({ title: (err && err.message) || '加载失败', icon: 'none' });
       this.setData({ loading: false });
     }
+  },
+
+  isNewRecord() {
+    return !this._productId;
+  },
+
+  syncAutoCodeUi() {
+    if (!this._codeAutoFill || !this._workingProduct) {
+      this.setData({ autoCodeActive: false, namePlaceholder: '请填写' });
+      return;
+    }
+    const state = this._codeAutoFill.getAutoState(this._workingProduct, this.isNewRecord());
+    this.setData({
+      autoCodeActive: this._codeAutoFill.isAutoCodeActive(
+        this._workingProduct,
+        this.isNewRecord(),
+      ),
+      namePlaceholder: state.autoMode ? '按编号规则自动生成' : '请填写',
+    });
+  },
+
+  scheduleAutoCode() {
+    if (!this._codeAutoFill || !this._workingProduct) return;
+    this._codeAutoFill.schedule(this._workingProduct, this.isNewRecord());
+    this.syncAutoCodeUi();
+  },
+
+  onRefreshAutoCode() {
+    if (!this._codeAutoFill || !this._workingProduct || !this.isNewRecord()) return;
+    this._codeAutoFill.refresh(this._workingProduct, true);
+    this.syncAutoCodeUi();
   },
 
   applyUiFromWorking() {
@@ -182,9 +249,9 @@ Page({
     const categoryOptions = (this._categories || []).map((c) => ({
       id: c.id,
       name: c.name,
-      selected: c.id === product.categoryId
+      selected: c.id === product.categoryId,
     }));
-    const units = this._dictionaries && this._dictionaries.units || [];
+    const units = (this._dictionaries && this._dictionaries.units) || [];
     const unitIdx = units.findIndex((u) => u.id === product.unitId);
     const unitName = unitIdx >= 0 ? units[unitIdx].name : '';
 
@@ -197,6 +264,15 @@ Page({
       return { ...f, pickerIndex };
     });
 
+    const autoState =
+      this._codeAutoFill &&
+      this._codeAutoFill.getAutoState(this._workingProduct, this.isNewRecord());
+    const autoMode = !!(autoState && autoState.autoMode);
+    const autoCodeActive = !!(
+      this._codeAutoFill &&
+      this._codeAutoFill.isAutoCodeActive(this._workingProduct, this.isNewRecord())
+    );
+
     this.setData({
       loading: false,
       pageTitle: this._productId ? '编辑产品' : '创建产品',
@@ -208,19 +284,23 @@ Page({
         imageUrl: this._workingProduct.imageUrl || this._workingProduct.imageThumb || '',
         colorIds: this._workingProduct.colorIds || [],
         sizeIds: this._workingProduct.sizeIds || [],
-        salesPriceText: this._workingProduct.salesPrice != null ? String(this._workingProduct.salesPrice) : '',
-        purchasePriceText: this._workingProduct.purchasePrice != null ? String(this._workingProduct.purchasePrice) : '',
-        unitId: this._workingProduct.unitId || ''
+        salesPriceText:
+          this._workingProduct.salesPrice != null ? String(this._workingProduct.salesPrice) : '',
+        purchasePriceText:
+          this._workingProduct.purchasePrice != null
+            ? String(this._workingProduct.purchasePrice)
+            : '',
+        unitId: this._workingProduct.unitId || '',
       },
       categoryOptions,
       unitName,
       canQuickAddUnit: hasPermission(
-        this._tenantCtx && this._tenantCtx.permissions || [],
-        'basic:dictionaries:create'
+        (this._tenantCtx && this._tenantCtx.permissions) || [],
+        'basic:dictionaries:create',
       ),
       canQuickAddDict: hasPermission(
-        this._tenantCtx && this._tenantCtx.permissions || [],
-        'basic:dictionaries:create'
+        (this._tenantCtx && this._tenantCtx.permissions) || [],
+        'basic:dictionaries:create',
       ),
       supplierName: findPartnerName(this._partners, this._workingProduct.supplierId),
       customFields,
@@ -230,7 +310,9 @@ Page({
       showColorSize: !!(category && category.hasColorSize),
       partners: this._partners,
       partnerCategories: this._partnerCategories,
-      dictionaries: this._dictionaries
+      dictionaries: this._dictionaries,
+      autoCodeActive,
+      namePlaceholder: autoMode ? '按编号规则自动生成' : '请填写',
     });
   },
 
@@ -247,29 +329,38 @@ Page({
       categoryId: cat.id,
       colorIds: cat.hasColorSize ? this._workingProduct.colorIds || [] : [],
       sizeIds: cat.hasColorSize ? this._workingProduct.sizeIds || [] : [],
-      variants: cat.hasColorSize ? this._workingProduct.variants || [] : []
+      variants: cat.hasColorSize ? this._workingProduct.variants || [] : [],
     };
     if (!this._productId) {
-      const unitIds = new Set((this._dictionaries && this._dictionaries.units || []).map((u) => u.id));
+      const unitIds = new Set(
+        ((this._dictionaries && this._dictionaries.units) || []).map((u) => u.id),
+      );
       const preferred = resolveDefaultUnitForNewProductCategory(
         this._tenantCtx && this._tenantCtx.tenantId,
         cat.id,
         this._products,
-        unitIds
+        unitIds,
       );
       if (preferred) this._workingProduct.unitId = preferred;
     }
     this.applyUiFromWorking();
+    this.scheduleAutoCode();
   },
 
   onNameInput(e) {
     this._workingProduct.name = e.detail.value || '';
     this.setData({ 'form.name': this._workingProduct.name });
+    this.syncAutoCodeUi();
+    // 清空后恢复自动取号
+    if (!String(this._workingProduct.name || '').trim()) {
+      this.scheduleAutoCode();
+    }
   },
 
   onSkuInput(e) {
     this._workingProduct.sku = e.detail.value || '';
     this.setData({ 'form.sku': this._workingProduct.sku });
+    this.scheduleAutoCode();
   },
 
   onUnitChange(e) {
@@ -281,19 +372,19 @@ Page({
       writeLastUnitForCategory(
         this._tenantCtx && this._tenantCtx.tenantId,
         this._workingProduct.categoryId,
-        unitId
+        unitId,
       );
     }
     this.setData({
       unitName,
-      'form.unitId': unitId
+      'form.unitId': unitId,
     });
   },
 
   onUnitsUpdated(e) {
     const unit = e.detail && e.detail.unit;
     if (!unit || !unit.id) return;
-    const units = [...(this._dictionaries && this._dictionaries.units || [])];
+    const units = [...((this._dictionaries && this._dictionaries.units) || [])];
     if (!units.some((u) => u.id === unit.id)) units.push(unit);
     this._dictionaries = { ...this._dictionaries, units };
     this.setData({ dictionaries: this._dictionaries });
@@ -323,8 +414,13 @@ Page({
 
   onCustomFieldInput(e) {
     const id = e.currentTarget.dataset.id;
-    this._workingProduct = applyCategoryCustomFieldValue(this._workingProduct, id, e.detail.value || '');
+    this._workingProduct = applyCategoryCustomFieldValue(
+      this._workingProduct,
+      id,
+      e.detail.value || '',
+    );
     this.applyUiFromWorking();
+    this.scheduleAutoCode();
   },
 
   onCustomSelectChange(e) {
@@ -334,6 +430,7 @@ Page({
     const value = field && field.options ? field.options[idx] || '' : '';
     this._workingProduct = applyCategoryCustomFieldValue(this._workingProduct, id, value);
     this.applyUiFromWorking();
+    this.scheduleAutoCode();
   },
 
   async onPickImage() {
@@ -348,8 +445,16 @@ Page({
     }
   },
 
+  onClearImage() {
+    this._workingProduct.imageUrl = '';
+    this._workingProduct.imageThumb = null;
+    this.setData({ 'form.imageUrl': '' });
+  },
+
   async onColorSizeChange(e) {
-    const _ref = e.detail || {},kind = _ref.kind,ids = _ref.ids;
+    const detail = e.detail || {};
+    const kind = detail.kind;
+    const ids = detail.ids;
     const key = kind === 'color' ? 'colorIds' : 'sizeIds';
     const prev = this._workingProduct[key] || [];
     const removed = prev.filter((id) => !(ids || []).includes(id));
@@ -359,12 +464,12 @@ Page({
     }
     this._workingProduct[key] = ids || [];
     const category = this.getActiveCategory();
-    if (productColorSizeEnabled(this._workingProduct, category) || ids && ids.length) {
+    if (productColorSizeEnabled(this._workingProduct, category) || (ids && ids.length)) {
       this._workingProduct.variants = generateVariants(
         this._workingProduct.colorIds,
         this._workingProduct.sizeIds,
         this._workingProduct.variants,
-        this._dictionaries
+        this._dictionaries,
       );
     } else {
       this._workingProduct.variants = [];
@@ -376,9 +481,9 @@ Page({
     const variantKey = kind === 'color' ? 'colorId' : 'sizeId';
     for (let i = 0; i < removedIds.length; i += 1) {
       const specId = removedIds[i];
-      const affectedIds = (this._workingProduct.variants || []).
-      filter((v) => v[variantKey] === specId).
-      map((v) => v.id);
+      const affectedIds = (this._workingProduct.variants || [])
+        .filter((v) => v[variantKey] === specId)
+        .map((v) => v.id);
       if (!affectedIds.length) continue;
       try {
         const res = await fetchVariantUsage(this._workingProduct.id, affectedIds);
@@ -388,21 +493,24 @@ Page({
           return false;
         }
       } catch {
-
         // backend fallback
-      }}
+      }
+    }
     return true;
   },
 
   async onColorSizeQuickAdd(e) {
-    const _ref2 = e.detail || {},kind = _ref2.kind,name = _ref2.name,pendingIds = _ref2.pendingIds;
+    const detail = e.detail || {};
+    const kind = detail.kind;
+    const name = detail.name;
+    const pendingIds = detail.pendingIds;
     if (!name) return;
     const dictType = kind === 'color' ? 'color' : 'size';
     try {
       const created = await createDictionaryItem({
         type: dictType,
         name,
-        value: kind === 'color' ? '#ccc' : name
+        value: kind === 'color' ? '#ccc' : name,
       });
       const raw = await fetchDictionaries();
       this._dictionaries = normalizeAppDictionaries(raw);
@@ -415,18 +523,18 @@ Page({
         this._workingProduct.colorIds,
         this._workingProduct.sizeIds,
         this._workingProduct.variants,
-        this._dictionaries
+        this._dictionaries,
       );
       this.applyUiFromWorking();
       wx.showToast({ title: '已添加', icon: 'success' });
     } catch (err) {
-      wx.showToast({ title: err && err.message || '添加失败', icon: 'none' });
+      wx.showToast({ title: (err && err.message) || '添加失败', icon: 'none' });
     }
   },
 
   async onSaveTap() {
     if (this.data.submitting) return;
-    const perms = this._tenantCtx && this._tenantCtx.permissions || [];
+    const perms = (this._tenantCtx && this._tenantCtx.permissions) || [];
     const canCreate = hasPermission(perms, 'basic:products:create');
     const canEdit = hasPermission(perms, 'basic:products:edit');
     if (this._productId && !canEdit) {
@@ -443,31 +551,38 @@ Page({
       syncVariantsIfNeeded(this._workingProduct, category, this._dictionaries),
       this._products,
       category,
-      this._originalProduct || undefined
+      this._originalProduct || undefined,
     );
     if (prepared.error) {
       wx.showToast({ title: prepared.error, icon: 'none' });
       return;
     }
 
+    const codeAutoGen =
+      this._codeAutoFill &&
+      this._codeAutoFill.buildCodeAutoGenPayload(this._workingProduct, this.isNewRecord());
+    const payload = codeAutoGen
+      ? { ...prepared.payload, codeAutoGen }
+      : prepared.payload;
+
     this.setData({ submitting: true });
     try {
       const exists = (this._products || []).some((p) => p.id === prepared.product.id);
-      const saved = exists ?
-      await updateProduct(prepared.product.id, prepared.payload) :
-      await createProduct(prepared.payload);
+      const saved = exists
+        ? await updateProduct(prepared.product.id, payload)
+        : await createProduct(payload);
       writeLastUnitForCategory(
         this._tenantCtx && this._tenantCtx.tenantId,
         saved.categoryId,
-        saved.unitId
+        saved.unitId,
       );
       afterSaveReturnToList({
         listUrl: LIST_ROUTES.BASIC_PRODUCTS,
-        toastTitle: '保存成功'
+        toastTitle: '保存成功',
       });
       clearUnsavedFormDrafts();
     } catch (err) {
-      wx.showToast({ title: err && err.message || '保存失败', icon: 'none' });
+      wx.showToast({ title: (err && err.message) || '保存失败', icon: 'none' });
       this.setData({ submitting: false });
     }
   },
@@ -485,13 +600,13 @@ Page({
           await deleteProduct(this._productId);
           afterSaveReturnToList({
             listUrl: LIST_ROUTES.BASIC_PRODUCTS,
-            toastTitle: '已删除'
+            toastTitle: '已删除',
           });
         } catch (err) {
-          wx.showToast({ title: err && err.message || '删除失败', icon: 'none' });
+          wx.showToast({ title: (err && err.message) || '删除失败', icon: 'none' });
           this.setData({ submitting: false });
         }
-      }
+      },
     });
-  }
+  },
 });

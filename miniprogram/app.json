@@ -5,6 +5,7 @@
     "pages/scan/scan",
     "pages/messages/messages",
     "pages/messages-chat/messages-chat",
+    "pages/message-detail/message-detail",
     "pages/mine/mine",
     "pages/login/login",
     "pages/tenant-select/tenant-select",

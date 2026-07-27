@@ -1,34 +1,86 @@
-<page-header title="{{title}}" show-back="{{true}}" center="{{true}}" bind:back="onHeaderBack" />
+<view class="plan-shell msg-feed-shell">
+  <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-header__title">{{title}}</text>
+      <view class="plan-header__back plan-header__back--placeholder"></view>
+    </view>
 
-<scroll-view class="chat-scroll" scroll-y show-scrollbar="{{false}}" scroll-into-view="bubble-last">
-  <view class="chat-body">
-    <view wx:if="{{empty}}" class="chat-empty">暂无消息记录</view>
-
-    <view
-      wx:for="{{bubbles}}"
-      wx:for-index="idx"
-      wx:key="id"
-      id="{{idx === bubbles.length - 1 ? 'bubble-last' : ''}}"
-      class="chat-bubble-row chat-bubble-row--{{item.side}}"
-    >
+    <view class="plan-header__tools">
+      <view class="plan-search">
+        <input
+          class="plan-search__input"
+          value="{{searchKeyword}}"
+          bindinput="onSearchInput"
+          placeholder="{{searchPlaceholder}}"
+          confirm-type="search"
+          placeholder-class="plan-search__ph"
+        />
+        <view wx:if="{{searchKeyword}}" class="plan-search__clear" bindtap="onSearchClear">×</view>
+      </view>
       <view
-        class="chat-bubble chat-bubble--{{item.side}} chat-bubble--{{item.kind}}"
-        bindtap="onBubbleTap"
-        data-id="{{item.id}}"
-        data-kind="{{item.kind}}"
-        data-title="{{item.title}}"
-        data-body="{{item.body}}"
+        wx:if="{{showMarkAllRead}}"
+        class="plan-tool-btn {{unreadCount > 0 ? '' : 'plan-tool-btn--disabled'}}"
+        bindtap="onMarkAllRead"
       >
-        <view class="chat-bubble__head">
-          <text class="chat-tag chat-tag--{{item.tagTone}}">{{item.tagLabel}}</text>
-          <text class="chat-bubble__time">{{item.timeText}}</text>
-        </view>
-        <text class="chat-bubble__title">{{item.title}}</text>
-        <view wx:for="{{item.bodyLines}}" wx:for-item="line" wx:key="*this" class="chat-bubble__line">{{line}}</view>
-        <view wx:if="{{item.metaParts.length > 0}}" class="chat-bubble__meta">
-          <text wx:for="{{item.metaParts}}" wx:for-item="part" wx:key="*this" class="chat-bubble__meta-item">{{part}}</text>
-        </view>
+        <image class="plan-tool-btn__icon" src="/assets/icons/circle-check.png" mode="aspectFit" />
+      </view>
+      <view wx:if="{{showManageTodos}}" class="plan-tool-btn" bindtap="onManageTodos">
+        <image class="plan-tool-btn__icon" src="/assets/icons/clipboard-list.png" mode="aspectFit" />
       </view>
     </view>
   </view>
-</scroll-view>
+
+  <view class="plan-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view
+    class="msg-feed-scroll"
+    style="height: {{scrollHeight}}px;"
+    scroll-y
+    show-scrollbar="{{false}}"
+    enhanced
+    refresher-enabled="{{true}}"
+    refresher-triggered="{{refreshing}}"
+    bindrefresherrefresh="onPullRefresh"
+  >
+    <view class="msg-feed-body">
+      <empty-state wx:if="{{empty}}" text="{{emptyText}}" />
+
+      <view wx:else class="msg-feed-card">
+        <view
+          wx:for="{{rows}}"
+          wx:key="id"
+          class="msg-feed-row {{item.unread ? 'msg-feed-row--unread' : ''}} {{item.done ? 'msg-feed-row--done' : ''}}"
+          bindtap="onRowTap"
+          data-id="{{item.id}}"
+          data-kind="{{item.kind}}"
+        >
+          <view wx:if="{{item.unread}}" class="msg-feed-row__dot"></view>
+          <view class="msg-feed-row__main">
+            <view class="msg-feed-row__top">
+              <view class="msg-feed-row__title-wrap">
+                <text class="msg-feed-tag msg-feed-tag--{{item.tagTone}}">{{item.tagLabel}}</text>
+                <text class="msg-feed-row__title">{{item.title}}</text>
+              </view>
+              <text class="msg-feed-row__time">{{item.timeText}}</text>
+            </view>
+
+            <text wx:if="{{item.body}}" class="msg-feed-row__body">{{item.body}}</text>
+
+            <view wx:if="{{item.metaParts.length}}" class="msg-feed-row__meta">
+              <text
+                wx:for="{{item.metaParts}}"
+                wx:for-item="part"
+                wx:key="*this"
+                class="msg-feed-row__meta-item"
+              >{{part}}</text>
+            </view>
+          </view>
+          <text class="msg-feed-row__chevron">›</text>
+        </view>
+      </view>
+
+      <view wx:if="{{!empty}}" class="msg-feed-footer">共 {{rows.length}} 条</view>
+    </view>
+  </scroll-view>
+</view>

@@ -5,6 +5,7 @@ const require = createRequire(import.meta.url);
 const {
   buildKnowledgeProductDetailView,
   bomHasConfiguredItems,
+  sanitizeProductForMiniView,
 } = require('./knowledgeProductDetailView.js');
 
 describe('knowledgeProductDetailView', () => {
@@ -160,6 +161,77 @@ describe('knowledgeProductDetailView', () => {
       knowledgeDocId: 'doc-1',
       knowledgeTitle: '工艺说明',
     });
+  });
+
+  it('shows file attachment label instead of raw base64 json', () => {
+    const rawFile = JSON.stringify([
+      { url: 'data:application/pdf;base64,JVBERi0x', name: '插针.pdf' },
+    ]);
+    const product = sanitizeProductForMiniView({
+      id: 'p1',
+      name: '成品A',
+      categoryId: 'c1',
+      categoryCustomData: { doc: rawFile },
+      milestoneNodeIds: [],
+    });
+    expect(String(product.categoryCustomData.doc)).not.toContain('JVBERi0x');
+    expect(product._fileFieldsById.doc).toHaveLength(1);
+
+    const view = buildKnowledgeProductDetailView({
+      product,
+      category: {
+        id: 'c1',
+        name: '外购',
+        customFields: [{ id: 'doc', label: '图纸', type: 'file' }],
+      },
+      dictionaries: { units: [], colors: [], sizes: [] },
+      partners: [],
+      globalNodes: [],
+      boms: [],
+      products: [],
+      bomSkuId: '',
+    });
+    expect(view.customRows[0]).toMatchObject({
+      label: '图纸',
+      value: '插针.pdf',
+      empty: false,
+      isFileLink: true,
+      fileFieldId: 'doc',
+    });
+  });
+
+  it('exposes image thumbs when localPath is ready', () => {
+    const product = sanitizeProductForMiniView({
+      id: 'p1',
+      name: '成品A',
+      categoryId: 'c1',
+      categoryCustomData: {
+        pic: JSON.stringify([{ url: 'data:image/png;base64,aaa', name: '外观.png' }]),
+      },
+      milestoneNodeIds: [],
+    });
+    expect(product._fileFieldsById.pic[0].isImage).toBe(true);
+    product._fileFieldsById.pic[0].localPath = '/tmp/外观.png';
+
+    const view = buildKnowledgeProductDetailView({
+      product,
+      category: {
+        id: 'c1',
+        name: '外购',
+        customFields: [{ id: 'pic', label: '图片', type: 'file' }],
+      },
+      dictionaries: { units: [], colors: [], sizes: [] },
+      partners: [],
+      globalNodes: [],
+      boms: [],
+      products: [],
+      bomSkuId: '',
+    });
+    expect(view.customRows[0].showImageThumbs).toBe(true);
+    expect(view.customRows[0].imageThumbs).toEqual([
+      { key: 'pic-0', src: '/tmp/外观.png', index: 0 },
+    ]);
+    expect(view.customRows[0].isFileLink).toBe(false);
   });
 
   it('prefers thumb and never puts heavy imageUrl into view', () => {

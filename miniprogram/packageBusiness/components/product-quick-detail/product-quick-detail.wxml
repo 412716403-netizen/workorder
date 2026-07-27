@@ -55,6 +55,37 @@
           data-title="{{item.knowledgeTitle}}"
           bindtap="onCustomKnowledgeTap"
         >{{item.value}}</text>
+        <view
+          wx:elif="{{item.showImageThumbs}}"
+          class="plan-form-cell__value plan-form-cell__value--thumbs"
+        >
+          <view class="kb-custom-thumbs">
+            <image
+              wx:for="{{item.imageThumbs}}"
+              wx:for-item="thumb"
+              wx:for-index="thumbIdx"
+              wx:key="key"
+              class="kb-custom-thumb"
+              src="{{thumb.src}}"
+              mode="aspectFill"
+              data-field-id="{{item.fileFieldId}}"
+              data-index="{{thumb.index}}"
+              bindtap="onCustomFileThumbTap"
+            />
+          </view>
+          <text
+            wx:if="{{item.isFileLink && item.fileLinkLabel}}"
+            class="plan-form-cell__value--link kb-custom-file-link"
+            data-id="{{item.fileFieldId}}"
+            bindtap="onCustomFileTap"
+          >{{item.fileLinkLabel}}</text>
+        </view>
+        <text
+          wx:elif="{{item.isFileLink}}"
+          class="plan-form-cell__value plan-form-cell__value--link"
+          data-id="{{item.fileFieldId}}"
+          bindtap="onCustomFileTap"
+        >{{item.fileLinkLabel || item.value}}</text>
         <text
           wx:else
           class="plan-form-cell__value {{item.empty ? 'plan-form-cell__value--empty' : ''}}"

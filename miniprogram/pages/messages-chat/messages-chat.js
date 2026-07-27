@@ -1,8 +1,10 @@
 const { readTenantCtx, readCurrentUserId } = require('../../utils/session.js');
-const { markRead } = require('../../utils/notificationRead.js');
+const { markRead, markAllRead, syncReadsFromServer } = require('../../utils/notificationRead.js');
 const { getCache } = require('../../utils/messagesCache.js');
 const { buildConversations } = require('../../utils/messagesChatBuilder.js');
-const { updateMessagesTabBadge } = require('../../utils/messagesTabBadge.js');
+const { applyMessageLists, loadMessagesData } = require('../../utils/messagesLoad.js');
+const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
+const { openTodoEdit } = require('../../utils/todosApi.js');
 
 function decodeOpt(v) {
   if (v == null || v === '') return '';
@@ -13,18 +15,99 @@ function decodeOpt(v) {
   }
 }
 
+function computeHeaderBlockHeight(nav) {
+  const win = readWindowMetrics();
+  const toolsPx = Math.ceil((win.windowWidth / 750) * 128);
+  return nav.statusBarHeight + nav.navBarHeight + toolsPx;
+}
+
+function computeScrollHeight(nav) {
+  const win = readWindowMetrics();
+  const headerPx = computeHeaderBlockHeight(nav);
+  return Math.max(200, (win.windowHeight || 667) - headerPx);
+}
+
+function buildMetaParts(b) {
+  const parts = [];
+  if (b.sourceLabel) parts.push(b.sourceLabel);
+  if (b.sourceDocNo) parts.push(`单号 ${b.sourceDocNo}`);
+  if (b.remindText) parts.push(`提醒 ${b.remindText}`);
+  if (b.productName) parts.push(b.productName);
+  if (b.quantity != null && b.quantity > 0) parts.push(`${b.quantity} 件`);
+  if (b.docNo) parts.push(`单号 ${b.docNo}`);
+  if (b.nextFactory) parts.push(`下一站 ${b.nextFactory}`);
+  return parts;
+}
+
+function mapRows(bubbles) {
+  const list = Array.isArray(bubbles) ? bubbles.slice() : [];
+  list.sort((a, b) => (b.at || 0) - (a.at || 0));
+  return list.map((b) => {
+    const bodyText = b.body || '';
+    return {
+      ...b,
+      body: bodyText,
+      metaParts: buildMetaParts(b),
+      unread: Boolean(b.unread),
+      done: Boolean(b.done),
+    };
+  });
+}
+
+function filterRows(rows, keyword) {
+  const q = String(keyword || '').trim().toLowerCase();
+  if (!q) return rows || [];
+  return (rows || []).filter((item) => {
+    const meta = (item.metaParts || []).join(' ');
+    const hay = `${item.title || ''} ${item.body || ''} ${item.tagLabel || ''} ${meta}`.toLowerCase();
+    return hay.indexOf(q) >= 0;
+  });
+}
+
+function emptyTextFor(kind, hasKeyword) {
+  if (hasKeyword) return '无搜索结果';
+  if (kind === 'todos') return '暂无待办';
+  if (kind === 'notifications') return '暂无系统消息';
+  return '暂无协作记录';
+}
+
+function searchPlaceholderFor(kind) {
+  if (kind === 'todos') return '搜索待办内容或关联单据';
+  if (kind === 'notifications') return '搜索消息标题或内容';
+  return '搜索协作记录';
+}
+
 Page({
   data: {
     title: '',
-    avatarText: '',
-    avatarTone: 'muted',
-    bubbles: [],
+    conversationKind: '',
+    rows: [],
     empty: false,
+    emptyText: '暂无消息记录',
+    showMarkAllRead: false,
+    showManageTodos: false,
+    unreadCount: 0,
+    refreshing: false,
+    scrollHeight: 600,
+    searchKeyword: '',
+    searchPlaceholder: '搜索',
+    statusBarHeight: 20,
+    navBarHeight: 44,
+    headerBlockHeight: 120,
   },
 
   onLoad(options) {
     const id = decodeOpt(options.id);
     this._conversationId = id;
+    this._allRows = [];
+    const nav = readNavBarMetrics();
+    this._nav = nav;
+    this.setData({
+      statusBarHeight: nav.statusBarHeight,
+      navBarHeight: nav.navBarHeight,
+      headerBlockHeight: computeHeaderBlockHeight(nav),
+      scrollHeight: computeScrollHeight(nav),
+    });
     this.loadConversation(id);
   },
 
@@ -33,13 +116,55 @@ Page({
       wx.reLaunch({ url: '/pages/login/login' });
       return;
     }
-    if (this._conversationId && !this.data.bubbles.length) {
-      this.loadConversation(this._conversationId);
+    if (!this._conversationId) return;
+    const ctx = readTenantCtx();
+    const userId = readCurrentUserId();
+    const reload = () => this.loadConversation(this._conversationId);
+    if (ctx && ctx.tenantId) {
+      syncReadsFromServer(ctx.tenantId, userId).finally(reload);
+    } else {
+      reload();
     }
+  },
+
+  applyFilter(keyword) {
+    const kw = keyword == null ? this.data.searchKeyword : keyword;
+    const kind = this.data.conversationKind;
+    const filtered = filterRows(this._allRows || [], kw);
+    this.setData({
+      searchKeyword: kw,
+      rows: filtered,
+      empty: filtered.length === 0,
+      emptyText: emptyTextFor(kind, Boolean(String(kw || '').trim())),
+    });
+  },
+
+  onSearchInput(e) {
+    this.applyFilter(e.detail.value || '');
+  },
+
+  onSearchClear() {
+    this.applyFilter('');
   },
 
   onHeaderBack() {
     wx.navigateBack();
+  },
+
+  onPullRefresh() {
+    this.setData({ refreshing: true });
+    this.reloadFromNetwork({ force: true })
+      .catch(() => {})
+      .finally(() => {
+        this.setData({ refreshing: false });
+      });
+  },
+
+  async reloadFromNetwork(opts) {
+    const ctx = readTenantCtx();
+    if (!ctx || !ctx.tenantId) return;
+    await loadMessagesData(ctx.tenantId, readCurrentUserId(), opts);
+    this.loadConversation(this._conversationId);
   },
 
   loadConversation(id) {
@@ -69,95 +194,135 @@ Page({
       return;
     }
 
-    const bubbles = (conversation.bubbles || []).map((b) => ({
-      ...b,
-      bodyLines: b.body ? b.body.split('\n').filter(Boolean) : [],
-      metaParts: this.buildMetaParts(b),
-    }));
+    this._conversation = conversation;
+    let rows = mapRows(conversation.bubbles || []);
+    const kind = conversation.kind || '';
+    const isNotif = kind === 'notifications';
+    const isTodos = kind === 'todos';
 
-    this.setData({
-      title: conversation.title,
-      avatarText: conversation.avatarText,
-      avatarTone: conversation.avatarTone,
-      bubbles,
-      empty: bubbles.length === 0,
-    });
-
-    if (conversation.kind === 'notifications') {
+    // 进入消息中心即视为已阅读：清未读圆点，并同步会话/Tab 红点角标
+    if (isNotif) {
       const ctx = readTenantCtx();
       const userId = readCurrentUserId();
-      if (ctx) {
-        (conversation.bubbles || []).forEach((b) => {
-          if (b.kind === 'notification' && b.id) markRead(ctx.tenantId, userId, b.id);
-        });
-        this.refreshTabBadge(cache);
+      const ids = rows
+        .filter((r) => r.kind === 'notification' && r.id)
+        .map((r) => String(r.id));
+      // 同时标记缓存中的全部通知 id，避免列表行与 raw 列表不一致漏标
+      const cacheIds = (cache.notifications || [])
+        .filter((n) => n && n.id && n.type !== 'todo')
+        .map((n) => String(n.id));
+      const allIds = Array.from(new Set(ids.concat(cacheIds)));
+      if (ctx && allIds.length) {
+        markAllRead(ctx.tenantId, userId, allIds);
       }
+      rows = rows.map((r) =>
+        r.kind === 'notification' ? { ...r, unread: false } : r,
+      );
+      this.refreshTabBadgeFromCache();
     }
-  },
 
-  buildMetaParts(b) {
-    const parts = [];
-    if (b.sourceLabel) parts.push(b.sourceLabel);
-    if (b.sourceDocNo) parts.push(`单号 ${b.sourceDocNo}`);
-    if (b.productName) parts.push(b.productName);
-    if (b.quantity != null && b.quantity > 0) parts.push(`${b.quantity} 件`);
-    if (b.docNo) parts.push(`单号 ${b.docNo}`);
-    if (b.nextFactory) parts.push(`下一站 ${b.nextFactory}`);
-    return parts;
-  },
+    const unreadCount = rows.filter((r) => r.kind === 'notification' && r.unread).length;
+    const searchKeyword = this.data.searchKeyword || '';
 
-  refreshTabBadge(cache) {
-    const result = buildConversations({
-      notifications: cache.notifications,
-      todos: cache.todos,
-      transfers: cache.transfers,
-      tenantId: cache.tenantId,
-      userId: cache.userId,
+    this._allRows = rows;
+    const filtered = filterRows(rows, searchKeyword);
+    this.setData({
+      title: conversation.title,
+      conversationKind: kind,
+      rows: filtered,
+      empty: filtered.length === 0,
+      emptyText: emptyTextFor(kind, Boolean(String(searchKeyword).trim())),
+      showMarkAllRead: isNotif,
+      showManageTodos: isTodos,
+      searchPlaceholder: searchPlaceholderFor(kind),
+      unreadCount,
     });
-    updateMessagesTabBadge(result.unreadCount);
   },
 
-  onBubbleTap(e) {
-    const { id, kind, title, body } = e.currentTarget.dataset;
+  refreshTabBadgeFromCache() {
+    const cache = getCache();
+    if (!cache) return;
+    const ctx = readTenantCtx();
+    applyMessageLists((ctx && ctx.tenantId) || cache.tenantId, readCurrentUserId(), {
+      notifList: cache.notifications,
+      todoList: cache.todos,
+      transferList: cache.transfers,
+    });
+  },
+
+  onMarkAllRead() {
+    if (this.data.unreadCount === 0) return;
+    const ctx = readTenantCtx();
+    const userId = readCurrentUserId();
+    if (!ctx) return;
+    const ids = (this._allRows || [])
+      .filter((r) => r.kind === 'notification' && r.id)
+      .map((r) => r.id);
+    markAllRead(ctx.tenantId, userId, ids);
+    this._allRows = (this._allRows || []).map((r) =>
+      r.kind === 'notification' ? { ...r, unread: false } : r,
+    );
+    this.setData({
+      unreadCount: 0,
+    });
+    this.applyFilter(this.data.searchKeyword);
+    this.refreshTabBadgeFromCache();
+    wx.showToast({ title: '已全部标为已读', icon: 'success' });
+  },
+
+  onManageTodos() {
+    wx.navigateTo({ url: '/packageBusiness/todos/todos' });
+  },
+
+  openMessageDetail(row) {
+    const payload = {
+      title: (row && row.title) || '消息详情',
+      body: (row && row.body) || '暂无内容',
+      tagLabel: (row && row.tagLabel) || '',
+      tagTone: (row && row.tagTone) || 'muted',
+      timeText: (row && row.timeText) || '',
+    };
+    wx.navigateTo({
+      url: '/pages/message-detail/message-detail',
+      success(res) {
+        if (res.eventChannel && typeof res.eventChannel.emit === 'function') {
+          res.eventChannel.emit('messageDetailInit', payload);
+        }
+      },
+    });
+  },
+
+  onRowTap(e) {
+    const { id, kind } = e.currentTarget.dataset;
     if (kind === 'notification') {
       const ctx = readTenantCtx();
       if (ctx && id) markRead(ctx.tenantId, readCurrentUserId(), id);
 
-      const bubbles = this.data.bubbles.map((b) =>
-        b.id === id ? { ...b, read: true } : b,
+      this._allRows = (this._allRows || []).map((b) =>
+        String(b.id) === String(id) ? { ...b, unread: false } : b,
       );
-      this.setData({ bubbles });
-
-      const cache = getCache();
-      if (cache) this.refreshTabBadge(cache);
-
-      wx.showModal({
-        title: title || '消息详情',
-        content: body || '暂无内容',
-        showCancel: false,
-        confirmText: '知道了',
+      const unreadCount = (this._allRows || []).filter(
+        (r) => r.kind === 'notification' && r.unread,
+      ).length;
+      this.setData({
+        unreadCount,
       });
+      this.applyFilter(this.data.searchKeyword);
+      this.refreshTabBadgeFromCache();
+
+      const row = (this._allRows || []).find((r) => String(r.id) === String(id));
+      this.openMessageDetail(row || { title: '消息详情', body: '暂无内容' });
       return;
     }
     if (kind === 'todo') {
-      const bubble = (this.data.bubbles || []).find((b) => b.id === id);
-      const href = (bubble && bubble.href) || '';
-      try {
-        const { resolveTodoMiniPath } = require('../../utils/todoNavigate.js');
-        const miniPath = resolveTodoMiniPath(href);
-        if (miniPath) {
-          wx.navigateTo({ url: miniPath });
-          return;
-        }
-      } catch {
-        // ignore
+      const row = (this._allRows || []).find((b) => String(b.id) === String(id))
+        || (this.data.rows || []).find((b) => String(b.id) === String(id));
+      const editing = (row && row.raw) || (row ? { id: row.id, note: row.body || row.title, href: row.href } : null);
+      if (!editing || !editing.id) {
+        wx.showToast({ title: '待办不存在', icon: 'none' });
+        return;
       }
-      wx.showModal({
-        title: title || '待办详情',
-        content: body || '暂无内容',
-        showCancel: false,
-        confirmText: '知道了',
-      });
+      openTodoEdit({ editing });
       return;
     }
     if (kind === 'dispatch' || kind === 'return' || kind === 'agg-return' || kind === 'forward') {

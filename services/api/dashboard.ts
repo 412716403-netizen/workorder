@@ -454,6 +454,13 @@ export const dashboard = {
     const qs = params.limit != null ? `?limit=${params.limit}` : '';
     return request<DashboardNotification[]>(`/dashboard/notifications${qs}`);
   },
+  getNotificationReads: () =>
+    request<{ ids: string[] }>('/dashboard/notification-reads'),
+  markNotificationReads: (ids: string[]) =>
+    request<{ ids: string[] }>('/dashboard/notification-reads', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    }),
   listPublishedMessages: () =>
     request<{ messages: PublishedMessageRow[] }>('/dashboard/messages'),
   publishMessage: (body: { title: string; body: string }) =>
