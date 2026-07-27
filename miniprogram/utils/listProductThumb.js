@@ -1,14 +1,26 @@
 /**
  * 列表/流水/详情产品缩略图（小程序列表默认带图约定）
  *
- * 无产品图时占位图标与工单中心（production-orders）一致，新增单据/流水请复用本模块。
- * 产品编号 + 名称展示约定见 listProductNameSkuFields / listProductDisplayFields。
+ * 列表标题口径（对齐设计稿）：
+ * - 主标题 productName = 产品编号（name），无编号时退回名称（sku）
+ * - 副标题 productSku = 产品名称（sku），仅当编号与名称皆有且不同时展示
+ *
+ * 产品编号 + 名称原始拆分见 productNameSkuParts（name=编号, sku=名称）。
  */
+
+const { mapProductCustomTags } = require('./reportCustomDocField.js');
+const {
+  buildPartnerNameById,
+  resolveProductPartnerName,
+} = require('./productPartnerDisplay.js');
 
 /** 与工单中心列表 `productionOrders.js` 一致 */
 const DEFAULT_PRODUCT_PLACEHOLDER_ICON = '/assets/icons/clipboard-list.png';
 
-/** 产品编号 + 名称（与 productionPlans.productNameSkuParts 口径一致） */
+/**
+ * 原始字段拆分：name=产品编号，sku=产品名称（与 Product 字段一致）
+ * @returns {{ name: string, sku: string, showSku: boolean }}
+ */
 function productNameSkuParts(product) {
   if (!product) return { name: '—', sku: '', showSku: false };
   const name = product.name || product.sku || '—';
@@ -21,30 +33,24 @@ function productNameSkuParts(product) {
 }
 
 /**
- * 产品编号 + 名称三件套（对齐报工流水 production-order-report-history）
+ * 列表展示三件套：主标题=产品编号，副标题=产品名称
  * @param {object|null} product
  * @param {{ name?: string, sku?: string, productName?: string, productSku?: string }} [fallback]
+ *   fallback.name / productName 视为编号；fallback.sku / productSku 视为名称
  */
 function listProductNameSkuFields(product, fallback = {}) {
-  const fbName = fallback.name || fallback.productName || '';
-  const fbSku = fallback.sku || fallback.productSku || '';
-  if (product) {
-    const parts = productNameSkuParts(product);
-    const name = parts.name || fbName || '—';
-    const sku = parts.sku || fbSku || '';
-    return {
-      productName: name,
-      productSku: sku,
-      showProductSku: parts.showSku || Boolean(sku && name && sku !== name),
-    };
+  const code = String(
+    (product && product.name) || fallback.name || fallback.productName || '',
+  ).trim();
+  const title = String(
+    (product && product.sku) || fallback.sku || fallback.productSku || '',
+  ).trim();
+  if (code && title && code !== title) {
+    return { productName: code, productSku: title, showProductSku: true };
   }
-  const name = fbName || fbSku || '—';
-  const sku = fbSku || '';
-  return {
-    productName: name,
-    productSku: sku,
-    showProductSku: Boolean(sku && name && sku !== name),
-  };
+  if (code) return { productName: code, productSku: '', showProductSku: false };
+  if (title) return { productName: title, productSku: '', showProductSku: false };
+  return { productName: '—', productSku: '', showProductSku: false };
 }
 
 function listProductNameSkuFromMap(productMap, productId, fallback = {}) {
@@ -63,6 +69,48 @@ function listProductDisplayFields(product, fallback = {}) {
 function listProductDisplayFieldsFromMap(productMap, productId, fallback = {}) {
   const product = productMap && productId ? productMap.get(productId) : null;
   return listProductDisplayFields(product, fallback);
+}
+
+/**
+ * 列表「自定义内容」行：合作单位 + 分类扩展字段（对齐 Web ProductListMetaTags）
+ * @returns {{
+ *   partnerName: string,
+ *   showPartner: boolean,
+ *   productCustomTags: { id: string, label: string, display: string }[],
+ *   showProductCustomTags: boolean,
+ *   showProductMeta: boolean,
+ * }}
+ */
+function listProductMetaFields(product, category, partnerNameById, options) {
+  const maxTags = options && typeof options.maxTags === 'number' ? options.maxTags : 6;
+  const partnerName =
+    resolveProductPartnerName(
+      product,
+      category,
+      partnerNameById || buildPartnerNameById([]),
+    ) || '';
+  const customTags = mapProductCustomTags(product, category, { includeFile: false })
+    .slice(0, maxTags)
+    .map((t) => ({
+      id: t.id,
+      label: t.label,
+      display: String(t.display || '').slice(0, 48),
+    }));
+  return {
+    partnerName,
+    showPartner: Boolean(partnerName),
+    productCustomTags: customTags,
+    showProductCustomTags: customTags.length > 0,
+    showProductMeta: Boolean(partnerName) || customTags.length > 0,
+  };
+}
+
+function listProductMetaFieldsFromMaps(product, categoryMap, partnerNameById, options) {
+  const category =
+    product && product.categoryId && categoryMap
+      ? categoryMap.get(product.categoryId) || null
+      : null;
+  return listProductMetaFields(product, category, partnerNameById, options);
 }
 
 /** 列表取图：优先 imageThumb（lite），回退 imageUrl */
@@ -84,9 +132,9 @@ function listProductThumbFromProduct(product, opts) {
   };
 }
 
-function listProductThumbFromUrl(imageUrl, opts) {
+function listProductThumbFromUrl(url, opts) {
   const placeholderIconSrc = (opts && opts.placeholderIconSrc) || DEFAULT_PRODUCT_PLACEHOLDER_ICON;
-  const productImageUrl = imageUrl ? String(imageUrl).trim() : '';
+  const productImageUrl = url ? String(url).trim() : '';
   return {
     productImageUrl,
     showProductImage: Boolean(productImageUrl),
@@ -102,6 +150,9 @@ module.exports = {
   listProductNameSkuFromMap,
   listProductDisplayFields,
   listProductDisplayFieldsFromMap,
+  listProductMetaFields,
+  listProductMetaFieldsFromMaps,
   listProductThumbFromProduct,
   listProductThumbFromUrl,
+  buildPartnerNameById,
 };

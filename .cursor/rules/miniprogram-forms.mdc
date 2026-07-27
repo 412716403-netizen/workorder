@@ -21,9 +21,14 @@ alwaysApply: false
 **创建时间（必做）**：单据新建/编辑与流水详情改时间戳，一律用 `datetime-calendar-select`（参考 [`finance-receipt-edit`](../miniprogram/packageFinance/finance-receipt-edit/)），禁止 `picker mode="date"` + `picker mode="time"`。列表筛选纯日期（`dateFrom`/`dateTo`）除外。
 
 **底栏选择器与提交按钮（必做）**：合作单位 / 产品 / 报工人员 / 创建时间 / 分类 / 账户等走 `openBottomSheet` 的弹层，会自动维护页面 `pickerSheetOpen`。页面须 `data.pickerSheetOpen: false`，底栏提交区 `wx:if="{{!pickerSheetOpen}}"`（与矩阵键盘并存时 `!matrixKeyboardVisible && !pickerSheetOpen`），避免「保存单据 / 确认报工」透出弹层。
+
+**别把这些选择器塞进自建底栏**：`openBottomSheet` 的容器带 `transform`，内层 `position: fixed` 弹层会相对该容器而非视口定位。需要「弹层里再填一张带选择器的表单」时开独立页面（参考 [`psi-doc-finance-entry`](../miniprogram/packagePsi/psi-doc-finance-entry/)），入参与回传走 `wx.navigateTo` 的 `events` + `getOpenerEventChannel()`。
 | 色码矩阵 | `plan-create-matrix` 类名 + 横向 `scroll-view` | `buildVariantMatrixUiModel()` 或业务 layout builder（如 `outsourceDispatchMatrix.js`） |
 | 矩阵数量键盘 | `matrix-qty-keyboard` | [`matrixQtyKeyboard.js`](../miniprogram/packageBusiness/utils/matrixQtyKeyboard.js) |
 | 采购入库批次 | `batch-return-input` | 点击选择；弹窗内可选已有批次或输入新批号；未填保存时默认「无批号」 |
+| 进销存四单的收付款登记 | 页脚合计区右侧图标 → [`psi-doc-finance-entry`](../miniprogram/packagePsi/psi-doc-finance-entry/) 页 | [`packagePsi/utils/psiDocFinancePanel.js`](../miniprogram/packagePsi/utils/psiDocFinancePanel.js)（`init/load/open/flush` 四件套），口径见 [`utils/psiDocFinance.js`](../miniprogram/utils/psiDocFinance.js) |
+
+**跨分包共享（必做）**：`packagePsi` / `packageBusiness` / `packageFinance` **不能互相 `require`**。多个分包都要用的逻辑放主包 `miniprogram/utils/`，原分包改为 re-export（如收付款表单逻辑在 [`utils/financeRecordForm.js`](../miniprogram/utils/financeRecordForm.js)，`packageFinance/utils/financeRecords.js` 只留展示侧）；共享样式放 `miniprogram/styles/`。
 
 ## 页面 `.json` 注册
 
@@ -163,6 +168,7 @@ onHide() {
 | 登记/编辑收款单 | `FINANCE_RECEIPTS` |
 | 收款单详情（删除） | `FINANCE_RECEIPTS` |
 | 登记/编辑付款单 | `FINANCE_PAYMENTS` |
+| 四单快捷登记收/付款（`psi-doc-finance-entry`） | 例外：`navigateBack` 回单据编辑页（单据还没保存，不能跳走） |
 | 付款单详情（删除） | `FINANCE_PAYMENTS` |
 | 账户转账（新建/编辑/删除） | `FINANCE_ACCOUNTS` |
 | 新建/编辑产品 | `BASIC_PRODUCTS` |

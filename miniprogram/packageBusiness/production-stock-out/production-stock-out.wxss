@@ -182,24 +182,10 @@
   gap: 10rpx;
 }
 
-.material-stock-card__product-line {
-  margin-top: 6rpx;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0 12rpx;
-}
-
 .material-stock-card__title {
   font-size: 28rpx;
   font-weight: 700;
   color: var(--color-text-primary);
-}
-
-.material-stock-card__sku {
-  font-size: 22rpx;
-  font-weight: 500;
-  color: var(--color-text-secondary);
 }
 
 .material-stock-select-count {

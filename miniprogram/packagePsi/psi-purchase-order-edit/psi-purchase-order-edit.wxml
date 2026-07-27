@@ -63,6 +63,7 @@
                 label=""
                 products="{{products}}"
                 categories="{{categories}}"
+                partners="{{partners}}"
                 value-id="{{item.productId}}"
                 value-name="{{item.productName}}"
                 placeholder="请选择产品"
@@ -163,6 +164,20 @@
       <view wx:if="{{showAmount}}" class="po-edit-footer__stat">
         <text class="po-edit-footer__summary-label">合计金额</text>
         <text class="po-edit-footer__summary-value">{{totalAmountText || '—'}}</text>
+      </view>
+      <view wx:if="{{showFinanceEntry || showFinanceAmount}}" class="po-edit-footer__finance">
+        <view wx:if="{{showFinanceAmount}}" class="po-edit-footer__stat po-edit-footer__stat--finance">
+          <text class="po-edit-footer__summary-label">{{financeShortLabel}}</text>
+          <text class="po-edit-footer__summary-value po-edit-footer__summary-value--finance">{{financeAmountText}}</text>
+        </view>
+        <view
+          wx:if="{{showFinanceEntry}}"
+          class="po-edit-footer__finance-icon"
+          hover-class="po-edit-footer__finance-icon--hover"
+          bindtap="onFinanceEntryTap"
+        >
+          <image class="po-edit-footer__finance-icon-img" src="{{financeEntryIcon}}" mode="aspectFit" />
+        </view>
       </view>
     </view>
     <view class="po-edit-footer__actions">

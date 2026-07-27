@@ -39,6 +39,13 @@ const _require0 =
 const _require1 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require1.readNavBarMetrics,readWindowMetrics = _require1.readWindowMetrics,computePlanCreateHeaderHeight = _require1.computePlanCreateHeaderHeight,computePoEditFooterInsetPx = _require1.computePoEditFooterInsetPx;
 const _require10 = require('../../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require10.afterMatrixKeyboardOpen,handleMatrixOutsideTap = _require10.handleMatrixOutsideTap;
 const _require11 = require('../../utils/saveNavigation.js'),LIST_ROUTES = _require11.LIST_ROUTES,afterSaveReturnToList = _require11.afterSaveReturnToList;
+const {
+  emptyPsiDocFinancePanelState,
+  initPsiDocFinancePanel,
+  loadPsiDocFinanceSavedAmount,
+  openPsiDocFinanceEntryFromPage,
+  flushPsiDocFinanceDrafts,
+} = require('../utils/psiDocFinancePanel.js');
 const _require12 = require('../utils/psiPartnerProductLastPrice.js'),resolveDefaultSalesPrice = _require12.resolveDefaultSalesPrice;
 const { applyPartnerCreatedOnPage } = require('../../utils/mergePartnerList.js');
 
@@ -87,6 +94,7 @@ Page({
     scrollHeight: 500,
     matrixScrollTop: 0,
     pickerSheetOpen: false,
+    ...emptyPsiDocFinancePanelState(),
     ...emptyMatrixKeyboardState()
   },
 
@@ -107,7 +115,17 @@ Page({
       showAmount: hasPermission(ctx && ctx.permissions || [], 'psi:sales_order:amount'),
       canDelete: editing && hasPermission(ctx && ctx.permissions || [], 'psi:sales_order:delete')
     });
+    initPsiDocFinancePanel(this, PSI_TYPE);
     this.bootstrap();
+  },
+
+  /** 登记收/付款单：编辑态直接写库，新建态先暂存 */
+  onFinanceEntryTap() {
+    openPsiDocFinanceEntryFromPage(this, {
+      partner: this.data.form.partner,
+      docNumber: this.data.form.docNumber,
+      saved: Boolean(this._editingDocNumber)
+    });
   },
 
   onHeaderBack() {
@@ -170,6 +188,9 @@ Page({
         partnerCategories: normalizeMasterList(partnerCategories)
       });
       this.refreshLinesUi();
+      if (this._editingDocNumber) {
+        loadPsiDocFinanceSavedAmount(this, this._editingDocNumber);
+      }
     } catch (err) {
       this.setData({ loading: false });
       wx.showToast({ title: '加载失败', icon: 'none' });
@@ -456,6 +477,7 @@ Page({
       } else {
         await createPsiRecordsBatch(newRecords);
       }
+      await flushPsiDocFinanceDrafts(this, docNumber);
       wx.hideLoading();
       this.setData({ submitting: false });
       afterSaveReturnToList({

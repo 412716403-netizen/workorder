@@ -18,7 +18,8 @@ const _require8 =
 
 
 
-  require('../../utils/orderApi.js'),fetchTenantConfig = _require8.fetchTenantConfig,fetchProductsAll = _require8.fetchProductsAll,fetchNodesAll = _require8.fetchNodesAll,listProductProgressAll = _require8.listProductProgressAll;
+  require('../../utils/orderApi.js'),fetchTenantConfig = _require8.fetchTenantConfig,fetchNodesAll = _require8.fetchNodesAll,listProductProgressAll = _require8.listProductProgressAll;
+const { loadProductMetaMaps } = require('../../utils/productMetaMaps.js');
 const _require9 = require('../utils/productionOrders.js'),normalizeMasterList = _require9.normalizeMasterList;
 const _require0 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require0.readNavBarMetrics,readWindowMetrics = _require0.readWindowMetrics;
 const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../../utils/planFilterPanel.js');
@@ -330,7 +331,9 @@ Page({
       expandedParents: this._expandedParents || {},
       canReport: this.data.canReport,
       canDetail: this.data.canDetail,
-      canMaterial: this.data.canMaterial
+      canMaterial: this.data.canMaterial,
+      categoryMap: this._categoryMap,
+      partnerNameById: this._partnerNameById
     });
     this.setData({
       cards,
@@ -358,17 +361,19 @@ Page({
         this.setData({ onlyShowIncomplete: true });
       }
 
-      const _await$Promise$all = await Promise.all([
+      const [allOrders, productMeta, nodesRaw, pmpRaw] = await Promise.all([
         fetchAllOrdersPaginated({}),
-        fetchProductsAll(),
+        loadProductMetaMaps(),
         fetchNodesAll(),
-        listProductProgressAll()]
-        ),allOrders = _await$Promise$all[0],productsRaw = _await$Promise$all[1],nodesRaw = _await$Promise$all[2],pmpRaw = _await$Promise$all[3];
+        listProductProgressAll()
+      ]);
 
-      this._products = normalizeMasterList(productsRaw);
+      this._products = productMeta.products;
       this._nodes = normalizeMasterList(nodesRaw);
       this._orders = allOrders || [];
       this._pmp = Array.isArray(pmpRaw) ? pmpRaw : pmpRaw && pmpRaw.data || [];
+      this._categoryMap = productMeta.categoryMap;
+      this._partnerNameById = productMeta.partnerNameById;
 
       const records = await fetchReworkRecordsForPanel({
         productionLinkMode: this._productionLinkMode,

@@ -525,7 +525,12 @@
 - **详情展示**：详情摘要「合计金额」右侧展示「已收款金额」/「已付款金额」（按 `sourceDocNo` + 对应 type 聚合）。若收付款为「仅本人可见」，非制单人看到的合计会被后端 `viewerScope` 过滤。
 - **反查权限门禁**：按 `sourceDocNo` 反查前先用 `canReadPsiDocLinkedFinance()` 判断方向对应的 `finance:receipt` / `finance:payment` 查看范围（`view` 或 `view_own` 皆可）；无权限时**不发起**列表请求（该端点要求 `finance` 下任一权限，否则 403），金额区不展示。
 
-**代表性实现锚点**：`components/finance/QuickFinanceRecordButton.tsx`、`views/psi-ops/OrderBillFormPage.tsx`、`views/psi-ops/PsiDocDetailSummary.tsx`、`utils/psiDocFinanceNote.ts`
+- **小程序**（口径与 Web 一致，交互按移动端改造）：四单编辑页页脚合计区展示已付/已收金额，合计区右侧图标按钮进入登记（采购侧钱包 / 销售侧收据）；点击进入 `packagePsi/psi-doc-finance-entry` 登记页（不做页内底栏——登记表单本身还要弹分类/账户/产品选择器，底栏的 `transform` 会让内层 `position: fixed` 弹层失去视口定位）。入参与回传走 `eventChannel`：新增态回传 payload 由单据页暂存、保存后 flush；编辑态登记页直接落库。详情页把已收/已付作为「基础信息」里紧随「合计金额」的一行（移动端摘要条只放三项，不再横向加第四项）。
+  - 采购入库「引用订单」模式下供应商不在表单里，取自首个已勾选明细（与 `onSubmitFromOrder` 同口径）。
+  - 暂存草稿带的是**预览单号**；落库时改写为真实单号，备注若仍是默认文案（`关联{单据类型} …`）一并跟上，用户改过的备注不覆盖。
+  - flush 部分失败用 `showModal` 而非 toast 提示——紧随其后的「保存成功」toast 会把提示顶掉。
+
+**代表性实现锚点**：`components/finance/QuickFinanceRecordButton.tsx`、`views/psi-ops/OrderBillFormPage.tsx`、`views/psi-ops/PsiDocDetailSummary.tsx`、`utils/psiDocFinanceNote.ts`；小程序 `miniprogram/utils/psiDocFinance.js`、`miniprogram/utils/psiDocFinanceEntry.js`、`miniprogram/packagePsi/utils/psiDocFinancePanel.js`、`miniprogram/packagePsi/psi-doc-finance-entry/`
 
 ### 4.3 合作单位对账 Excel 导出
 

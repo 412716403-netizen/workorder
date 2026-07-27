@@ -11,8 +11,9 @@ const {
 } = require('../../utils/psiOpsAggregators.js');
 const { effectiveAllocatedQuantity, isSalesOrderLineFullyShipped, linePendingShipQty } = require('./psiAllocationDisplay.js');
 const { flowRecordsEarliestMs, formatLocalDateTimeZh } = require('../../utils/flowDocSortLite.js');
+const { psiDocLinkedFinanceRows } = require('../../utils/psiDocFinance.js');
 const { formatReportTime } = require('../../utils/orderReportHistory.js');
-const { listProductDisplayFieldsFromMap } = require('../../utils/listProductThumb.js');
+const { listProductDisplayFieldsFromMap, listProductMetaFieldsFromMaps } = require('../../utils/listProductThumb.js');
 const { buildVariantMatrixUiModel } = require('../../utils/variantQtyMatrix.js');
 const { productHasColorSizeMatrix } = require('../../utils/productionPlans.js');
 const { getProductUnitName } = require('../../utils/planFormCustomField.js');
@@ -175,13 +176,14 @@ function filterSalesOrderDocs(groups, keyword, onlyNotFullyShipped, productMap) 
 }
 
 function mapLineGroupPreview(docNumber, lineGroupId, items, ctx) {
-  const { productMap, dictionaries, showAmount, canAllocate } = ctx;
+  const { productMap, categoryMap, partnerNameById, dictionaries, showAmount, canAllocate } = ctx;
   const first = items[0] || {};
   const product = productMap && first.productId ? productMap.get(first.productId) : null;
   const display = listProductDisplayFieldsFromMap(productMap, first.productId, {
     productName: first.productName,
     productSku: first.productSku,
   });
+  const meta = listProductMetaFieldsFromMaps(product, categoryMap, partnerNameById, { maxTags: 4 });
   const ordered = lineGroupTotalQty(items);
   const shipped = lineGroupShippedQty(items);
   const allocatedEff = lineGroupAllocatedQty(items);
@@ -196,6 +198,10 @@ function mapLineGroupPreview(docNumber, lineGroupId, items, ctx) {
   return {
     lineGroupId,
     ...display,
+    partnerName: meta.partnerName,
+    showPartner: meta.showPartner,
+    productCustomTags: meta.productCustomTags,
+    showProductMeta: meta.showProductMeta,
     quantityText: `${ordered} ${unitName}`,
     priceText: showAmount ? `¥${price.toFixed(2)}` : '',
     amountText: showAmount ? `¥${amount.toFixed(2)}` : '',
@@ -259,6 +265,10 @@ function slimSalesOrderLinePreview(line) {
     productImageUrl: line.productImageUrl,
     showProductImage: line.showProductImage,
     placeholderIconSrc: line.placeholderIconSrc,
+    partnerName: line.partnerName || '',
+    showPartner: !!line.showPartner,
+    productCustomTags: line.productCustomTags || [],
+    showProductMeta: !!line.showProductMeta,
     quantityText: line.quantityText,
     priceText: line.priceText,
     amountText: line.amountText,
@@ -401,6 +411,7 @@ function mapSalesOrderDetailView(docNumber, items, ctx) {
         { label: '制单时间', value: createdAtText || '—' },
         { label: '经办人', value: operator || '—' },
         ...(showAmount ? [{ label: '合计金额', value: `¥${totalAmount.toFixed(2)}` }] : []),
+        ...psiDocLinkedFinanceRows('SALES_ORDER', ctx.linkedFinanceAmount),
       ],
     },
     {

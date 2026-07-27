@@ -1,51 +1,69 @@
 ---
-description: 小程序列表/流水/清单中产品名称与编号展示约定
+description: 小程序列表/流水/清单中产品编号与名称展示约定
 globs: miniprogram/**/*
 alwaysApply: false
 ---
 
-# 小程序列表 · 产品名称 + 编号
+# 小程序列表 · 产品编号 + 名称
 
-凡**流水、清单、主列表卡片**展示成品/产品名称时，名称后须跟**产品编号（sku）**，口径对齐报工流水 `production-order-report-history`。
+凡**流水、清单、主列表卡片、产品选择弹窗**展示成品/产品时：
+
+1. **首行**：产品编号（`Product.name`）大字粗体 + 产品名称（`Product.sku`）小字灰色
+2. **次行**：合作单位（分类 `linkPartner` + 已关联时）+ 分类自定义字段 pill
+
+产品选择弹窗用 `searchable-product-select`，须传 `partners="{{partners}}"` 才出合作单位 pill。
 
 ## 数据层（必做）
 
-- 使用 [`listProductThumb.js`](../miniprogram/packageBusiness/utils/listProductThumb.js)：
-  - `listProductNameSkuFields(product, fallback?)` → `{ productName, productSku, showProductSku }`
-  - 有 `productsById` / `productMap` 时用 `listProductNameSkuFromMap` 或 `listProductDisplayFieldsFromMap`
-  - 已有 `productMetaFromMap`（[`orderReportHistory.js`](../miniprogram/packageBusiness/utils/orderReportHistory.js)）可继续用于带缩略图场景
-- `showProductSku` 规则：有 `product.name` 且 `product.sku` 非空且二者不同才为 `true`（见 `productionPlans.productNameSkuParts`）
-- 列表搜索/筛选须把 `productSku` 纳入关键词字段
+- 使用 [`listProductThumb.js`](../miniprogram/utils/listProductThumb.js)：
+  - `listProductNameSkuFields(product, fallback?)` → `{ productName, productSku, showProductSku }`  
+    - `productName` = 编号（name），无编号时退回名称  
+    - `productSku` = 名称（sku），仅编号与名称皆有且不同时展示  
+  - `listProductMetaFields(product, category, partnerNameById)` → 合作单位 + 自定义 tags  
+  - 有 `productMap` 时用 `listProductNameSkuFromMap` / `listProductDisplayFieldsFromMap` / `listProductMetaFieldsFromMaps`
+- 原始字段拆分仍用 `productNameSkuParts`：`name`=编号、`sku`=名称（业务逻辑用，勿直接当列表标题）
+- 列表搜索须同时覆盖名称与编号
+
+## bootstrap 装配（必做）
+
+列表页要拉 `productMap` / `categoryMap` / `partnerNameById` 时，用
+[`productMetaMaps.js`](../miniprogram/utils/productMetaMaps.js) 的 `loadProductMetaMaps()`，
+别再各页手写 `Promise.all([fetchProductsAll, fetchCategoriesAll, fetchPartnersAll])` + `new Map(...)`：
+
+```js
+const { loadProductMetaMaps } = require('../../utils/productMetaMaps.js');
+
+const [records, productMeta] = await Promise.all([fetchRecords(), loadProductMetaMaps()]);
+this._productMap = productMeta.productMap;
+this._categoryMap = productMeta.categoryMap;
+this._partnerNameById = productMeta.partnerNameById;
+```
+
+- 自己已拉过产品的页面传 `loadProductMetaMaps({ withProducts: false })`
+- 三个请求都带 90s 缓存；**维护页**（改完要立刻看到新值）请直连各自 `*Api.js` 的未缓存版本
 
 ## 视图层（WXML）
 
-**分行展示**（报工流水 / 工单列表 / 外协流水等，推荐）：
+用模板 [`templates/listProductTitle.wxml`](../miniprogram/templates/listProductTitle.wxml)，不要复制结构：
 
 ```xml
-<text class="…__product-name">{{item.productName}}</text>
-<text wx:if="{{item.showProductSku}}" class="…__sku">{{item.productSku}}</text>
+<import src="/templates/listProductTitle.wxml" />
+...
+<template is="listProductTitle" data="{{item: line}}" />
+<template is="listProductMeta" data="{{item: line}}" />
 ```
 
-- 外协/返工流水行复用 `outsource-flow-row__product-name` + `outsource-flow-row__sku`（[`outsource-shared.wxss`](../miniprogram/styles/outsource-shared.wxss)）
-- 报工流水用 `report-history-row__product-name` + `report-history-row__sku`
+标题行内要额外塞徽章 / 数量（工单中心、产品档案、款式列表）时，标题保持页面内联，
+元信息行仍走 `listProductMeta`。
 
-**单行/详情标题**（可选，与入库详情一致）：
-
-```xml
-{{detail.productName}}<text wx:if="{{detail.showProductSku}}" class="list-product-sku"> {{detail.productSku}}</text>
-```
-
-全局样式：`.list-product-sku`（[`styles/list.wxss`](../miniprogram/styles/list.wxss)）
+全局样式：[`styles/list.wxss`](../miniprogram/styles/list.wxss) 中 `.list-product-title*` / `.list-product-meta*`。
 
 ## 禁止
 
-- 仅写 `productName: product.name` 而不提供 `productSku` / `showProductSku`
-- 在 WXML 用 `wx:if="{{item.productSku}}"` 代替 `showProductSku`（无名称时编号单独展示会误判）
-- 各页自创「名称+编号」拼接字符串（应用 util 保持搜索与展示一致）
+- 把 `product.sku`（名称）写成大标题而不走 `listProductNameSkuFields`
+- 用 `wx:if="{{item.productSku}}"` 代替 `showProductSku`
+- 各页自创「名称+编号」拼接字符串
+- 复制 `list-product-meta` 那段 WXML 而不用 `listProductMeta` 模板
+- 自定义字段字段名改叫 `customTags`：统一 `productCustomTags` / `showProductMeta`
 
-## 参考实现
-
-- 报工流水：[`orderReportHistory.js`](../miniprogram/packageBusiness/utils/orderReportHistory.js) + [`production-order-report-history.wxml`](../miniprogram/packageBusiness/production-order-report-history/production-order-report-history.wxml)
-- 工单中心列表：[`productionOrders.js`](../miniprogram/packageBusiness/utils/productionOrders.js) + [`production-orders.wxml`](../miniprogram/packageBusiness/production-orders/production-orders.wxml)
-
-完整说明见 [`docs/10-miniprogram-ui.md`](../docs/10-miniprogram-ui.md) §产品名称与编号。
+完整说明见 [`docs/10-miniprogram-ui.md`](../docs/10-miniprogram-ui.md) §产品编号与名称。

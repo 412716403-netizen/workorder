@@ -23,7 +23,8 @@ const _require0 =
 
 
 
-  require('../../utils/orderApi.js'),fetchTenantConfig = _require0.fetchTenantConfig,fetchProductsAll = _require0.fetchProductsAll,fetchNodesAll = _require0.fetchNodesAll,fetchBomsAll = _require0.fetchBomsAll;
+  require('../../utils/orderApi.js'),fetchTenantConfig = _require0.fetchTenantConfig,fetchNodesAll = _require0.fetchNodesAll,fetchBomsAll = _require0.fetchBomsAll;
+const { loadProductMetaMaps } = require('../../utils/productMetaMaps.js');
 const _require1 = require('../../utils/productionPlans.js'),normalizeMasterList = _require1.normalizeMasterList;
 const _require10 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require10.readNavBarMetrics,readWindowMetrics = _require10.readWindowMetrics;
 const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../../utils/planFilterPanel.js');
@@ -306,14 +307,16 @@ Page({
         this.setData({ onlyShowIncomplete: true });
       }
 
-      const _await$Promise$all2 = await Promise.all([
+      const [allOrders, productMeta, nodesRaw] = await Promise.all([
         fetchAllOrdersPaginated({}),
-        fetchProductsAll(),
-        fetchNodesAll()]
-        ),allOrders = _await$Promise$all2[0],productsRaw = _await$Promise$all2[1],nodesRaw = _await$Promise$all2[2];
+        loadProductMetaMaps(),
+        fetchNodesAll()
+      ]);
 
-      this._products = normalizeMasterList(productsRaw);
+      this._products = productMeta.products;
       this._nodes = normalizeMasterList(nodesRaw);
+      this._categoryMap = productMeta.categoryMap;
+      this._partnerNameById = productMeta.partnerNameById;
       this._boms = [];
       this._stockRecords = [];
       this._materialDepsLoaded = false;
@@ -343,7 +346,9 @@ Page({
         records: outsourceRaw || [],
         orders: this._orders,
         products: this._products,
-        nodes: this._nodes
+        nodes: this._nodes,
+        categoryMap: this._categoryMap,
+        partnerNameById: this._partnerNameById
       });
 
       this.setData({

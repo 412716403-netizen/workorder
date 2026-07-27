@@ -3,9 +3,7 @@ const _require2 = require('../../utils/permissions.js'),hasPermission = _require
 const _require3 = require('../config/products.js'),PRODUCT_ARCHIVE_ALL = _require3.PRODUCT_ARCHIVE_ALL,DEFAULT_PAGE_SIZE = _require3.DEFAULT_PAGE_SIZE;
 const _require4 = require('../utils/products.js'),buildProductListRows = _require4.buildProductListRows;
 const _require5 = require('../utils/productApi.js'),fetchProductsAll = _require5.fetchProductsAll,updateProduct = _require5.updateProduct;
-const _require6 =
-
-  require('../../utils/planApi.js'),fetchCategoriesAll = _require6.fetchCategoriesAll,fetchPartnersAll = _require6.fetchPartnersAll;
+const { loadProductMetaMaps } = require('../../utils/productMetaMaps.js');
 const _require7 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require7.readNavBarMetrics,readWindowMetrics = _require7.readWindowMetrics;
 const _require8 = require('../../utils/saveNavigation.js'),shouldHubListRefetch = _require8.shouldHubListRefetch,trackHubListHidden = _require8.trackHubListHidden,LIST_ROUTES = _require8.LIST_ROUTES;
 const _require9 = require('../utils/productEnabled.js'),isProductEnabled = _require9.isProductEnabled;
@@ -207,15 +205,14 @@ Page({
     this._initialized = true;
     this.setData({ loading: true });
     try {
-      const _await$Promise$all = await Promise.all([
+      // 产品档案是维护页：产品列表不走缓存，改完返回要立刻看到新值
+      const [products, meta] = await Promise.all([
         fetchProductsAll(),
-        fetchCategoriesAll(),
-        fetchPartnersAll().catch(() => []),
-      ]
-        ),products = _await$Promise$all[0],categories = _await$Promise$all[1],partners = _await$Promise$all[2];
+        loadProductMetaMaps({ withProducts: false }),
+      ]);
       this._products = products || [];
-      this._categories = categories || [];
-      this._partners = partners || [];
+      this._categories = meta.categories;
+      this._partners = meta.partners;
       this.reloadList();
     } catch {
       this.setData({ loading: false, rows: [], emptyText: '加载失败' });

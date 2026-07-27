@@ -4,7 +4,7 @@
 
 const _require = require('../config/productionOrders.js'),OrderDispatchStatus = _require.OrderDispatchStatus;
 const _requireOrderSort = require('./productionOrders.js'),orderCreatedMs = _requireOrderSort.orderCreatedMs;
-const _require2 = require('../../utils/listProductThumb.js'),listProductNameSkuFields = _require2.listProductNameSkuFields;
+const _require2 = require('../../utils/listProductThumb.js'),listProductNameSkuFields = _require2.listProductNameSkuFields,listProductMetaFields = _require2.listProductMetaFields;
 const _require3 =
 
 
@@ -22,7 +22,7 @@ const _require3 =
 const DEFAULT_PAGE_SIZE = 10;
 const PARTNER_PAGE_SIZE = 5;
 
-function buildMaterialIndexes(products, boms, orders) {
+function buildMaterialIndexes(products, boms, orders, categoryMap, partnerNameById) {
   const productsById = new Map((products || []).map((p) => [p.id, p]));
   const bomsById = new Map((boms || []).map((b) => [b.id, b]));
   const bomsByParentProduct = new Map();
@@ -60,7 +60,9 @@ function buildMaterialIndexes(products, boms, orders) {
     childrenByParentId,
     ordersById,
     ordersByProductId,
-    rootOrdersByProductId
+    rootOrdersByProductId,
+    categoryMap: categoryMap || new Map(),
+    partnerNameById: partnerNameById || new Map()
   };
 }
 
@@ -108,6 +110,10 @@ function buildOrderScopeCard(scopeKey, materials, idx, partnerKey) {
   if (!order) return null;
   const product = idx.productsById.get(order.productId);
   const nameSku = listProductNameSkuFields(product, { name: order.productName, sku: order.sku });
+  const category = product && product.categoryId && idx.categoryMap
+    ? idx.categoryMap.get(product.categoryId)
+    : null;
+  const meta = listProductMetaFields(product, category, idx.partnerNameById, { maxTags: 4 });
   return {
     partnerKey: partnerKey || INTERNAL_PARTNER_KEY,
     scopeKey: order.id,
@@ -118,6 +124,10 @@ function buildOrderScopeCard(scopeKey, materials, idx, partnerKey) {
     productName: nameSku.productName,
     productSku: nameSku.productSku,
     showProductSku: nameSku.showProductSku,
+    partnerName: meta.partnerName,
+    showPartner: meta.showPartner,
+    productCustomTags: meta.productCustomTags,
+    showProductMeta: meta.showProductMeta,
     customerName: order.customerName || '',
     materialRows: materials.map((m) => matRowToUiRow(m, idx.productsById))
   };
@@ -126,6 +136,10 @@ function buildOrderScopeCard(scopeKey, materials, idx, partnerKey) {
 function buildProductScopeCard(scopeKey, materials, idx, partnerKey) {
   const product = idx.productsById.get(scopeKey);
   const nameSku = listProductNameSkuFields(product, { name: scopeKey });
+  const category = product && product.categoryId && idx.categoryMap
+    ? idx.categoryMap.get(product.categoryId)
+    : null;
+  const meta = listProductMetaFields(product, category, idx.partnerNameById, { maxTags: 4 });
   return {
     partnerKey: partnerKey || INTERNAL_PARTNER_KEY,
     scopeKey,
@@ -136,6 +150,10 @@ function buildProductScopeCard(scopeKey, materials, idx, partnerKey) {
     productName: nameSku.productName,
     productSku: nameSku.productSku,
     showProductSku: nameSku.showProductSku,
+    partnerName: meta.partnerName,
+    showPartner: meta.showPartner,
+    productCustomTags: meta.productCustomTags,
+    showProductMeta: meta.showProductMeta,
     customerName: '',
     materialRows: materials.map((m) => matRowToUiRow(m, idx.productsById))
   };
@@ -458,6 +476,11 @@ function buildOrderModeCards(params) {
     if (visible.length === 0) return;
 
     const product = idx.productsById.get(order.productId);
+    const nameSku = listProductNameSkuFields(product, { name: order.productName, sku: order.sku });
+    const category = product && product.categoryId && idx.categoryMap
+      ? idx.categoryMap.get(product.categoryId)
+      : null;
+    const meta = listProductMetaFields(product, category, idx.partnerNameById, { maxTags: 4 });
     cards.push({
       partnerKey: INTERNAL_PARTNER_KEY,
       scopeKey: order.id,
@@ -465,8 +488,13 @@ function buildOrderModeCards(params) {
       orderId: order.id,
       sourceProductId: order.productId || '',
       orderNumber: order.orderNumber || '',
-      productName: product && product.name || order.productName || '—',
-      productSku: product && product.sku || order.sku || '',
+      productName: nameSku.productName,
+      productSku: nameSku.productSku,
+      showProductSku: nameSku.showProductSku,
+      partnerName: meta.partnerName,
+      showPartner: meta.showPartner,
+      productCustomTags: meta.productCustomTags,
+      showProductMeta: meta.showProductMeta,
       customerName: order.customerName || '',
       materialRows: visible.map((m) => matRowToUiRow(m, idx.productsById))
     });
@@ -498,6 +526,11 @@ function buildProductModeCards(params) {
     const visible = visibleMaterialRowsForList(materials, materialKw, idx.productsById);
     if (visible.length === 0) return;
     const product = idx.productsById.get(productId);
+    const nameSku = listProductNameSkuFields(product, { name: productId });
+    const category = product && product.categoryId && idx.categoryMap
+      ? idx.categoryMap.get(product.categoryId)
+      : null;
+    const meta = listProductMetaFields(product, category, idx.partnerNameById, { maxTags: 4 });
     cards.push({
       partnerKey: INTERNAL_PARTNER_KEY,
       scopeKey: productId,
@@ -505,8 +538,13 @@ function buildProductModeCards(params) {
       orderId: '',
       sourceProductId: productId,
       orderNumber: '',
-      productName: product && product.name || productId,
-      productSku: product && product.sku || '',
+      productName: nameSku.productName,
+      productSku: nameSku.productSku,
+      showProductSku: nameSku.showProductSku,
+      partnerName: meta.partnerName,
+      showPartner: meta.showPartner,
+      productCustomTags: meta.productCustomTags,
+      showProductMeta: meta.showProductMeta,
       customerName: '',
       materialRows: visible.map((m) => matRowToUiRow(m, idx.productsById))
     });
@@ -558,9 +596,9 @@ function buildMaterialPanelCards(params) {
 
 
 
-    params.orders,products = params.products,boms = params.boms,stockRecords = params.stockRecords,outsourceRecords = params.outsourceRecords,globalNodes = params.globalNodes,productMilestoneProgresses = params.productMilestoneProgresses,productionLinkMode = params.productionLinkMode,materialPanelSettings = params.materialPanelSettings,searchKeyword = params.searchKeyword,materialKw = params.materialKw;
+    params.orders,products = params.products,boms = params.boms,stockRecords = params.stockRecords,outsourceRecords = params.outsourceRecords,globalNodes = params.globalNodes,productMilestoneProgresses = params.productMilestoneProgresses,productionLinkMode = params.productionLinkMode,materialPanelSettings = params.materialPanelSettings,searchKeyword = params.searchKeyword,materialKw = params.materialKw,categoryMap = params.categoryMap,partnerNameById = params.partnerNameById;
 
-  const idx = buildMaterialIndexes(products, boms, orders);
+  const idx = buildMaterialIndexes(products, boms, orders, categoryMap, partnerNameById);
   const nodeWeightEnabledMap = require('../../utils/materialStatsLite.js').buildNodeWeightEnabledMap(globalNodes);
   const groupByPartner = !!(materialPanelSettings && materialPanelSettings.groupByOutsourcePartner);
 

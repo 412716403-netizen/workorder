@@ -102,23 +102,23 @@
             <text wx:if="{{item.showCreatedAt}}" class="plan-list-row__meta">{{item.createdAtText}}</text>
             <text wx:if="{{item.showQuantity}}" class="plan-list-row__qty">{{item.quantityText}}</text>
           </view>
-          <view class="plan-list-row__product-line">
-            <text class="plan-list-row__product">{{item.productName}}</text>
-            <text wx:if="{{item.showProductSku}}" class="plan-list-row__sku">{{item.productSku}}</text>
+          <view class="plan-list-row__product-line list-product-title">
+            <text class="list-product-title__name">{{item.productName}}</text>
+            <text wx:if="{{item.showProductSku}}" class="list-product-title__code">{{item.productSku}}</text>
           </view>
-          <view wx:if="{{item.showProductCustomTags}}" class="plan-list-row__custom-tags">
-            <text wx:if="{{item.showPartner}}" class="plan-list-row__tag plan-list-row__tag--partner">{{item.partnerName}}</text>
+          <view wx:if="{{item.showProductCustomTags}}" class="list-product-meta">
+            <text wx:if="{{item.showPartner}}" class="list-product-meta__tag list-product-meta__tag--partner">{{item.partnerName}}</text>
             <text
               wx:for="{{item.productCustomTags}}"
               wx:for-item="tag"
               wx:key="id"
-              class="plan-list-row__tag"
+              class="list-product-meta__tag"
             >{{tag.label}}: {{tag.display}}</text>
             <text
               wx:for="{{item.planCustomTags}}"
               wx:for-item="ptag"
               wx:key="id"
-              class="plan-list-row__tag"
+              class="list-product-meta__tag"
             >{{ptag.label}}: {{ptag.display}}</text>
           </view>
           <view wx:if="{{item.showSubRow}}" class="plan-list-row__sub">

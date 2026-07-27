@@ -139,6 +139,7 @@
       "root": "packagePsi",
       "name": "psi",
       "pages": [
+        "psi-doc-finance-entry/psi-doc-finance-entry",
         "psi-purchase-bill-detail/psi-purchase-bill-detail",
         "psi-purchase-bill-edit/psi-purchase-bill-edit",
         "psi-purchase-bill-flow/psi-purchase-bill-flow",

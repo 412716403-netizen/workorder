@@ -126,27 +126,44 @@ RBAC 字段单一事实源：[`shared/workbenchShortcuts.ts`](../shared/workbenc
 5. 登录后进入 Tab 页使用 `wx.switchTab`，勿对 Tab 页使用 `reLaunch`
 6. 验证安全区与 TabBar 遮挡（`st-page--tab` 已预留底部间距）
 7. **表单录入**（合作单位 / 产品 / 色码矩阵 / 数量键盘）遵循下方 §表单录入标准，以 [`production-plan-create`](../miniprogram/packageBusiness/production-plan-create/) 为参考实现
-8. **列表/流水/清单**展示产品编号时遵循下方 §产品编号与名称，以 [`production-order-report-history`](../miniprogram/packageBusiness/production-order-report-history/) 为参考实现
+8. **列表/流水/清单**展示产品时遵循下方 §产品编号与名称，以 [`production-order-report-history`](../miniprogram/packageBusiness/production-order-report-history/) 为参考实现
 
-## 产品编号与名称（列表 / 流水 / 清单 · 默认）
+## 产品编号与名称（列表 / 流水 / 清单 / 选择弹窗 · 默认）
 
-凡展示**成品产品编号**的流水行、清单行、主列表卡片（含详情区产品标题），编号后须显示**产品名称（sku）**，与报工流水一致。
+凡展示成品的流水行、清单行、主列表卡片、产品选择弹窗行，统一为：
+
+1. **首行**：产品编号（`name`）大字粗体 + 产品名称（`sku`）小字灰色（编号缺失时名称作主标题）
+2. **次行（可选）**：合作单位 + 分类自定义字段 pill（`label: value`）；合作单位仅在分类开启 `linkPartner` 且已关联时展示
 
 ### 数据层
 
 | 工具 | 路径 | 用途 |
 |------|------|------|
-| `listProductNameSkuFields` | [`utils/listProductThumb.js`](../miniprogram/utils/listProductThumb.js) | 从 `product` + 回退字段生成三件套 |
-| `listProductDisplayFields` | 同上 | 三件套 + 缩略图 |
+| `listProductNameSkuFields` | [`utils/listProductThumb.js`](../miniprogram/utils/listProductThumb.js) | 列表标题三件套（主标题=编号，副标题=名称） |
+| `listProductMetaFields` | 同上 | 合作单位 + 自定义字段 tags |
+| `listProductDisplayFields` | 同上 | 标题三件套 + 缩略图 |
 | `productMetaFromMap` | [`utils/orderReportHistory.js`](../miniprogram/utils/orderReportHistory.js) | 带 `productMap` 的列表行（含 `imageUrl`） |
+| `loadProductMetaMaps` | [`utils/productMetaMaps.js`](../miniprogram/utils/productMetaMaps.js) | 列表页 bootstrap：并发拉取并装配 `productMap` / `categoryMap` / `partnerNameById` |
 
-行模型字段：`productName`、`productSku`、`showProductSku`。`showProductSku` 仅在「有名称且有编号且二者不同」时为 `true`。
+行模型字段：`productName`（编号）、`productSku`（名称）、`showProductSku`；元信息：`partnerName` / `productCustomTags` / `showProductMeta`。
+
+`loadProductMetaMaps()` 内部的产品 / 分类 / 合作单位三个请求都带 90s 内存缓存
+（[`utils/masterDataCache.js`](../miniprogram/utils/masterDataCache.js)）。
+维护页（产品档案、合作单位档案等）改完要立刻看到新值，应直连各自 `*Api.js` 的未缓存版本；
+合作单位写操作会自动失效 `partners:all` 缓存。
 
 ### 视图层
 
-- **双字段分行**：`product-name` + `sku` 两个 `<text>`（报工流水、工单列表、外协/返工流水行）
-- **单行后缀**：`{{productName}}<text class="list-product-sku"> {{productSku}}</text>`（详情 hero、部分副标题）
-- 样式：列表行用各页 `__sku`；通用后缀用全局 `.list-product-sku`（[`styles/list.wxss`](../miniprogram/styles/list.wxss)）
+- 统一用模板 [`templates/listProductTitle.wxml`](../miniprogram/templates/listProductTitle.wxml)：
+  `<import src="/templates/listProductTitle.wxml" />` 后 `<template is="listProductTitle" data="{{item: line}}" />`
+  与 `<template is="listProductMeta" data="{{item: line}}" />`
+- 标题行内需额外塞徽章 / 数量（工单中心、产品档案、款式列表、计划单）时标题保持页面内联，元信息行仍走 `listProductMeta`
+- **标题**：`.list-product-title` + `__name`（大字编号） / `__code`（小字名称）
+- **元信息行**：`.list-product-meta` + `__tag`（合作单位用 `__tag--partner`）
+- 样式见全局 [`styles/list.wxss`](../miniprogram/styles/list.wxss)
+- 选择弹窗 [`searchable-product-select`](../miniprogram/components/searchable-product-select/) 走同一模板
+  （组件开了 `addGlobalClass`，`list.wxss` 的类可直接命中）。
+  要显示合作单位 pill 须传 `partners="{{partners}}"`，不传则只出自定义字段。
 
 ### Cursor 规则
 
@@ -201,6 +218,37 @@ RBAC 字段单一事实源：[`shared/workbenchShortcuts.ts`](../shared/workbenc
 - 无金额权限时只显示数量列
 
 已对齐：采购订单新建/编辑、采购入库新建/编辑、列表产品行、详情产品行。
+
+### 进销存四单的收付款登记
+
+采购订单 / 采购入库 / 销售订单 / 销售单的**编辑页与详情页**与网页端同口径（业务规则见 [`docs/01-business-rules.md`](./01-business-rules.md) §4.2.3）：采购侧登记付款单，销售侧登记收款单，财务记录以 `sourceDocNo = PSI 单号` 关联。
+
+| 位置 | 表现 |
+|------|------|
+| 编辑页（页脚） | 合计区在「合计数量 / 合计金额」旁展示「已付款 / 已收款」金额（>0 才显示）；合计区右侧图标按钮进入登记页（采购侧钱包图标 / 销售侧收据图标）。无 `finance:<type>:create` 时不渲染图标 |
+| 登记页 | [`packagePsi/psi-doc-finance-entry/`](../miniprogram/packagePsi/psi-doc-finance-entry/)，字段与 [`finance-receipt-edit`](../miniprogram/packageFinance/finance-receipt-edit/) 一致，合作单位由单据带入且**只读** |
+| 详情页 | 「基础信息」里紧随「合计金额」的一行「已付款金额 / 已收款金额」，金额为 0 时不出现 |
+
+**为什么用独立页面而非页内底栏**：登记表单自身还要弹分类 / 账户 / 产品选择器，而底栏容器带 `transform`，会让内层 `position: fixed` 弹层相对底栏而非视口定位。
+
+**接线**（四单一套，勿各页自写）：
+
+```javascript
+// packagePsi 编辑页
+const {
+  emptyPsiDocFinancePanelState,   // 展开进 data
+  initPsiDocFinancePanel,         // onLoad：initPsiDocFinancePanel(this, PSI_TYPE)
+  loadPsiDocFinanceSavedAmount,   // 编辑态 bootstrap 末尾按单号反查已收/付
+  openPsiDocFinanceEntryFromPage, // onFinanceEntryTap
+  flushPsiDocFinanceDrafts,       // 保存成功后、跳列表前 await
+} = require('../utils/psiDocFinancePanel.js');
+```
+
+- **新增态**：单号还没落库，登记页只回传 payload，页面暂存；PSI 保存成功后按真实单号 flush。暂存草稿带的是预览单号，落库时改写单号，备注若仍是默认文案（`关联{单据类型} …`）一并跟上。
+- **编辑态**：单号已存在，登记页直接 `POST /finance/records`，回传后重新反查金额。
+- 无对应 `finance:receipt|payment` 查看权限时**不发起**反查请求（该端点要求 `finance` 下任一权限，否则 403）。
+
+**分包约束**：`packagePsi` 不能 require `packageFinance`，收付款表单逻辑因此放在主包 [`utils/financeRecordForm.js`](../miniprogram/utils/financeRecordForm.js)（`packageFinance/utils/financeRecords.js` 只做展示侧 + re-export），样式在 [`styles/finance-record-form.wxss`](../miniprogram/styles/finance-record-form.wxss)。
 
 ### 组件
 
@@ -496,7 +544,7 @@ npm run miniprogram:icons
 
 | 页面 | 路径 | 职责 |
 |------|------|------|
-| 销售订单 Hub | [`packagePsi/psi-sales-orders/`](../miniprogram/packagePsi/psi-sales-orders/) | 按单号分组卡片列表（头区状态标签右侧为总件数/金额；行内品名标签右侧为发货进度+配货，发齐后配货位显示「已发齐」）、搜索/仅未发齐筛选、行级配货/发货进度预览、新建入口 |
+| 销售订单 Hub | [`packagePsi/psi-sales-orders/`](../miniprogram/packagePsi/psi-sales-orders/) | 按单号分组卡片列表（头区状态标签右侧为总件数/金额；行内品名右侧为配货按钮/已发齐，及「已发/待发」文字，不展示配货进度条）、搜索/仅未发齐筛选、新建入口 |
 | 销售订单详情 | [`packageBusiness/psi-sales-order-detail/`](../miniprogram/packageBusiness/psi-sales-order-detail/) | 客户/单号/明细/行级进度；配货入口；编辑/删除 |
 | 登记/编辑 | [`packageBusiness/psi-sales-order-edit/`](../miniprogram/packageBusiness/psi-sales-order-edit/) | 客户、多行明细、色码矩阵、销售价、保存/删除 |
 | 订单流水 | [`packageBusiness/psi-sales-order-flow/`](../miniprogram/packageBusiness/psi-sales-order-flow/) | 行级发货流水（未发货/发部分/已发齐筛选） |

@@ -12,6 +12,7 @@ const _require7 = require('../../utils/planApi.js'),fetchProductsAll = _require7
 const _require8 = require('../../utils/productionPlans.js'),normalizeAppDictionaries = _require8.normalizeAppDictionaries;
 const _require9 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require9.readNavBarMetrics,readWindowMetrics = _require9.readWindowMetrics;
 const _require0 = require('../../utils/saveNavigation.js'),LIST_ROUTES = _require0.LIST_ROUTES,afterSaveReturnToList = _require0.afterSaveReturnToList;
+const { fetchPsiDocLinkedFinanceAmount } = require('../../utils/psiDocFinance.js');
 const { loadFeaturePlugins, isPluginEnabled } = require('../../utils/featurePlugins.js');
 const { openTodoEdit } = require('../../utils/todosApi.js');
 
@@ -150,6 +151,15 @@ Page({
     this.setData({ sections });
   },
 
+  /** 关联收/付款合计（无财务查看权限或失败时为 0，界面则不展示该行） */
+  loadLinkedFinanceAmount() {
+    const ctx = readTenantCtx();
+    return fetchPsiDocLinkedFinanceAmount(PSI_TYPE, this.data.docNumber, {
+      tenantRole: ctx && ctx.tenantRole,
+      permissions: ctx && ctx.permissions || []
+    });
+  },
+
   async loadDetail() {
     this.setData({ loading: true });
     try {
@@ -158,8 +168,9 @@ Page({
         fetchAllPsiRecords(PSI_BILL_TYPE),
         fetchProductsAll().catch(() => []),
         fetchCategoriesAll().catch(() => []),
-        fetchDictionaries().catch(() => ({}))]
-        ),purchaseOrders = _await$Promise$all[0],purchaseBills = _await$Promise$all[1],products = _await$Promise$all[2],categories = _await$Promise$all[3],dictionaries = _await$Promise$all[4];
+        fetchDictionaries().catch(() => ({})),
+        this.loadLinkedFinanceAmount()]
+        ),purchaseOrders = _await$Promise$all[0],purchaseBills = _await$Promise$all[1],products = _await$Promise$all[2],categories = _await$Promise$all[3],dictionaries = _await$Promise$all[4],linkedFinanceAmount = _await$Promise$all[5];
       const groups = groupRecordsByDocNumber(purchaseOrders || [], PSI_TYPE);
       const items = groups[this.data.docNumber];
       if (!items || !items.length) {
@@ -172,6 +183,7 @@ Page({
       const categoryMap = buildCategoryMap(categories || []);
       const receivedByOrderLine = sumReceivedByOrderLine(purchaseBills || []);
       const view = mapPurchaseOrderDetailView(this.data.docNumber, items, {
+        linkedFinanceAmount,
         productMap,
         categoryMap,
         dictionaries: normalizeAppDictionaries(dictionaries),

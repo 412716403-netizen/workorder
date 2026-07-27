@@ -3,7 +3,7 @@
  */
 
 const _require = require('../config/productionOrders.js'),OrderDispatchStatus = _require.OrderDispatchStatus;
-const _require2 = require('../../utils/listProductThumb.js'),DEFAULT_PRODUCT_PLACEHOLDER_ICON = _require2.DEFAULT_PRODUCT_PLACEHOLDER_ICON,listProductNameSkuFields = _require2.listProductNameSkuFields;
+const _require2 = require('../../utils/listProductThumb.js'),DEFAULT_PRODUCT_PLACEHOLDER_ICON = _require2.DEFAULT_PRODUCT_PLACEHOLDER_ICON,listProductNameSkuFields = _require2.listProductNameSkuFields,listProductMetaFields = _require2.listProductMetaFields;
 
 function buildOutOfSequenceTemplateIds(nodes) {
   const set = new Set();
@@ -391,13 +391,17 @@ function mapReworkCardForUi(block, ctx) {
 
 
 
-    ctx.productionLinkMode,productionLinkMode = _ctx$productionLinkMo === void 0 ? 'order' : _ctx$productionLinkMo,statsByOrderId = ctx.statsByOrderId,statsByProductId = ctx.statsByProductId,idx = ctx.idx,_ctx$expandedParents = ctx.expandedParents,expandedParents = _ctx$expandedParents === void 0 ? {} : _ctx$expandedParents,_ctx$canReport = ctx.canReport,canReport = _ctx$canReport === void 0 ? false : _ctx$canReport,_ctx$canDetail = ctx.canDetail,canDetail = _ctx$canDetail === void 0 ? false : _ctx$canDetail,_ctx$canMaterial = ctx.canMaterial,canMaterial = _ctx$canMaterial === void 0 ? false : _ctx$canMaterial;
+    ctx.productionLinkMode,productionLinkMode = _ctx$productionLinkMo === void 0 ? 'order' : _ctx$productionLinkMo,statsByOrderId = ctx.statsByOrderId,statsByProductId = ctx.statsByProductId,idx = ctx.idx,_ctx$expandedParents = ctx.expandedParents,expandedParents = _ctx$expandedParents === void 0 ? {} : _ctx$expandedParents,_ctx$canReport = ctx.canReport,canReport = _ctx$canReport === void 0 ? false : _ctx$canReport,_ctx$canDetail = ctx.canDetail,canDetail = _ctx$canDetail === void 0 ? false : _ctx$canDetail,_ctx$canMaterial = ctx.canMaterial,canMaterial = _ctx$canMaterial === void 0 ? false : _ctx$canMaterial,categoryMap = ctx.categoryMap,partnerNameById = ctx.partnerNameById;
 
   if (block.type === 'productAggregate') {
     const product = idx.productsById.get(block.productId);
     const stats = statsByProductId.get(block.productId) || [];
     const productImageUrl = String(product && (product.imageThumb || product.imageUrl) || '').trim();
     const nameSku = listProductNameSkuFields(product);
+    const category = product && product.categoryId && categoryMap
+      ? categoryMap.get(product.categoryId)
+      : null;
+    const meta = listProductMetaFields(product, category, partnerNameById, { maxTags: 4 });
     return {
       cardKey: block.productId,
       blockType: 'productAggregate',
@@ -408,6 +412,10 @@ function mapReworkCardForUi(block, ctx) {
       productImageUrl,
       productSku: nameSku.productSku,
       showProductSku: nameSku.showProductSku,
+      partnerName: meta.partnerName,
+      showPartner: meta.showPartner,
+      productCustomTags: meta.productCustomTags,
+      showProductMeta: meta.showProductMeta,
       showProductImage: Boolean(productImageUrl),
       placeholderIconSrc: DEFAULT_PRODUCT_PLACEHOLDER_ICON,
       showOrderNumber: false,
@@ -426,6 +434,10 @@ function mapReworkCardForUi(block, ctx) {
     const stats = statsByOrderId.get(order.id) || [];
     const productImageUrl = String(product && (product.imageThumb || product.imageUrl) || '').trim();
     const nameSku = listProductNameSkuFields(product, { name: order.productName, sku: order.sku });
+    const category = product && product.categoryId && categoryMap
+      ? categoryMap.get(product.categoryId)
+      : null;
+    const meta = listProductMetaFields(product, category, partnerNameById, { maxTags: 4 });
     const dueDate = order.dueDate ? String(order.dueDate).trim().slice(0, 10) : '';
     const orderTotalQty = (order.items || []).reduce((s, i) => s + (Number(i.quantity) || 0), 0);
     return {
@@ -438,6 +450,10 @@ function mapReworkCardForUi(block, ctx) {
       productImageUrl,
       productSku: nameSku.productSku,
       showProductSku: nameSku.showProductSku,
+      partnerName: meta.partnerName,
+      showPartner: meta.showPartner,
+      productCustomTags: meta.productCustomTags,
+      showProductMeta: meta.showProductMeta,
       customer: order.customer || '',
       dueDate,
       dueDateLabel: dueDate ? `交期 ${dueDate}` : '',

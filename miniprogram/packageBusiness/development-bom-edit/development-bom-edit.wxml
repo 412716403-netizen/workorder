@@ -47,6 +47,7 @@
               label="物料"
               products="{{products}}"
               categories="{{categories}}"
+              partners="{{partners}}"
               value-id="{{item.productId}}"
               value-name="{{item.productName}}"
               data-key="{{item.rowKey}}"

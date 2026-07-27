@@ -1,3 +1,4 @@
+<import src="/templates/listProductTitle.wxml" />
 <view class="plan-shell">
   <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
     <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
@@ -237,9 +238,9 @@
           <view class="order-list-row__content">
             <text wx:if="{{item.showProductGroupLabel}}" class="order-list-row__group-label">{{item.productGroupLabel}}</text>
             <!-- 产品组卡：产品名 + 合计件数 -->
-            <view wx:if="{{item.rowType === 'productGroup'}}" class="order-list-row__head">
-              <text class="order-list-row__product order-list-row__product--title">{{item.productName}}</text>
-              <text wx:if="{{item.showProductSku}}" class="order-list-row__sku">{{item.productSku}}</text>
+            <view wx:if="{{item.rowType === 'productGroup'}}" class="order-list-row__head list-product-title">
+              <text class="list-product-title__name">{{item.productName}}</text>
+              <text wx:if="{{item.showProductSku}}" class="list-product-title__code">{{item.productSku}}</text>
               <text wx:if="{{item.showQuantity}}" class="order-list-row__qty">{{item.quantityText}}</text>
             </view>
             <!-- 工单行：工单号 + 派发 -->
@@ -249,24 +250,11 @@
               <text wx:if="{{item.showQuantity}}" class="order-list-row__qty">{{item.quantityText}}</text>
               <text wx:if="{{item.showDueDate}}" class="order-list-row__due">{{item.dueDateLabel}}</text>
             </view>
-            <view wx:if="{{item.rowType !== 'productGroup'}}" class="order-list-row__product-line">
-              <text class="order-list-row__product">{{item.productName}}</text>
-              <text wx:if="{{item.showProductSku}}" class="order-list-row__sku">{{item.productSku}}</text>
-              <text
-                wx:for="{{item.productCustomTags}}"
-                wx:for-item="tag"
-                wx:key="id"
-                class="order-list-row__custom-tag"
-              >{{tag.label}}: {{tag.display}}</text>
+            <view wx:if="{{item.rowType !== 'productGroup'}}" class="order-list-row__product-line list-product-title">
+              <text class="list-product-title__name">{{item.productName}}</text>
+              <text wx:if="{{item.showProductSku}}" class="list-product-title__code">{{item.productSku}}</text>
             </view>
-            <view wx:elif="{{item.showProductCustomTags}}" class="order-list-row__product-line">
-              <text
-                wx:for="{{item.productCustomTags}}"
-                wx:for-item="tag"
-                wx:key="id"
-                class="order-list-row__custom-tag"
-              >{{tag.label}}: {{tag.display}}</text>
-            </view>
+            <template is="listProductMeta" data="{{item: item}}" />
             <view wx:if="{{item.showCustomer}}" class="order-list-row__customer">
               <image
                 class="order-list-row__customer-icon"

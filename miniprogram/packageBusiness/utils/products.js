@@ -2,9 +2,10 @@ const { PRODUCT_ARCHIVE_ALL, DEFAULT_PAGE_SIZE } = require('../config/products.j
 const { isProductEnabled } = require('./productEnabled.js');
 const { productMatchesSearchQuery } = require('../../utils/productSearchMatch.js');
 const { compareProductsArchiveOrder } = require('../../utils/productSort.js');
-const { mapProductCustomTags } = require('../../utils/reportCustomDocField.js');
 const {
   listProductThumbFromProduct,
+  listProductNameSkuFields,
+  listProductMetaFields,
   DEFAULT_PRODUCT_PLACEHOLDER_ICON,
 } = require('../../utils/listProductThumb.js');
 const {
@@ -87,38 +88,27 @@ function buildProductListRow(product, category, partnerNameById) {
   const enabled = isProductEnabled(product);
   const thumb = listProductThumbFromProduct(product);
   const price = formatPriceText(product);
-  const customTags = mapProductCustomTags(product, category, { includeFile: false }).slice(0, 2);
+  const nameSku = listProductNameSkuFields(product);
+  const meta = listProductMetaFields(product, category, partnerNameById, { maxTags: 4 });
   const variantCount = ((product && product.variants) || []).length;
-  const partnerName = resolveProductPartnerName(
-    product,
-    category,
-    partnerNameById || buildPartnerNameById([]),
-  );
 
   return {
     id: product.id,
-    productName: product.name || '',
-    productSku: product.sku || '',
-    showProductSku: Boolean(
-      product.name && product.sku && String(product.name).trim() !== String(product.sku).trim(),
-    ),
+    ...nameSku,
     productImageUrl: thumb.productImageUrl,
     showProductImage: thumb.showProductImage,
     placeholderIconSrc: thumb.placeholderIconSrc || DEFAULT_PRODUCT_PLACEHOLDER_ICON,
     categoryName: category ? category.name : '',
     showCategory: Boolean(category),
-    partnerName: partnerName || '',
-    showPartner: Boolean(partnerName),
+    partnerName: meta.partnerName,
+    showPartner: meta.showPartner,
     variantCountText: String(variantCount),
     ...price,
     enabled,
     showDisabledBadge: !enabled,
-    customTags: customTags.map((t) => ({
-      id: t.id,
-      label: t.label,
-      display: String(t.display || '').slice(0, 48),
-    })),
-    showCustomTags: customTags.length > 0,
+    productCustomTags: meta.productCustomTags,
+    showProductCustomTags: meta.showProductCustomTags,
+    showProductMeta: meta.showProductMeta,
   };
 }
 

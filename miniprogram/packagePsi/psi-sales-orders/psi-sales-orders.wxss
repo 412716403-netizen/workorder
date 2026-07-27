@@ -157,49 +157,12 @@
   gap: 10rpx;
 }
 
-.so-line-progress-inline {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-}
-
 .so-line-allocate-col {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 4rpx;
-}
-
-.so-progress-bar {
-  display: flex;
-  flex: 0 0 100rpx;
-  width: 100rpx;
-  height: 8rpx;
-  border-radius: 4rpx;
-  overflow: hidden;
-  background: #e5e7eb;
-}
-
-.so-progress-bar__shipped {
-  background: #0ea5e9;
-  height: 100%;
-}
-
-.so-progress-bar__alloc {
-  background: #2f6bff;
-  height: 100%;
-}
-
-.so-progress-bar__over {
-  background: #ef4444;
-  height: 100%;
-}
-
-.po-line-progress__nums {
-  font-size: 22rpx;
-  color: var(--color-text-primary, #1f2329);
-  font-variant-numeric: tabular-nums;
 }
 
 .po-line-progress__tag {

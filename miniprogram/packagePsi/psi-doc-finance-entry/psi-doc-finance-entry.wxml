@@ -1,0 +1,138 @@
+<view class="plan-create-shell">
+  <view class="plan-create-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-create-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-create-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-create-header__title">{{title}}</text>
+      <view class="plan-create-header__back plan-create-header__back--placeholder"></view>
+    </view>
+  </view>
+
+  <view class="plan-create-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view
+    class="plan-create-scroll"
+    scroll-y
+    show-scrollbar="{{false}}"
+    style="height: {{scrollHeight}}px;"
+  >
+    <view wx:if="{{loading}}" class="plan-create-muted">加载中…</view>
+
+    <view wx:else class="plan-create-page">
+      <view class="plan-form-card">
+        <datetime-calendar-select
+          last="{{true}}"
+          label="创建时间"
+          date="{{entryDate}}"
+          time="{{entryTime}}"
+          bind:change="onEntryDateTimeChange"
+          bind:sheetopen="onPickerSheetOpen"
+          bind:sheetclose="onPickerSheetClose"
+        />
+      </view>
+
+      <view class="plan-form-card">
+        <finance-category-tag-select
+          wx:if="{{hasCategories}}"
+          required="{{true}}"
+          label="单据分类"
+          categories="{{categories}}"
+          value="{{form.categoryId}}"
+          placeholder="请选择"
+          bind:change="onCategoryChange"
+          bind:sheetopen="onPickerSheetOpen"
+          bind:sheetclose="onPickerSheetClose"
+        />
+
+        <view wx:if="{{showPartner}}" class="plan-form-cell">
+          <text class="plan-form-cell__label">{{partnerLabel}}</text>
+          <text class="plan-form-cell__value">{{form.partner || '—'}}</text>
+        </view>
+
+        <picker
+          wx:if="{{showWorker}}"
+          mode="selector"
+          range="{{workerNames}}"
+          value="{{workerIndex}}"
+          bindchange="onWorkerChange"
+        >
+          <view class="plan-form-cell plan-form-cell--input">
+            <text class="plan-form-cell__label">关联工人</text>
+            <text class="plan-form-cell__value {{workerIndex > 0 ? '' : 'plan-form-cell__value--ph'}}">{{workerIndex > 0 ? workerNames[workerIndex] : '请选择'}}</text>
+            <text class="plan-form-cell__chevron">›</text>
+          </view>
+        </picker>
+
+        <searchable-product-select
+          wx:if="{{showProduct}}"
+          cell="{{true}}"
+          label="关联产品"
+          products="{{products}}"
+          categories="{{productCategories}}"
+          partners="{{partners}}"
+          value-id="{{form.productId}}"
+          placeholder="请选择"
+          bind:change="onProductChange"
+          bind:sheetopen="onPickerSheetOpen"
+          bind:sheetclose="onPickerSheetClose"
+        />
+
+        <plan-form-custom-field
+          wx:if="{{customFields.length}}"
+          fields="{{customFields}}"
+          values="{{form.customData}}"
+          bind:change="onCustomDataChange"
+        />
+
+        <finance-account-select
+          wx:if="{{showPaymentAccount}}"
+          required="{{true}}"
+          label="收支账户"
+          accounts="{{accounts}}"
+          value="{{form.paymentAccount}}"
+          placeholder="请选择"
+          bind:change="onAccountChange"
+          bind:sheetopen="onPickerSheetOpen"
+          bind:sheetclose="onPickerSheetClose"
+        />
+      </view>
+
+      <view class="plan-form-card">
+        <view class="plan-form-cell plan-form-cell--column">
+          <text class="plan-form-cell__label"><text class="plan-form-cell__req">*</text>结算金额 (CNY)</text>
+          <view class="fin-edit-amount">
+            <text class="fin-edit-amount__symbol">¥</text>
+            <input
+              class="fin-edit-amount__input"
+              type="digit"
+              value="{{form.amount}}"
+              placeholder="0.00"
+              placeholder-class="plan-form-cell__ph"
+              bindinput="onAmountInput"
+            />
+          </view>
+        </view>
+        <view class="plan-form-cell plan-form-cell--column plan-form-cell--last">
+          <text class="plan-form-cell__label">备注说明</text>
+          <textarea
+            class="fin-edit-note"
+            value="{{form.note}}"
+            placeholder="输入备注…"
+            placeholder-class="plan-form-cell__ph"
+            maxlength="500"
+            auto-height
+            bindinput="onNoteInput"
+          />
+        </view>
+      </view>
+    </view>
+  </scroll-view>
+
+  <view wx:if="{{!pickerSheetOpen}}" class="plan-create-footer">
+    <button
+      class="plan-create-submit"
+      loading="{{submitting}}"
+      disabled="{{submitting || !canSubmit}}"
+      bindtap="onSubmit"
+    >{{submitText}}</button>
+  </view>
+</view>

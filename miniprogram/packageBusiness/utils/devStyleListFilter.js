@@ -1,5 +1,6 @@
 const { DevStyleStatus } = require('./devStyleConstants.js');
 const { resolveDevStyleCustomerName, getDevSampleSidebarProgress, resolveDevStyleThumb } = require('./devStyleDisplay.js');
+const { listProductMetaFields, buildPartnerNameById } = require('../../utils/listProductThumb.js');
 
 const DEV_STYLE_LIST_FILTERS_DEFAULT = {
   stageName: 'all',
@@ -106,7 +107,12 @@ function sortDevStyles(styles, sortMode, partners) {
   return list;
 }
 
-function buildDevStyleListRows(styles, partners) {
+function buildDevStyleListRows(styles, opts) {
+  const partners = Array.isArray(opts) ? opts : (opts && opts.partners) || [];
+  const categoryMap = (!Array.isArray(opts) && opts && opts.categoryMap) || new Map();
+  const partnerNameById =
+    (!Array.isArray(opts) && opts && opts.partnerNameById) || buildPartnerNameById(partners);
+
   return (styles || []).map((style) => {
     const customerName = resolveDevStyleCustomerName(style, partners) || '';
     const samples = style.samples || [];
@@ -120,19 +126,27 @@ function buildDevStyleListRows(styles, partners) {
       };
     });
     const thumb = resolveDevStyleThumb(style);
-    const code = String(style.code || '').trim();
-    const name = String(style.name || '').trim();
-    const showProductSku = !!(name && code && name !== code);
+    // DevStyle：name=产品编号，code=产品名称（款号）
+    const code = String(style.name || '').trim();
+    const title = String(style.code || '').trim();
+    const productName = code || title || '未命名款式';
+    const showProductSku = !!(title && code && title !== code);
+    const category = style.categoryId ? categoryMap.get(style.categoryId) || null : null;
+    const meta = listProductMetaFields(style, category, partnerNameById, { maxTags: 4 });
     return {
       id: style.id,
-      productName: name || code || '未命名款式',
-      productSku: code,
+      productName,
+      productSku: showProductSku ? title : '',
       showProductSku,
       productImageUrl: thumb,
       showProductImage: !!thumb,
       placeholderIconSrc: '/assets/icons/boxes.png',
       customerName,
       showCustomer: !!customerName,
+      partnerName: meta.partnerName,
+      showPartner: meta.showPartner,
+      productCustomTags: meta.productCustomTags,
+      showProductMeta: meta.showProductMeta,
       status: style.status,
       statusLabel:
         style.status === 'published'

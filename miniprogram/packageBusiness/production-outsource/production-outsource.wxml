@@ -1,3 +1,4 @@
+<import src="/templates/listProductTitle.wxml" />
 <view class="plan-shell">
   <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
     <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
@@ -94,10 +95,8 @@
               <text wx:if="{{item.showDueDate}}" class="order-list-row__due">{{item.dueDateLabel}}</text>
               <text wx:if="{{item.showOrderTotal}}" class="order-list-row__qty">{{item.orderTotalQtyText}}</text>
             </view>
-            <view class="order-list-row__product-line">
-              <text class="order-list-row__product">{{item.productName}}</text>
-              <text wx:if="{{item.showProductSku}}" class="order-list-row__sku">{{item.productSku}}</text>
-            </view>
+            <template is="listProductTitle" data="{{item: item}}" />
+            <template is="listProductMeta" data="{{item: item}}" />
             <view wx:if="{{item.showCustomer}}" class="order-list-row__customer">
               <image class="order-list-row__customer-icon" src="/assets/icons/user.png" mode="aspectFit" />
               <text class="order-list-row__customer-text">{{item.customer}}</text>

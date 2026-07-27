@@ -11,8 +11,12 @@ const {
   formatPsiQtyDisplay,
 } = require('../../utils/psiOpsAggregators.js');
 const { flowRecordsEarliestMs } = require('../../utils/flowDocSortLite.js');
+const { psiDocLinkedFinanceRows } = require('../../utils/psiDocFinance.js');
 const { formatReportTime } = require('../../utils/orderReportHistory.js');
-const { listProductDisplayFieldsFromMap } = require('../../utils/listProductThumb.js');
+const {
+  listProductDisplayFieldsFromMap,
+  listProductMetaFieldsFromMaps,
+} = require('../../utils/listProductThumb.js');
 const { buildVariantMatrixUiModel } = require('../../utils/variantQtyMatrix.js');
 const { productHasColorSizeMatrix } = require('../../utils/productionPlans.js');
 const { categoryUsesBatchManagement } = require('../../utils/materialIssueBatch.js');
@@ -103,13 +107,14 @@ function resolveBatchDisplay(first, ctx) {
 }
 
 function mapLineGroupPreview(lineGroupId, items, ctx) {
-  const { productMap, showAmount, dictionaries } = ctx;
+  const { productMap, categoryMap, partnerNameById, showAmount, dictionaries } = ctx;
   const first = items[0] || {};
   const product = productMap && first.productId ? productMap.get(first.productId) : null;
   const display = listProductDisplayFieldsFromMap(productMap, first.productId, {
     productName: first.productName,
     productSku: first.productSku,
   });
+  const meta = listProductMetaFieldsFromMaps(product, categoryMap, partnerNameById, { maxTags: 4 });
   const qty = lineGroupTotalQty(items);
   const price = Number(first.purchasePrice) || 0;
   const amount = qty * price;
@@ -119,6 +124,10 @@ function mapLineGroupPreview(lineGroupId, items, ctx) {
   return {
     lineGroupId,
     ...display,
+    partnerName: meta.partnerName,
+    showPartner: meta.showPartner,
+    productCustomTags: meta.productCustomTags,
+    showProductMeta: meta.showProductMeta,
     quantityText: `${qty} ${unitName}`,
     qtyText: `${qty}`,
     unitName,
@@ -191,6 +200,10 @@ function slimPurchaseBillLinePreview(line) {
     productImageUrl: line.productImageUrl,
     showProductImage: line.showProductImage,
     placeholderIconSrc: line.placeholderIconSrc,
+    partnerName: line.partnerName || '',
+    showPartner: !!line.showPartner,
+    productCustomTags: line.productCustomTags || [],
+    showProductMeta: !!line.showProductMeta,
     quantityText: line.quantityText,
     priceText: line.priceText,
     amountText: line.amountText,
@@ -318,6 +331,7 @@ function mapPurchaseBillDetailView(docNumber, items, ctx) {
         ...(sourceOrder ? [{ label: '来源订单', value: sourceOrder }] : []),
         ...(first.note ? [{ label: '备注', value: String(first.note) }] : []),
         ...(showAmount ? [{ label: '合计金额', value: `¥${totalAmount.toFixed(2)}` }] : []),
+        ...psiDocLinkedFinanceRows(PSI_TYPE, ctx.linkedFinanceAmount),
       ],
     },
     {

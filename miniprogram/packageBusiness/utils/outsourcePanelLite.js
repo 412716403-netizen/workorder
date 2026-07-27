@@ -3,7 +3,7 @@
  */
 
 const _require = require('../config/productionOrders.js'),OrderDispatchStatus = _require.OrderDispatchStatus;
-const _require2 = require('../../utils/listProductThumb.js'),DEFAULT_PRODUCT_PLACEHOLDER_ICON = _require2.DEFAULT_PRODUCT_PLACEHOLDER_ICON,listProductNameSkuFields = _require2.listProductNameSkuFields;
+const _require2 = require('../../utils/listProductThumb.js'),DEFAULT_PRODUCT_PLACEHOLDER_ICON = _require2.DEFAULT_PRODUCT_PLACEHOLDER_ICON,listProductNameSkuFields = _require2.listProductNameSkuFields,listProductMetaFields = _require2.listProductMetaFields;
 
 function orderCreatedMs(order) {
   if (!order) return 0;
@@ -34,7 +34,7 @@ function buildOutsourceStatsByOrder(params) {
 
 
 
-    params.productionLinkMode,productionLinkMode = _params$productionLin === void 0 ? 'order' : _params$productionLin,_params$records = params.records,records = _params$records === void 0 ? [] : _params$records,_params$orders = params.orders,orders = _params$orders === void 0 ? [] : _params$orders,_params$products = params.products,products = _params$products === void 0 ? [] : _params$products,_params$nodes = params.nodes,nodes = _params$nodes === void 0 ? [] : _params$nodes;
+    params.productionLinkMode,productionLinkMode = _params$productionLin === void 0 ? 'order' : _params$productionLin,_params$records = params.records,records = _params$records === void 0 ? [] : _params$records,_params$orders = params.orders,orders = _params$orders === void 0 ? [] : _params$orders,_params$products = params.products,products = _params$products === void 0 ? [] : _params$products,_params$nodes = params.nodes,nodes = _params$nodes === void 0 ? [] : _params$nodes,categoryMap = params.categoryMap,partnerNameById = params.partnerNameById;
 
   const ordersById = new Map((orders || []).map((o) => [o.id, o]));
   const productsById = new Map((products || []).map((p) => [p.id, p]));
@@ -91,12 +91,20 @@ function buildOutsourceStatsByOrder(params) {
         return String(a.partner || '').localeCompare(String(b.partner || ''));
       });
       const nameSku = listProductNameSkuFields(product);
+      const category = product && product.categoryId && categoryMap
+        ? categoryMap.get(product.categoryId)
+        : null;
+      const meta = listProductMetaFields(product, category, partnerNameById, { maxTags: 4 });
       return {
         productId,
         productName: nameSku.productName,
         productImageUrl: product && (product.imageThumb || product.imageUrl) || '',
         productSku: nameSku.productSku,
         showProductSku: nameSku.showProductSku,
+        partnerName: meta.partnerName,
+        showPartner: meta.showPartner,
+        productCustomTags: meta.productCustomTags,
+        showProductMeta: meta.showProductMeta,
         partners: sortedPartners
       };
     }).
@@ -160,6 +168,10 @@ function buildOutsourceStatsByOrder(params) {
       name: order && order.productName,
       sku: order && order.sku
     });
+    const category = product && product.categoryId && categoryMap
+      ? categoryMap.get(product.categoryId)
+      : null;
+    const meta = listProductMetaFields(product, category, partnerNameById, { maxTags: 4 });
     return {
       orderId,
       orderNumber: order && order.orderNumber || orderId,
@@ -168,6 +180,10 @@ function buildOutsourceStatsByOrder(params) {
       productImageUrl: product && (product.imageThumb || product.imageUrl) || '',
       productSku: nameSku.productSku,
       showProductSku: nameSku.showProductSku,
+      partnerName: meta.partnerName,
+      showPartner: meta.showPartner,
+      productCustomTags: meta.productCustomTags,
+      showProductMeta: meta.showProductMeta,
       customer: order && order.customer || '',
       dueDate: order && order.dueDate ? String(order.dueDate).trim().slice(0, 10) : '',
       orderTotalQty: (order && order.items || []).reduce(
@@ -258,6 +274,10 @@ function mapOutsourceCardForUi(item, productionLinkMode) {
     showProductSku: item.showProductSku != null ?
     !!item.showProductSku :
     Boolean(item.productSku && item.productName && item.productSku !== item.productName),
+    partnerName: item.partnerName || '',
+    showPartner: !!item.showPartner,
+    productCustomTags: item.productCustomTags || [],
+    showProductMeta: !!item.showProductMeta,
     customer: item.customer || '',
     dueDate,
     dueDateLabel: dueDate ? `交期 ${dueDate}` : '',

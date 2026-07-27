@@ -1,3 +1,4 @@
+<import src="/templates/listProductTitle.wxml" />
 <view class="plan-shell">
   <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
     <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
@@ -122,20 +123,11 @@
               <view class="report-history-row__content">
                 <view class="so-line-main">
                   <view class="so-line-main__left">
-                    <text class="report-history-row__product-name">{{line.productName}}</text>
-                    <text wx:if="{{line.showProductSku}}" class="report-history-row__sku">{{line.productSku}}</text>
+                    <template is="listProductTitle" data="{{item: line}}" />
+                    <template is="listProductMeta" data="{{item: line}}" />
                   </view>
-                  <view wx:if="{{line.showProgress || line.showAllocateBtn || line.showFullyShippedLabel || line.showAllocProgress}}" class="so-line-main__right">
-                    <view wx:if="{{line.showProgress}}" class="so-line-progress-inline">
-                      <view class="po-line-progress__bar so-progress-bar">
-                        <view class="so-progress-bar__shipped" style="width: {{line.progressShippedBarPct}}%;"></view>
-                        <view class="so-progress-bar__alloc" style="width: {{line.progressAllocBarPct}}%;"></view>
-                        <view wx:if="{{line.progressOverBarPct > 0}}" class="so-progress-bar__over" style="width: {{line.progressOverBarPct}}%;"></view>
-                      </view>
-                      <text class="po-line-progress__nums">{{line.progressShortText}}</text>
-                      <text wx:if="{{line.progressOverAllocated}}" class="po-line-progress__tag">超配</text>
-                    </view>
-                    <view wx:if="{{line.showAllocateBtn || line.showFullyShippedLabel || line.showAllocProgress}}" class="so-line-allocate-col">
+                  <view wx:if="{{line.showAllocateBtn || line.showFullyShippedLabel || line.showAllocProgress}}" class="so-line-main__right">
+                    <view class="so-line-allocate-col">
                       <view
                         wx:if="{{line.showAllocateBtn}}"
                         class="so-list-allocate__btn"

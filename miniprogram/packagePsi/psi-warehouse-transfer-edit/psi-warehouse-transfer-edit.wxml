@@ -86,6 +86,7 @@
                 label=""
                 products="{{products}}"
                 categories="{{categories}}"
+                partners="{{partners}}"
                 value-id="{{item.productId}}"
                 value-name="{{item.productName}}"
                 placeholder="请选择产品"

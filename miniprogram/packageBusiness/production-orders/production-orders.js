@@ -8,8 +8,12 @@ const {
   mapOrderListRow,
   mapProductGroupRow,
   normalizeMasterList,
-  productNameSkuParts,
 } = require('../utils/productionOrders.js');
+const {
+  listProductNameSkuFields,
+  listProductMetaFields,
+  buildPartnerNameById,
+} = require('../../utils/listProductThumb.js');
 const {
   buildOrderProcessChips,
   buildOutOfSequenceTemplateIds,
@@ -22,16 +26,14 @@ const { buildDefectiveReworkByOrderMilestone } = require('../utils/outsourceDisp
 const {
   listOrdersPaginated,
   fetchTenantConfig,
-  fetchProductsAll,
-  fetchCategoriesAll,
   fetchNodesAll,
   listReportHistory,
   fetchProductionRecords,
   listProductProgressAll,
 } = require('../../utils/orderApi.js');
+const { loadProductMetaMaps } = require('../../utils/productMetaMaps.js');
 
 const PRODUCT_CARD_BATCH_SIZE = 15;
-const _require7 = require('../../utils/reportCustomDocField.js'),mapProductCustomTags = _require7.mapProductCustomTags;
 const _require8 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require8.readNavBarMetrics,readWindowMetrics = _require8.readWindowMetrics;
 const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../../utils/planFilterPanel.js');
 const _require9 = require('../utils/pendingStockBadge.js'),computePendingStockCount = _require9.computePendingStockCount,loadPendingStockRows = _require9.loadPendingStockRows,fetchAllOrdersPaginated = _require9.fetchAllOrdersPaginated;
@@ -146,6 +148,8 @@ function slimOrderListRow(row) {
     label: t.label,
     display: String(t.display || '').slice(0, 48)
   }));
+  const partnerName = row.partnerName ? String(row.partnerName).slice(0, 48) : '';
+  const showProductMeta = Boolean(partnerName) || productCustomTags.length > 0;
   const isProductGroup = row.blockType === 'productGroup' && row.rowType === 'productGroup';
   return {
     rowKey: row.rowKey,
@@ -156,8 +160,11 @@ function slimOrderListRow(row) {
     productName: row.productName,
     productSku: row.productSku,
     showProductSku: row.showProductSku,
+    partnerName,
+    showPartner: Boolean(partnerName),
     productCustomTags,
-    showProductCustomTags: productCustomTags.length > 0,
+    showProductCustomTags: showProductMeta,
+    showProductMeta,
     productImageUrl: row.productImageUrl,
     showProductImage: row.showProductImage,
     placeholderIconSrc: row.placeholderIconSrc,
@@ -710,23 +717,41 @@ Page({
   productMetaForOrder(order) {
     const product = this._productMap.get(order.productId);
     if (!product) {
-      return {
+      const fallback = listProductNameSkuFields(null, {
         name: order.productName || '',
         sku: order.sku || '',
-        showSku: Boolean(order.sku),
+      });
+      return {
+        name: fallback.productName,
+        sku: fallback.productSku,
+        showSku: fallback.showProductSku,
         imageUrl: '',
-        customTags: []
+        customTags: [],
+        partnerName: '',
+        showPartner: false,
+        showProductMeta: false,
       };
     }
     const category = product.categoryId ? this._categoryMap.get(product.categoryId) : null;
-    const customTags = mapProductCustomTags(product, category, { includeFile: false });
-    const display = productNameSkuParts(product);
+    const display = listProductNameSkuFields(product, {
+      name: order.productName || '',
+      sku: order.sku || '',
+    });
+    const meta = listProductMetaFields(
+      product,
+      category,
+      this._partnerNameById,
+      { maxTags: 4 },
+    );
     return {
-      name: display.name,
-      sku: display.sku,
-      showSku: display.showSku,
+      name: display.productName,
+      sku: display.productSku,
+      showSku: display.showProductSku,
       imageUrl: (product.imageThumb || product.imageUrl) || '',
-      customTags
+      customTags: meta.productCustomTags,
+      partnerName: meta.partnerName,
+      showPartner: meta.showPartner,
+      showProductMeta: meta.showProductMeta,
     };
   },
 
@@ -755,7 +780,6 @@ Page({
       if (block.type !== 'productGroup') return;
       const product = this._productMap.get(block.productId) || null;
       const category = product && product.categoryId ? this._categoryMap.get(product.categoryId) : null;
-      const customTags = mapProductCustomTags(product, category, { includeFile: false });
       const chips = buildProductGroupProcessChips({
         block,
         product,
@@ -771,8 +795,9 @@ Page({
       const showConfigureProcessHint = productGroupNeedsConfigureProcess(product, block.orders);
       const row = mapProductGroupRow(block, {
         product,
+        category,
+        partnerNameById: this._partnerNameById,
         processChips: chips,
-        productCustomTags: customTags,
         showConfigureProcessHint,
         canReport,
         canViewDetail: this.data.canViewDetail,
@@ -831,6 +856,7 @@ Page({
           showProductSku: meta.showSku,
           productImageUrl: meta.imageUrl,
           productCustomTags: meta.customTags,
+          partnerName: meta.partnerName,
           showDeliveryDate: this._showDeliveryDate !== false,
           processChips: chips,
           depth: item.depth,
@@ -843,6 +869,9 @@ Page({
         });
         out.push(slimOrderListRow({
           ...row,
+          partnerName: meta.partnerName,
+          showPartner: meta.showPartner,
+          showProductMeta: meta.showProductMeta,
           rowKey: `${item.order.id}-${idx}`,
           blockKey
         }));
@@ -889,6 +918,7 @@ Page({
     this._initialized = true;
     this._productMap = new Map();
     this._categoryMap = new Map();
+    this._partnerNameById = buildPartnerNameById([]);
     this._expandedBlocks = new Set();
     this._nodesList = [];
     this._pmpList = [];
@@ -910,25 +940,24 @@ Page({
         isProductMode,
         excludeCompleted: isProductMode ? false : !!listDisplay.onlyShowNotCompleted,
         filterActive: isProductMode ? false : !!listDisplay.onlyShowNotCompleted,
-        searchPlaceholder: isProductMode ? '产品编号 / SKU' : '工单号 / 产品 / 客户',
+        searchPlaceholder: isProductMode ? '产品名称 / 编号' : '工单号 / 产品 / 客户',
         emptyText: isProductMode ? '暂无产品' : '暂无工单',
       });
 
-      const results = await Promise.all([
-        fetchProductsAll(),
-        fetchCategoriesAll(),
+      const [productMeta, nodesRaw] = await Promise.all([
+        loadProductMetaMaps(),
         fetchNodesAll(),
       ]);
-      const products = normalizeMasterList(results[0]);
-      const categories = normalizeMasterList(results[1]);
-      const nodes = normalizeMasterList(results[2]);
-      this._productMap = new Map(products.map((p) => [p.id, p]));
-      this._categoryMap = new Map(categories.map((c) => [c.id, c]));
+      const nodes = normalizeMasterList(nodesRaw);
+      this._productMap = productMeta.productMap;
+      this._categoryMap = productMeta.categoryMap;
+      this._partnerNameById = productMeta.partnerNameById;
       this._nodesList = nodes;
       this._outOfSequenceIds = buildOutOfSequenceTemplateIds(nodes);
     } catch {
       this._productionLinkMode = 'order';
       this._processSequenceMode = 'sequential';
+      this._partnerNameById = buildPartnerNameById([]);
       this._outOfSequenceIds = new Set();
       this._nodesList = [];
       this.setData({ isProductMode: false, searchPlaceholder: '工单号 / 产品 / 客户' });

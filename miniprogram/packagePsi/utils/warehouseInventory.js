@@ -3,7 +3,10 @@
  */
 
 const { categoryUsesBatchManagement } = require('../../utils/materialIssueBatch.js');
-const { listProductDisplayFieldsFromMap } = require('../../utils/listProductThumb.js');
+const {
+  listProductDisplayFieldsFromMap,
+  listProductMetaFieldsFromMaps,
+} = require('../../utils/listProductThumb.js');
 const { formatStockQty } = require('./warehouseStock.js');
 const { productHasColorSizeMatrix } = require('../../utils/productionPlans.js');
 
@@ -137,7 +140,7 @@ function buildColorGroups(variantBreakdown, qtyKey) {
   return Array.from(map.values());
 }
 
-function buildWarehouseCards(warehouses, productStocks, productMap) {
+function buildWarehouseCards(warehouses, productStocks, productMap, categoryMap, partnerNameById) {
   return (warehouses || []).map((wh) => {
     const lines = productStocks
       .filter((ps) => {
@@ -146,7 +149,9 @@ function buildWarehouseCards(warehouses, productStocks, productMap) {
       })
       .map((ps) => {
         const d = ps.distribution.find((x) => x.warehouseId === wh.id);
+        const product = productMap && ps.productId ? productMap.get(ps.productId) : null;
         const display = listProductDisplayFieldsFromMap(productMap, ps.productId);
+        const meta = listProductMetaFieldsFromMaps(product, categoryMap, partnerNameById, { maxTags: 4 });
         let variantBreakdown;
         if (ps.variantBreakdown) {
           variantBreakdown = ps.variantBreakdown.map((vb) => ({
@@ -160,6 +165,10 @@ function buildWarehouseCards(warehouses, productStocks, productMap) {
         const usesBatch = Boolean(ps.usesBatch);
         return {
           ...display,
+          partnerName: meta.partnerName,
+          showPartner: meta.showPartner,
+          productCustomTags: meta.productCustomTags,
+          showProductMeta: meta.showProductMeta,
           productId: ps.productId,
           categoryName: ps.categoryName,
           qty: d ? d.qty : 0,
@@ -191,9 +200,11 @@ function buildWarehouseCards(warehouses, productStocks, productMap) {
   });
 }
 
-function buildProductCards(productStocks, productMap) {
+function buildProductCards(productStocks, productMap, categoryMap, partnerNameById) {
   return productStocks.map((ps) => {
+    const product = productMap && ps.productId ? productMap.get(ps.productId) : null;
     const display = listProductDisplayFieldsFromMap(productMap, ps.productId);
+    const meta = listProductMetaFieldsFromMaps(product, categoryMap, partnerNameById, { maxTags: 4 });
     const whLines = ps.distribution
       .filter((d) => d.qty !== 0)
       .map((d) => ({
@@ -207,6 +218,10 @@ function buildProductCards(productStocks, productMap) {
     const usesBatch = Boolean(ps.usesBatch);
     return {
       ...display,
+      partnerName: meta.partnerName,
+      showPartner: meta.showPartner,
+      productCustomTags: meta.productCustomTags,
+      showProductMeta: meta.showProductMeta,
       productId: ps.productId,
       categoryName: ps.categoryName,
       total: ps.total,

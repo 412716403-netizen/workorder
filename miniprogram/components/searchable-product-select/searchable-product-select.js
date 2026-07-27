@@ -1,12 +1,16 @@
 const { filterProducts } = require('../../utils/filterProducts.js');
-const { mapProductCustomTags } = require('../../utils/reportCustomDocField.js');
 const {
   openBottomSheet,
   closeBottomSheet,
   clearBottomSheetTimers,
   SHEET_ANIM_MS,
 } = require('../../utils/bottomSheetAnim.js');
-const { DEFAULT_PRODUCT_PLACEHOLDER_ICON } = require('../../utils/listProductThumb.js');
+const {
+  DEFAULT_PRODUCT_PLACEHOLDER_ICON,
+  listProductNameSkuFields,
+  listProductMetaFields,
+  buildPartnerNameById,
+} = require('../../utils/listProductThumb.js');
 
 Component({
   options: {
@@ -16,6 +20,8 @@ Component({
     label: { type: String, value: '产品' },
     products: { type: Array, value: [] },
     categories: { type: Array, value: [] },
+    /** 用于行内展示合作单位（分类开启 linkPartner 时）；不传则不展示该 pill */
+    partners: { type: Array, value: [] },
     valueId: { type: String, value: '' },
     valueName: { type: String, value: '' },
     placeholder: { type: String, value: '搜索产品编号或 SKU' },
@@ -47,7 +53,7 @@ Component({
       const title = String(label || '').trim() || '产品';
       this.setData({ sheetTitle: title });
     },
-    'products, categories, search, activeTab, blockedProductIds, unavailableProductIds, valueId': function () {
+    'products, categories, partners, search, activeTab, blockedProductIds, unavailableProductIds, valueId': function () {
       this.refreshFiltered();
     },
     'valueId, products, valueName': function () {
@@ -75,8 +81,9 @@ Component({
         ? (products || []).find((p) => p.id === valueId)
         : null;
       if (product) {
-        const name = product.name || product.sku || valueName || '';
-        const displaySku = product.name && product.sku ? product.sku : '';
+        const display = listProductNameSkuFields(product, { name: valueName });
+        const name = display.productName === '—' ? '' : display.productName;
+        const displaySku = display.showProductSku ? display.productSku : '';
         const displayText = displaySku ? `${name} ${displaySku}` : name;
         this.setData({
           displayName: name,
@@ -97,6 +104,7 @@ Component({
     refreshFiltered() {
       const categories = this.properties.categories || [];
       const catMap = new Map(categories.map((c) => [c.id, c]));
+      const partnerNameById = buildPartnerNameById(this.properties.partners || []);
       const categoryId = this.data.activeTab === 'all' ? undefined : this.data.activeTab;
       const valueId = this.properties.valueId || '';
       const blockedSet = new Set((this.properties.blockedProductIds || []).filter(Boolean));
@@ -109,20 +117,22 @@ Component({
         const imageUrl = (p.imageThumb || p.imageUrl) || '';
         const category = p.categoryId ? catMap.get(p.categoryId) : null;
         const categoryLabel = category && category.name ? category.name : '';
-        const customTags = mapProductCustomTags(p, category, { includeFile: false });
+        const display = listProductNameSkuFields(p);
+        const meta = listProductMetaFields(p, category, partnerNameById, { maxTags: 4 });
         const blocked = blockedSet.has(p.id);
         const used = !blocked && unavailableSet.has(p.id);
         const unavailable = (blocked || used) && p.id !== valueId;
         return {
           id: p.id,
+          /** 原始 Product.name（编号），change 事件回传给页面用 */
           name: p.name,
           sku: p.sku || '',
+          ...display,
+          ...meta,
           categoryId: p.categoryId,
           categoryLabel,
           imageUrl,
           showImage: Boolean(String(imageUrl).trim()),
-          customTags,
-          hasCustomTags: customTags.length > 0,
           blocked,
           used,
           unavailable,
@@ -134,23 +144,9 @@ Component({
     onImageError(e) {
       const { id } = e.currentTarget.dataset;
       if (!id) return;
-      const filteredProducts = (this.data.filteredProducts || []).map((item) => {
-        if (item.id !== id) return item;
-        return {
-          id: item.id,
-          name: item.name,
-          sku: item.sku,
-          categoryId: item.categoryId,
-          categoryLabel: item.categoryLabel,
-          imageUrl: item.imageUrl,
-          showImage: false,
-          customTags: item.customTags || [],
-          hasCustomTags: item.hasCustomTags,
-          blocked: item.blocked,
-          used: item.used,
-          unavailable: item.unavailable,
-        };
-      });
+      const filteredProducts = (this.data.filteredProducts || []).map((item) =>
+        item.id === id ? { ...item, showImage: false } : item,
+      );
       this.setData({ filteredProducts });
     },
 

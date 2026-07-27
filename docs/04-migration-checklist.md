@@ -77,7 +77,7 @@
 
 | 模块 | 当前状态 | 说明 | 剩余收口 |
 |------|------|------|------|
-| 财务记录 CRUD | 已落地 | `/api/finance/records`；`sourceDocNo`（migration `20260727120000`）支持按 PSI 来源单号过滤；进销存四单表单可快捷登记收/付款 | 小程序暂无快捷入口 |
+| 财务记录 CRUD | 已落地 | `/api/finance/records`；`sourceDocNo`（migration `20260727120000`）支持按 PSI 来源单号过滤；进销存四单表单可快捷登记收/付款 | 小程序四单编辑页/详情页已同步（`packagePsi/psi-doc-finance-entry`） |
 | 资金账户余额 | 已落地 | `FinanceAccountType` 加期初余额；`GET /api/finance/account-balances` 实时聚合（期初+收-付）；`FinanceRecord.accountTypeId` 外键（migration `20260625120000` 已回填）；前端「资金账户」Tab | 后续可加按状态过滤（审核流）/账户报表 |
 | 账户间转账 | 已落地 | `POST /api/finance/transfers` 事务内落 PAYMENT+RECEIPT 同组（`ZZD` 单号） | 后续可加转账撤销/红冲 |
 | Dashboard / 工作台 | 已落地 | `/api/dashboard/*`：工作台页面存于 `system_settings.workbenchSharedPages`；owner 恒可见并可编辑全部页面；成员按裸 `workbench` 或 `workbench:<pageId>` 严格授权且只读，未授予任何工作台 key 时不显示入口；页面授权同时授予该页组件完整数据 | migration `20260710113000_tenant_member_role_cleanup` 将历史租户 `admin` 迁为 `worker`并清理旧 `dashboard` 权限；存量用户旧 `preferences.dashboardWorkbench` 中的自定义页不会自动迁入共享池 |

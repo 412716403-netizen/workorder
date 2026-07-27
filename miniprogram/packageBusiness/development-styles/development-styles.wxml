@@ -1,3 +1,4 @@
+<import src="/templates/listProductTitle.wxml" />
 <view class="plan-shell">
   <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
     <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
@@ -145,13 +146,14 @@
 
         <view class="dev-styles-row__content">
           <view class="dev-styles-row__head">
-            <view class="dev-styles-row__title-wrap">
-              <text class="report-history-row__product-name">{{item.productName}}</text>
-              <text wx:if="{{item.showProductSku}}" class="report-history-row__sku">{{item.productSku}}</text>
+            <view class="dev-styles-row__title-wrap list-product-title">
+              <text class="list-product-title__name">{{item.productName}}</text>
+              <text wx:if="{{item.showProductSku}}" class="list-product-title__code">{{item.productSku}}</text>
               <text wx:if="{{item.showPublishedBadge}}" class="dev-styles-badge">已发布</text>
               <text wx:elif="{{item.statusLabel}}" class="dev-styles-badge dev-styles-badge--muted">{{item.statusLabel}}</text>
             </view>
           </view>
+          <template is="listProductMeta" data="{{item: item}}" />
           <view wx:if="{{item.showCustomer}}" class="dev-styles-row__meta">{{item.customerName}}</view>
           <view wx:if="{{item.progressParts.length}}" class="dev-styles-progress">
             <text

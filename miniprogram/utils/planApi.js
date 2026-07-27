@@ -115,8 +115,15 @@ function fetchCategoriesAll() {
   );
 }
 
+/**
+ * 只读消费方（列表 / 详情）用：带 90s 缓存。
+ * 合作单位维护页请直接用 partnerApi.fetchPartnersAll 拿实时数据。
+ */
 function fetchPartnersAll() {
-  return request({ path: '/master/partners?all=true', method: 'GET' }).catch(() => []);
+  const { cachedFetch } = require('./masterDataCache.js');
+  const { fetchPartnersAll: fetchPartnersFresh } = require('./partnerApi.js');
+  // 失败不进缓存：否则空列表会被缓存 90s，列表合作单位标签全部消失
+  return cachedFetch('partners:all', fetchPartnersFresh, 90 * 1000).catch(() => []);
 }
 
 function fetchPartnerCategoriesAll() {

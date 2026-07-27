@@ -145,7 +145,8 @@
   flex: none;
   min-width: 0;
   justify-content: flex-start;
-  gap: 32rpx;
+  align-items: center;
+  gap: 24rpx;
 }
 
 .plan-create-footer.po-edit-footer .po-edit-footer__actions {
@@ -171,6 +172,44 @@
 
 .plan-create-footer.po-edit-footer .po-edit-footer__btn--primary {
   min-width: 0;
+}
+
+.po-edit-footer__summary-value--finance {
+  color: #4f46e5;
+}
+
+/* 合计区右侧：已付/已收金额 + 登记图标（金额在图标左侧） */
+.po-edit-footer__finance {
+  flex: 0 0 auto;
+  margin-left: auto;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.po-edit-footer__stat--finance {
+  text-align: right;
+}
+
+.po-edit-footer__finance-icon {
+  flex: 0 0 auto;
+  width: 72rpx;
+  height: 72rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16rpx;
+  background: rgba(22, 119, 255, 0.08);
+}
+
+.po-edit-footer__finance-icon--hover {
+  opacity: 0.75;
+}
+
+.po-edit-footer__finance-icon-img {
+  width: 40rpx;
+  height: 40rpx;
 }
 
 .po-edit-footer {

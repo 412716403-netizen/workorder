@@ -1,3 +1,4 @@
+<import src="/templates/listProductTitle.wxml" />
 <view class="plan-shell">
   <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
     <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
@@ -102,8 +103,8 @@
 
               <view class="report-history-row__content">
                 <view class="sb-line-main">
-                  <text class="report-history-row__product-name">{{line.productName}}</text>
-                  <text wx:if="{{line.showProductSku}}" class="report-history-row__sku">{{line.productSku}}</text>
+                  <template is="listProductTitle" data="{{item: line}}" />
+                  <template is="listProductMeta" data="{{item: line}}" />
                 </view>
 
                 <view class="order-detail-summary order-detail-summary--compact">

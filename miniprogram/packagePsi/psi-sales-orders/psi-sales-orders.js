@@ -10,10 +10,11 @@ const _require4 =
 
 
 
-  require('../utils/salesOrders.js'),parseSalesOrderSearch = _require4.parseSalesOrderSearch,buildSalesOrderListCards = _require4.buildSalesOrderListCards,slimSalesOrderListCard = _require4.slimSalesOrderListCard,buildProductMap = _require4.buildProductMap;
+  require('../utils/salesOrders.js'),parseSalesOrderSearch = _require4.parseSalesOrderSearch,buildSalesOrderListCards = _require4.buildSalesOrderListCards,slimSalesOrderListCard = _require4.slimSalesOrderListCard;
 const _require5 = require('../../utils/psiOpsAggregators.js'),groupRecordsByDocNumber = _require5.groupRecordsByDocNumber;
 const _require6 = require('../../utils/psiApi.js'),fetchAllPsiRecords = _require6.fetchAllPsiRecords;
-const _require7 = require('../../utils/planApi.js'),fetchProductsAll = _require7.fetchProductsAll,fetchDictionaries = _require7.fetchDictionaries;
+const _require7 = require('../../utils/planApi.js'),fetchDictionaries = _require7.fetchDictionaries;
+const { loadProductMetaMaps } = require('../../utils/productMetaMaps.js');
 const _require8 = require('../../utils/productionPlans.js'),normalizeAppDictionaries = _require8.normalizeAppDictionaries;
 const _require9 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require9.readNavBarMetrics,readWindowMetrics = _require9.readWindowMetrics;
 const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../../utils/planFilterPanel.js');
@@ -222,13 +223,15 @@ Page({
     this._initialized = true;
     this.setData({ loading: true });
     try {
-      const _await$Promise$all = await Promise.all([
+      const [salesOrders, productMeta, dictionaries] = await Promise.all([
         fetchAllPsiRecords(PSI_TYPE),
-        fetchProductsAll().catch(() => []),
-        fetchDictionaries().catch(() => ({}))]
-        ),salesOrders = _await$Promise$all[0],products = _await$Promise$all[1],dictionaries = _await$Promise$all[2];
+        loadProductMetaMaps(),
+        fetchDictionaries().catch(() => ({}))
+      ]);
       this._salesOrders = salesOrders || [];
-      this._productMap = buildProductMap(products || []);
+      this._productMap = productMeta.productMap;
+      this._categoryMap = productMeta.categoryMap;
+      this._partnerNameById = productMeta.partnerNameById;
       this._dictionaries = normalizeAppDictionaries(dictionaries);
       await this.reloadList();
     } catch (err) {
@@ -242,6 +245,8 @@ Page({
     const parsed = parseSalesOrderSearch(this.data.searchKeyword);
     const ctx = {
       productMap: this._productMap,
+      categoryMap: this._categoryMap,
+      partnerNameById: this._partnerNameById,
       dictionaries: this._dictionaries,
       showAmount: this.data.canViewAmount,
       canAllocate: this.data.canAllocate

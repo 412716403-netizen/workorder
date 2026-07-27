@@ -10,6 +10,7 @@ const _require9 = require('../../utils/orderApi.js'),fetchWarehousesAll = _requi
 const _require0 = require('../../utils/productionPlans.js'),normalizeAppDictionaries = _require0.normalizeAppDictionaries;
 const _require1 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require1.readNavBarMetrics,readWindowMetrics = _require1.readWindowMetrics;
 const _require10 = require('../../utils/saveNavigation.js'),LIST_ROUTES = _require10.LIST_ROUTES,afterSaveReturnToList = _require10.afterSaveReturnToList;
+const { fetchPsiDocLinkedFinanceAmount } = require('../../utils/psiDocFinance.js');
 const { loadFeaturePlugins, isPluginEnabled } = require('../../utils/featurePlugins.js');
 const { openTodoEdit } = require('../../utils/todosApi.js');
 
@@ -156,6 +157,15 @@ Page({
     this.setData({ sections });
   },
 
+  /** 关联收/付款合计（无财务查看权限或失败时为 0，界面则不展示该行） */
+  loadLinkedFinanceAmount() {
+    const ctx = readTenantCtx();
+    return fetchPsiDocLinkedFinanceAmount(PSI_TYPE, this.data.docNumber, {
+      tenantRole: ctx && ctx.tenantRole,
+      permissions: ctx && ctx.permissions || []
+    });
+  },
+
   async loadDetail() {
     this.setData({ loading: true });
     try {
@@ -164,8 +174,9 @@ Page({
         fetchProductsAll().catch(() => []),
         fetchCategoriesAll().catch(() => []),
         fetchDictionaries().catch(() => ({})),
-        fetchWarehousesAll().catch(() => [])]
-        ),salesBills = _await$Promise$all[0],products = _await$Promise$all[1],categories = _await$Promise$all[2],dictionaries = _await$Promise$all[3],warehouses = _await$Promise$all[4];
+        fetchWarehousesAll().catch(() => []),
+        this.loadLinkedFinanceAmount()]
+        ),salesBills = _await$Promise$all[0],products = _await$Promise$all[1],categories = _await$Promise$all[2],dictionaries = _await$Promise$all[3],warehouses = _await$Promise$all[4],linkedFinanceAmount = _await$Promise$all[5];
       const groups = groupRecordsByDocNumber(salesBills || [], PSI_TYPE);
       const items = groups[this.data.docNumber];
       if (!items || !items.length) {
@@ -178,6 +189,7 @@ Page({
       const categoryMap = buildCategoryMap(categories || []);
       const whList = Array.isArray(warehouses) ? warehouses : warehouses.data || [];
       const view = mapSalesBillDetailView(this.data.docNumber, items, {
+        linkedFinanceAmount,
         productMap,
         categoryMap,
         dictionaries: normalizeAppDictionaries(dictionaries),

@@ -1,3 +1,4 @@
+<import src="/templates/listProductTitle.wxml" />
 <view class="plan-shell">
   <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
     <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
@@ -78,9 +79,9 @@
 
           <view class="basic-products-row__content">
             <view class="basic-products-row__head">
-              <view class="basic-products-row__title-wrap">
-                <text class="report-history-row__product-name">{{item.productName}}</text>
-                <text wx:if="{{item.showProductSku}}" class="report-history-row__sku">{{item.productSku}}</text>
+              <view class="basic-products-row__title-wrap list-product-title">
+                <text class="list-product-title__name">{{item.productName}}</text>
+                <text wx:if="{{item.showProductSku}}" class="list-product-title__code">{{item.productSku}}</text>
                 <text wx:if="{{item.showDisabledBadge}}" class="basic-products-row__disabled">已禁用</text>
               </view>
               <view
@@ -93,19 +94,11 @@
               </view>
             </view>
 
-            <view wx:if="{{item.showCategory || item.showPartner}}" class="basic-products-row__meta">
-              <text wx:if="{{item.showCategory}}" class="basic-products-row__cat-pill">{{item.categoryName}}</text>
-              <text wx:if="{{item.showPartner}}" class="basic-products-row__partner">{{item.partnerName}}</text>
+            <view wx:if="{{item.showCategory}}" class="basic-products-row__meta">
+              <text class="basic-products-row__cat-pill">{{item.categoryName}}</text>
             </view>
 
-            <view wx:if="{{item.showCustomTags}}" class="basic-products-row__tags">
-              <text
-                wx:for="{{item.customTags}}"
-                wx:for-item="tag"
-                wx:key="id"
-                class="basic-products-row__tag"
-              >{{tag.label}}: {{tag.display}}</text>
-            </view>
+            <template is="listProductMeta" data="{{item: item}}" />
 
             <view class="basic-products-row__stats">
               <text class="basic-products-row__stat">变体 {{item.variantCountText}}</text>

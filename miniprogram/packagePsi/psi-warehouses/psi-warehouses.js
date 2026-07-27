@@ -14,11 +14,11 @@ const _require4 =
 
   require('../utils/warehouseInventory.js'),buildProductStockRows = _require4.buildProductStockRows,filterProductStocks = _require4.filterProductStocks,buildVisibleProductStocks = _require4.buildVisibleProductStocks,buildWarehouseCards = _require4.buildWarehouseCards,buildProductCards = _require4.buildProductCards,paginateItems = _require4.paginateItems;
 const _require5 = require('../utils/warehouseStock.js'),buildStockSnapshotIndex = _require5.buildStockSnapshotIndex;
-const _require6 = require('../../utils/purchaseOrders.js'),buildProductMap = _require6.buildProductMap,buildCategoryMap = _require6.buildCategoryMap;
+const { loadProductMetaMaps } = require('../../utils/productMetaMaps.js');
 const _require7 = require('../../utils/orderApi.js'),fetchStockSnapshot = _require7.fetchStockSnapshot,fetchStockBatches = _require7.fetchStockBatches;
-const _require8 = require('../../utils/planApi.js'),fetchProductsAll = _require8.fetchProductsAll,fetchCategoriesAll = _require8.fetchCategoriesAll,fetchDictionaries = _require8.fetchDictionaries;
+const _require8 = require('../../utils/planApi.js'),fetchDictionaries = _require8.fetchDictionaries;
 const _require9 = require('../../utils/orderApi.js'),fetchWarehousesAll = _require9.fetchWarehousesAll;
-const _require0 = require('../../utils/productionPlans.js'),normalizeAppDictionaries = _require0.normalizeAppDictionaries,normalizeMasterList = _require0.normalizeMasterList;
+const _require0 = require('../../utils/productionPlans.js'),normalizeAppDictionaries = _require0.normalizeAppDictionaries;
 const _require1 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require1.readNavBarMetrics,readWindowMetrics = _require1.readWindowMetrics;
 const _require10 = require('../../utils/saveNavigation.js'),shouldHubListRefetch = _require10.shouldHubListRefetch,trackHubListHidden = _require10.trackHubListHidden,LIST_ROUTES = _require10.LIST_ROUTES;
 
@@ -200,18 +200,18 @@ Page({
   async bootstrap() {
     this.setData({ loading: true });
     try {
-      const _await$Promise$all = await Promise.all([
+      const [snapshotRaw, warehouses, productMeta, dictionaries] = await Promise.all([
         fetchStockSnapshot().catch(() => ({ byWarehouse: [], byVariant: [], byBatch: [] })),
         fetchWarehousesAll().catch(() => []),
-        fetchProductsAll().catch(() => []),
-        fetchCategoriesAll().catch(() => []),
-        fetchDictionaries().catch(() => ({}))]
-        ),snapshotRaw = _await$Promise$all[0],warehouses = _await$Promise$all[1],products = _await$Promise$all[2],categories = _await$Promise$all[3],dictionaries = _await$Promise$all[4];
-      this._products = normalizeMasterList(products);
-      this._categories = normalizeMasterList(categories);
+        loadProductMetaMaps(),
+        fetchDictionaries().catch(() => ({}))
+      ]);
+      this._products = productMeta.products;
+      this._categories = productMeta.categories;
       this._warehouses = Array.isArray(warehouses) ? warehouses : warehouses.data || [];
-      this._productMap = buildProductMap(this._products);
-      this._categoryMap = buildCategoryMap(this._categories);
+      this._productMap = productMeta.productMap;
+      this._categoryMap = productMeta.categoryMap;
+      this._partnerNameById = productMeta.partnerNameById;
       this._warehouseMap = new Map(this._warehouses.map((w) => [w.id, w]));
       this._dictionaries = normalizeAppDictionaries(dictionaries);
       this._stockIndex = buildStockSnapshotIndex(snapshotRaw || {});
@@ -243,9 +243,16 @@ Page({
     this._allWarehouseCards = buildWarehouseCards(
       this._warehouses,
       visible,
-      this._productMap
+      this._productMap,
+      this._categoryMap,
+      this._partnerNameById
     );
-    this._allProductCards = buildProductCards(visible, this._productMap);
+    this._allProductCards = buildProductCards(
+      visible,
+      this._productMap,
+      this._categoryMap,
+      this._partnerNameById
+    );
 
     if (this.data.selectedWarehouseId) {
       const card = this._allWarehouseCards.find((c) => c.warehouseId === this.data.selectedWarehouseId);

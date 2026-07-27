@@ -15,8 +15,11 @@ const {
   formatPsiQtyDisplay,
 } = require('./psiOpsAggregators.js');
 const { flowRecordsEarliestMs, formatLocalDateTimeZh } = require('./flowDocSortLite.js');
+const { psiDocLinkedFinanceRows } = require('./psiDocFinance.js');
 const { formatReportTime } = require('./orderReportHistory.js');
-const { listProductDisplayFieldsFromMap } = require('./listProductThumb.js');
+const { listProductDisplayFieldsFromMap, listProductMetaFieldsFromMaps } = require('./listProductThumb.js');
+/** 实现在 utils/productMetaMaps.js，这里透传导出以兼容既有调用方 */
+const { buildProductMap, buildCategoryMap } = require('./productMetaMaps.js');
 const { buildVariantMatrixUiModel } = require('./variantQtyMatrix.js');
 const { productHasColorSizeMatrix } = require('./productionPlans.js');
 const { getProductUnitName } = require('./planFormCustomField.js');
@@ -171,13 +174,14 @@ function filterPurchaseOrderDocs(groups, keyword, onlyUnsettled, receivedByOrder
 }
 
 function mapLineGroupPreview(docNumber, lineGroupId, items, ctx) {
-  const { productMap, receivedByOrderLine, showAmount, dictionaries } = ctx;
+  const { productMap, categoryMap, partnerNameById, receivedByOrderLine, showAmount, dictionaries } = ctx;
   const first = items[0] || {};
   const product = productMap && first.productId ? productMap.get(first.productId) : null;
   const display = listProductDisplayFieldsFromMap(productMap, first.productId, {
     productName: first.productName,
     productSku: first.productSku,
   });
+  const meta = listProductMetaFieldsFromMaps(product, categoryMap, partnerNameById, { maxTags: 4 });
   const ordered = lineGroupTotalQty(items);
   const received = items.reduce(
     (s, i) => s + (receivedByOrderLine[`${docNumber}::${i.id}`] || 0),
@@ -191,6 +195,10 @@ function mapLineGroupPreview(docNumber, lineGroupId, items, ctx) {
   return {
     lineGroupId,
     ...display,
+    partnerName: meta.partnerName,
+    showPartner: meta.showPartner,
+    productCustomTags: meta.productCustomTags,
+    showProductMeta: meta.showProductMeta,
     quantityText: `${ordered} ${unitName}`,
     qtyText: `${ordered}`,
     unitName,
@@ -304,6 +312,10 @@ function slimPurchaseOrderLinePreview(line) {
     productImageUrl: line.productImageUrl,
     showProductImage: line.showProductImage,
     placeholderIconSrc: line.placeholderIconSrc,
+    partnerName: line.partnerName || '',
+    showPartner: !!line.showPartner,
+    productCustomTags: line.productCustomTags || [],
+    showProductMeta: !!line.showProductMeta,
     quantityText: line.quantityText,
     priceText: line.priceText,
     amountText: line.amountText,
@@ -432,6 +444,7 @@ function mapPurchaseOrderDetailView(docNumber, items, ctx) {
         { label: '经办人', value: operator || '—' },
         ...(sourcePlan ? [{ label: '来源计划', value: sourcePlan }] : []),
         ...(showAmount ? [{ label: '合计金额', value: `¥${totalAmount.toFixed(2)}` }] : []),
+        ...psiDocLinkedFinanceRows('PURCHASE_ORDER', ctx.linkedFinanceAmount),
       ],
     },
     {
@@ -565,22 +578,6 @@ function computePurchaseOrderFlowStats(rows) {
   const totalQty = (rows || []).reduce((s, r) => s + (Number(r.totalQty) || 0), 0);
   const totalReceived = (rows || []).reduce((s, r) => s + (Number(r.receivedQty) || 0), 0);
   return { count, totalQty, totalReceived };
-}
-
-function buildProductMap(products) {
-  const map = new Map();
-  (products || []).forEach((p) => {
-    if (p && p.id) map.set(p.id, p);
-  });
-  return map;
-}
-
-function buildCategoryMap(categories) {
-  const map = new Map();
-  (categories || []).forEach((c) => {
-    if (c && c.id) map.set(c.id, c);
-  });
-  return map;
 }
 
 module.exports = {

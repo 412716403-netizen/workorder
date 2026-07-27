@@ -21,7 +21,7 @@ const _require7 =
 
 
   require('../../utils/psiApi.js'),fetchAllPsiRecords = _require7.fetchAllPsiRecords,createPsiRecordsBatch = _require7.createPsiRecordsBatch,replacePsiRecords = _require7.replacePsiRecords;
-const _require8 = require('../../utils/planApi.js'),fetchProductsAll = _require8.fetchProductsAll,fetchCategoriesAll = _require8.fetchCategoriesAll,fetchDictionaries = _require8.fetchDictionaries;
+const _require8 = require('../../utils/planApi.js'),fetchProductsAll = _require8.fetchProductsAll,fetchCategoriesAll = _require8.fetchCategoriesAll,fetchDictionaries = _require8.fetchDictionaries,fetchPartnersAll = _require8.fetchPartnersAll;
 const _require9 = require('../../utils/orderApi.js'),fetchWarehousesAll = _require9.fetchWarehousesAll,fetchStockBatches = _require9.fetchStockBatches,fetchStockSnapshot = _require9.fetchStockSnapshot;
 const _require0 = require('../utils/warehouseStock.js'),buildStockSnapshotIndex = _require0.buildStockSnapshotIndex;
 const _require1 = require('../../utils/productionPlans.js'),normalizeAppDictionaries = _require1.normalizeAppDictionaries,normalizeMasterList = _require1.normalizeMasterList;
@@ -45,6 +45,7 @@ Page({
     lines: [],
     products: [],
     categories: [],
+    partners: [],
     warehouses: [],
     warehouseNames: [],
     fromWarehouseIndex: 0,
@@ -91,16 +92,18 @@ Page({
   async bootstrap() {
     this.setData({ loading: true });
     try {
-      const _await$Promise$all = await Promise.all([
+      const [products, categories, dictionaries, warehouses, records, partners] = await Promise.all([
         fetchProductsAll(),
         fetchCategoriesAll(),
         fetchDictionaries().catch(() => ({})),
         fetchWarehousesAll().catch(() => []),
-        fetchAllPsiRecords(PSI_TRANSFER_TYPE).catch(() => [])]
-        ),products = _await$Promise$all[0],categories = _await$Promise$all[1],dictionaries = _await$Promise$all[2],warehouses = _await$Promise$all[3],records = _await$Promise$all[4];
+        fetchAllPsiRecords(PSI_TRANSFER_TYPE).catch(() => []),
+        fetchPartnersAll().catch(() => [])
+      ]);
       await this.loadStockIndex();
       this._products = normalizeMasterList(products);
       this._categories = normalizeMasterList(categories);
+      this._partners = normalizeMasterList(partners);
       this._productMap = buildProductMap(this._products);
       this._categoryMap = buildCategoryMap(this._categories);
       this._dictionaries = normalizeAppDictionaries(dictionaries);
@@ -158,7 +161,8 @@ Page({
         fromWarehouseIndex: fromIdx,
         toWarehouseIndex: toIdx,
         products: this._products,
-        categories: this._categories
+        categories: this._categories,
+        partners: this._partners
       });
       this.refreshLinesUi();
     } catch (err) {

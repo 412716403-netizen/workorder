@@ -49,6 +49,13 @@ const _require10 =
 const _require11 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require11.readNavBarMetrics,readWindowMetrics = _require11.readWindowMetrics,computePlanCreateHeaderHeight = _require11.computePlanCreateHeaderHeight;
 const _require12 = require('../../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require12.afterMatrixKeyboardOpen,handleMatrixOutsideTap = _require12.handleMatrixOutsideTap;
 const _require13 = require('../../utils/saveNavigation.js'),LIST_ROUTES = _require13.LIST_ROUTES,afterSaveReturnToList = _require13.afterSaveReturnToList;
+const {
+  emptyPsiDocFinancePanelState,
+  initPsiDocFinancePanel,
+  loadPsiDocFinanceSavedAmount,
+  openPsiDocFinanceEntryFromPage,
+  flushPsiDocFinanceDrafts,
+} = require('../utils/psiDocFinancePanel.js');
 
 function computeHeaderBlockHeight(nav) {
   return computePlanCreateHeaderHeight(nav);
@@ -103,6 +110,7 @@ Page({
     scrollHeight: 500,
     matrixScrollTop: 0,
     pickerSheetOpen: false,
+    ...emptyPsiDocFinancePanelState(),
     ...emptyMatrixKeyboardState()
   },
 
@@ -123,7 +131,19 @@ Page({
       showAmount: hasPermission(ctx && ctx.permissions || [], 'psi:purchase_bill:amount'),
       canDelete: editing && hasPermission(ctx && ctx.permissions || [], 'psi:purchase_bill:delete')
     });
+    initPsiDocFinancePanel(this, PSI_TYPE);
     this.bootstrap();
+  },
+
+  /** 登记付款单：编辑态直接写库，新建态先暂存 */
+  onFinanceEntryTap() {
+    // 引用订单模式下供应商不在表单里，取自首个已勾选明细（与 onSubmitFromOrder 同口径）
+    const fromOrder = this.collectSelectedFromOrderLines()[0];
+    openPsiDocFinanceEntryFromPage(this, {
+      partner: this.data.form.partner || (fromOrder && fromOrder.partner) || '',
+      docNumber: this.data.form.docNumber,
+      saved: Boolean(this._editingDocNumber)
+    });
   },
 
   onHeaderBack() {
@@ -227,6 +247,9 @@ Page({
         pendingPoDocs: this._pendingPoDocs
       });
       this.refreshLinesUi();
+      if (this._editingDocNumber) {
+        loadPsiDocFinanceSavedAmount(this, this._editingDocNumber);
+      }
     } catch (err) {
       this.setData({ loading: false });
       wx.showToast({ title: '加载失败', icon: 'none' });
@@ -635,6 +658,7 @@ Page({
       } else {
         await createPsiRecordsBatch(newRecords);
       }
+      await flushPsiDocFinanceDrafts(this, docNumber);
       wx.hideLoading();
       this.setData({ submitting: false });
       afterSaveReturnToList({
@@ -684,6 +708,7 @@ Page({
     wx.showLoading({ title: '入库中…' });
     try {
       await createPsiRecordsBatch(newRecords);
+      await flushPsiDocFinanceDrafts(this, docNumber);
       wx.hideLoading();
       this.setData({ submitting: false });
       afterSaveReturnToList({

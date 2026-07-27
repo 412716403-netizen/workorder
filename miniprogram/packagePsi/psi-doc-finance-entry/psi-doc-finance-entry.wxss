@@ -1,0 +1,2 @@
+@import '/styles/plan-create-form.wxss';
+@import '/styles/finance-record-form.wxss';

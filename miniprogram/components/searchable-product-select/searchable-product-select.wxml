@@ -1,3 +1,4 @@
+<import src="/templates/listProductTitle.wxml" />
 <view class="sps {{embedded ? 'sps--embedded' : ''}} {{cell ? 'sps--cell' : ''}}">
   <view
     wx:if="{{cell}}"
@@ -81,7 +82,7 @@
       <view
         wx:for="{{filteredProducts}}"
         wx:key="id"
-        class="sps__row {{valueId === item.id ? 'sps__row--active' : ''}} {{item.hasCustomTags ? 'sps__row--rich' : ''}} {{item.unavailable ? 'sps__row--disabled' : ''}}"
+        class="sps__row {{valueId === item.id ? 'sps__row--active' : ''}} {{item.showProductMeta ? 'sps__row--rich' : ''}} {{item.unavailable ? 'sps__row--disabled' : ''}}"
         data-id="{{item.id}}"
         data-name="{{item.name}}"
         bindtap="onSelect"
@@ -103,16 +104,8 @@
           </view>
         </view>
         <view class="sps__row-body">
-          <view class="sps__row-title">
-            <text class="sps__row-name">{{item.name}}</text>
-            <text wx:if="{{item.sku}}" class="sps__row-sku">{{item.sku}}</text>
-            <text
-              wx:for="{{item.customTags}}"
-              wx:for-item="tag"
-              wx:key="id"
-              class="sps__row-tag sps__row-tag--inline"
-            >{{tag.label}}: {{tag.display}}</text>
-          </view>
+          <template is="listProductTitle" data="{{item: item}}" />
+          <template is="listProductMeta" data="{{item: item}}" />
         </view>
         <text wx:if="{{item.used}}" class="sps__row-used">已添加</text>
         <text wx:elif="{{item.blocked && item.unavailable}}" class="sps__row-blocked">不可选</text>

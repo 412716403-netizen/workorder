@@ -8,9 +8,9 @@ const _require4 =
   require('../utils/salesBills.js'),parseSalesBillSearch = _require4.parseSalesBillSearch,buildSalesBillListCards = _require4.buildSalesBillListCards,slimSalesBillListCard = _require4.slimSalesBillListCard;
 const _require5 = require('../../utils/psiOpsAggregators.js'),groupRecordsByDocNumber = _require5.groupRecordsByDocNumber;
 const _require6 = require('../../utils/psiApi.js'),fetchAllPsiRecords = _require6.fetchAllPsiRecords;
-const _require7 = require('../../utils/planApi.js'),fetchProductsAll = _require7.fetchProductsAll,fetchDictionaries = _require7.fetchDictionaries,fetchCategoriesAll = _require7.fetchCategoriesAll;
+const _require7 = require('../../utils/planApi.js'),fetchDictionaries = _require7.fetchDictionaries;
 const _require8 = require('../../utils/orderApi.js'),fetchWarehousesAll = _require8.fetchWarehousesAll;
-const _require9 = require('../../utils/purchaseOrders.js'),buildProductMap = _require9.buildProductMap,buildCategoryMap = _require9.buildCategoryMap;
+const { loadProductMetaMaps } = require('../../utils/productMetaMaps.js');
 const _require0 = require('../../utils/productionPlans.js'),normalizeAppDictionaries = _require0.normalizeAppDictionaries;
 const _require1 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require1.readNavBarMetrics,readWindowMetrics = _require1.readWindowMetrics;
 const _require10 = require('../../utils/saveNavigation.js'),shouldHubListRefetch = _require10.shouldHubListRefetch,trackHubListHidden = _require10.trackHubListHidden,LIST_ROUTES = _require10.LIST_ROUTES;
@@ -164,16 +164,16 @@ Page({
     this._initialized = true;
     this.setData({ loading: true });
     try {
-      const _await$Promise$all = await Promise.all([
+      const [salesBills, productMeta, dictionaries, warehouses] = await Promise.all([
         fetchAllPsiRecords(PSI_TYPE),
-        fetchProductsAll().catch(() => []),
+        loadProductMetaMaps(),
         fetchDictionaries().catch(() => ({})),
-        fetchWarehousesAll().catch(() => []),
-        fetchCategoriesAll().catch(() => [])]
-        ),salesBills = _await$Promise$all[0],products = _await$Promise$all[1],dictionaries = _await$Promise$all[2],warehouses = _await$Promise$all[3],categories = _await$Promise$all[4];
+        fetchWarehousesAll().catch(() => [])
+      ]);
       this._salesBills = salesBills || [];
-      this._productMap = buildProductMap(products || []);
-      this._categoryMap = buildCategoryMap(categories || []);
+      this._productMap = productMeta.productMap;
+      this._categoryMap = productMeta.categoryMap;
+      this._partnerNameById = productMeta.partnerNameById;
       this._warehouseMap = buildWarehouseMap(Array.isArray(warehouses) ? warehouses : warehouses.data || []);
       this._dictionaries = normalizeAppDictionaries(dictionaries);
       await this.reloadList();
@@ -189,6 +189,7 @@ Page({
     const ctx = {
       productMap: this._productMap,
       categoryMap: this._categoryMap,
+      partnerNameById: this._partnerNameById,
       warehouseMap: this._warehouseMap,
       dictionaries: this._dictionaries,
       showAmount: this.data.canViewAmount

@@ -1,3 +1,4 @@
+<import src="/templates/listProductTitle.wxml" />
 <view class="plan-shell">
   <view class="plan-header" style="padding-top: {{statusBarHeight}}px;">
     <view class="plan-header__bar" style="height: {{navBarHeight}}px;">
@@ -94,12 +95,8 @@
                 data-product-id="{{item.productId}}"
               >{{item.detailsExpanded ? '▼' : '▶'}}</view>
               <view class="wh-card__info">
-                <view class="report-history-row__product">
-                  <view class="report-history-row__product-left">
-                    <text class="report-history-row__product-name">{{item.productName}}</text>
-                    <text wx:if="{{item.showProductSku}}" class="report-history-row__sku">{{item.productSku}}</text>
-                  </view>
-                </view>
+                <template is="listProductTitle" data="{{item: item}}" />
+                <template is="listProductMeta" data="{{item: item}}" />
                 <view class="wh-card__meta">
                   <text>{{item.categoryName}}</text>
                 </view>
@@ -159,12 +156,8 @@
               data-warehouse-id="{{selectedWarehouseId}}"
             >{{item.detailsExpanded ? '▼' : '▶'}}</view>
             <view class="wh-line__left">
-              <view class="report-history-row__product">
-                <view class="report-history-row__product-left">
-                  <text class="report-history-row__product-name">{{item.productName}}</text>
-                  <text wx:if="{{item.showProductSku}}" class="report-history-row__sku">{{item.productSku}}</text>
-                </view>
-              </view>
+              <template is="listProductTitle" data="{{item: item}}" />
+              <template is="listProductMeta" data="{{item: item}}" />
               <view class="wh-card__meta">
                 <text>{{item.categoryName}}</text>
               </view>

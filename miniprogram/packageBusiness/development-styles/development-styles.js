@@ -11,7 +11,7 @@ const {
   markFilterPanelOpen,
   shouldCloseFilterPanelOnScroll,
 } = require('../../utils/planFilterPanel.js');
-const { fetchPartnersAll } = require('../../utils/planApi.js');
+const { loadProductMetaMaps } = require('../../utils/productMetaMaps.js');
 const {
   listDevStyles,
   listDevStageTemplates,
@@ -84,6 +84,8 @@ Page({
     this._styles = [];
     this._templates = [];
     this._partners = [];
+    this._categoryMap = new Map();
+    this._partnerNameById = new Map();
   },
 
   onShow() {
@@ -136,14 +138,16 @@ Page({
   async bootstrap() {
     this.setData({ loading: true });
     try {
-      const [styles, templates, partners] = await Promise.all([
+      const [styles, templates, productMeta] = await Promise.all([
         listDevStyles(),
         listDevStageTemplates().catch(() => []),
-        fetchPartnersAll().catch(() => []),
+        loadProductMetaMaps({ withProducts: false }),
       ]);
       this._styles = Array.isArray(styles) ? styles : [];
       this._templates = Array.isArray(templates) ? templates : [];
-      this._partners = Array.isArray(partners) ? partners : [];
+      this._partners = productMeta.partners;
+      this._categoryMap = productMeta.categoryMap;
+      this._partnerNameById = productMeta.partnerNameById;
       this._initialized = true;
       this.reloadList();
     } catch (err) {
@@ -165,7 +169,11 @@ Page({
       partners: this._partners,
     });
     const sorted = sortDevStyles(filtered, this.data.sortMode, this._partners);
-    const rows = buildDevStyleListRows(sorted, this._partners);
+    const rows = buildDevStyleListRows(sorted, {
+      partners: this._partners,
+      categoryMap: this._categoryMap,
+      partnerNameById: this._partnerNameById,
+    });
     const stageFilterOptions = collectDevStageFilterOptions(this._templates, this._styles);
     const showCustomerSort = (this._partners || []).length > 0;
     this.setData({

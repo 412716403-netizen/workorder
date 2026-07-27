@@ -4,6 +4,7 @@
  */
 
 const { formatMoney, formatFinanceTimestamp } = require('./financeRecords.js');
+const { buildAccountSelectRows } = require('../../utils/financeRecordForm.js');
 
 /** 与 shared/types.ts FINANCE_UNASSIGNED_ACCOUNT_KEY 一致（小程序无法直接引 TS） */
 const UNASSIGNED_ACCOUNT_KEY = '__unassigned__';
@@ -99,29 +100,6 @@ function mapBalancesResult(data, period) {
     : [];
 
   return { rows, unassignedRow, hasUnassigned, totalsView };
-}
-
-/**
- * 收/付款「选择收支账户」列表项（无最近使用、无添加账户）。
- * balancesData 可选：来自 getAccountBalances，用于副标题余额。
- */
-function buildAccountSelectRows(accountTypes, balancesData) {
-  const list = (accountTypes || []).filter((a) => a && a.id && a.active !== false);
-  list.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
-  const balanceById = new Map();
-  ((balancesData && balancesData.accounts) || []).forEach((acc) => {
-    if (acc && acc.accountTypeId) balanceById.set(acc.accountTypeId, acc.balance);
-  });
-  return list.map((a) => {
-    const hasBal = balanceById.has(a.id);
-    const bal = hasBal ? Number(balanceById.get(a.id)) : NaN;
-    return {
-      id: a.id,
-      name: a.name || '',
-      balanceText: hasBal && Number.isFinite(bal) ? formatMoney(bal) : '',
-      balanceNegative: hasBal && Number.isFinite(bal) && bal < 0,
-    };
-  });
 }
 
 /** 从流水 customData 读取转账信息（与 Web readTransfer 一致） */

@@ -151,7 +151,8 @@
 }
 
 .report-history-row__product-name {
-  font-size: 26rpx;
+  font-size: 28rpx;
+  font-weight: 700;
   color: var(--color-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;

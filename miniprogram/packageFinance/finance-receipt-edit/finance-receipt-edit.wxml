@@ -78,6 +78,7 @@
           label="关联产品"
           products="{{products}}"
           categories="{{productCategories}}"
+          partners="{{partners}}"
           value-id="{{form.productId}}"
           placeholder="请选择"
           bind:change="onProductChange"

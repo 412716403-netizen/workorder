@@ -8,7 +8,7 @@ const _require =
   require('../config/productionOrders.js'),OrderDispatchStatus = _require.OrderDispatchStatus,ORDER_DISPATCH_STATUS_LABEL = _require.ORDER_DISPATCH_STATUS_LABEL;
 const _require2 = require('./orderProcessChips.js'),buildOrderProcessChips = _require2.buildOrderProcessChips,sumOrderQty = _require2.sumOrderQty;
 const _require3 = require('../../utils/reportCustomDocField.js'),mapProductCustomTags = _require3.mapProductCustomTags;
-const _require4 = require('../../utils/listProductThumb.js'),DEFAULT_PRODUCT_PLACEHOLDER_ICON = _require4.DEFAULT_PRODUCT_PLACEHOLDER_ICON;
+const _require4 = require('../../utils/listProductThumb.js'),DEFAULT_PRODUCT_PLACEHOLDER_ICON = _require4.DEFAULT_PRODUCT_PLACEHOLDER_ICON,listProductNameSkuFields = _require4.listProductNameSkuFields,listProductMetaFields = _require4.listProductMetaFields;
 const _require5 = require('../../utils/variantQtyMatrix.js'),buildVariantMatrixUiModel = _require5.buildVariantMatrixUiModel;
 const _require6 = require('../../utils/listResponse.js'),normalizeListBody = _require6.normalizeListBody;
 const _require7 = require('../../utils/productionPlans.js'),productHasColorSizeMatrix = _require7.productHasColorSizeMatrix,variantLabel = _require7.variantLabel;
@@ -59,6 +59,7 @@ function dispatchStatusLabel(status) {
 }
 
 function productNameSkuParts(product) {
+  // 保留原始字段拆分（name=编号, sku=名称）；列表展示请用 listProductNameSkuFields
   if (!product) return { name: '—', sku: '', showSku: false };
   const name = product.name || product.sku || '—';
   const sku = product.sku || '';
@@ -261,33 +262,35 @@ function flattenBlockOrders(block) {
  */
 function mapProductGroupRow(block, ctx = {}) {
   const product = ctx.product || null;
-  const parts = productNameSkuParts(product);
-  const productName =
-    parts.name !== '—'
-      ? parts.name
-      : block.productName || (block.orders && block.orders[0] && block.orders[0].productName) || '—';
-  const productSku =
-    parts.sku ||
-    (product && product.sku) ||
-    (block.orders && block.orders[0] && block.orders[0].sku) ||
-    '';
+  const display = listProductNameSkuFields(product, {
+    name: block.productName || (block.orders && block.orders[0] && block.orders[0].productName) || '',
+    sku: (block.orders && block.orders[0] && block.orders[0].sku) || '',
+  });
+  const meta = listProductMetaFields(
+    product,
+    ctx.category || null,
+    ctx.partnerNameById,
+    { maxTags: 4 },
+  );
   const processChips = ctx.processChips || [];
   const totalQty = (block.orders || []).reduce((s, o) => s + sumOrderQty(o), 0);
   const showConfigureProcessHint = !!ctx.showConfigureProcessHint;
   const imageUrl = (product && (product.imageThumb || product.imageUrl)) || '';
-  const customTags = ctx.productCustomTags || [];
 
   return {
     id: block.productId,
     rowType: 'productGroup',
     orderNumber: '',
-    productName,
-    productSku,
-    showProductSku: Boolean(productSku && productName),
+    productName: display.productName,
+    productSku: display.productSku,
+    showProductSku: display.showProductSku,
     productImageUrl: imageUrl,
     showProductImage: Boolean(String(imageUrl).trim()),
-    productCustomTags: customTags,
-    showProductCustomTags: customTags.length > 0,
+    productCustomTags: meta.productCustomTags,
+    showProductCustomTags: meta.showProductMeta,
+    partnerName: meta.partnerName,
+    showPartner: meta.showPartner,
+    showProductMeta: meta.showProductMeta,
     placeholderIconSrc: DEFAULT_PRODUCT_PLACEHOLDER_ICON,
     customer: '',
     showCustomer: false,

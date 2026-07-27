@@ -21,7 +21,7 @@ const _require8 =
 
 
   require('../../utils/psiApi.js'),fetchAllPsiRecords = _require8.fetchAllPsiRecords,createPsiRecordsBatch = _require8.createPsiRecordsBatch,replacePsiRecords = _require8.replacePsiRecords;
-const _require9 = require('../../utils/planApi.js'),fetchProductsAll = _require9.fetchProductsAll,fetchCategoriesAll = _require9.fetchCategoriesAll,fetchDictionaries = _require9.fetchDictionaries;
+const _require9 = require('../../utils/planApi.js'),fetchProductsAll = _require9.fetchProductsAll,fetchCategoriesAll = _require9.fetchCategoriesAll,fetchDictionaries = _require9.fetchDictionaries,fetchPartnersAll = _require9.fetchPartnersAll;
 const _require0 = require('../../utils/orderApi.js'),fetchWarehousesAll = _require0.fetchWarehousesAll,fetchStockSnapshot = _require0.fetchStockSnapshot;
 const _require1 = require('../../utils/productionPlans.js'),normalizeAppDictionaries = _require1.normalizeAppDictionaries,normalizeMasterList = _require1.normalizeMasterList,productHasColorSizeMatrix = _require1.productHasColorSizeMatrix;
 const _require10 = require('../../utils/matrixQtyKeyboard.js'),createMatrixKeyboardInputSession = _require10.createMatrixKeyboardInputSession;
@@ -44,6 +44,7 @@ Page({
     lines: [],
     products: [],
     categories: [],
+    partners: [],
     warehouses: [],
     warehouseNames: [],
     warehouseIndex: 0,
@@ -89,16 +90,18 @@ Page({
   async bootstrap() {
     this.setData({ loading: true });
     try {
-      const _await$Promise$all = await Promise.all([
+      const [products, categories, dictionaries, warehouses, records, partners] = await Promise.all([
         fetchProductsAll(),
         fetchCategoriesAll(),
         fetchDictionaries().catch(() => ({})),
         fetchWarehousesAll().catch(() => []),
-        fetchAllPsiRecords(PSI_STOCKTAKE_TYPE).catch(() => [])]
-        ),products = _await$Promise$all[0],categories = _await$Promise$all[1],dictionaries = _await$Promise$all[2],warehouses = _await$Promise$all[3],records = _await$Promise$all[4];
+        fetchAllPsiRecords(PSI_STOCKTAKE_TYPE).catch(() => []),
+        fetchPartnersAll().catch(() => [])
+      ]);
       await this.loadStockIndex();
       this._products = normalizeMasterList(products);
       this._categories = normalizeMasterList(categories);
+      this._partners = normalizeMasterList(partners);
       this._productMap = buildProductMap(this._products);
       this._categoryMap = buildCategoryMap(this._categories);
       this._dictionaries = normalizeAppDictionaries(dictionaries);
@@ -148,7 +151,8 @@ Page({
         warehouseNames,
         warehouseIndex: whIdx,
         products: this._products,
-        categories: this._categories
+        categories: this._categories,
+        partners: this._partners
       });
       this.refreshLinesUi();
     } catch (err) {

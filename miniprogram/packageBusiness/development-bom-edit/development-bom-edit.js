@@ -6,7 +6,7 @@ const {
   readWindowMetrics,
   computePlanCreateHeaderHeight,
 } = require('../../utils/windowMetrics.js');
-const { fetchCategoriesAll, fetchDictionaries } = require('../../utils/planApi.js');
+const { fetchCategoriesAll, fetchDictionaries, fetchPartnersAll } = require('../../utils/planApi.js');
 const { normalizeAppDictionaries } = require('../../utils/productionPlans.js');
 const { request } = require('../../utils/request.js');
 const { fetchProductsAll } = require('../utils/productApi.js');
@@ -45,6 +45,7 @@ Page({
     itemRows: [],
     products: [],
     categories: [],
+    partners: [],
     pickerSheetOpen: false,
     statusBarHeight: 20,
     navBarHeight: 44,
@@ -103,13 +104,14 @@ Page({
   async bootstrap() {
     this.setData({ loading: true });
     try {
-      const [style, boms, products, categories, dictRaw, nodesRaw] = await Promise.all([
+      const [style, boms, products, categories, dictRaw, nodesRaw, partners] = await Promise.all([
         getDevStyle(this.data.styleId),
         listDevBoms({ parentStyleId: this.data.styleId }),
         fetchProductsAll().catch(() => []),
         fetchCategoriesAll().catch(() => []),
         fetchDictionaries().catch(() => ({})),
         request({ path: '/settings/nodes?all=true', method: 'GET', timeout: 60000 }).catch(() => []),
+        fetchPartnersAll().catch(() => []),
       ]);
       this._style = style;
       this._boms = boms || [];
@@ -126,6 +128,7 @@ Page({
         mode: 'cells',
         products: this._products,
         categories: categories || [],
+        partners: partners || [],
       });
     } catch (err) {
       wx.showToast({ title: (err && err.message) || '加载失败', icon: 'none' });

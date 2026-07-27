@@ -70,12 +70,6 @@
   background: #fafbfc;
 }
 
-.order-list-row--product .order-list-row__product--title {
-  font-size: 30rpx;
-  font-weight: 700;
-  color: var(--color-text);
-}
-
 .order-list-row__config-hint {
   margin-top: 8rpx;
   padding: 12rpx 16rpx;
@@ -225,44 +219,6 @@
   flex-wrap: wrap;
   gap: 6rpx;
   min-width: 0;
-}
-
-.order-list-row__product {
-  flex-shrink: 1;
-  min-width: 0;
-  max-width: 100%;
-  font-size: 32rpx;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  line-height: 1.25;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.order-list-row__sku {
-  flex-shrink: 0;
-  max-width: 42%;
-  font-size: var(--font-caption);
-  color: var(--color-text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.order-list-row__custom-tag {
-  flex-shrink: 1;
-  min-width: 0;
-  max-width: 100%;
-  padding: 2rpx 10rpx;
-  border-radius: 8rpx;
-  font-size: 20rpx;
-  font-weight: 600;
-  color: var(--color-text-secondary);
-  background: var(--color-bg-page);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .order-list-row__customer {

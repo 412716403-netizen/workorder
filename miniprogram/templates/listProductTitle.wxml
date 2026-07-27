@@ -1,0 +1,30 @@
+<!--
+  列表产品标题 / 元信息模板（口径见 utils/listProductThumb.js，样式在 styles/list.wxss）
+
+  用法：
+    <import src="/templates/listProductTitle.wxml" />
+    <template is="listProductTitle" data="{{item: line}}" />
+    <template is="listProductMeta" data="{{item: line}}" />
+
+  data 里的 item 需带 listProductNameSkuFields + listProductMetaFields 的产出字段。
+  标题行内要额外塞徽章 / 数量时，标题保持页面内联，元信息行仍用 listProductMeta。
+  用 template 而非自定义组件：列表行数多，避免每行一个组件实例的开销。
+-->
+<template name="listProductTitle">
+  <view class="list-product-title">
+    <text class="list-product-title__name">{{item.productName}}</text>
+    <text wx:if="{{item.showProductSku}}" class="list-product-title__code">{{item.productSku}}</text>
+  </view>
+</template>
+
+<template name="listProductMeta">
+  <view wx:if="{{item.showProductMeta}}" class="list-product-meta">
+    <text wx:if="{{item.showPartner}}" class="list-product-meta__tag list-product-meta__tag--partner">{{item.partnerName}}</text>
+    <text
+      wx:for="{{item.productCustomTags}}"
+      wx:for-item="tag"
+      wx:key="id"
+      class="list-product-meta__tag"
+    >{{tag.label}}: {{tag.display}}</text>
+  </view>
+</template>

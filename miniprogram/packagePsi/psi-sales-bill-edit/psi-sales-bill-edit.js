@@ -44,6 +44,13 @@ const _require11 =
 const _require12 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require12.readNavBarMetrics,readWindowMetrics = _require12.readWindowMetrics,computePlanCreateHeaderHeight = _require12.computePlanCreateHeaderHeight;
 const _require13 = require('../../utils/matrixKeyboardLayout.js'),afterMatrixKeyboardOpen = _require13.afterMatrixKeyboardOpen,handleMatrixOutsideTap = _require13.handleMatrixOutsideTap;
 const _require14 = require('../../utils/saveNavigation.js'),LIST_ROUTES = _require14.LIST_ROUTES,afterSaveReturnToList = _require14.afterSaveReturnToList;
+const {
+  emptyPsiDocFinancePanelState,
+  initPsiDocFinancePanel,
+  loadPsiDocFinanceSavedAmount,
+  openPsiDocFinanceEntryFromPage,
+  flushPsiDocFinanceDrafts,
+} = require('../utils/psiDocFinancePanel.js');
 
 function computeHeaderBlockHeight(nav) {
   return computePlanCreateHeaderHeight(nav);
@@ -93,6 +100,7 @@ Page({
     scrollHeight: 500,
     matrixScrollTop: 0,
     pickerSheetOpen: false,
+    ...emptyPsiDocFinancePanelState(),
     ...emptyMatrixKeyboardState()
   },
 
@@ -113,7 +121,17 @@ Page({
       showAmount: hasPermission(ctx && ctx.permissions || [], 'psi:sales_bill:amount'),
       canDelete: editing && hasPermission(ctx && ctx.permissions || [], 'psi:sales_bill:delete')
     });
+    initPsiDocFinancePanel(this, PSI_TYPE);
     this.bootstrap();
+  },
+
+  /** 登记收/付款单：编辑态直接写库，新建态先暂存 */
+  onFinanceEntryTap() {
+    openPsiDocFinanceEntryFromPage(this, {
+      partner: this.data.form.partner,
+      docNumber: this.data.form.docNumber,
+      saved: Boolean(this._editingDocNumber)
+    });
   },
 
   onHeaderBack() {
@@ -205,6 +223,9 @@ Page({
         partnerCategories: normalizeMasterList(partnerCategories)
       });
       this.refreshLinesUi();
+      if (this._editingDocNumber) {
+        loadPsiDocFinanceSavedAmount(this, this._editingDocNumber);
+      }
     } catch (err) {
       this.setData({ loading: false });
       wx.showToast({ title: '加载失败', icon: 'none' });
@@ -519,6 +540,7 @@ Page({
       } else {
         await createPsiRecordsBatch(newRecords);
       }
+      await flushPsiDocFinanceDrafts(this, docNumber);
       wx.hideLoading();
       this.setData({ submitting: false });
       afterSaveReturnToList({

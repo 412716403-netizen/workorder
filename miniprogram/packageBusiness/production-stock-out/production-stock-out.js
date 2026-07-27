@@ -7,7 +7,8 @@ const _require3 =
 
 
 
-  require('../../utils/orderApi.js'),fetchTenantConfig = _require3.fetchTenantConfig,fetchProductsAll = _require3.fetchProductsAll,fetchBomsAll = _require3.fetchBomsAll,fetchNodesAll = _require3.fetchNodesAll,fetchProductionRecords = _require3.fetchProductionRecords,listProductProgressAll = _require3.listProductProgressAll;
+  require('../../utils/orderApi.js'),fetchTenantConfig = _require3.fetchTenantConfig,fetchBomsAll = _require3.fetchBomsAll,fetchNodesAll = _require3.fetchNodesAll,fetchProductionRecords = _require3.fetchProductionRecords,listProductProgressAll = _require3.listProductProgressAll;
+const { loadProductMetaMaps } = require('../../utils/productMetaMaps.js');
 const _require4 = require('../utils/pendingStockBadge.js'),fetchAllOrdersPaginated = _require4.fetchAllOrdersPaginated;
 const _require5 = require('../../utils/productionPlans.js'),normalizeMasterList = _require5.normalizeMasterList;
 const _require6 =
@@ -292,21 +293,23 @@ Page({
       this.setData({ loading: true });
     }
     try {
-      const _await$Promise$all = await Promise.all([
+      const [config, orders, productMeta, bomsRaw, nodesRaw, pmpRaw] = await Promise.all([
         fetchTenantConfig(),
         fetchAllOrdersPaginated({}),
-        fetchProductsAll().catch(() => []),
+        loadProductMetaMaps(),
         fetchBomsAll().catch(() => []),
         fetchNodesAll().catch(() => []),
-        listProductProgressAll().catch(() => [])]
-        ),config = _await$Promise$all[0],orders = _await$Promise$all[1],productsRaw = _await$Promise$all[2],bomsRaw = _await$Promise$all[3],nodesRaw = _await$Promise$all[4],pmpRaw = _await$Promise$all[5];
+        listProductProgressAll().catch(() => [])
+      ]);
 
       const productionLinkMode = config && config.productionLinkMode || 'order';
       const materialPanelSettings = config && config.materialPanelSettings || {};
-      const products = normalizeMasterList(productsRaw);
+      const products = productMeta.products;
       const boms = Array.isArray(bomsRaw) ? bomsRaw : normalizeMasterList(bomsRaw);
       const globalNodes = Array.isArray(nodesRaw) ? nodesRaw : [];
       const productMilestoneProgresses = Array.isArray(pmpRaw) ? pmpRaw : [];
+      this._categoryMap = productMeta.categoryMap;
+      this._partnerNameById = productMeta.partnerNameById;
 
       const allOrders = orders || [];
       const orderIdsCsv = getActiveOrderIdsCsv(allOrders);
@@ -364,7 +367,9 @@ Page({
       productionLinkMode: this._productionLinkMode || 'order',
       materialPanelSettings: this._materialPanelSettings || {},
       searchKeyword: this.data.searchKeyword,
-      materialKw: ''
+      materialKw: '',
+      categoryMap: this._categoryMap,
+      partnerNameById: this._partnerNameById
     });
     this._groupByPartner = groupByPartner && result.groupByPartner;
     this._allCards = result.cards;
