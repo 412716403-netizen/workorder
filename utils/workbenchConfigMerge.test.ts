@@ -127,6 +127,7 @@ describe('mergeWorkbenchHomePinnedItems', () => {
       'finance_stats',
       'sales_stats',
       'rework_stats',
+      'todos',
     ]);
   });
 });

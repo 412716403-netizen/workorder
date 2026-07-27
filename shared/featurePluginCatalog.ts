@@ -233,16 +233,16 @@ export const FEATURE_PLUGIN_MARKET_CATALOG: FeaturePluginMarketItem[] = [
     usageGuide: [
       {
         title: '开通插件',
-        body: '租户管理员在插件中心开启「待办提醒」。开启后工作台「消息中心」卡片出现「待办事项」按钮，生产工单/计划详情页出现「加待办」图标；关闭后相关入口与提醒全部隐藏。',
+        body: '租户管理员在插件中心开启「待办提醒」。开启后工作台首页自动出现「待办事项」组件（可拖动/删除，删除后可从「添加组件」加回），生产工单/计划等详情页出现「加待办」入口；关闭后相关入口与提醒全部隐藏。',
         bullets: ['管理员：插件中心开启', '待办为个人级，每位成员只看自己的待办'],
       },
       {
         title: '添加待办',
-        body: '在详情页点「加待办」把当前单据加入待办；或在「消息中心 - 待办事项」面板点「新建待办」添加独立待办。填写内容备注，按需开启提醒并选择提醒时间。',
+        body: '在详情页点「加待办」把当前单据加入待办；或在首页「待办事项」组件点「新建」添加独立待办。填写内容备注，按需开启提醒并选择提醒时间。',
       },
       {
         title: '查看与提醒',
-        body: '在消息中心「待办事项」面板查看、完成或删除待办；到点的提醒会出现在消息中心列表，点击可跳转关联单据。',
+        body: '在首页「待办事项」组件勾选完成，或点「管理」打开完整面板（未完成/已完成、搜索、编辑、删除）；到点的提醒会出现在消息中心列表，点击可跳转关联单据。',
       },
     ],
   },
@@ -318,10 +318,16 @@ export function isFeaturePluginActivated(
   plugins: Record<string, boolean | undefined>,
 ): boolean {
   if (item.toggleable) {
-    return plugins[item.id] !== false;
+    if (Object.prototype.hasOwnProperty.call(plugins, item.id)) {
+      return plugins[item.id] !== false;
+    }
+    return item.defaultEnabled;
   }
   if (item.linkedPluginId) {
-    return plugins[item.linkedPluginId] !== false;
+    if (Object.prototype.hasOwnProperty.call(plugins, item.linkedPluginId)) {
+      return plugins[item.linkedPluginId] !== false;
+    }
+    return true;
   }
   return true;
 }

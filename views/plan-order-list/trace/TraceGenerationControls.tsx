@@ -19,7 +19,6 @@ interface Props {
 
   vbBulkAllSummary: { totalRemaining: number; variantCount: number };
   bulkQuickConfiguredBatchSize: number | undefined;
-  bulkQuickWithItemCodesConfigured: boolean;
   vbBulkSplitting: boolean;
   handleBulkSplitVirtualBatches: (planOrderId: string) => Promise<void>;
 
@@ -46,7 +45,6 @@ const TraceGenerationControls: React.FC<Props> = ({
   setTraceGenMode,
   vbBulkAllSummary,
   bulkQuickConfiguredBatchSize,
-  bulkQuickWithItemCodesConfigured,
   vbBulkSplitting,
   handleBulkSplitVirtualBatches,
   singleBatchExpanded,
@@ -101,7 +99,7 @@ const TraceGenerationControls: React.FC<Props> = ({
         <p className="text-[11px] text-slate-500 leading-relaxed">
           额度按本计划及子计划、同产品明细汇总；标签请用打印模版批次码占位符。
           {traceGenMode === 'batchWithItems'
-            ? ' 当前为「单品码+批次码」：单条生成或一键生成时可按类型同步单品码。'
+            ? ' 当前为「单品码+批次码」：单条生成与一键生成都会同步生成单品码。'
             : ' 当前为「仅批次码」：不自动生成单品码。'}
         </p>
 
@@ -139,7 +137,7 @@ const TraceGenerationControls: React.FC<Props> = ({
               type="button"
               onClick={openBulkQuickSettings}
               className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-[11px] font-black text-slate-700 hover:bg-slate-50"
-              title="每批件数与一键生成是否带单品码"
+              title="设置一键生成的每批件数"
             >
               <Settings className="h-3.5 w-3.5 text-indigo-600" />
               拆批设置
@@ -150,9 +148,7 @@ const TraceGenerationControls: React.FC<Props> = ({
               <>
                 默认每批 <span className="font-black text-indigo-700">{bulkQuickConfiguredBatchSize}</span> 件
                 {traceGenMode === 'batchWithItems'
-                  ? bulkQuickWithItemCodesConfigured
-                    ? ' · 一键生成时带单品码'
-                    : ' · 一键生成不带单品码'
+                  ? ' · 一键生成同步单品码'
                   : ' · 一键生成仅批次码'}
                 {' · '}
               </>

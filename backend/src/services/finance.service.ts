@@ -19,6 +19,8 @@ export interface FinanceListFilter {
   startDate?: string;
   endDate?: string;
   search?: string;
+  /** PSI 来源单据号精确匹配（快捷收付款反查） */
+  sourceDocNo?: string;
 }
 
 /** Phase 3.A：把过滤参数从 controller 透传到 where 子句 */
@@ -29,6 +31,7 @@ function buildFinanceWhere(opts: FinanceListFilter): Record<string, unknown> {
   if (opts.categoryId) where.categoryId = opts.categoryId;
   if (opts.workerId) where.workerId = opts.workerId;
   if (opts.productId) where.productId = opts.productId;
+  if (opts.sourceDocNo) where.sourceDocNo = opts.sourceDocNo;
   if (opts.accountTypeId) {
     if (opts.accountTypeId === FINANCE_UNASSIGNED_ACCOUNT_KEY) {
       // 「未归账」：accountTypeId 为空且仅看收/付款（与余额聚合的 unassigned 口径一致）

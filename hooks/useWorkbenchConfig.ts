@@ -4,8 +4,10 @@ import { toast } from 'sonner';
 import { dashboard } from '../services/api/dashboard';
 import { dashboardQueryKey } from './dashboardQueryKeys';
 import { useAuth } from '../contexts/AuthContext';
+import { useFeaturePlugins } from './useFeaturePlugins';
 import {
   normalizeWorkbenchConfig,
+  filterWorkbenchByAccess,
   WORKBENCH_HOME_PAGE_ID,
   isWorkbenchHomePage,
   isHomePinnedWidgetType,
@@ -38,6 +40,12 @@ export function useWorkbenchConfig() {
   const tenantId = tenantCtx?.tenantId;
   const tenantRole = tenantCtx?.tenantRole;
   const permissions = useMemo(() => tenantCtx?.permissions ?? [], [tenantCtx?.permissions]);
+  const { plugins } = useFeaturePlugins();
+  /** 稳定依赖：避免 plugins 对象引用变化触发无意义重算 */
+  const pluginsKey = useMemo(
+    () => Object.keys(plugins).sort().map(k => `${k}:${plugins[k] ? 1 : 0}`).join('|'),
+    [plugins],
+  );
   /** 本地预判：用于决定是否发起请求；最终以服务端 canAccess 为准 */
   const localNavAllowed = hasWorkbenchNavAccess(permissions, tenantRole);
   const permKey = useMemo(() => workbenchPermKey(permissions), [permissions]);
@@ -68,12 +76,29 @@ export function useWorkbenchConfig() {
   /** 页面可见性与入口权限均以服务端为准 */
   const serverCanAccess = query.data?.canAccess;
   const navAllowed = serverCanAccess ?? localNavAllowed;
-  const effective =
+  const emptyWorkbench = useMemo(
+    () => ({ version: 1 as const, activePageId: '', pages: [] as WorkbenchConfig['pages'] }),
+    [],
+  );
+  const serverEffective =
     navAllowed && query.data?.effective && Array.isArray(query.data.effective.pages)
       ? query.data.effective
       : navAllowed
         ? null
-        : { version: 1 as const, activePageId: '', pages: [] };
+        : emptyWorkbench;
+
+  /** 按当前插件开关再过滤一遍，关闭插件后无需等 workbench 重拉即可隐藏依赖组件 */
+  const effective = useMemo(() => {
+    if (!serverEffective || serverEffective.pages.length === 0) return serverEffective;
+    return filterWorkbenchByAccess(serverEffective, {
+      permissions,
+      featurePlugins: plugins,
+      tenantRole,
+      userId,
+    });
+    // pluginsKey 表达插件开关内容；plugins 仅作取值
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- pluginsKey 已覆盖 plugins 内容变化
+  }, [serverEffective, permissions, pluginsKey, tenantRole, userId]);
 
   const loadError = query.error instanceof Error ? query.error.message : query.isError ? '加载失败' : null;
 
@@ -93,11 +118,18 @@ export function useWorkbenchConfig() {
   const config = useMemo(() => {
     if (!layoutConfig) return null;
     const normalized = normalizeWorkbenchConfig(layoutConfig, false);
-    const pageIds = new Set(normalized.pages.map(p => p.id));
-    const fallbackId = normalized.pages[0]?.id ?? WORKBENCH_HOME_PAGE_ID;
+    const filtered = filterWorkbenchByAccess(normalized, {
+      permissions,
+      featurePlugins: plugins,
+      tenantRole,
+      userId,
+    });
+    const pageIds = new Set(filtered.pages.map(p => p.id));
+    const fallbackId = filtered.pages[0]?.id ?? WORKBENCH_HOME_PAGE_ID;
     const activePageId = pageIds.has(sessionActivePageId) ? sessionActivePageId : fallbackId;
-    return { ...normalized, activePageId };
-  }, [layoutConfig, sessionActivePageId]);
+    return { ...filtered, activePageId };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- pluginsKey 已覆盖 plugins 内容变化
+  }, [layoutConfig, sessionActivePageId, permissions, pluginsKey, tenantRole, userId]);
 
   const saveMutation = useMutation({
     mutationFn: (config: WorkbenchConfig) => dashboard.saveWorkbench(config),

@@ -4,6 +4,7 @@ import {
   WORKBENCH_WIDGET_CATALOG,
   WORKBENCH_WIDGET_TYPES,
   WORKBENCH_PERM_MODULE,
+  FEATURE_PLUGIN_CATALOG,
   isWorkbenchHomePage,
   mergeWorkbenchHomePinnedItems,
   workbenchPagePermKey,
@@ -220,7 +221,15 @@ export function canUseWidget(
   if (!isWorkbenchWidgetType(widgetType)) return false;
   const def = WORKBENCH_WIDGET_CATALOG.find(w => w.type === widgetType);
   if (!def) return false;
-  if (def.requiredPlugin && opts.featurePlugins[def.requiredPlugin] === false) return false;
+  if (def.requiredPlugin) {
+    const flag = opts.featurePlugins[def.requiredPlugin];
+    if (flag === false) return false;
+    // 未写入开关时回落插件目录 defaultEnabled（如 todo_reminder 默认关闭）
+    if (flag === undefined) {
+      const pluginDef = FEATURE_PLUGIN_CATALOG.find(p => p.id === def.requiredPlugin);
+      if (pluginDef && !pluginDef.defaultEnabled) return false;
+    }
+  }
   if (fullAccess) return true;
   if (!def.requiredModule) return true;
   if (opts.tenantRole === 'owner') return true;

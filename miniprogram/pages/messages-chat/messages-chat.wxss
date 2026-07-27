@@ -58,6 +58,36 @@
   text-decoration: line-through;
 }
 
+.msg-feed-check {
+  flex-shrink: 0;
+  width: 44rpx;
+  height: 44rpx;
+  margin-top: 4rpx;
+  border-radius: 12rpx;
+  border: 2rpx solid #c9cdd4;
+  background: #fff;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.msg-feed-check--done {
+  border-color: var(--color-success);
+  background: var(--color-success);
+}
+
+.msg-feed-check--busy {
+  opacity: 0.55;
+}
+
+.msg-feed-check__mark {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1;
+}
+
 .msg-feed-row__dot {
   position: absolute;
   left: 10rpx;

@@ -139,12 +139,12 @@ describe('normalizePlanFormSettings listDisplay', () => {
     expect(n.labelPrint?.bulkQuickSplitWithItemCodes).toBe(true);
   });
 
-  it('preserves bulkQuickSplitWithItemCodes false when set', () => {
+  it('forces bulkQuickSplitWithItemCodes to true even when historically false', () => {
     const n = normalizePlanFormSettings({
       labelPrint: { bulkQuickSplitBatchSize: 10, bulkQuickSplitWithItemCodes: false },
     });
     expect(n.labelPrint?.bulkQuickSplitBatchSize).toBe(10);
-    expect(n.labelPrint?.bulkQuickSplitWithItemCodes).toBe(false);
+    expect(n.labelPrint?.bulkQuickSplitWithItemCodes).toBe(true);
   });
 });
 

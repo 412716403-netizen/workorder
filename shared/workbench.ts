@@ -10,6 +10,7 @@ export type WorkbenchWidgetType =
   | 'shortcuts'
   | 'plugin_center'
   | 'messages'
+  | 'todos'
   | 'order_stats'
   | 'outsource_stats'
   | 'rework_stats'
@@ -90,6 +91,7 @@ export const WORKBENCH_WIDGET_TYPES: WorkbenchWidgetType[] = [
   'shortcuts',
   'plugin_center',
   'messages',
+  'todos',
   'order_stats',
   'outsource_stats',
   'rework_stats',
@@ -143,6 +145,18 @@ export const WORKBENCH_WIDGET_CATALOG: WorkbenchWidgetDefinition[] = [
     requiredModule: null,
   },
   {
+    type: 'todos',
+    title: '待办事项',
+    description: '个人待办清单，勾选完成、定时提醒与关联单据跳转',
+    category: 'efficiency',
+    defaultW: 4,
+    defaultH: 6,
+    minW: 3,
+    minH: 4,
+    requiredModule: null,
+    requiredPlugin: 'todo_reminder',
+  },
+  {
     type: 'order_stats',
     title: '工单统计',
     description: '按工序查看计划数、良品数、不良品数与完成进度',
@@ -169,10 +183,10 @@ export const WORKBENCH_WIDGET_CATALOG: WorkbenchWidgetDefinition[] = [
     title: '返工统计',
     description: '按工序查看返工任务、待返工与完成进度',
     category: 'reports',
-    defaultW: 5,
-    defaultH: 7,
+    defaultW: 4,
+    defaultH: 6,
     minW: 3,
-    minH: 6,
+    minH: 4,
     requiredModule: 'production',
   },
   {
@@ -180,9 +194,9 @@ export const WORKBENCH_WIDGET_CATALOG: WorkbenchWidgetDefinition[] = [
     title: '销售统计',
     description: '销售出库、单数与退货汇总',
     category: 'reports',
-    defaultW: 5,
+    defaultW: 4,
     defaultH: 6,
-    minW: 4,
+    minW: 3,
     minH: 4,
     requiredModule: 'psi',
   },
@@ -191,9 +205,9 @@ export const WORKBENCH_WIDGET_CATALOG: WorkbenchWidgetDefinition[] = [
     title: '销售订单统计',
     description: '销售订单金额、单数与件数汇总',
     category: 'reports',
-    defaultW: 5,
+    defaultW: 4,
     defaultH: 6,
-    minW: 4,
+    minW: 3,
     minH: 4,
     requiredModule: 'psi',
   },
@@ -202,9 +216,9 @@ export const WORKBENCH_WIDGET_CATALOG: WorkbenchWidgetDefinition[] = [
     title: '财务统计',
     description: '收付款汇总与净现金流',
     category: 'reports',
-    defaultW: 5,
+    defaultW: 4,
     defaultH: 6,
-    minW: 4,
+    minW: 3,
     minH: 4,
     requiredModule: 'finance',
   },
@@ -213,9 +227,9 @@ export const WORKBENCH_WIDGET_CATALOG: WorkbenchWidgetDefinition[] = [
     title: '产品经营·报工耗材',
     description: '按报工耗材与领退料结余损耗汇总物料成本，叠加报工/外协/返工/报损',
     category: 'reports',
-    defaultW: 5,
+    defaultW: 4,
     defaultH: 6,
-    minW: 4,
+    minW: 3,
     minH: 4,
     requiredModule: 'production',
   },
@@ -224,9 +238,9 @@ export const WORKBENCH_WIDGET_CATALOG: WorkbenchWidgetDefinition[] = [
     title: '产品经营·单据关联',
     description: '按关联采购入库与关联收付款汇总成本，叠加报工/外协/返工/报损',
     category: 'reports',
-    defaultW: 5,
+    defaultW: 4,
     defaultH: 6,
-    minW: 4,
+    minW: 3,
     minH: 4,
     requiredModule: 'production',
   },
@@ -261,21 +275,77 @@ export function getWorkbenchHomePinnedRowBottom(): number {
   return WORKBENCH_HOME_PINNED_LAYOUT.reduce((max, it) => Math.max(max, it.y + it.h), 0);
 }
 
-/** 系统内置首页完整布局（含统计组件默认位置） */
+/**
+ * membership.preferences 中标记「已对当前用户做过待办组件种子注入」。
+ * owner 删除待办组件并保存后置真，避免下次 GET 再次注入。
+ */
+export const WORKBENCH_TODO_WIDGET_SEEDED_PREF_KEY = 'workbenchTodoWidgetSeeded';
+
+/** 首页默认待办事项组件位置：整页最下方靠左 */
+export const WORKBENCH_HOME_TODO_LAYOUT_ITEM: WorkbenchLayoutItem = {
+  i: 'w-todos',
+  widgetType: 'todos',
+  x: 0,
+  y: 19,
+  w: 4,
+  h: 6,
+  minW: 3,
+  minH: 4,
+};
+
+/**
+ * 向首页注入待办组件（幂等）：已存在则原样返回；
+ * 否则放在当前布局最下方靠左（x=0），不挤占既有组件。
+ */
+export function injectHomeTodoWidget(page: WorkbenchPage): WorkbenchPage {
+  if (!isWorkbenchHomePage(page.id)) return page;
+  if (page.layout.items.some(it => it.widgetType === 'todos')) return page;
+
+  const zoneBottom = getWorkbenchHomePinnedRowBottom();
+  const contentBottom = page.layout.items.reduce(
+    (max, it) => Math.max(max, it.y + it.h),
+    zoneBottom,
+  );
+  const todo: WorkbenchLayoutItem = {
+    ...WORKBENCH_HOME_TODO_LAYOUT_ITEM,
+    y: contentBottom,
+  };
+
+  return {
+    ...page,
+    layout: {
+      version: 1,
+      items: mergeWorkbenchHomePinnedItems([...page.layout.items, todo]),
+    },
+  };
+}
+
+/** 系统内置首页完整布局（含统计组件默认位置；todos 依赖插件，由 filter 按开关剔除） */
 export const WORKBENCH_HOME_DEFAULT_LAYOUT: WorkbenchLayoutItem[] = [
   ...WORKBENCH_HOME_PINNED_LAYOUT,
   { i: 'w-order-stats', widgetType: 'order_stats', x: 0, y: 6, w: 6, h: 7, minW: 3, minH: 6 },
   { i: 'w-outsource-stats', widgetType: 'outsource_stats', x: 6, y: 6, w: 6, h: 7, minW: 3, minH: 6 },
-  { i: 'w-finance-stats', widgetType: 'finance_stats', x: 0, y: 13, w: 4, h: 6, minW: 4, minH: 4 },
-  { i: 'w-sales-stats', widgetType: 'sales_stats', x: 4, y: 13, w: 4, h: 6, minW: 4, minH: 4 },
-  { i: 'w-rework-stats', widgetType: 'rework_stats', x: 8, y: 13, w: 4, h: 6, minW: 3, minH: 6 },
+  { i: 'w-finance-stats', widgetType: 'finance_stats', x: 0, y: 13, w: 4, h: 6, minW: 3, minH: 4 },
+  { i: 'w-sales-stats', widgetType: 'sales_stats', x: 4, y: 13, w: 4, h: 6, minW: 3, minH: 4 },
+  { i: 'w-rework-stats', widgetType: 'rework_stats', x: 8, y: 13, w: 4, h: 6, minW: 3, minH: 4 },
+  { ...WORKBENCH_HOME_TODO_LAYOUT_ITEM },
 ];
 
 export function mergeWorkbenchHomePinnedItems(items: WorkbenchLayoutItem[]): WorkbenchLayoutItem[] {
   const zoneBottom = getWorkbenchHomePinnedRowBottom();
-  const custom = items
+  let custom = items
     .filter(it => !isHomePinnedWidgetType(it.widgetType))
     .map(it => (it.y < zoneBottom ? { ...it, y: zoneBottom } : it));
+
+  // 非编辑态网格项为 static，不会垂直吸附；去掉固定区与内容区之间的空洞
+  if (custom.length > 0) {
+    const minY = Math.min(...custom.map(it => it.y));
+    if (minY > zoneBottom) {
+      const shift = minY - zoneBottom;
+      custom = custom.map(it => ({ ...it, y: it.y - shift }));
+    }
+  }
+
   return [
     ...WORKBENCH_HOME_PINNED_LAYOUT.map(it => ({ ...it })),
     ...custom,

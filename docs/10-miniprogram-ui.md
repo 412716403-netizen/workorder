@@ -367,7 +367,7 @@ npm run miniprogram:icons
 | 会话列表 | [`pages/messages/`](../miniprogram/pages/messages/) | 类微信聊天列表：消息中心 / 待办事项 / 各协作合作单位 |
 | 详情列表 | [`pages/messages-chat/`](../miniprogram/pages/messages-chat/) | 对齐工单中心：蓝顶栏内嵌搜索 + 右侧操作；全宽列表行（最新在上） |
 | — | 消息中心详情 | 未读圆点、进入即已读、「全部已读」、下拉刷新；点行进入 [`message-detail`](../miniprogram/pages/message-detail/) |
-| — | 待办事项详情 | 「管理」跳转完整待办页；点行进入 [`todo-edit`](../miniprogram/packageBusiness/todo-edit/) 待办详情 |
+| — | 待办事项详情 | 行左侧勾选完成/还原；「管理」跳转完整待办页；点行进入 [`todo-edit`](../miniprogram/packageBusiness/todo-edit/) 待办详情（底栏「标记完成」） |
 | — | 协作会话详情 | 同列表行；操作仍提示电脑端处理 |
 
 | 会话类型 | 数据源 | 气泡方向 |
@@ -386,7 +386,7 @@ npm run miniprogram:icons
 | [`utils/messagesCache.js`](../miniprogram/utils/messagesCache.js) | 跨页面数据缓存 |
 | [`utils/messagesTabBadge.js`](../miniprogram/utils/messagesTabBadge.js) | Tab 角标 |
 
-进入「消息中心」列表即视为已阅读：本地全部标已读并上报服务端，清除会话/Tab 红点角标。「全部已读」仍保留。Tab 角标 = 未读消息 + **已到点且未完成**的待办提醒 + 协作待处理。打开消息 Tab / 首页时会先同步服务端已读（网页已读后小程序不再提示未读）。点消息行进入 [`message-detail`](../miniprogram/pages/message-detail/)；点待办行进入 [`todo-edit`](../miniprogram/packageBusiness/todo-edit/)（可再点关联单据深链）；协作操作提示去电脑端处理。
+进入「消息中心」列表即视为已阅读：本地全部标已读并上报服务端，清除会话/Tab 红点角标。「全部已读」仍保留。Tab 角标 = 未读消息 + **已到点且未完成**的待办提醒 + 协作待处理。打开消息 Tab / 首页时会先同步服务端已读（网页已读后小程序不再提示未读）。点消息行进入 [`message-detail`](../miniprogram/pages/message-detail/)；点待办行进入 [`todo-edit`](../miniprogram/packageBusiness/todo-edit/)（可再点关联单据深链）；待办列表勾选或详情「标记完成」后角标按未完成数更新；协作操作提示去电脑端处理。
 
 完整待办管理（对齐 Web `TodoPanelModal`）见下方「待办提醒」节；消息 Tab 内「待办事项」仅在有到点提醒时出现，可点「管理」进入完整待办页（含未到点项）。
 
@@ -987,7 +987,7 @@ npm run miniprogram:icons
 | 页面 | 路径 | 职责 |
 |------|------|------|
 | 管理页 | [`packageBusiness/todos/`](../miniprogram/packageBusiness/todos/) | 未完成 / 已完成 Tab、搜索、完成/还原、编辑、删除、点关联单据跳转 |
-| 新建/编辑 | [`packageBusiness/todo-edit/`](../miniprogram/packageBusiness/todo-edit/) | 备注 + 定时提醒（`datetime-calendar-select`）；可带单据 seed |
+| 新建/编辑 | [`packageBusiness/todo-edit/`](../miniprogram/packageBusiness/todo-edit/) | 备注 + 定时提醒（`datetime-calendar-select`）；编辑态底栏删除 / 标记完成 / 保存；可带单据 seed |
 
 | 工具 | 作用 |
 |------|------|
@@ -1010,7 +1010,7 @@ npm run miniprogram:icons
 | 页面 | 路径 | 职责 |
 |------|------|------|
 | 款式列表 | [`packageBusiness/development-styles/`](../miniprogram/packageBusiness/development-styles/) | 开发中 / 已归档 Tab、搜索、进度节点或同步状态筛选、按时间/客户排序、录入新产品、节点库入口 |
-| 款式详情 | [`development-style-detail/`](../miniprogram/packageBusiness/development-style-detail/) | 基本信息、归档/还原/发布大货/删除、样品区标题同行靠右入口（日志 / 开发物料 / BOM）、节点时间线、加删样品、版本日志、深链 `styleId` + `devStageId` / `devSampleId` |
+| 款式详情 | [`development-style-detail/`](../miniprogram/packageBusiness/development-style-detail/) | 基本信息、归档/还原/发布大货/删除、样品区标题同行靠右入口（日志 / 开发物料 / BOM；无样品时 BOM 仍可进款式级全量录入）、节点时间线、加删样品、版本日志、深链 `styleId` + `devStageId` / `devSampleId` |
 | 创建/编辑 | [`development-style-edit/`](../miniprogram/packageBusiness/development-style-edit/) | 分类商品字段（产品编号可按分类规则自动取号，与产品档案同口径；产品名称/款号选填）、开发流程节点（新建默认不勾选，须手动选择）、大货工序；保存回列表 |
 | 节点登记 | [`development-stage-register/`](../miniprogram/packageBusiness/development-stage-register/) | 四态 + 模板自定义字段；`todo_reminder` 开启时可加待办 |
 | BOM 录入 | [`development-bom-edit/`](../miniprogram/packageBusiness/development-bom-edit/) | **格子下钻**（变体×工序 → 物料行），非 Web 整表矩阵；同数据源 `dev_boms` + `syncVariantNodeBoms` |

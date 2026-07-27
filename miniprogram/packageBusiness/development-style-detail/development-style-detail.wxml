@@ -91,7 +91,7 @@
               bindtap="onMaterialTap"
             >开发物料</view>
             <view
-              wx:if="{{detail.actions.showBom && activeSample}}"
+              wx:if="{{detail.actions.showBom}}"
               class="dev-hero-outline-btn dev-hero-outline-btn--amber"
               bindtap="onBomTap"
             >BOM</view>

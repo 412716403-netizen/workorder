@@ -4,7 +4,7 @@ const { getCache } = require('../../utils/messagesCache.js');
 const { buildConversations } = require('../../utils/messagesChatBuilder.js');
 const { applyMessageLists, loadMessagesData } = require('../../utils/messagesLoad.js');
 const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
-const { openTodoEdit } = require('../../utils/todosApi.js');
+const { openTodoEdit, updateTodo } = require('../../utils/todosApi.js');
 
 function decodeOpt(v) {
   if (v == null || v === '') return '';
@@ -87,6 +87,7 @@ Page({
     showMarkAllRead: false,
     showManageTodos: false,
     unreadCount: 0,
+    togglingTodoId: '',
     refreshing: false,
     scrollHeight: 600,
     searchKeyword: '',
@@ -120,6 +121,18 @@ Page({
     const ctx = readTenantCtx();
     const userId = readCurrentUserId();
     const reload = () => this.loadConversation(this._conversationId);
+
+    // 首次由 onLoad 装载；从待办详情返回时需重拉，才能清「未完成」角标
+    if (this._hasShown) {
+      const isTodos =
+        this.data.conversationKind === 'todos' || this._conversationId === 'todos';
+      if (isTodos && ctx && ctx.tenantId) {
+        this.reloadFromNetwork().catch(() => reload());
+        return;
+      }
+    }
+    this._hasShown = true;
+
     if (ctx && ctx.tenantId) {
       syncReadsFromServer(ctx.tenantId, userId).finally(reload);
     } else {
@@ -272,6 +285,61 @@ Page({
 
   onManageTodos() {
     wx.navigateTo({ url: '/packageBusiness/todos/todos' });
+  },
+
+  /** 勾选完成 / 取消完成；同步缓存与 Tab 角标 */
+  onTodoToggleTap(e) {
+    const id = e.currentTarget.dataset.id;
+    if (!id || this.data.togglingTodoId) return;
+    const row =
+      (this._allRows || []).find((b) => String(b.id) === String(id)) ||
+      (this.data.rows || []).find((b) => String(b.id) === String(id));
+    if (!row || row.kind !== 'todo') return;
+
+    const nextDone = !row.done;
+    const nextStatus = nextDone ? 'done' : 'open';
+    this.setData({ togglingTodoId: String(id) });
+
+    updateTodo(id, { status: nextStatus })
+      .then(() => {
+        const patchRow = (r) => {
+          if (String(r.id) !== String(id)) return r;
+          const raw = r.raw ? { ...r.raw, status: nextStatus } : r.raw;
+          return {
+            ...r,
+            done: nextDone,
+            tagLabel: nextDone ? '已完成' : '待处理',
+            tagTone: nextDone ? 'muted' : 'warning',
+            preview: nextDone
+              ? `[已完成] ${String(r.title || '').replace(/^\[已完成\]\s*/, '')}`
+              : String(r.title || ''),
+            raw,
+          };
+        };
+        this._allRows = (this._allRows || []).map(patchRow);
+        this.applyFilter(this.data.searchKeyword);
+
+        const cache = getCache();
+        if (cache && Array.isArray(cache.todos)) {
+          cache.todos = cache.todos.map((t) =>
+            String(t.id) === String(id) ? { ...t, status: nextStatus } : t,
+          );
+          this.refreshTabBadgeFromCache();
+        }
+        wx.showToast({
+          title: nextDone ? '已完成' : '已还原为未完成',
+          icon: 'success',
+        });
+      })
+      .catch((err) => {
+        wx.showToast({
+          title: (err && err.message) || '操作失败',
+          icon: 'none',
+        });
+      })
+      .finally(() => {
+        this.setData({ togglingTodoId: '' });
+      });
   },
 
   openMessageDetail(row) {

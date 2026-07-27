@@ -15,6 +15,8 @@ export interface FinanceFilter {
   startDate?: string;
   endDate?: string;
   search?: string;
+  /** PSI 来源单据号精确匹配（快捷收付款反查） */
+  sourceDocNo?: string;
 }
 
 export interface AccountBalanceRow {

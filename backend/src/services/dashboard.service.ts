@@ -11,8 +11,10 @@ import {
   WORKBENCH_HOME_PAGE_ID,
   WORKBENCH_BUILTIN_DEFAULT,
   WORKBENCH_WIDGET_CATALOG,
+  WORKBENCH_TODO_WIDGET_SEEDED_PREF_KEY,
   parseFeaturePlugins,
   isWorkbenchHomePage,
+  injectHomeTodoWidget,
   type WorkbenchConfig,
   type WorkbenchPage,
   type FeaturePluginsConfig,
@@ -67,6 +69,12 @@ function readUserHomePage(preferences: unknown): WorkbenchPage {
   const wb = readUserWorkbench(preferences);
   const home = wb?.pages.find(p => isWorkbenchHomePage(p.id));
   return home ?? builtinHomePage();
+}
+
+/** 是否已对当前用户做过待办组件种子注入（避免删除后再复活） */
+function readTodoWidgetSeeded(preferences: unknown): boolean {
+  if (!preferences || typeof preferences !== 'object') return false;
+  return (preferences as Record<string, unknown>)[WORKBENCH_TODO_WIDGET_SEEDED_PREF_KEY] === true;
 }
 
 /** 读取租户级共享的自定义页面（存于 system_settings.workbenchSharedPages） */
@@ -162,8 +170,11 @@ export async function getWorkbench(userId: string, tenantId: string, permissions
   const featurePlugins = parseFeaturePlugins(config[DASHBOARD_SETTING_KEYS.featurePlugins]);
 
   const homePage = readUserHomePage(membership.preferences);
+  const needSeed = featurePlugins.todo_reminder === true
+    && !readTodoWidgetSeeded(membership.preferences);
+  const home = needSeed ? injectHomeTodoWidget(homePage) : homePage;
   const sharedPages = readSharedWorkbenchPages(config);
-  const assembled = assembleWorkbench(homePage, sharedPages);
+  const assembled = assembleWorkbench(home, sharedPages);
 
   const visible = filterWorkbenchPagesByVisibility(assembled, {
     userId,
@@ -214,6 +225,10 @@ export async function saveUserWorkbench(
     membership.preferences && typeof membership.preferences === 'object'
       ? { ...(membership.preferences as Record<string, unknown>) }
       : {};
+
+  if (featurePlugins.todo_reminder === true) {
+    prefs[WORKBENCH_TODO_WIDGET_SEEDED_PREF_KEY] = true;
+  }
 
   await basePrisma.tenantMembership.update({
     where: { id: membership.id },

@@ -85,17 +85,14 @@ export function usePlanTraceState(args: UsePlanTraceStateArgs) {
 
   const [bulkQuickSettingsOpen, setBulkQuickSettingsOpen] = useState(false);
   const [bulkQuickDraftSize, setBulkQuickDraftSize] = useState('');
-  const [bulkQuickDraftWithItems, setBulkQuickDraftWithItems] = useState(true);
 
   const [traceInventoryTab, setTraceInventoryTab] = useState<'items' | 'batches'>('items');
 
   const bulkQuickConfiguredBatchSize = planFormSettings.labelPrint?.bulkQuickSplitBatchSize;
-  const bulkQuickWithItemCodesConfigured = planFormSettings.labelPrint?.bulkQuickSplitWithItemCodes !== false;
 
   const openBulkQuickSettings = useCallback(() => {
     const sz = planFormSettings.labelPrint?.bulkQuickSplitBatchSize;
     setBulkQuickDraftSize(sz != null && Number.isFinite(sz) ? String(sz) : '');
-    setBulkQuickDraftWithItems(planFormSettings.labelPrint?.bulkQuickSplitWithItemCodes !== false);
     setBulkQuickSettingsOpen(true);
   }, [planFormSettings.labelPrint]);
 
@@ -115,7 +112,8 @@ export function usePlanTraceState(args: UsePlanTraceStateArgs) {
       labelPrint: {
         ...planFormSettings.labelPrint,
         bulkQuickSplitBatchSize: n,
-        bulkQuickSplitWithItemCodes: bulkQuickDraftWithItems,
+        // 已取消「是否带单品码」开关：一键生成跟随详情页生成类型，配置恒为同步生成
+        bulkQuickSplitWithItemCodes: true,
       },
     });
     try {
@@ -130,7 +128,7 @@ export function usePlanTraceState(args: UsePlanTraceStateArgs) {
           : '保存失败：请确认已登录且账号具备「系统设置 → 配置」编辑权限（settings:config:edit）',
       );
     }
-  }, [bulkQuickDraftSize, bulkQuickDraftWithItems, onUpdatePlanFormSettings, planFormSettings]);
+  }, [bulkQuickDraftSize, onUpdatePlanFormSettings, planFormSettings]);
 
   const allocByVariantKey = useMemo(() => {
     const m = new Map<string, number>();
@@ -304,7 +302,8 @@ export function usePlanTraceState(args: UsePlanTraceStateArgs) {
         toast.error('请先在设置中配置有效的每批件数（1–100000）');
         return;
       }
-      const withItemCodes = traceGenMode === 'batchWithItems' && bulkQuickWithItemCodesConfigured;
+      // 与单条生成一致：选「单品码+批次码」则同步生成，选「仅批次码」则不生成
+      const withItemCodes = traceGenMode === 'batchWithItems';
       setVbBulkSplitting(true);
       try {
         const res = await planVirtualBatchesApi.bulkSplitAll({
@@ -332,7 +331,6 @@ export function usePlanTraceState(args: UsePlanTraceStateArgs) {
     },
     [
       bulkQuickConfiguredBatchSize,
-      bulkQuickWithItemCodesConfigured,
       traceGenMode,
       loadVirtualBatches,
       loadSubtreeAllocations,
@@ -440,10 +438,7 @@ export function usePlanTraceState(args: UsePlanTraceStateArgs) {
     setBulkQuickSettingsOpen,
     bulkQuickDraftSize,
     setBulkQuickDraftSize,
-    bulkQuickDraftWithItems,
-    setBulkQuickDraftWithItems,
     bulkQuickConfiguredBatchSize,
-    bulkQuickWithItemCodesConfigured,
     openBulkQuickSettings,
     handleSaveBulkQuickSettings,
 

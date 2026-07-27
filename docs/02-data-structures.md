@@ -211,12 +211,15 @@ interface FinanceRecord {
   status: 'PENDING' | 'COMPLETED' | 'CANCELLED';
   paymentAccount?: string;  // 收支账户名（展示用）
   accountTypeId?: string;   // 关联 FinanceAccountType.id（余额聚合/台账/转账的精确分组键）
+  /** PSI 来源单据号（采购订单/采购入库/销售订单/销售单）；快捷登记收付款时写入，详情页反查已收付金额 */
+  sourceDocNo?: string;
   customData?: Record<string, any>;  // 转账记录含 { transfer:true, transferGroupId, direction:'in'|'out', counterpartAccountId, counterpartAccountName }
 }
 ```
 
 `paymentAccount` 历史只存账户名字符串；新增 `accountTypeId` 外键后，余额聚合、账户台账、转账一律以 `accountTypeId` 精确分组，`paymentAccount` 仅作展示与回退。迁移 `20260625120000_finance_account_balance` 已按 `(tenant_id, name)` 回填存量数据；新建/编辑收付款记录时，`finance.service` 会按 `paymentAccount` 名解析并写入 `accountTypeId`（`resolveAccountTypeId`），保证写入即归账；空或对不上的记录 `accountTypeId` 为 NULL，在「资金账户」页归入「未归账」提示，不计入任一账户余额。
 
+`sourceDocNo` 由 migration `20260727120000_finance_record_source_doc_no` 增加列与 `(tenant_id, source_doc_no)` 索引；列表可用 `GET /api/finance/records?sourceDocNo=` 精确过滤。
 ### 3.1 收支账户类型 (FinanceAccountType)
 
 ```ts

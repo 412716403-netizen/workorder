@@ -68,11 +68,15 @@
     <view class="report-batch-footer__inner">
       <block wx:if="{{isEdit}}">
         <view
-          class="report-batch-footer__btn report-batch-footer__btn--danger {{deleting ? 'report-batch-footer__btn--disabled' : ''}}"
+          class="report-batch-footer__btn report-batch-footer__btn--danger {{deleting || togglingDone ? 'report-batch-footer__btn--disabled' : ''}}"
           bindtap="onDeleteTap"
         >删除</view>
         <view
-          class="report-batch-footer__btn report-batch-footer__btn--primary {{submitting ? 'report-batch-footer__btn--disabled' : ''}}"
+          class="report-batch-footer__btn {{done ? 'report-batch-footer__btn--ghost' : 'report-batch-footer__btn--success'}} {{togglingDone || submitting || deleting ? 'report-batch-footer__btn--disabled' : ''}}"
+          bindtap="onToggleDone"
+        >{{done ? '取消完成' : '标记完成'}}</view>
+        <view
+          class="report-batch-footer__btn report-batch-footer__btn--primary {{submitting || togglingDone ? 'report-batch-footer__btn--disabled' : ''}}"
           bindtap="onSubmit"
         >保存</view>
       </block>

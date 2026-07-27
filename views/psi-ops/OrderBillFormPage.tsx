@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Product,
   Warehouse,
@@ -13,13 +14,17 @@ import {
   PrintTemplate,
   PsiRecord,
   ProductionOpRecord,
+  FinanceRecord,
   PSI_PO_CUSTOM_DATA_SOURCE_PLAN_ID,
   PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER,
+  PSI_DOC_FINANCE_OP_TYPE,
+  type PsiOrderBillDocType,
 } from '../../types';
 import PurchaseOrderFormSection from './PurchaseOrderFormSection';
 import SalesOrderFormSection from './SalesOrderFormSection';
 import SalesBillFormSection from './SalesBillFormSection';
 import PurchaseBillFormSection from './PurchaseBillFormSection';
+import PsiDocFinanceSummarySlot from './PsiDocFinanceSummarySlot';
 import { psiEntryTimestampsFromDatetime, defaultEntryDatetimeLocal, hydrateEntryDatetimeLocal } from '../../utils/docEntryTime';
 import { nextPsiDocNumber } from '../../utils/partnerDocNumber';
 import {
@@ -44,6 +49,7 @@ import {
 import { hasModulePerm } from '../../utils/hasModulePerm';
 import { formatMaterialQtyDisplay } from '../../utils/formatMaterialQtyDisplay';
 import { AMOUNT_PERMISSION_KEYS, canViewAmount } from '../../utils/canViewAmount';
+import { buildPsiDocFinanceNote, canReadPsiDocLinkedFinance } from '../../utils/psiDocFinanceNote';
 import { toast } from 'sonner';
 import * as api from '../../services/api';
 import { categoryUsesBatchManagement } from '../../types';
@@ -173,6 +179,83 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
   const showPbAmount = canViewAmount(tenantRole, userPermissions, AMOUNT_PERMISSION_KEYS.PSI_PURCHASE_BILL);
   const showSoAmount = canViewAmount(tenantRole, userPermissions, AMOUNT_PERMISSION_KEYS.PSI_SALES_ORDER);
   const showSbAmount = canViewAmount(tenantRole, userPermissions, AMOUNT_PERMISSION_KEYS.PSI_SALES_BILL);
+  const qc = useQueryClient();
+  const orderBillDocType = formType as PsiOrderBillDocType;
+  const financeOpType = PSI_DOC_FINANCE_OP_TYPE[orderBillDocType];
+
+  /** 新增态暂存的收付款单；保存 PSI 单据后 flush 落库并写入 sourceDocNo */
+  const [stagedFinanceDrafts, setStagedFinanceDrafts] = useState<FinanceRecord[]>([]);
+  useEffect(() => {
+    setStagedFinanceDrafts([]);
+  }, [editingDocNumber, formType]);
+
+  const canReadLinkedFinance = canReadPsiDocLinkedFinance(orderBillDocType, tenantRole, userPermissions);
+  const linkedFinanceQuery = useQuery({
+    queryKey: ['finance', 'bySourceDoc', editingDocNumber, financeOpType],
+    queryFn: () =>
+      api.finance.listPage({
+        sourceDocNo: editingDocNumber!,
+        type: financeOpType,
+        page: 1,
+        pageSize: 200,
+      }),
+    enabled: !!editingDocNumber && canReadLinkedFinance,
+    staleTime: 15_000,
+  });
+  const savedLinkedFinanceAmount = useMemo(
+    () =>
+      ((linkedFinanceQuery.data?.data as FinanceRecord[] | undefined) ?? []).reduce(
+        (s, r) => s + (Number(r.amount) || 0),
+        0,
+      ),
+    [linkedFinanceQuery.data],
+  );
+  const stagedFinanceAmount = useMemo(
+    () => stagedFinanceDrafts.reduce((s, r) => s + (Number(r.amount) || 0), 0),
+    [stagedFinanceDrafts],
+  );
+  const linkedFinanceAmount = savedLinkedFinanceAmount + stagedFinanceAmount;
+
+  const handleStageFinanceDraft = useCallback((record: FinanceRecord) => {
+    setStagedFinanceDrafts(prev => [...prev, record]);
+  }, []);
+
+  const invalidateLinkedFinance = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ['finance', 'bySourceDoc'] });
+    qc.invalidateQueries({ queryKey: ['finance', 'list'] });
+  }, [qc]);
+
+  const flushStagedFinanceDrafts = useCallback(
+    async (docNumber: string) => {
+      if (stagedFinanceDrafts.length === 0) return;
+      const drafts = [...stagedFinanceDrafts];
+      setStagedFinanceDrafts([]);
+      const defaultWithoutNo = buildPsiDocFinanceNote(orderBillDocType, null);
+      const noteWithNo = buildPsiDocFinanceNote(orderBillDocType, docNumber);
+      let ok = 0;
+      let fail = 0;
+      for (const d of drafts) {
+        try {
+          await api.finance.create({
+            ...d,
+            sourceDocNo: docNumber,
+            note: !d.note || d.note === defaultWithoutNo ? noteWithNo : d.note,
+          });
+          ok += 1;
+        } catch {
+          fail += 1;
+        }
+      }
+      invalidateLinkedFinance();
+      if (fail > 0) {
+        toast.warning(`单据已保存，但有 ${fail} 笔收付款单登记失败，请到财务模块补登`);
+      } else if (ok > 0) {
+        toast.success(`已同步登记 ${ok} 笔收付款单`);
+      }
+    },
+    [stagedFinanceDrafts, orderBillDocType, invalidateLinkedFinance],
+  );
+
   const safePurchaseBillFormSettings = useMemo(
     () => ({
       standardFields: purchaseBillFormSettings?.standardFields ?? [],
@@ -903,6 +986,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       } else {
         if (onSaveBatch) await onSaveBatch(newRecords);
         else { for (const r of newRecords) await onSave(r); }
+        await flushStagedFinanceDrafts(docNumber);
       }
 
       if (editingDocNumber) {
@@ -1047,6 +1131,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       } else {
         if (onSaveBatch) await onSaveBatch(newRecords);
         else { for (const r of newRecords) await onSave(r); }
+        await flushStagedFinanceDrafts(docNumber);
       }
       writeWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.PURCHASE_BILL, {
         warehouseId: form.warehouseId,
@@ -1157,6 +1242,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       } else {
         if (onSaveBatch) await onSaveBatch(newRecords);
         else { for (const r of newRecords) await onSave(r); }
+        await flushStagedFinanceDrafts(docNumber);
       }
       if (editingDocNumber) {
         onBack();
@@ -1299,6 +1385,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       } else {
         if (onSaveBatch) await onSaveBatch(newRecords);
         else { for (const r of newRecords) await onSave(r); }
+        await flushStagedFinanceDrafts(docNumber);
       }
       writeWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.SALES_BILL, {
         warehouseId: form.warehouseId,
@@ -1315,6 +1402,30 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
   };
 
   // ── Render ──
+  /** 备注用单号：已保存单号，或已选合作单位后的预览单号（未选单位则为空） */
+  const financeNoteDocNumber = (() => {
+    if (editingDocNumber) return editingDocNumber;
+    if (!(form.partner || '').trim()) return '';
+    if (formType === 'PURCHASE_ORDER') return generatePODocNumber();
+    if (formType === 'PURCHASE_BILL') return generatePBDocNumber(form.partnerId || '', form.partner || '');
+    if (formType === 'SALES_ORDER') return generateSODocNumber();
+    if (formType === 'SALES_BILL') return generateSBDocNumber();
+    return '';
+  })();
+
+  const financeSummarySlot = (
+    <PsiDocFinanceSummarySlot
+      docType={orderBillDocType}
+      sourceDocNo={editingDocNumber}
+      noteDocNumber={financeNoteDocNumber || null}
+      partner={form.partner || ''}
+      partnerLabel={partnerLabel}
+      linkedAmount={linkedFinanceAmount}
+      onStage={handleStageFinanceDraft}
+      onCreated={invalidateLinkedFinance}
+    />
+  );
+
   if (formType === 'PURCHASE_ORDER') {
     return (
       <PurchaseOrderFormSection
@@ -1344,6 +1455,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         receivedByOrderLine={receivedByOrderLine}
         resolveDefaultPurchasePrice={resolveDefaultPurchasePrice}
         showAmount={showPoAmount}
+        financeSummarySlot={financeSummarySlot}
       />
     );
   }
@@ -1379,6 +1491,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         buildSalesOrderPrintContext={buildSalesOrderPrintContext}
         resolveDefaultSalesPrice={resolveDefaultSalesPrice}
         showAmount={showSoAmount}
+        financeSummarySlot={financeSummarySlot}
       />
     );
   }
@@ -1414,6 +1527,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         recordsList={recordsList}
         prodRecords={prodRecords}
         showAmount={showSbAmount}
+        financeSummarySlot={financeSummarySlot}
       />
     );
   }
@@ -1433,7 +1547,11 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         onBack={onBack}
         onAfterNewDocSaved={onAfterNewDocSaved}
         onSaveRecord={onSave}
-        onSaveBatch={onSaveBatch}
+        onSaveBatch={async (recs) => {
+          await onSaveBatch(recs);
+          const docNum = String(recs[0]?.docNumber || '').trim();
+          if (docNum && !editingDocNumber) await flushStagedFinanceDrafts(docNum);
+        }}
         onDeleteRecords={onDeleteRecords}
         editingDocNumber={editingDocNumber}
         hasPsiPerm={hasPsiPerm}
@@ -1458,6 +1576,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         buildPurchaseBillPrintContext={buildPurchaseBillPrintContext}
         resolveDefaultPurchasePrice={resolveDefaultPurchasePrice}
         showAmount={showPbAmount}
+        financeSummarySlot={financeSummarySlot}
       />
     );
   }

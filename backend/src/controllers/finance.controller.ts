@@ -19,6 +19,7 @@ function parseFinanceFilter(req: { query: Record<string, unknown> }) {
     startDate: optStr(req.query.startDate),
     endDate: optStr(req.query.endDate),
     search: optStr(req.query.search),
+    sourceDocNo: optStr(req.query.sourceDocNo),
   };
 }
 

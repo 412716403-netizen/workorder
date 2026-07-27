@@ -8,8 +8,6 @@ interface Props {
   open: boolean;
   draftSize: string;
   setDraftSize: React.Dispatch<React.SetStateAction<string>>;
-  draftWithItems: boolean;
-  setDraftWithItems: React.Dispatch<React.SetStateAction<boolean>>;
   onClose: () => void;
   onSave: () => void | Promise<void>;
 }
@@ -18,8 +16,6 @@ const BulkQuickSettingsModal: React.FC<Props> = ({
   open,
   draftSize,
   setDraftSize,
-  draftWithItems,
-  setDraftWithItems,
   onClose,
   onSave,
 }) => {
@@ -37,7 +33,7 @@ const BulkQuickSettingsModal: React.FC<Props> = ({
         <div className="border-b border-slate-100 px-5 py-4">
           <h3 className="text-sm font-black text-slate-900">拆批设置</h3>
           <p className="mt-1 text-[11px] text-slate-500 leading-relaxed">
-            保存后，「一键生成全部规格」将按此处每批件数拆批；是否在「单品码+批次码」模式下同步生成单品码由下方勾选决定。
+            保存后，「一键生成全部规格」将按此处每批件数拆批。选择「单品码+批次码」时会同步生成单品码；「仅批次码」则不生成单品码。
           </p>
         </div>
         <div className="space-y-4 px-5 py-4">
@@ -53,18 +49,6 @@ const BulkQuickSettingsModal: React.FC<Props> = ({
               className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-800"
             />
           </div>
-          <label className="flex cursor-pointer items-start gap-3 text-sm font-bold text-slate-800">
-            <input
-              type="checkbox"
-              className="mt-0.5 h-4 w-4 shrink-0 rounded text-indigo-600"
-              checked={draftWithItems}
-              onChange={e => setDraftWithItems(e.target.checked)}
-            />
-            <span>
-              在「单品码+批次码」时，一键生成同步生成单品码
-              <span className="mt-1 block text-xs font-medium text-slate-500">选择「仅批次码」时不会生成单品码。</span>
-            </span>
-          </label>
         </div>
         <div className="flex justify-end gap-2 border-t border-slate-100 bg-slate-50/80 px-5 py-3">
           <button

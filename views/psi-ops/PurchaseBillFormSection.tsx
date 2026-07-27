@@ -135,6 +135,8 @@ interface PurchaseBillFormSectionProps {
   resolveDefaultPurchasePrice?: (productId: string) => number;
   /** 是否展示单价/金额（无权限时隐藏 UI，state 仍保留） */
   showAmount?: boolean;
+  /** 合计条右侧：快捷收付款金额 + 登记按钮 */
+  financeSummarySlot?: React.ReactNode;
 }
 
 const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
@@ -151,6 +153,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
   buildPurchaseBillPrintContext,
   resolveDefaultPurchasePrice,
   showAmount = true,
+  financeSummarySlot,
 }) => {
   const { currentUser } = useAuth();
   const docOperator = currentOperatorDisplayName(currentUser);
@@ -654,6 +657,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                   </span>
                 </div>
                 )}
+                {financeSummarySlot}
               </div>
             </div>
           </>
@@ -1065,6 +1069,11 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                 );
                 })}
                 </div>
+                {financeSummarySlot && (
+                  <div className={psiOrderBillCompactSummaryBarClass}>
+                    {financeSummarySlot}
+                  </div>
+                )}
               </div>
             )}
               </div>

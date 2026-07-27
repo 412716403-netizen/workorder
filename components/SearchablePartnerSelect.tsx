@@ -412,8 +412,11 @@ export function SearchablePartnerSelect({
                   <input
                     id="partner-quick-create-name"
                     type="text"
-                    name="organization"
-                    autoComplete="organization"
+                    name="stp-partner-quick-name"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
                     className={psiOrderBillCompactLineInputClass}
                     placeholder="请输入单位名称"
                     value={quickName}

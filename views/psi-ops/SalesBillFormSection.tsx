@@ -110,6 +110,8 @@ interface SalesBillFormSectionProps {
   prodRecords?: unknown[];
   /** 是否展示单价/金额（无权限时隐藏 UI，state 仍保留） */
   showAmount?: boolean;
+  /** 合计条右侧：快捷收付款金额 + 登记按钮 */
+  financeSummarySlot?: React.ReactNode;
 }
 
 const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
@@ -128,6 +130,7 @@ const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
   recordsList = [],
   prodRecords = [],
   showAmount = true,
+  financeSummarySlot,
 }) => {
   const confirm = useConfirm();
   const { listAvailableBatches } = useStockSnapshot();
@@ -396,6 +399,7 @@ const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
               </span>
             </div>
             )}
+            {financeSummarySlot}
           </div>
         </div>
       </div>

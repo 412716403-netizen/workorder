@@ -47,7 +47,7 @@
 | 企业成员身份 | `tenant_memberships.role`：仅 `owner`（创建者）/ `worker`（成员）；成员业务权限由 `roleId` 绑定的自定义角色提供，空权限不再默认全权 |
 | 页面聚合状态 | `AppDataContext` |
 | 打印模板 / 表单配置 | 已进入聚合状态与后端配置并存阶段，需持续收口 |
-| 待办提醒（`todo_reminder` 插件） | 后端 `TodoItem` 表 + `/api/todos`（个人区，按 `userId` 隔离，不挂 `requireSubPermission`）；提醒经 `dashboard.getNotifications` 注入工作台消息中心，无业务字段落本地 |
+| 待办提醒（`todo_reminder` 插件） | 后端 `TodoItem` 表 + `/api/todos`（个人区，按 `userId` 隔离，不挂 `requireSubPermission`）；工作台首页「待办事项」组件（`todos`，插件开启自动出现）管理清单；提醒经 `dashboard.getNotifications` 注入工作台消息中心，无业务字段落本地 |
 
 ## 3. 当前最重要的结构事实
 

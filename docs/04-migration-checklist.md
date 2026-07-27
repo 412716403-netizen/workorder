@@ -77,7 +77,7 @@
 
 | 模块 | 当前状态 | 说明 | 剩余收口 |
 |------|------|------|------|
-| 财务记录 CRUD | 已落地 | 已有 `/api/finance/records` | 补充统计、校验与测试说明 |
+| 财务记录 CRUD | 已落地 | `/api/finance/records`；`sourceDocNo`（migration `20260727120000`）支持按 PSI 来源单号过滤；进销存四单表单可快捷登记收/付款 | 小程序暂无快捷入口 |
 | 资金账户余额 | 已落地 | `FinanceAccountType` 加期初余额；`GET /api/finance/account-balances` 实时聚合（期初+收-付）；`FinanceRecord.accountTypeId` 外键（migration `20260625120000` 已回填）；前端「资金账户」Tab | 后续可加按状态过滤（审核流）/账户报表 |
 | 账户间转账 | 已落地 | `POST /api/finance/transfers` 事务内落 PAYMENT+RECEIPT 同组（`ZZD` 单号） | 后续可加转账撤销/红冲 |
 | Dashboard / 工作台 | 已落地 | `/api/dashboard/*`：工作台页面存于 `system_settings.workbenchSharedPages`；owner 恒可见并可编辑全部页面；成员按裸 `workbench` 或 `workbench:<pageId>` 严格授权且只读，未授予任何工作台 key 时不显示入口；页面授权同时授予该页组件完整数据 | migration `20260710113000_tenant_member_role_cleanup` 将历史租户 `admin` 迁为 `worker`并清理旧 `dashboard` 权限；存量用户旧 `preferences.dashboardWorkbench` 中的自定义页不会自动迁入共享池 |
@@ -114,7 +114,7 @@
 | 打印模板、预览、标签 | 部分落地 | 前端能力完整，但文档入口尚未充分整理 | 后续可补独立打印链路文档 |
 | 单品码 `ItemCode` | 已落地 | 已有 schema、route、controller、前端 API 封装 | 补扫码响应类型与迁移链核验 |
 | 虚拟批次 `PlanVirtualBatch` | 已落地 | 已有 schema、route、controller、前端 API 封装 | 核对 migration 完整性与打印链路说明 |
-| 待办提醒 `todo_reminder` 插件 | 已落地 | `TodoItem` 表（migration `20260626120000_add_todo_items`）、`/api/todos` 路由（个人区，不挂 `requireSubPermission`）、`services/api/todos.ts` + `hooks/useTodos.ts`；提醒经 `dashboard.getNotifications` 注入工作台消息中心；**无 localStorage 业务字段**；消息「前往单据」按 `href` 内 `tab/orderId/productId/planId` 经 `location.state` 深链打开对应详情弹窗 | — |
+| 待办提醒 `todo_reminder` 插件 | 已落地 | `TodoItem` 表（migration `20260626120000_add_todo_items`）、`/api/todos` 路由（个人区，不挂 `requireSubPermission`）、`services/api/todos.ts` + `hooks/useTodos.ts`；工作台首页「待办事项」组件（`todos`，插件开启自动出现在首页最下方靠左，可拖动/删除）；提醒经 `dashboard.getNotifications` 注入工作台消息中心；**无 localStorage 业务字段**；消息「前往单据」按 `href` 内 `tab/orderId/productId/planId` 经 `location.state` 深链打开对应详情弹窗 | — |
 
 ---
 

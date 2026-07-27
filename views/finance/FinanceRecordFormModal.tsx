@@ -54,6 +54,10 @@ interface FinanceRecordFormModalProps {
   financeAccountTypes: FinanceAccountType[];
   /** 资金账户插件开启时：收款单/付款单需选择收支账户 */
   fundsAccountEnabled?: boolean;
+  /** 宿主弹窗 z-index 较高时（如进销存单据编辑）需上调，默认 z-50 */
+  zIndexClass?: string;
+  /** PSI 快捷登记：合作单位由来源单据带入，禁止修改 */
+  partnerLocked?: boolean;
 }
 
 function OrderSearchSelect({ orders, products, value, onChange, label }: { orders: ProductionOrder[]; products: Product[]; value: string; onChange: (orderNumber: string) => void; label: string }) {
@@ -137,12 +141,14 @@ function FinanceRecordFormModal({
   globalNodes,
   financeAccountTypes,
   fundsAccountEnabled = false,
+  zIndexClass = 'z-50',
+  partnerLocked = false,
 }: FinanceRecordFormModalProps) {
   if (!open) return null;
 
   return (
     <ModalPortal>
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+    <div className={`fixed inset-0 ${zIndexClass} flex items-center justify-center p-4 sm:p-6`}>
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose}></div>
       <div className="relative z-10 bg-white w-full max-w-3xl rounded-[40px] shadow-2xl overflow-hidden animate-in zoom-in-95 max-h-[min(92vh,960px)] flex flex-col">
         <div className="px-10 py-6 border-b border-slate-100 flex items-center justify-between bg-indigo-50/40">
@@ -151,6 +157,79 @@ function FinanceRecordFormModal({
         </div>
         <div className="p-10 overflow-y-auto flex-1">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {isReceiptOrPayment && partnerLocked ? (
+              <>
+                <DocEntryTimeField
+                  mode="datetime"
+                  className="space-y-1"
+                  label="创建时间"
+                  value={form.entryTimestamp}
+                  onChange={entryTimestamp => setForm({ ...form, entryTimestamp })}
+                />
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{current.partnerLabel}</label>
+                  <PartnerSelect
+                    options={partners}
+                    categories={partnerCategories}
+                    value={form.partner}
+                    onChange={name => setForm({ ...form, partner: name })}
+                    placeholder="请选择..."
+                    disabled
+                    allowQuickCreate={false}
+                  />
+                </div>
+                {categoriesForType.length > 0 && (
+                  <div className="space-y-1 lg:col-span-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">单据分类</label>
+                    <select
+                      value={form.categoryId}
+                      onChange={e => setForm({ ...form, categoryId: e.target.value, customData: {} })}
+                      className={`${formStandardControlClass} cursor-pointer`}
+                    >
+                      <option value="">请选择分类...</option>
+                      {categoriesForType.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {selectedCategory && (
+                  <>
+                    {selectedCategory.linkWorker && (
+                      <WorkerSelectWithTabs workers={workers} processNodes={globalNodes} value={form.workerId} onChange={id => setForm({ ...form, workerId: id })} label="关联工人" />
+                    )}
+                    {selectedCategory.linkProduct && (
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">关联产品</label>
+                        <SearchableProductSelect options={products} categories={categories} value={form.productId} onChange={id => setForm({ ...form, productId: id })} />
+                      </div>
+                    )}
+                    {(selectedCategory.customFields || []).filter(f => f.showInForm !== false).length > 0 && (
+                      <div className="lg:col-span-2 space-y-3">
+                        <ReportCustomFieldsEditor
+                          fields={(selectedCategory.customFields || []).filter(f => f.showInForm !== false)}
+                          values={form.customData}
+                          onChange={(fieldId, v) =>
+                            setForm({ ...form, customData: { ...form.customData, [fieldId]: v } })
+                          }
+                          inputClassName={formStandardControlClass}
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
+                {fundsAccountEnabled && (
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">收支账户 <span className="text-rose-500">*</span></label>
+                    <select value={financeAccountTypes.find(a => a.name === form.paymentAccount)?.id ?? ''} onChange={e => { const a = financeAccountTypes.find(x => x.id === e.target.value); setForm({ ...form, paymentAccount: a ? a.name : '' }); }} className={`${formStandardControlClass} cursor-pointer`}>
+                      <option value="">请选择收支账户...</option>
+                      {financeAccountTypes.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                    </select>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
             <DocEntryTimeField
               mode="datetime"
               className="space-y-1 lg:col-span-2"
@@ -247,6 +326,8 @@ function FinanceRecordFormModal({
                     placeholder="请选择..."
                   />
                 </div>
+              </>
+            )}
               </>
             )}
             <div className="lg:col-span-2 mt-1 border-t border-slate-100" />

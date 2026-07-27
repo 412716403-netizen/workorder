@@ -180,7 +180,8 @@ export function normalizePlanFormSettings(raw: Partial<PlanFormSettings> | null 
                 : {}),
             showPlanDetailTraceSection: lp.showPlanDetailTraceSection !== false,
             ...(bulkQuickSplitBatchSize !== undefined ? { bulkQuickSplitBatchSize } : {}),
-            bulkQuickSplitWithItemCodes: lp.bulkQuickSplitWithItemCodes !== false,
+            // 已取消 UI 开关：归一化恒为 true（一键生成跟随详情页「单品码+批次码」类型）
+            bulkQuickSplitWithItemCodes: true,
           };
         })()
       : s.labelPrint,

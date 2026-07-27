@@ -463,7 +463,7 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
                 <Package className="h-4 w-4" /> 开发物料
               </button>
             )}
-            {activeSample && canEdit && !readOnly && (
+            {canEdit && !readOnly && (
               <button
                 type="button"
                 onClick={() => setBomModalOpen(true)}
@@ -579,18 +579,24 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
         </ModalPortal>
       )}
 
-      {bomModalOpen && activeSample && (
+      {bomModalOpen && (
         <ModalPortal>
         <div className="fixed inset-0 z-[280] flex items-center justify-center p-4 sm:p-6">
           <div className="absolute inset-0 bg-slate-900/40" onClick={() => setBomModalOpen(false)} role="presentation" />
           <div className="relative z-10 flex max-h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
             <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-6 py-4">
               <h3 className={sectionTitleClass}>
-                BOM 录入 · {activeSample.name}
-                {colorSizeLabel(activeSample.colorId, activeSample.sizeId, dictionaries) && (
-                  <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
-                    {colorSizeLabel(activeSample.colorId, activeSample.sizeId, dictionaries)}
-                  </span>
+                {activeSample ? (
+                  <>
+                    BOM 录入 · {activeSample.name}
+                    {colorSizeLabel(activeSample.colorId, activeSample.sizeId, dictionaries) && (
+                      <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+                        {colorSizeLabel(activeSample.colorId, activeSample.sizeId, dictionaries)}
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  'BOM 录入'
                 )}
               </h3>
               <div className="flex shrink-0 items-center gap-2">
@@ -600,7 +606,11 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
               </div>
             </div>
             <div className="flex-1 overflow-y-auto px-6 py-5">
-              {activeSampleVariantId ? (
+              {activeSample && !activeSampleVariantId ? (
+                <p className="rounded-2xl border border-amber-100 bg-amber-50/60 px-4 py-3 text-xs font-medium text-amber-600">
+                  该样品未绑定颜色尺码，无法录入 BOM；请在新增样品时选择颜色尺码。
+                </p>
+              ) : (
                 <DevBomConfigSection
                   working={style}
                   setWorking={() => {}}
@@ -612,15 +622,11 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
                   mode="persist"
                   onSaveBom={onSaveBom}
                   readOnly={readOnly}
-                  variantFilterId={activeSampleVariantId}
+                  variantFilterId={activeSample ? activeSampleVariantId : undefined}
                   showMilestonePicker={false}
                   scopedHeading=""
                   scopedDescription=""
                 />
-              ) : (
-                <p className="rounded-2xl border border-amber-100 bg-amber-50/60 px-4 py-3 text-xs font-medium text-amber-600">
-                  该样品未绑定颜色尺码，无法录入 BOM；请在新增样品时选择颜色尺码。
-                </p>
               )}
             </div>
           </div>

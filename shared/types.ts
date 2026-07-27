@@ -375,6 +375,25 @@ export function isPurchaseBillDocType(docType: string): boolean {
   return docType === PSI_PURCHASE_BILL_LABEL || docType === PSI_PURCHASE_BILL_LABEL_LEGACY;
 }
 
+/** PSI 四单（采购订单/采购入库/销售订单/销售单），可快捷登记收付款 */
+export type PsiOrderBillDocType = 'PURCHASE_ORDER' | 'PURCHASE_BILL' | 'SALES_ORDER' | 'SALES_BILL';
+
+/** PSI 四单 → 快捷收付款方向：采购侧付款，销售侧收款 */
+export const PSI_DOC_FINANCE_OP_TYPE: Record<PsiOrderBillDocType, Extract<FinanceOpType, 'RECEIPT' | 'PAYMENT'>> = {
+  PURCHASE_ORDER: 'PAYMENT',
+  PURCHASE_BILL: 'PAYMENT',
+  SALES_ORDER: 'RECEIPT',
+  SALES_BILL: 'RECEIPT',
+};
+
+/** PSI 四单中文名（备注预填、按钮文案等） */
+export const PSI_ORDER_BILL_DOC_LABEL: Record<PsiOrderBillDocType, string> = {
+  PURCHASE_ORDER: '采购订单',
+  PURCHASE_BILL: PSI_PURCHASE_BILL_LABEL,
+  SALES_ORDER: '销售订单',
+  SALES_BILL: '销售单',
+};
+
 /**
  * 产品分类是否按批次管理物料（与颜色尺码互斥：二者不应同时为 true，服务端会拒绝）。
  */

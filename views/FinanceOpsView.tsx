@@ -45,9 +45,12 @@ import PartnerProductReconTable from './finance/PartnerProductReconTable';
 import FinanceRecordFormModal, { type FinanceRecordFormValues } from './finance/FinanceRecordFormModal';
 import {
   defaultEntryDatetimeLocal,
-  entryDatetimeLocalToTimestamp,
   hydrateEntryDatetimeLocal,
 } from '../utils/docEntryTime';
+import {
+  applyFinanceFormToExistingRecord,
+  buildFinanceRecordFromForm,
+} from '../utils/buildFinanceRecordFromForm';
 import FinanceDocFlowListModal from './finance/FinanceDocFlowListModal';
 import { FINANCE_FLOW_LABELS } from './finance/financeFlowHelpers';
 import WorkerSelectWithTabs from './finance/WorkerSelectWithTabs';
@@ -426,20 +429,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
     if (editingRecordId) {
       const existing = editingRecordSnapshot ?? allRecords.find(r => r.id === editingRecordId);
       if (existing && onUpdateRecord) {
-        const updated: FinanceRecord = {
-          ...existing,
-          amount: form.amount,
-          relatedId: form.relatedId || undefined,
-          partner: form.partner,
-          note: form.note,
-          categoryId: form.categoryId || undefined,
-          workerId: form.workerId || undefined,
-          productId: form.productId || undefined,
-          paymentAccount: form.paymentAccount || undefined,
-          customData: Object.keys(form.customData).length ? { ...form.customData } : undefined,
-          timestamp: entryDatetimeLocalToTimestamp(form.entryTimestamp),
-        };
-        onUpdateRecord(updated);
+        onUpdateRecord(applyFinanceFormToExistingRecord(existing, form));
         invalidateFinanceList();
       }
       setShowModal(false);
@@ -448,26 +438,11 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
       setEditingRecordSnapshot(null);
       return;
     }
-    const newRec: FinanceRecord = {
-      id: `fin-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      type: type,
-      // 单号不再由前端预生成：view_own 成员的 today-count 只统计本人单会重号；后端 createRecord 带 advisory lock 全表取号
-      docNo: '',
-      timestamp: entryDatetimeLocalToTimestamp(form.entryTimestamp),
-      amount: form.amount,
-      relatedId: form.relatedId || undefined,
-      partner: form.partner,
-      note: form.note,
+    const newRec = buildFinanceRecordFromForm(form, {
+      type,
       operator: docOperator,
-      status: 'COMPLETED',
-    };
-    if (isReceiptOrPayment) {
-      newRec.categoryId = form.categoryId || undefined;
-      newRec.workerId = form.workerId || undefined;
-      newRec.productId = form.productId || undefined;
-      newRec.paymentAccount = form.paymentAccount || undefined;
-      if (Object.keys(form.customData).length) newRec.customData = { ...form.customData };
-    }
+      isReceiptOrPayment,
+    });
     onAddRecord(newRec);
     invalidateFinanceList();
     setShowModal(false);

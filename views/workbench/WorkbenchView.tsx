@@ -10,6 +10,7 @@ import AddPageModal from './AddPageModal';
 import ShortcutsWidget from './widgets/ShortcutsWidget';
 import PluginCenterWidget from './widgets/PluginCenterWidget';
 import MessageCenterWidget from './widgets/MessageCenterWidget';
+import TodoWidget from './widgets/TodoWidget';
 import OrderStatsWidget from './widgets/OrderStatsWidget';
 import OutsourceStatsWidget from './widgets/OutsourceStatsWidget';
 import ReworkStatsWidget from './widgets/ReworkStatsWidget';
@@ -66,6 +67,8 @@ const WorkbenchView: React.FC = () => {
           return <PluginCenterWidget {...props} />;
         case 'messages':
           return <MessageCenterWidget {...props} />;
+        case 'todos':
+          return <TodoWidget {...props} />;
         case 'order_stats':
           return <OrderStatsWidget {...props} />;
         case 'outsource_stats':

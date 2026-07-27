@@ -51,6 +51,8 @@ Page({
     noteMax: TODO_NOTE_MAX_CHARS,
     submitting: false,
     deleting: false,
+    togglingDone: false,
+    done: false,
     pickerSheetOpen: false,
     statusBarHeight: 20,
     navBarHeight: 44,
@@ -114,6 +116,7 @@ Page({
         remindTime: form.remindTime,
         docLabel: form.docLabel,
         canJumpDoc: !!(editing.href && form.docLabel),
+        done: editing.status === 'done',
       });
       return;
     }
@@ -152,7 +155,7 @@ Page({
   },
 
   onDeleteTap() {
-    if (!this.data.isEdit || !this._todoId || this.data.deleting || this.data.submitting) return;
+    if (!this.data.isEdit || !this._todoId || this.data.deleting || this.data.submitting || this.data.togglingDone) return;
     wx.showModal({
       title: '删除待办',
       content: '确定删除这条待办吗？',
@@ -171,6 +174,36 @@ Page({
           });
       },
     });
+  },
+
+  onToggleDone() {
+    if (
+      !this.data.isEdit ||
+      !this._todoId ||
+      this.data.togglingDone ||
+      this.data.submitting ||
+      this.data.deleting
+    ) {
+      return;
+    }
+    const nextDone = !this.data.done;
+    this.setData({ togglingDone: true });
+    updateTodo(this._todoId, { status: nextDone ? 'done' : 'open' })
+      .then(() => {
+        if (this._editing) this._editing.status = nextDone ? 'done' : 'open';
+        this.setData({ done: nextDone, togglingDone: false });
+        wx.showToast({
+          title: nextDone ? '已完成' : '已还原为未完成',
+          icon: 'success',
+        });
+        if (nextDone) {
+          setTimeout(() => wx.navigateBack(), 400);
+        }
+      })
+      .catch((err) => {
+        wx.showToast({ title: (err && err.message) || '操作失败', icon: 'none' });
+        this.setData({ togglingDone: false });
+      });
   },
 
   onNoteInput(e) {
@@ -200,7 +233,7 @@ Page({
   },
 
   async onSubmit() {
-    if (this.data.submitting) return;
+    if (this.data.submitting || this.data.togglingDone) return;
     const ctx = readTenantCtx();
     if (!ctx || !ctx.tenantId) {
       wx.reLaunch({ url: '/pages/tenant-select/tenant-select' });

@@ -132,7 +132,6 @@ const PlanTraceSection: React.FC<PlanTraceSectionProps> = ({
           setTraceGenMode={s.setTraceGenMode}
           vbBulkAllSummary={s.vbBulkAllSummary}
           bulkQuickConfiguredBatchSize={s.bulkQuickConfiguredBatchSize}
-          bulkQuickWithItemCodesConfigured={s.bulkQuickWithItemCodesConfigured}
           vbBulkSplitting={s.vbBulkSplitting}
           handleBulkSplitVirtualBatches={s.handleBulkSplitVirtualBatches}
           singleBatchExpanded={s.singleBatchExpanded}
@@ -265,8 +264,6 @@ const PlanTraceSection: React.FC<PlanTraceSectionProps> = ({
         open={s.bulkQuickSettingsOpen}
         draftSize={s.bulkQuickDraftSize}
         setDraftSize={s.setBulkQuickDraftSize}
-        draftWithItems={s.bulkQuickDraftWithItems}
-        setDraftWithItems={s.setBulkQuickDraftWithItems}
         onClose={() => s.setBulkQuickSettingsOpen(false)}
         onSave={s.handleSaveBulkQuickSettings}
       />

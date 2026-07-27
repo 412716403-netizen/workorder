@@ -1,12 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { ChevronRight, Loader2, ListTodo, CheckCircle2, Circle } from 'lucide-react';
+import { ChevronRight, Loader2, CheckCircle2, Circle } from 'lucide-react';
 import WidgetShell from '../WidgetShell';
 import MessageDetailModal from './MessageDetailModal';
-import TodoPanelModal from './TodoPanelModal';
 import { formatTimestamp } from '../../../utils/formatTime';
 import { useDashboardNotifications } from '../../../hooks/useDashboardNotifications';
 import { useDashboardNotificationRead } from '../../../hooks/useDashboardNotificationRead';
-import { useFeaturePlugins } from '../../../hooks/useFeaturePlugins';
 import type { DashboardNotification } from '../../../services/api/dashboard';
 
 interface MessageCenterWidgetProps {
@@ -18,10 +16,7 @@ interface MessageCenterWidgetProps {
 const MessageCenterWidget: React.FC<MessageCenterWidgetProps> = ({ editing, layoutLocked, onRemove }) => {
   const { data, isLoading } = useDashboardNotifications(20);
   const { isRead, markRead } = useDashboardNotificationRead();
-  const { isPluginEnabled } = useFeaturePlugins();
   const [selected, setSelected] = useState<DashboardNotification | null>(null);
-  const [todoOpen, setTodoOpen] = useState(false);
-  const todoEnabled = isPluginEnabled('todo_reminder');
 
   const hasUnread = useMemo(
     () => (data ?? []).some(msg => !isRead(msg.id)),
@@ -42,17 +37,6 @@ const MessageCenterWidget: React.FC<MessageCenterWidgetProps> = ({ editing, layo
         editing={editing}
         layoutLocked={layoutLocked}
         onRemove={onRemove}
-        headerExtra={
-          todoEnabled ? (
-            <button
-              type="button"
-              onClick={() => setTodoOpen(true)}
-              className="workbench-no-drag inline-flex items-center gap-1.5 rounded-lg bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-600 transition hover:bg-rose-100"
-            >
-              <ListTodo className="h-3.5 w-3.5" /> 待办事项
-            </button>
-          ) : undefined
-        }
       >
         {isLoading ? (
           <div className="flex justify-center py-8">
@@ -125,10 +109,6 @@ const MessageCenterWidget: React.FC<MessageCenterWidgetProps> = ({ editing, layo
         message={selected}
         onClose={() => setSelected(null)}
       />
-
-      {todoEnabled && (
-        <TodoPanelModal open={todoOpen} onClose={() => setTodoOpen(false)} />
-      )}
     </>
   );
 };

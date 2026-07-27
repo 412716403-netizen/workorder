@@ -514,6 +514,18 @@
   - 删除：`DELETE /api/finance/transfers/:groupId`（`finance:transfer:delete`）→ `deleteTransfer`，按 `transferGroupId` 成对删除。
   - 防误删：普通 `deleteRecord` 检测到记录为转账腿（`customData.transfer === true`）时，按 `relatedId` 级联删整组，避免从收/付款列表删半条转账。
 
+### 4.2.3 PSI 单据快捷登记收付款单
+
+- **入口**：进销存四单（采购订单 / 采购入库 / 销售订单 / 销售单）的**新增/编辑表单**合计金额条右侧「登记付款单」或「登记收款单」按钮（需对应 `finance:payment:create` / `finance:receipt:create`）。列表卡片头不放此按钮；详情页只展示已关联金额，不提供登记入口。
+- **方向映射**（`PSI_DOC_FINANCE_OP_TYPE`）：采购订单、采购入库 → 付款单（`PAYMENT`）；销售订单、销售单 → 收款单（`RECEIPT`）。
+- **预填**：合作单位带入当前单据 `partner`（**不可改**）；备注默认 `关联{单据类型} {单号}`。**须先选择合作单位**后才可点「登记收/付款单」（未选时按钮禁用并提示）；新增态单号取表单预览号（选单位后即生成），编辑态取已保存单号。**金额留空**；单据分类 / 关联产品不预填（选中开启「关联产品」的分类后才显示产品字段，默认空）。
+- **新增态暂存**：单据尚未保存时登记的收付款先暂存在表单（`OrderBillFormPage.stagedFinanceDrafts`），合计条实时显示已登记金额；点「保存单据」取得正式单号后一并 `POST /api/finance/records`，并写入 `sourceDocNo`。落库失败只 toast 告警，不回滚已保存的 PSI 单据。
+- **编辑态**：有单号时直接创建收付款单并写入 `sourceDocNo`。
+- **详情展示**：详情摘要「合计金额」右侧展示「已收款金额」/「已付款金额」（按 `sourceDocNo` + 对应 type 聚合）。若收付款为「仅本人可见」，非制单人看到的合计会被后端 `viewerScope` 过滤。
+- **反查权限门禁**：按 `sourceDocNo` 反查前先用 `canReadPsiDocLinkedFinance()` 判断方向对应的 `finance:receipt` / `finance:payment` 查看范围（`view` 或 `view_own` 皆可）；无权限时**不发起**列表请求（该端点要求 `finance` 下任一权限，否则 403），金额区不展示。
+
+**代表性实现锚点**：`components/finance/QuickFinanceRecordButton.tsx`、`views/psi-ops/OrderBillFormPage.tsx`、`views/psi-ops/PsiDocDetailSummary.tsx`、`utils/psiDocFinanceNote.ts`
+
 ### 4.3 合作单位对账 Excel 导出
 
 - **入口**：财务 → 对账 → 合作单位，在已选择合作单位并点击「查询」后，工具栏「导出 Excel」可用（数据加载中禁用）。**开始/结束日期可不填**；未填开始日期时「上期结余」为 0，明细为与该合作单位相关的全部对账单据。
@@ -866,7 +878,7 @@
 - 开发流程节点**可在「编辑款式」弹窗重新编辑**（非新建态也展示「开发流程节点配置」，保存即更新 `DevStyle.defaultStageNames`）；编辑后**新建的样品按新的开发节点**。
 - 新建样品默认节点优先取 `DevStyle.defaultStageNames`（含头样与后续轮次，名称默认「头样」/「样品 N」）；款式无 `defaultStageNames`（历史数据）时回退到头样（首个轮次）节点 → 节点库默认顺序 → 内置兜底。已创建样品的节点不随之变更，仅影响之后新建的样品。
 - 样品颜色尺码：当款式配置了颜色尺码（存在 `DevStyleVariant`）时，创建开发样品（头样与新增样品轮次）**必须**从款式的「颜色×尺码」组合中单选一个，落到 `DevSample.colorId/sizeId`，用于确定该样品打的是哪个颜色尺码；款式无颜色尺码时不展示选择器、强制为空。后端 `resolveSampleColorSize` 校验必填与组合归属。
-- 样品面板 BOM 录入：在「样品开发记录」选中某样品后，可按该样品对应的颜色尺码变体录入 BOM（复用「变体×大货工序」矩阵，但只显示该样品对应的那一行变体）。这与「编辑款式」里该变体的 BOM 是**同一份数据**——样品面板录入即直接写 `DevStyleVariant` 的变体 BOM（`dev_boms` + `syncVariantNodeBoms`），保存后自动同步，无独立按钮。样品面板不改大货工序（隐藏工序选择器）；单 SKU 款式录入单 SKU BOM；历史未绑定颜色尺码的样品显示提示、不渲染矩阵。仅 `readOnly`/未发布且有编辑权限时显示。
+- 样品面板 BOM 录入：有编辑权限且未发布时，即使**尚未创建样品**也显示 BOM 入口，打开款式级全量矩阵（所有变体×大货工序）。选中某样品后则按该样品对应的颜色尺码变体过滤（只显示对应那一行）。这与「编辑款式」里该变体的 BOM 是**同一份数据**——样品面板录入即直接写 `DevStyleVariant` 的变体 BOM（`dev_boms` + `syncVariantNodeBoms`），保存后自动同步，无独立按钮。样品面板不改大货工序（隐藏工序选择器）；单 SKU 款式录入单 SKU BOM；历史未绑定颜色尺码的样品显示提示、不渲染矩阵。
 
 ### 6.4 附件
 
@@ -888,7 +900,7 @@
 - **个人级**：待办按 `userId` 隔离，每位成员只能查看/操作自己的待办；不进 RBAC 权限目录，开通插件后全员可用（与工作台/dashboard 同属个人区，接口不挂 `requireSubPermission`）。
 - **来源**：`sourceType ∈ standalone | production_order | plan | product | outsource | rework | purchase_order | purchase_bill | sales_order | sales_bill | dev_stage | dev_bom | dev_style`。`standalone` 为不关联单据的独立待办；其余从对应详情页「待办」按钮生成并快照单号、标题与跳转 `href`：`production_order`（工单详情）/ `plan`（计划详情）/ `product`（产品生产详情）/ `outsource`（外协「加工厂往来数量明细」）/ `rework`（返工管理「返工详情」）/ `purchase_order`（采购订单详情）/ `purchase_bill`（采购入库详情）/ `sales_order`（销售订单详情）/ `sales_bill`（销售单详情）/ `dev_style`（开发管理「款式详情」商品信息区）/ `dev_stage`（历史：节点登记）/ `dev_bom`（开发管理「BOM 录入」）。各待办「关联单据」标签（`[sourceDocNo, sourceTitle]` 拼接）统一以**所属模块名打头**：`sourceDocNo` 放模块名（生产计划 / 工单中心 / 外协管理 / 返工管理 / 采购订单 / 采购入库 / 销售订单 / 销售单 / 开发管理），`sourceTitle` 放单号 + 产品/标题快照。
 - **提醒**：`remindEnabled` 开启时必须给将来时间 `remindAt`。到点（`remindAt <= now`）的待办，由工作台消息中心 `getNotifications` 注入消息流（轮询 ≤60s 呈现）；**完成后仍保留显示**（不改标题，完成状态由通知的 `done` 字段驱动：消息中心列表前置只读复选框图标、详情弹窗用可点击复选框/「标记完成·取消完成」按钮展示），仅**删除**待办才从消息中心移除。通知**标题**只放固定提示 +（若有）关联单据号，备注内容放 body；「前往单据」按 `href` 经 `utils/todoHrefNavigate` 把 query 透传进 `location.state`（`orderId/productId/planId` 别名映射为 `detailOrderId/detailProductId/detailPlanId`），各业务页据此**直接打开对应单据详情弹窗**：工单/产品/计划（`/production?tab=orders|plans&orderId|productId|planId=`）、返工（`/production?tab=REWORK&reworkOrderId=`，`ReworkPanel` 打开返工详情）、外协（`/production?tab=OUTSOURCE&outsourceFlow=<PartnerFlowDetailSeed JSON>`，`OutsourcePanel` 重开「加工厂往来数量明细」）、采购/销售（`/psi?tab=<PSITab>&psiDoc=<单号>`，`PSIOpsView` 在 `tab===type` 命中时打开对应单据详情）、开发管理（`/development?styleId=<款式>&devStageId=<节点>` 或 `&devSampleId=<样品>`，`DevManagementView` 先选中款式并切到对应页签/清空筛选，再由 `DevStyleMainContent` 打开「节点登记」或「BOM 录入」弹窗）。各页消费深链后会 `navigate(replace)` 清掉对应 state 键，避免切页签再回来重复弹窗。
-- **入口**：工作台「消息中心」卡片头部「待办事项」按钮（插件关闭即隐藏）打开待办面板（未完成/已完成 + 搜索，可完成、编辑、删除、新建，列表按建立时间倒序）；各业务详情弹窗顶栏的「待办」按钮（`components/AddTodoButton`）带单据上下文新建：工单详情、计划详情、产品生产详情、外协「加工厂往来数量明细」、返工详情、采购订单/采购入库/销售订单/销售单详情、开发管理「款式详情」商品信息区（宿主弹窗层级高，按钮传 `modalZIndexClass` 上调新建弹窗层级）。**BOM 录入**不再提供新建待办入口（历史 `dev_bom` 来源仍可查看与完成）。
+- **入口**：工作台首页「待办事项」组件（`todos`，插件 `todo_reminder` 开启后自动出现在首页最下方靠左，可拖动/删除，删除后可从「添加组件」加回；关闭插件即隐藏）内可新建、勾选完成、打开管理面板（未完成/已完成 + 搜索，可编辑、删除，列表按建立时间倒序）；消息中心仅保留到点提醒消息流，不再挂「待办事项」管理入口。各业务详情弹窗顶栏的「待办」按钮（`components/AddTodoButton`）带单据上下文新建：工单详情、计划详情、产品生产详情、外协「加工厂往来数量明细」、返工详情、采购订单/采购入库/销售订单/销售单详情、开发管理「款式详情」商品信息区（宿主弹窗层级高，按钮传 `modalZIndexClass` 上调新建弹窗层级）。**BOM 录入**不再提供新建待办入口（历史 `dev_bom` 来源仍可查看与完成）。
 
 ---
 

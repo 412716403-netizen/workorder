@@ -4,7 +4,7 @@ import { parseFeaturePlugins, type FeaturePluginsConfig } from '../types';
 import { dashboardQueryKey } from './dashboardQueryKeys';
 import { useAuth } from '../contexts/AuthContext';
 import { useConfigDataOptional } from '../contexts/AppDataContext';
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 
 export function useFeaturePlugins() {
   const { tenantCtx } = useAuth();
@@ -25,14 +25,23 @@ export function useFeaturePlugins() {
   const qc = useQueryClient();
   const mutation = useMutation({
     mutationFn: (body: FeaturePluginsConfig) => dashboard.updateFeaturePlugins(body),
-    onSuccess: data => { qc.setQueryData(queryKey, data); },
+    onSuccess: data => {
+      qc.setQueryData(queryKey, data);
+      // 工作台 widget / 快捷入口 / 消息提醒均按插件开关过滤，需立刻重拉
+      void qc.invalidateQueries({ queryKey: dashboardQueryKey(tenantId, 'workbench') });
+      void qc.invalidateQueries({ queryKey: dashboardQueryKey(tenantId, 'shortcuts') });
+      void qc.invalidateQueries({ queryKey: dashboardQueryKey(tenantId, 'notifications') });
+    },
   });
 
-  const plugins = parseFeaturePlugins(query.data ?? null);
+  const plugins = useMemo(
+    () => parseFeaturePlugins(query.data ?? null),
+    [query.data],
+  );
 
-  function isPluginEnabled(id: string): boolean {
+  const isPluginEnabled = useCallback((id: string): boolean => {
     return plugins[id] !== false;
-  }
+  }, [plugins]);
 
   return {
     plugins,

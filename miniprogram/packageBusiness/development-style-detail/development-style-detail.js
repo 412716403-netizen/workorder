@@ -462,12 +462,20 @@ Page({
   },
 
   onBomTap() {
-    const sampleId = this.data.activeSampleId;
-    if (!sampleId) {
-      wx.showToast({ title: '请先添加样品', icon: 'none' });
+    if (!this._style) return;
+    if (this.data.detail.readOnly) {
+      wx.showToast({ title: '已发布不可编辑', icon: 'none' });
       return;
     }
-    this.openBomForSample(sampleId);
+    const sampleId = this.data.activeSampleId;
+    // 有选中样品：按样品颜色尺码过滤；无样品时打开款式级全量 BOM
+    if (sampleId) {
+      this.openBomForSample(sampleId);
+      return;
+    }
+    wx.navigateTo({
+      url: `/packageBusiness/development-bom-edit/development-bom-edit?styleId=${encodeURIComponent(this._style.id)}`,
+    });
   },
 
   openBomForSample(sampleId) {

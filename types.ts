@@ -80,6 +80,9 @@ export {
   PSI_TYPES_WITH_BATCH_LINE,
   PSI_PURCHASE_BILL_LABEL,
   isPurchaseBillDocType,
+  type PsiOrderBillDocType,
+  PSI_DOC_FINANCE_OP_TYPE,
+  PSI_ORDER_BILL_DOC_LABEL,
   categoryUsesBatchManagement,
   normalizeCollabSpecLabel,
   COLLAB_ACCEPT_CATEGORY_DECISION,
@@ -211,6 +214,8 @@ export {
   WORKBENCH_HOME_PINNED_WIDGET_TYPES,
   WORKBENCH_HOME_PINNED_LAYOUT,
   WORKBENCH_HOME_DEFAULT_LAYOUT,
+  WORKBENCH_HOME_TODO_LAYOUT_ITEM,
+  WORKBENCH_TODO_WIDGET_SEEDED_PREF_KEY,
   WORKBENCH_WIDGET_CATALOG,
   WORKBENCH_WIDGET_TYPES,
   FEATURE_PLUGIN_CATALOG,
@@ -220,6 +225,8 @@ export {
   isWorkbenchHomePage,
   isHomePinnedWidgetType,
   mergeWorkbenchHomePinnedItems,
+  injectHomeTodoWidget,
+  getWorkbenchHomePinnedRowBottom,
   isWorkbenchWidgetType,
   workbenchPagePermKey,
   WORKBENCH_PERM_MODULE,
@@ -870,7 +877,10 @@ export interface PlanLabelPrintSettings {
   showPlanDetailTraceSection?: boolean;
   /** 计划详情「一键生成全部规格」每批件数；合法范围 1–100000，非法值在归一化时剔除 */
   bulkQuickSplitBatchSize?: number;
-  /** 在「单品码+批次码」模式下，一键生成是否同步生成关联单品码；默认 true（仅影响一键生成，单条生成仍跟详情页生成类型） */
+  /**
+   * @deprecated 已取消拆批设置中的开关；一键是否带单品码仅跟随详情页「生成类型」。
+   * 归一化恒为 true，保留字段兼容历史租户配置。
+   */
   bulkQuickSplitWithItemCodes?: boolean;
 }
 
@@ -1862,6 +1872,11 @@ export interface FinanceRecord {
   paymentAccount?: string;
   /** 关联收支账户类型 id（余额聚合 / 转账 / 台账下钻的精确分组键） */
   accountTypeId?: string;
+  /**
+   * 来源业务单据号（PSI 采购订单/采购入库/销售订单/销售单）。
+   * 快捷登记收付款时写入，详情页据此反查已收/付款金额。
+   */
+  sourceDocNo?: string;
   /** 分类自定义字段值，key 为 customField.id */
   customData?: Record<string, any>;
 }

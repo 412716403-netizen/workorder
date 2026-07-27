@@ -1,7 +1,12 @@
 import React, { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Clock, Package, User } from 'lucide-react';
 import type { AppDictionaries, PlanFormFieldConfig, Product, ProductCategory, ProductVariant, PsiRecord, Warehouse } from '../../types';
-import { BATCH_NO_UNTAGGED, PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER } from '../../types';
+import { BATCH_NO_UNTAGGED, PSI_DOC_FINANCE_OP_TYPE, PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER, type PsiOrderBillDocType } from '../../types';
+import * as api from '../../services/api';
+import type { FinanceRecord } from '../../types';
+import { canReadPsiDocLinkedFinance, psiDocLinkedFinanceAmountLabel } from '../../utils/psiDocFinanceNote';
+import { useAuth } from '../../contexts/AuthContext';
 import { formatPsiDocListTime } from '../../utils/flowDocSort';
 import { aggregatePurchaseBillRelatedProductListText, formatPsiDocNumForList, psiCustomFieldHasFilledDisplayValue } from './psiOpsListFormatting';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
@@ -12,7 +17,7 @@ import { productThumbSrc } from '../../utils/productImageSrc';
 import type { ProductImagePreviewTarget } from '../../components/ProductImageLightbox';
 import { productPreviewFromProduct, productPreviewFromSrc } from '../../components/ProductImageLightbox';
 
-type PsiDocType = 'PURCHASE_ORDER' | 'SALES_ORDER' | 'PURCHASE_BILL' | 'SALES_BILL';
+type PsiDocType = PsiOrderBillDocType;
 
 export interface PsiDocDetailSummaryProps {
   docType: PsiDocType;
@@ -35,6 +40,11 @@ export interface PsiDocDetailSummaryProps {
   headerCustomFieldDefs?: PlanFormFieldConfig[];
   /** 是否展示单价/金额列与合计 */
   showAmount?: boolean;
+  /**
+   * 关联收/付款合计（按 sourceDocNo 反查）。
+   * 未传入时组件内自行查询；注意「仅本人可见」权限下非制单人合计会被过滤。
+   */
+  linkedFinance?: { label: string; amount: number };
 }
 
 function readPsiLinePrice(i: PsiRecord, priceField: string): number {
@@ -167,8 +177,37 @@ const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
   dictionaries, getUnitName, formatQtyDisplay, receivedByOrderLine, onProductImagePreview,
   headerCustomFieldDefs = [],
   showAmount = true,
+  linkedFinance: linkedFinanceProp,
 }) => {
   const meta = DOC_META[docType];
+  const { tenantCtx } = useAuth();
+  const financeOpType = PSI_DOC_FINANCE_OP_TYPE[docType];
+  const canReadLinkedFinance = canReadPsiDocLinkedFinance(
+    docType,
+    tenantCtx?.tenantRole,
+    tenantCtx?.permissions,
+  );
+  const linkedFinanceQuery = useQuery({
+    queryKey: ['finance', 'bySourceDoc', docNumber, financeOpType],
+    queryFn: () =>
+      api.finance.listPage({
+        sourceDocNo: docNumber,
+        type: financeOpType,
+        page: 1,
+        pageSize: 200,
+      }),
+    enabled: !!docNumber && linkedFinanceProp === undefined && canReadLinkedFinance,
+    staleTime: 15_000,
+  });
+  const linkedFinance = useMemo(() => {
+    if (linkedFinanceProp) return linkedFinanceProp.amount > 0 ? linkedFinanceProp : undefined;
+    const amount = ((linkedFinanceQuery.data?.data as FinanceRecord[] | undefined) ?? []).reduce(
+      (s, r) => s + (Number(r.amount) || 0),
+      0,
+    );
+    if (amount <= 0) return undefined;
+    return { label: psiDocLinkedFinanceAmountLabel(docType), amount };
+  }, [linkedFinanceProp, linkedFinanceQuery.data, docType]);
 
   const docItems = useMemo(
     () => recordsList.filter((r) => r.type === docType && r.docNumber === docNumber),
@@ -350,6 +389,14 @@ const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
               <p className="text-[10px] text-slate-400 font-black uppercase mb-0.5">合计金额</p>
               <p className={`font-black tabular-nums ${isReturnDoc || totalAmount < 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
                 ¥{totalAmount.toFixed(2)}
+              </p>
+            </div>
+            )}
+            {linkedFinance && linkedFinance.amount > 0 && (
+            <div className="min-w-[6.5rem] md:text-right">
+              <p className="text-[10px] text-slate-400 font-black uppercase mb-0.5">{linkedFinance.label}</p>
+              <p className="font-black tabular-nums text-indigo-600">
+                ¥{linkedFinance.amount.toFixed(2)}
               </p>
             </div>
             )}

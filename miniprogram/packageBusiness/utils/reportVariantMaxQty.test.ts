@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest';
-// @ts-expect-error -- 小程序 CommonJS 工具，无类型声明
 import { buildVariantMaxGoodMap, getSeqRemainingForVariant } from './reportVariantMaxQty.js';
 
 /**

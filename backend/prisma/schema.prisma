@@ -965,6 +965,8 @@ model FinanceRecord {
   productId      String?  @map("product_id") @db.VarChar(50)
   paymentAccount String?  @map("payment_account") @db.VarChar(100)
   accountTypeId  String?  @map("account_type_id") @db.VarChar(50)
+  /// 来源业务单据号（PSI 采购订单/采购入库/销售订单/销售单），用于详情页反查已收付金额
+  sourceDocNo    String?  @map("source_doc_no") @db.VarChar(50)
   customData     Json     @default("{}") @map("custom_data")
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
@@ -983,6 +985,7 @@ model FinanceRecord {
   @@index([tenantId, type, createdAt])
   @@index([tenantId, updatedAt])
   @@index([tenantId, type, createdByUserId])
+  @@index([tenantId, sourceDocNo])
   @@map("finance_records")
 }
 

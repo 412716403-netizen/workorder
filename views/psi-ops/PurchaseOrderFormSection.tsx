@@ -90,6 +90,8 @@ interface PurchaseOrderFormSectionProps {
   resolveDefaultPurchasePrice?: (productId: string) => number;
   /** 是否展示单价/金额（无权限时隐藏 UI，state 仍保留） */
   showAmount?: boolean;
+  /** 合计条右侧：快捷收付款金额 + 登记按钮 */
+  financeSummarySlot?: React.ReactNode;
 }
 
 const PurchaseOrderFormSection: React.FC<PurchaseOrderFormSectionProps> = ({
@@ -105,6 +107,7 @@ const PurchaseOrderFormSection: React.FC<PurchaseOrderFormSectionProps> = ({
   receivedByOrderLine,
   resolveDefaultPurchasePrice,
   showAmount = true,
+  financeSummarySlot,
 }) => {
   const confirm = useConfirm();
 
@@ -392,6 +395,7 @@ const PurchaseOrderFormSection: React.FC<PurchaseOrderFormSectionProps> = ({
               </span>
             </div>
             )}
+            {financeSummarySlot}
           </div>
         </div>
       </div>

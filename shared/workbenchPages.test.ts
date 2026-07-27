@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   WORKBENCH_HOME_PAGE_ID,
   workbenchPagePermKey,
+  injectHomeTodoWidget,
+  getWorkbenchHomePinnedRowBottom,
+  mergeWorkbenchHomePinnedItems,
   type WorkbenchPage,
 } from './workbench.js';
 import {
@@ -188,6 +191,83 @@ describe('canUseWidget 页面级完整授权', () => {
     const collabOff = { permissions: [], featurePlugins: { collaboration: false } };
     // sales_stats 不依赖插件，完整授权下可用
     expect(canUseWidget('sales_stats', collabOff, true)).toBe(true);
+  });
+
+  it('todos 受 todo_reminder 插件开关约束', () => {
+    expect(canUseWidget('todos', { permissions: [], featurePlugins: { todo_reminder: false } })).toBe(false);
+    expect(canUseWidget('todos', { permissions: [], featurePlugins: { todo_reminder: true } })).toBe(true);
+    // 未写入开关时按 defaultEnabled=false 剔除
+    expect(canUseWidget('todos', { permissions: [], featurePlugins: {} })).toBe(false);
+    expect(
+      canUseWidget('todos', { permissions: [], featurePlugins: { todo_reminder: false } }, true),
+    ).toBe(false);
+  });
+});
+
+describe('injectHomeTodoWidget', () => {
+  it('幂等：已含 todos 时原样返回', () => {
+    const withTodo: WorkbenchPage = {
+      ...home,
+      layout: {
+        version: 1,
+        items: [
+          ...home.layout.items,
+          {
+            i: 'w-todos',
+            widgetType: 'todos',
+            x: 0,
+            y: getWorkbenchHomePinnedRowBottom(),
+            w: 4,
+            h: 6,
+          },
+        ],
+      },
+    };
+    const next = injectHomeTodoWidget(withTodo);
+    expect(next).toBe(withTodo);
+  });
+
+  it('注入位置为布局最下方靠左，不挤占既有组件', () => {
+    const base: WorkbenchPage = {
+      id: WORKBENCH_HOME_PAGE_ID,
+      title: '首页',
+      sortOrder: 0,
+      layout: {
+        version: 1,
+        items: [
+          { i: 'w-shortcuts', widgetType: 'shortcuts', x: 0, y: 0, w: 4, h: 6 },
+          { i: 'w-plugin-center', widgetType: 'plugin_center', x: 4, y: 0, w: 4, h: 6 },
+          { i: 'w-messages', widgetType: 'messages', x: 8, y: 0, w: 4, h: 6 },
+          { i: 'w-order-stats', widgetType: 'order_stats', x: 0, y: 6, w: 6, h: 7 },
+        ],
+      },
+    };
+    const next = injectHomeTodoWidget(base);
+    const todo = next.layout.items.find(it => it.widgetType === 'todos');
+    expect(todo).toBeDefined();
+    expect(todo!.x).toBe(0);
+    expect(todo!.y).toBe(13); // order_stats 底边 6+7
+    const orderStats = next.layout.items.find(it => it.widgetType === 'order_stats');
+    expect(orderStats!.y).toBe(6);
+  });
+
+  it('非首页不注入', () => {
+    const custom = page('page-a', 'u1');
+    expect(injectHomeTodoWidget(custom)).toBe(custom);
+  });
+});
+
+describe('mergeWorkbenchHomePinnedItems 消除内容区前导空洞', () => {
+  it('把内容区整体上移贴紧固定区', () => {
+    const merged = mergeWorkbenchHomePinnedItems([
+      { i: 'w-shortcuts', widgetType: 'shortcuts', x: 0, y: 0, w: 4, h: 6 },
+      { i: 'w-order-stats', widgetType: 'order_stats', x: 0, y: 12, w: 6, h: 7 },
+      { i: 'w-todos', widgetType: 'todos', x: 0, y: 19, w: 4, h: 6 },
+    ]);
+    const orderStats = merged.find(it => it.widgetType === 'order_stats');
+    const todos = merged.find(it => it.widgetType === 'todos');
+    expect(orderStats!.y).toBe(getWorkbenchHomePinnedRowBottom());
+    expect(todos!.y).toBe(13);
   });
 });
 

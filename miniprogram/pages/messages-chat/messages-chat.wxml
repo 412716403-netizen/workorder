@@ -56,6 +56,14 @@
           data-kind="{{item.kind}}"
         >
           <view wx:if="{{item.unread}}" class="msg-feed-row__dot"></view>
+          <view
+            wx:if="{{item.kind === 'todo'}}"
+            class="msg-feed-check {{item.done ? 'msg-feed-check--done' : ''}} {{togglingTodoId === item.id ? 'msg-feed-check--busy' : ''}}"
+            data-id="{{item.id}}"
+            catchtap="onTodoToggleTap"
+          >
+            <text wx:if="{{item.done}}" class="msg-feed-check__mark">✓</text>
+          </view>
           <view class="msg-feed-row__main">
             <view class="msg-feed-row__top">
               <view class="msg-feed-row__title-wrap">

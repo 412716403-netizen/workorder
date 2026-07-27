@@ -83,6 +83,8 @@ interface SalesOrderFormSectionProps {
   resolveDefaultSalesPrice?: (productId: string) => number;
   /** 是否展示单价/金额（无权限时隐藏 UI，state 仍保留） */
   showAmount?: boolean;
+  /** 合计条右侧：快捷收付款金额 + 登记按钮 */
+  financeSummarySlot?: React.ReactNode;
 }
 
 const SalesOrderFormSection: React.FC<SalesOrderFormSectionProps> = ({
@@ -100,6 +102,7 @@ const SalesOrderFormSection: React.FC<SalesOrderFormSectionProps> = ({
   buildSalesOrderPrintContext,
   resolveDefaultSalesPrice,
   showAmount = true,
+  financeSummarySlot,
 }) => {
   const confirm = useConfirm();
 
@@ -336,6 +339,7 @@ const SalesOrderFormSection: React.FC<SalesOrderFormSectionProps> = ({
               </span>
             </div>
             )}
+            {financeSummarySlot}
           </div>
         </div>
       </div>
