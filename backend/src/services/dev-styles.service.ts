@@ -225,11 +225,6 @@ export async function createDevStyle(
   coerceStyleJson(data);
   if (!data.status) data.status = DevStyleStatus.DEVELOPING;
 
-  if (code) {
-    const dup = await db.devStyle.findFirst({ where: { code } });
-    if (dup) throw new AppError(409, '款号已存在');
-  }
-
   await assertNoProductCatalogConflict(db, code, name);
   await syncDevStyleCustomerNameFromSupplier(db, data);
   stripClientImageThumb(data);
@@ -294,12 +289,7 @@ export async function updateDevStyle(
     }
   }
   if ('code' in data) {
-    const code = String(data.code ?? '').trim();
-    if (code) {
-      const dup = await db.devStyle.findFirst({ where: { code, id: { not: styleId } } });
-      if (dup) throw new AppError(409, '款号已存在');
-    }
-    data.code = code || null;
+    data.code = String(data.code ?? '').trim() || null;
   }
   if ('name' in data) {
     const name = String(data.name ?? '').trim();

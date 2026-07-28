@@ -45,6 +45,17 @@ describe('sanitizeKnowledgeHtml', () => {
     expect(out).toContain('data-document-id="d1"');
     expect(out).toContain('工艺说明');
   });
+
+  it('keeps biz-doc-ref chips', () => {
+    const out = sanitizeKnowledgeHtml(
+      '<p><span data-type="biz-doc-ref" data-doc-kind="PLAN" data-doc-id="p1" data-doc-number="JH-1" data-label="生产计划 JH-1" class="kb-biz-doc-ref">生产计划 JH-1</span></p>',
+    );
+    expect(out).toContain('data-type="biz-doc-ref"');
+    expect(out).toContain('data-doc-kind="PLAN"');
+    expect(out).toContain('data-doc-id="p1"');
+    expect(out).toContain('data-doc-number="JH-1"');
+    expect(out).toContain('生产计划 JH-1');
+  });
 });
 
 describe('knowledgeDocReferences helpers', () => {

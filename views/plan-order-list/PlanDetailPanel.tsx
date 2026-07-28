@@ -120,6 +120,14 @@ interface ProposedOrder {
 export interface PlanDetailPanelProps {
   planId: string;
   onClose: () => void;
+  /**
+   * 跨模块只读打开（如资料库关联单据）：隐藏写操作、禁用可编辑字段，仍保留「待办」。
+   */
+  readOnly?: boolean;
+  /** 遮罩层级，资料库等高 z 场景可上调 */
+  overlayZIndexClass?: string;
+  /** 待办弹窗层级（宿主遮罩较高时需上调） */
+  todoModalZIndexClass?: string;
 
   // Data
   plans: PlanOrder[];
@@ -176,6 +184,9 @@ export interface PlanDetailPanelProps {
 const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   planId,
   onClose,
+  readOnly = false,
+  overlayZIndexClass = 'z-[60]',
+  todoModalZIndexClass,
   plans,
   products,
   categories,
@@ -215,6 +226,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   onMergeLabelPrintWhitelist,
   onUpdatePlanFormSettings,
 }) => {
+  const editable = !readOnly;
   const equipmentFeaturesOn = useEquipmentFeaturesEffective();
   const { traceEnabled } = useTraceabilityPlugin();
   const confirm = useConfirm();
@@ -279,7 +291,8 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
     [viewPlan?.items],
   );
   const canSplitPlan = Boolean(
-    splitPlanEnabled &&
+    editable &&
+      splitPlanEnabled &&
       onSplitPlan &&
       viewPlan &&
       !viewPlan.parentPlanId &&
@@ -462,7 +475,8 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   const isRouteCustomized = !milestoneNodeIdsEqual(tempMilestoneNodeIds, productMilestoneNodeIds);
   /** 产品无工序时两种模式均可在计划内配置；有工序时 product 模式仍隐藏覆盖编辑 */
   const canEditProcessRoute =
-    productionLinkMode !== 'product' || productMilestoneNodeIds.length === 0;
+    editable &&
+    (productionLinkMode !== 'product' || productMilestoneNodeIds.length === 0);
   const productProcessEmpty = productMilestoneNodeIds.length === 0;
 
   const findSubPlanForMaterial = (materialId: string, nodeId: string, rootPlanId: string): PlanOrder | null => {
@@ -624,7 +638,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
     return !existing;
   });
 
-  const canUseSubPlanActions = Boolean(onCreateSubPlan || onCreateSubPlans);
+  const canUseSubPlanActions = editable && Boolean(onCreateSubPlan || onCreateSubPlans);
   const showCreateSubPlanButton = canUseSubPlanActions && hasProducibleNeedingSubPlan;
 
   const hasSubBom = (materialId: string) => boms.some(b => b.parentProductId === materialId);
@@ -1359,13 +1373,13 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   // --- Render ---
   return createPortal(
     <>
-      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6">
+      <div className={`fixed inset-0 ${overlayZIndexClass} flex items-center justify-center p-4 sm:p-6`}>
         <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300" onClick={() => { void handlePanelClose(); }} />
         <div
           className="relative z-10 flex w-full max-h-[min(92vh,960px)] max-w-3xl flex-col overflow-hidden rounded-[32px] bg-white shadow-2xl animate-in zoom-in-95 duration-200 sm:max-w-4xl md:max-w-5xl xl:max-w-6xl"
           role="dialog"
           aria-modal="true"
-          aria-label="查看生产计划"
+          aria-label={readOnly ? '查看生产计划（只读）' : '查看生产计划'}
         >
 
           <div className="px-10 py-6 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-50">
@@ -1378,7 +1392,12 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                   <div className="w-14 h-14 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-100 flex-shrink-0"><Info className="w-7 h-7" /></div>
                 )}
                 <div>
-                     <h2 className="text-2xl font-black text-slate-900 tracking-tight">查看生产计划</h2>
+                     <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+                       查看生产计划
+                       {readOnly ? (
+                         <span className="ml-2 align-middle text-xs font-bold text-slate-400 normal-case tracking-normal">只读</span>
+                       ) : null}
+                     </h2>
                   <p className="text-sm font-bold text-slate-400 mt-0.5 tracking-tighter uppercase flex flex-wrap items-center gap-2">
                     {viewPlan.planNumber} — 关联：{viewProduct.name}
                     {sourceSalesOrderDocNumber ? (
@@ -1399,6 +1418,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                    sourceTitle: `${viewPlan.planNumber} · ${viewProduct.name}`,
                    href: `/production?tab=plans&planId=${viewPlan.id}`,
                  }}
+                 modalZIndexClass={todoModalZIndexClass}
                />
                <button onClick={() => { void handlePanelClose(); }} className="p-3 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50 transition-all"><X className="w-7 h-7" /></button>
              </div>
@@ -1451,7 +1471,9 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                         planFormSettings.standardFields.find(f => f.id === 'createdAt')?.label ?? '入单时间'
                       }
                       value={tempPlanInfo.createdAt}
+                      disabled={!editable}
                       onChange={createdAt => {
+                        if (!editable) return;
                         setTempPlanInfo({ ...tempPlanInfo, createdAt });
                         schedulePlanAutoSave({ createdAt: planEntryDatetimeToCreatedAt(createdAt) });
                       }}
@@ -1473,7 +1495,9 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                       <input
                         type="date"
                         value={tempPlanInfo.dueDate}
+                        disabled={!editable}
                         onChange={e => {
+                          if (!editable) return;
                           const dueDate = e.target.value;
                           setTempPlanInfo({ ...tempPlanInfo, dueDate });
                           schedulePlanAutoSave({ dueDate: dueDate || undefined }, dueDate);
@@ -1489,7 +1513,10 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                         options={partners}
                         categories={partnerCategories}
                         value={tempPlanInfo.customer}
+                        disabled={!editable}
+                        allowQuickCreate={editable}
                         onChange={customerName => {
+                          if (!editable) return;
                           setTempPlanInfo({ ...tempPlanInfo, customer: customerName });
                           schedulePlanAutoSave({ customer: customerName });
                         }}
@@ -1500,20 +1527,26 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                   {planFormSettings.customFields.filter(f => f.showInDetail).map(cf => (
                     <div key={cf.id} className="space-y-2">
                       <label className={formStandardLabelClass}>{cf.label}</label>
-                      <PlanFormCustomFieldInput
-                        cf={cf}
-                        value={tempPlanInfo.customData?.[cf.id]}
-                        onChange={next => {
-                          const customData = { ...tempPlanInfo.customData, [cf.id]: next };
-                          setTempPlanInfo({
-                            ...tempPlanInfo,
-                            customData,
-                          });
-                          schedulePlanAutoSave({ customData });
-                        }}
-                        controlClassName={formStandardControlClass}
-                        onFilePreview={onFilePreview}
-                      />
+                      {editable ? (
+                        <PlanFormCustomFieldInput
+                          cf={cf}
+                          value={tempPlanInfo.customData?.[cf.id]}
+                          onChange={next => {
+                            const customData = { ...tempPlanInfo.customData, [cf.id]: next };
+                            setTempPlanInfo({
+                              ...tempPlanInfo,
+                              customData,
+                            });
+                            schedulePlanAutoSave({ customData });
+                          }}
+                          controlClassName={formStandardControlClass}
+                          onFilePreview={onFilePreview}
+                        />
+                      ) : (
+                        <div className={`${formStandardControlClass} flex items-center min-h-[2.25rem] text-slate-700`}>
+                          {String(tempPlanInfo.customData?.[cf.id] ?? '').trim() || '—'}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1524,7 +1557,8 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                 <div className="flex items-center gap-3 border-b border-slate-100 pb-4 ml-2">
                   <Layers className="w-5 h-5 text-indigo-600" />
                   <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">
-                    2. 生产数量明细录入 {planWorkOrdersDispatched ? '(已下达工单，不可改)' : '(可编辑)'}
+                    2. 生产数量明细录入{' '}
+                    {!editable || planWorkOrdersDispatched ? '(不可改)' : '(可编辑)'}
                   </h3>
                 </div>
                 <div className="bg-white p-8 rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
@@ -1538,14 +1572,14 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                             .map(i => [i.variantId, Number(i.quantity) || 0]),
                         )}
                         onVariantQtyChange={(variantId, qty) => updateDetailItemQty(variantId, String(qty))}
-                        readOnly={planWorkOrdersDispatched}
+                        readOnly={!editable || planWorkOrdersDispatched}
                       />
                   ) : (
                       <div className="max-w-xs space-y-2">
                            <label className="text-[10px] font-black text-slate-400 uppercase">总量 ({getUnitName(viewPlan.productId)})</label>
                            <input
                              type="number"
-                             disabled={planWorkOrdersDispatched}
+                             disabled={!editable || planWorkOrdersDispatched}
                              value={tempPlanInfo.items?.[0]?.quantity || 0}
                              onChange={e => updateDetailItemQty(undefined, e.target.value)}
                              className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-2xl font-black text-indigo-600 focus:ring-2 focus:ring-indigo-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed"
@@ -1608,16 +1642,26 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                                {node.enablePieceRate && (
                                <div className="flex items-center gap-2 w-[9rem]">
                                  <span className="text-[9px] font-bold text-slate-400 uppercase whitespace-nowrap w-6">工价</span>
-                                 <UnitPriceInput
-                                   value={tempNodeRates[node.id]}
-                                   onValueChange={v => setTempNodeRates(prev => ({ ...prev, [node.id]: v }))}
-                                   onBlur={() => { void saveNodeRates(); }}
-                                   className="w-20 bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2 text-xs font-bold text-slate-800 text-right focus:ring-2 focus:ring-indigo-500 outline-none"
-                                 />
-                                 <span className="text-[9px] text-slate-400 whitespace-nowrap">元/件</span>
+                                 {editable ? (
+                                   <>
+                                     <UnitPriceInput
+                                       value={tempNodeRates[node.id]}
+                                       onValueChange={v => setTempNodeRates(prev => ({ ...prev, [node.id]: v }))}
+                                       onBlur={() => { void saveNodeRates(); }}
+                                       className="w-20 bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2 text-xs font-bold text-slate-800 text-right focus:ring-2 focus:ring-indigo-500 outline-none"
+                                     />
+                                     <span className="text-[9px] text-slate-400 whitespace-nowrap">元/件</span>
+                                   </>
+                                 ) : (
+                                   <span className="text-xs font-bold text-slate-700 whitespace-nowrap">
+                                     {tempNodeRates[node.id] != null && tempNodeRates[node.id] !== ''
+                                       ? `${tempNodeRates[node.id]} 元/件`
+                                       : '—'}
+                                   </span>
+                                 )}
                                </div>
                                )}
-                               {canAssign && (
+                               {canAssign && editable && (
                                  <div className="flex flex-wrap items-center gap-4 md:gap-4 border-l border-slate-200 pl-4 md:pl-5 min-w-[480px] flex-1">
                                    {enableWorker && (
                                      <div className="min-w-[440px] w-full max-w-[640px]">
@@ -1649,6 +1693,28 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                                    )}
                                  </div>
                                )}
+                               {canAssign && !editable && (
+                                 <div className="flex flex-wrap items-center gap-3 border-l border-slate-200 pl-4 text-xs font-bold text-slate-600">
+                                   {enableWorker && (
+                                     <span>
+                                       负责人：
+                                       {(((tempAssignments[node.id] as NodeAssignment)?.workerIds) || [])
+                                         .map(id => workers.find(w => w.id === id)?.name)
+                                         .filter(Boolean)
+                                         .join('、') || '—'}
+                                     </span>
+                                   )}
+                                   {enableEquipment && (
+                                     <span>
+                                       设备：
+                                       {(((tempAssignments[node.id] as NodeAssignment)?.equipmentIds) || [])
+                                         .map(id => equipment.find(e => e.id === id)?.name)
+                                         .filter(Boolean)
+                                         .join('、') || '—'}
+                                     </span>
+                                   )}
+                                 </div>
+                               )}
                              </div>
                           </div>
                        </div>
@@ -1675,7 +1741,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                              创建子工单
                            </button>
                          )}
-                   {!hasExistingPOs && (
+                   {editable && !hasExistingPOs && (
                    <button
                       onClick={handleGenerateProposedOrders}
                            disabled={!canGeneratePO || materialRequirements.length === 0}
@@ -1791,14 +1857,16 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                                              min={0}
                                              step="1"
                                              placeholder="0"
+                                             disabled={!editable}
                                              value={lossRates[req.rowKey] != null ? String(lossRates[req.rowKey]) : ''}
                                              onChange={e => {
+                                                if (!editable) return;
                                                 const raw = e.target.value.trim();
                                                 if (raw === '') { setMaterialLossRate(req.rowKey, null); return; }
                                                 const v = parseFloat(raw);
                                                 setMaterialLossRate(req.rowKey, isNaN(v) || v <= 0 ? null : Math.round(v * 100) / 100);
                                              }}
-                                             className="w-20 bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-sm font-bold text-slate-800 text-right focus:ring-2 focus:ring-indigo-500 outline-none shrink-0"
+                                             className="w-20 bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-sm font-bold text-slate-800 text-right focus:ring-2 focus:ring-indigo-500 outline-none shrink-0 disabled:opacity-70 disabled:cursor-not-allowed"
                                           />
                                           <span className="text-[10px] font-bold text-slate-400 shrink-0">%</span>
                                        </span>
@@ -1857,6 +1925,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                                                 min={0}
                                                 step="0.01"
                                                 placeholder="—"
+                                                disabled={!editable}
                                                 value={(() => {
                                                   const raw = req.rowKey in plannedQtyByKey ? plannedQtyByKey[req.rowKey] : req.plannedQty;
                                                   if (raw == null || raw === 0) return '';
@@ -1866,6 +1935,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                                                   return String(Number(rounded.toFixed(2)));
                                                 })()}
                                                 onChange={e => {
+                                                  if (!editable) return;
                                                   const raw = e.target.value.trim();
                                                   if (raw === '') {
                                                     setPlannedQtyByKey(prev => ({ ...prev, [req.rowKey]: null }));
@@ -1875,7 +1945,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                                                   const qty = isNaN(v) || v < 0 ? 0 : Math.round(v * 100) / 100;
                                                   setPlannedQtyByKey(prev => ({ ...prev, [req.rowKey]: qty }));
                                                 }}
-                                                className="w-24 bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-sm font-bold text-slate-800 text-right focus:ring-2 focus:ring-indigo-500 outline-none shrink-0"
+                                                className="w-24 bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-sm font-bold text-slate-800 text-right focus:ring-2 focus:ring-indigo-500 outline-none shrink-0 disabled:opacity-70 disabled:cursor-not-allowed"
                                               />
                                               <span className="text-[10px] font-bold text-slate-400 shrink-0">{getUnitName(req.materialId)}</span>
                                             </span>
@@ -2153,6 +2223,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                 onTraceItemCodesInventoryMayHaveChanged={probePlanActiveItemCodes}
                 planFormSettings={planFormSettings}
                 onUpdatePlanFormSettings={onUpdatePlanFormSettings}
+                readOnly={readOnly}
               />
             )}
 
@@ -2162,7 +2233,10 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
           <div className="px-6 sm:px-10 py-4 sm:py-5 bg-white/90 backdrop-blur-md border-t border-slate-100 shadow-[0_-6px_28px_-10px_rgba(15,23,42,0.08)] flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between sticky bottom-0 z-10">
              <div className="min-w-0 flex-1">
                 <p className="text-xs font-bold text-slate-500">
-                  当前操作：<span className="text-indigo-600 font-black">计划资料自动保存</span>
+                  当前操作：
+                  <span className="text-indigo-600 font-black">
+                    {readOnly ? '只读查看' : '计划资料自动保存'}
+                  </span>
                   {planWorkOrdersDispatched && (
                     <span className="ml-2 inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-slate-500">
                       已下达工单
@@ -2170,13 +2244,15 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                   )}
                 </p>
                 <p className="text-[10px] text-slate-400 mt-1.5 leading-relaxed font-medium">
-                  {planWorkOrdersDispatched
+                  {readOnly
+                    ? '※ 资料库关联打开为只读；可添加个人待办，修改请到生产管理 → 计划单。'
+                    : planWorkOrdersDispatched
                     ? '※ 生产数量与 BOM 计划用量已锁定，用料清单仍可查看。客户、交期与工序派发的更改会自动保存；交期会同步到关联工单。'
                     : '※ 客户、交期、规格数量及派发方案的更改会自动保存；工艺路线仍需在弹窗中确认。'}
                 </p>
              </div>
              <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-2.5">
-                 {onDeletePlan && (
+                 {editable && onDeletePlan && (
                    <button
                      type="button"
                      onClick={() => {
@@ -2201,7 +2277,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                      删除
                    </button>
                  )}
-                 {viewPlan.status !== PlanStatus.CONVERTED && !viewPlan.parentPlanId && (
+                 {editable && viewPlan.status !== PlanStatus.CONVERTED && !viewPlan.parentPlanId && (
                      <button
                        type="button"
                        onClick={() => {
@@ -2227,7 +2303,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                      <Split className="w-4 h-4" /> 拆单
                    </button>
                  )}
-                 {viewPlan.status === PlanStatus.CONVERTED && !viewPlan.parentPlanId && hasUnconvertedSubPlans(viewPlan.id) && (
+                 {editable && viewPlan.status === PlanStatus.CONVERTED && !viewPlan.parentPlanId && hasUnconvertedSubPlans(viewPlan.id) && (
                    <button
                      type="button"
                      onClick={() => {
@@ -2255,6 +2331,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                      <FileText className="w-4 h-4" /> 工单详情
                    </button>
                  )}
+                 {!readOnly && (
                  <div className={`px-3 py-2 text-xs font-bold ${autoSaveStatus === 'error' ? 'text-rose-600' : autoSaveStatus === 'saved' ? 'text-emerald-600' : 'text-slate-500'}`}>
                    {autoSaveStatus === 'saving' && '正在保存…'}
                    {autoSaveStatus === 'pending' && '更改将自动保存…'}
@@ -2265,6 +2342,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                      </button>
                    )}
                  </div>
+                 )}
              </div>
           </div>
         </div>

@@ -18,6 +18,7 @@ export const KNOWLEDGE_HTML_ALLOWED_ATTR = [
   'colspan', 'rowspan', 'colwidth', 'data-colwidth',
   'data-type', 'data-checked',
   'data-product-id', 'data-document-id', 'data-label',
+  'data-doc-kind', 'data-doc-id', 'data-doc-number',
   'data-asset-url', 'data-file-name', 'data-mime-type', 'data-size-bytes', 'data-display-mode',
   'data-color',
   'class', 'style',

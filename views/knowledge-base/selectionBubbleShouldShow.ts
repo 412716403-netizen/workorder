@@ -17,5 +17,6 @@ export function shouldShowKnowledgeSelectionBubbleMenu(
   if (editor.isActive('image')) return false;
   if (editor.isActive('productRef')) return false;
   if (editor.isActive('documentRef')) return false;
+  if (editor.isActive('bizDocRef')) return false;
   return true;
 }

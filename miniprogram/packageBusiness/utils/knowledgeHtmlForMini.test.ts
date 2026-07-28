@@ -6,6 +6,7 @@ const {
   extractKnowledgeAssetIdsFromHtml,
   replaceKnowledgeAssetUrls,
   convertProductRefsToText,
+  convertBizDocRefsToText,
   prepareKnowledgeHtmlForRichText,
   styleKnowledgeTables,
   styleKnowledgeMarks,
@@ -39,6 +40,14 @@ describe('knowledgeHtmlForMini', () => {
     const html =
       '<span class="kb-product-ref" data-type="product-ref" data-product-id="p1">上衣（A01）</span>';
     expect(convertProductRefsToText(html)).toContain('上衣（A01）');
+  });
+
+  it('converts biz-doc-ref chip to readable text', () => {
+    const html =
+      '<p>见 <span data-type="biz-doc-ref" data-doc-kind="PLAN" data-doc-id="p1" data-doc-number="JH-1" data-label="生产计划 JH-1">x</span></p>';
+    const out = convertBizDocRefsToText(html);
+    expect(out).toContain('生产计划 JH-1');
+    expect(out).not.toContain('data-type="biz-doc-ref"');
   });
 
   it('injects inline table borders for rich-text', () => {

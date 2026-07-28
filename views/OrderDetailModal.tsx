@@ -139,10 +139,16 @@ interface OrderDetailModalProps {
   onDeleteRecord?: (recordId: string) => void;
   onUpdateOrder?: (orderId: string, updates: Partial<ProductionOrder>) => void;
   onDeleteOrder?: (orderId: string) => void;
+  /** 遮罩层级；资料库关联计划再打开工单时需高于计划面板 */
+  zIndexClass?: string;
+  /** 待办弹窗层级 */
+  todoModalZIndexClass?: string;
 }
 
 const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
-  orderId, onClose, orders, products, boms, prodRecords, dictionaries, categories, orderFormSettings, printTemplates = [], productionLinkMode, productMilestoneProgresses = [], globalNodes = [], detailFromFlowLayout = false, onOpenOrderFormPrintTab, onOpenReportHistory, canViewReportHistory = false, canViewMaterialFlow = false, onOpenMaterialFlow, outsourceFormSettings = DEFAULT_OUTSOURCE_FORM_SETTINGS, planFormSettings, partners = [], partnerCategories = [], userPermissions, tenantRole, onAddRecord, onAddRecordBatch, onUpdateRecord, onDeleteRecord, onUpdateOrder, onDeleteOrder
+  orderId, onClose, orders, products, boms, prodRecords, dictionaries, categories, orderFormSettings, printTemplates = [], productionLinkMode, productMilestoneProgresses = [], globalNodes = [], detailFromFlowLayout = false, onOpenOrderFormPrintTab, onOpenReportHistory, canViewReportHistory = false, canViewMaterialFlow = false, onOpenMaterialFlow, outsourceFormSettings = DEFAULT_OUTSOURCE_FORM_SETTINGS, planFormSettings, partners = [], partnerCategories = [], userPermissions, tenantRole, onAddRecord, onAddRecordBatch, onUpdateRecord, onDeleteRecord, onUpdateOrder, onDeleteOrder,
+  zIndexClass = 'z-[85]',
+  todoModalZIndexClass,
 }) => {
   const { processSequenceMode, allowExceedMaxReportQty } = useConfigData();
   const showInDetail = (id: string) => orderFormSettings?.standardFields.find(f => f.id === id)?.showInDetail ?? true;
@@ -526,7 +532,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   if (productionLinkMode === 'product' && !detailFromFlowLayout) {
     return (
       <DocPhaseModal
-        zIndexClass="z-[85]"
+        zIndexClass={zIndexClass}
         open
         phase="detail"
         editingDocNumber={product?.name ?? order.productName}
@@ -542,6 +548,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
               sourceTitle: product?.name ?? order.productName,
               href: `/production?tab=orders&productId=${product?.id ?? order.productId ?? ''}`,
             }}
+            modalZIndexClass={todoModalZIndexClass}
           />
         }
         hasPerm={() => false}
@@ -755,7 +762,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   return (
     <>
     <DocPhaseModal
-      zIndexClass="z-[85]"
+      zIndexClass={zIndexClass}
       open
       phase={isEditing ? 'edit' : 'detail'}
       editingDocNumber={order.orderNumber}
@@ -773,6 +780,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
               sourceTitle: `${order.orderNumber}${product?.name ? ` · ${product.name}` : ''}`,
               href: `/production?tab=orders&orderId=${order.id}`,
             }}
+            modalZIndexClass={todoModalZIndexClass}
           />
           {(productionLinkMode !== 'product' || detailFromFlowLayout) ? (
             <OrderCenterDetailPrintBlock

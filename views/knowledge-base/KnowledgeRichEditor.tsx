@@ -36,11 +36,16 @@ import {
   bindKnowledgeEditorDocumentRefClick,
   formatKnowledgeDocumentRefLabel,
 } from './knowledgeEditorDocumentRef';
+import {
+  bindKnowledgeEditorBizDocRefClick,
+  type KnowledgeBizDocRefResolved,
+} from './knowledgeEditorBizDocRef';
 import KnowledgeImagePreviewOverlay from './KnowledgeImagePreviewOverlay';
 import KnowledgeFilePreviewOverlay from './KnowledgeFilePreviewOverlay';
 import { buildKnowledgeImageInsertAttrs } from './knowledgeTableImage';
 import { KnowledgeProductRef } from './knowledgeProductRefExtension';
 import { KnowledgeDocumentRef } from './knowledgeDocumentRefExtension';
+import { KnowledgeBizDocRef } from './knowledgeBizDocRefExtension';
 import { KnowledgeFileAttachment, type KnowledgeAttachmentInfo } from './knowledgeFileAttachmentExtension';
 import { KnowledgeDocPickerModal, KnowledgeDocPreviewModal } from '../../components/knowledge/KnowledgeDocPickerModal';
 import type { KnowledgeFieldRef } from '../../utils/knowledgeFieldValue';
@@ -53,6 +58,8 @@ import { useKnowledgeDocOutline } from '../../hooks/useKnowledgeDocOutline';
 import KnowledgeDocOutline from './KnowledgeDocOutline';
 import PlanProductDetail from '../plan-order-list/PlanProductDetail';
 import { MediaFilePreviewOverlay } from '../../components/MediaFilePreviewOverlay';
+import BizDocLinkInsertDialog from './BizDocLinkInsertDialog';
+import KnowledgeBizDocDetailHost from './KnowledgeBizDocDetailHost';
 import './knowledge-editor.css';
 
 const lowlight = createLowlight(common);
@@ -118,10 +125,12 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
   const [linkDialogInitialText, setLinkDialogInitialText] = useState('');
   const [productDialogOpen, setProductDialogOpen] = useState(false);
   const [documentDialogOpen, setDocumentDialogOpen] = useState(false);
+  const [bizDocDialogOpen, setBizDocDialogOpen] = useState(false);
   /** 打开选择弹窗前记下光标，确认插入时还原（避免失焦后插到段末/新行） */
   const insertCaretRef = useRef<{ from: number; to: number } | null>(null);
   const [viewProductId, setViewProductId] = useState<string | null>(null);
   const [viewDocId, setViewDocId] = useState<string | null>(null);
+  const [viewBizDoc, setViewBizDoc] = useState<KnowledgeBizDocRefResolved | null>(null);
   const [filePreview, setFilePreview] = useState<{ url: string; type: 'image' | 'pdf' } | null>(null);
   const [imagePreviewSrc, setImagePreviewSrc] = useState<string | null>(null);
   const [attachmentPreview, setAttachmentPreview] = useState<KnowledgeAttachmentInfo | null>(null);
@@ -224,6 +233,7 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
       KnowledgeTableCell,
       KnowledgeProductRef,
       KnowledgeDocumentRef,
+      KnowledgeBizDocRef,
       KnowledgeFileAttachment.configure({
         onPreview: (info) => setAttachmentPreview(info),
       }),
@@ -408,6 +418,14 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
     });
   }, [editor]);
 
+  useEffect(() => {
+    const root = editor?.view.dom;
+    if (!root) return;
+    return bindKnowledgeEditorBizDocRefClick(root, (ref) => {
+      setViewBizDoc(ref);
+    });
+  }, [editor]);
+
   const openLinkDialog = useCallback(() => {
     if (!editor) return;
     const { from, to, empty } = editor.state.selection;
@@ -430,6 +448,14 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
       insertCaretRef.current = { from, to };
     }
     setDocumentDialogOpen(true);
+  }, [editor]);
+
+  const openBizDocDialog = useCallback(() => {
+    if (editor) {
+      const { from, to } = editor.state.selection;
+      insertCaretRef.current = { from, to };
+    }
+    setBizDocDialogOpen(true);
   }, [editor]);
 
   const restoreInsertCaret = useCallback(() => {
@@ -470,6 +496,23 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
     restoreInsertCaret();
     const label = formatKnowledgeDocumentRefLabel(ref.title);
     editor.commands.insertDocumentRef({ documentId: ref.id, label });
+    scheduleSaveRef.current(documentIdRef.current, editor);
+  }, [editor, restoreInsertCaret]);
+
+  const handleBizDocConfirm = useCallback((payload: {
+    docKind: string;
+    docId: string;
+    docNumber: string;
+    label: string;
+  }) => {
+    if (!editor) return;
+    restoreInsertCaret();
+    editor.commands.insertBizDocRef({
+      docKind: payload.docKind,
+      docId: payload.docId,
+      docNumber: payload.docNumber,
+      label: payload.label,
+    });
     scheduleSaveRef.current(documentIdRef.current, editor);
   }, [editor, restoreInsertCaret]);
 
@@ -547,6 +590,7 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
             onOpenLinkDialog={openLinkDialog}
             onOpenProductDialog={openProductDialog}
             onOpenDocumentDialog={openDocumentDialog}
+            onOpenBizDocDialog={openBizDocDialog}
             onPickFile={() => attachmentInputRef.current?.click()}
           />
           <div className="kb-editor">
@@ -581,6 +625,12 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
         onConfirm={handleProductConfirm}
       />
 
+      <BizDocLinkInsertDialog
+        open={bizDocDialogOpen}
+        onClose={() => setBizDocDialogOpen(false)}
+        onConfirm={handleBizDocConfirm}
+      />
+
       <KnowledgeDocPickerModal
         isOpen={documentDialogOpen}
         onClose={() => setDocumentDialogOpen(false)}
@@ -594,6 +644,11 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
         isOpen={Boolean(viewDocId)}
         onClose={() => setViewDocId(null)}
         stackZClass="z-[12100]"
+      />
+
+      <KnowledgeBizDocDetailHost
+        target={viewBizDoc}
+        onClose={() => setViewBizDoc(null)}
       />
 
       {viewProductId && (

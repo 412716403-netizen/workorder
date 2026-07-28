@@ -41,6 +41,8 @@ interface PlanTraceSectionProps {
   onTraceItemCodesInventoryMayHaveChanged?: () => void;
   planFormSettings: PlanFormSettings;
   onUpdatePlanFormSettings: (next: PlanFormSettings) => void | Promise<void>;
+  /** 只读：隐藏生成/拆批等写操作，仍可浏览与打印 */
+  readOnly?: boolean;
 }
 
 const PlanTraceSection: React.FC<PlanTraceSectionProps> = ({
@@ -58,6 +60,7 @@ const PlanTraceSection: React.FC<PlanTraceSectionProps> = ({
   onTraceItemCodesInventoryMayHaveChanged,
   planFormSettings,
   onUpdatePlanFormSettings,
+  readOnly = false,
 }) => {
   const traceItemListRef = useRef<HTMLDivElement>(null);
   const traceBatchListRef = useRef<HTMLDivElement>(null);
@@ -124,6 +127,7 @@ const PlanTraceSection: React.FC<PlanTraceSectionProps> = ({
         <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">5. 追溯码</h3>
       </div>
       <div className="bg-white p-8 rounded-[32px] border border-slate-200 shadow-sm space-y-8">
+        {!readOnly && (
         <TraceGenerationControls
           plan={plan}
           product={product}
@@ -145,6 +149,7 @@ const PlanTraceSection: React.FC<PlanTraceSectionProps> = ({
           vbCreating={s.vbCreating}
           handleCreateVirtualBatch={s.handleCreateVirtualBatch}
         />
+        )}
 
         {s.traceGenMode === 'batchWithItems' && (
           <div ref={traceInventoryPanelRef} className="border-t border-slate-200 pt-8 space-y-4 scroll-mt-4">

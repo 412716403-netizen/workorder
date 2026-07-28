@@ -34,6 +34,8 @@ export interface PsiOrderBillDocModalProps {
   showDetailDeleteButton?: boolean;
   /** 详情态、在「打印」按钮之前插入的控件（如「待办」按钮） */
   leadingDetailActions?: React.ReactNode;
+  /** 遮罩 z-index，默认与进销存一致 */
+  zIndexClass?: string;
 }
 
 const PsiOrderBillDocModal: React.FC<PsiOrderBillDocModalProps> = ({
@@ -59,6 +61,7 @@ const PsiOrderBillDocModal: React.FC<PsiOrderBillDocModalProps> = ({
   showDetailEditButton = true,
   showDetailDeleteButton = true,
   leadingDetailActions,
+  zIndexClass,
 }) => (
   <DocPhaseModal
     open={open}
@@ -96,6 +99,7 @@ const PsiOrderBillDocModal: React.FC<PsiOrderBillDocModalProps> = ({
     showDetailDeleteButton={showDetailDeleteButton}
     detailContent={detailContent}
     formContent={formContent}
+    zIndexClass={zIndexClass}
   />
 );
 

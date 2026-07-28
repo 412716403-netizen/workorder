@@ -8,7 +8,9 @@
 
 .kb-editor-tail-hit {
   flex-shrink: 0;
-  height: 48px;
+  /* 文末可继续上滑，避免末行/插入菜单贴死视口底边（对齐 Notion 类编辑器尾部留白） */
+  height: min(42vh, 420px);
+  min-height: 160px;
   cursor: text;
 }
 
@@ -1005,6 +1007,187 @@
 .kb-editor .ProseMirror .kb-document-ref.ProseMirror-selectednode {
   outline: 2px solid #6366f1;
   outline-offset: 1px;
+}
+
+/* ── 关联单据芯片 ── */
+
+.kb-editor .ProseMirror .kb-biz-doc-ref,
+.kb-editor .kb-biz-doc-ref {
+  display: inline-block;
+  max-width: none;
+  margin: 0 0.15em;
+  padding: 0.1em 0.45em;
+  border-radius: 0.35rem;
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+  font-size: 0.92em;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+  vertical-align: baseline;
+  white-space: normal;
+  overflow: visible;
+  word-break: break-word;
+}
+
+.kb-editor .ProseMirror .kb-biz-doc-ref[data-doc-kind="PLAN"],
+.kb-editor .kb-biz-doc-ref[data-doc-kind="PLAN"] {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+
+.kb-editor .ProseMirror .kb-biz-doc-ref[data-doc-kind="PURCHASE_BILL"],
+.kb-editor .kb-biz-doc-ref[data-doc-kind="PURCHASE_BILL"] {
+  background: #fff7ed;
+  color: #c2410c;
+  border-color: #fed7aa;
+}
+
+.kb-editor .ProseMirror .kb-biz-doc-ref[data-doc-kind="SALES_BILL"],
+.kb-editor .kb-biz-doc-ref[data-doc-kind="SALES_BILL"] {
+  background: #fdf2f8;
+  color: #be185d;
+  border-color: #fbcfe8;
+}
+
+.kb-editor .ProseMirror td .kb-biz-doc-ref,
+.kb-editor .ProseMirror th .kb-biz-doc-ref {
+  max-width: none;
+}
+
+.kb-editor .ProseMirror .kb-biz-doc-ref:hover,
+.kb-editor .kb-biz-doc-ref:hover {
+  filter: brightness(0.97);
+}
+
+.kb-editor .ProseMirror .kb-biz-doc-ref.ProseMirror-selectednode {
+  outline: 2px solid #6366f1;
+  outline-offset: 1px;
+}
+
+/* ── 关联单据选择弹窗 ── */
+
+.kb-biz-doc-dialog {
+  width: min(440px, calc(100vw - 2rem));
+  max-height: min(72vh, 560px);
+}
+
+.kb-biz-doc-dialog .kb-link-insert-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: min(72vh, 560px);
+}
+
+.kb-biz-doc-tabs {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.kb-biz-doc-tab {
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.kb-biz-doc-tab.is-active {
+  background: #fff7ed;
+  border-color: #fdba74;
+  color: #c2410c;
+}
+
+.kb-biz-doc-search {
+  position: relative;
+}
+
+.kb-biz-doc-search-icon {
+  position: absolute;
+  left: 0.65rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0.9rem;
+  height: 0.9rem;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.kb-biz-doc-search-input {
+  padding-left: 2rem !important;
+}
+
+.kb-biz-doc-hint {
+  margin: 0;
+  font-size: 0.7rem;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+.kb-biz-doc-list {
+  flex: 1;
+  min-height: 10rem;
+  max-height: 18rem;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  background: #fff;
+}
+
+.kb-biz-doc-list-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 8rem;
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.kb-biz-doc-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  width: 100%;
+  padding: 0.65rem 0.8rem;
+  border: none;
+  border-bottom: 1px solid #f1f5f9;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.kb-biz-doc-row:last-child {
+  border-bottom: none;
+}
+
+.kb-biz-doc-row:hover {
+  background: #f8fafc;
+}
+
+.kb-biz-doc-row.is-selected {
+  background: #fff7ed;
+}
+
+.kb-biz-doc-row-title {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #0f172a;
+  word-break: break-all;
+}
+
+.kb-biz-doc-row-sub {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #94a3b8;
+  line-height: 1.35;
 }
 
 /* ── 图片放大预览 ── */

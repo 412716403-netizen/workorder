@@ -1,38 +1,52 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { ModalPortal } from '../../components/ModalPortal';
-import { PdfPreviewViewer } from '../../components/PdfPreviewViewer';
+import { ModalPortal } from './ModalPortal';
+import { PdfPreviewViewer } from './PdfPreviewViewer';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import type { PlanOrder, PrintTemplate, ProductionOpRecord } from '../../types';
-import { DEFAULT_OUTSOURCE_FORM_SETTINGS } from '../../types';
-import { useAuth } from '../../contexts/AuthContext';
+import type { PlanOrder, PrintTemplate, ProductionOpRecord, Product } from '../types';
+import { DEFAULT_OUTSOURCE_FORM_SETTINGS } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 import {
   useAppActions,
   useConfigData,
   useMasterData,
   useOrdersData,
-} from '../../contexts/AppDataContext';
-import { normalizeDecimals } from '../../contexts/formSettingsDefaults';
-import { production as productionApi } from '../../services/api';
-import { buildPlanLabelPrintPicker, mergePlanLabelPrintWhitelistInSettings } from '../../utils/planLabelPrintSettings';
-import PlanDetailPanel from '../plan-order-list/PlanDetailPanel';
-import OrderDetailModal from '../OrderDetailModal';
-import { getOrderFamilyIds, hasOpsPerm } from '../production-ops/types';
+} from '../contexts/AppDataContext';
+import { normalizeDecimals } from '../contexts/formSettingsDefaults';
+import { production as productionApi } from '../services/api';
+import { buildPlanLabelPrintPicker, mergePlanLabelPrintWhitelistInSettings } from '../utils/planLabelPrintSettings';
+import PlanDetailPanel from '../views/plan-order-list/PlanDetailPanel';
+import OrderDetailModal from '../views/OrderDetailModal';
+import { getOrderFamilyIds, hasOpsPerm } from '../views/production-ops/types';
 import ProductImageLightbox, {
   productPreviewFromProduct,
   type ProductImagePreviewTarget,
-} from '../../components/ProductImageLightbox';
+} from './ProductImageLightbox';
 
-export interface SalesOrderReferencedProductionDetailHostProps {
+export interface PlanOrderDetailHostProps {
   planId: string | null;
   orderId: string | null;
   onPlanIdChange: (id: string | null) => void;
   onOrderIdChange: (id: string | null) => void;
+  /**
+   * 跨模块只读（如资料库关联单据）：计划详情禁用写操作并抬高层级，仍保留「待办」。
+   * 销售订单引用生产等业务内打开保持可编辑（默认 false）。
+   */
+  readOnly?: boolean;
 }
 
-const SalesOrderReferencedProductionDetailHost: React.FC<
-  SalesOrderReferencedProductionDetailHostProps
-> = ({ planId, orderId, onPlanIdChange, onOrderIdChange }) => {
+const noopAsyncProduct = async (_product: Product): Promise<Product | null> => null;
+const noopConvert = (_planId: string) => undefined;
+const noopPlanFormSettings = async () => undefined;
+
+/** 跨模块打开计划详情 / 工单详情（资料库关联单据、销售订单引用生产等） */
+const PlanOrderDetailHost: React.FC<PlanOrderDetailHostProps> = ({
+  planId,
+  orderId,
+  onPlanIdChange,
+  onOrderIdChange,
+  readOnly = false,
+}) => {
   const { tenantCtx } = useAuth();
   const tenantRole = tenantCtx?.tenantRole;
   const userPermissions = tenantCtx?.permissions;
@@ -43,8 +57,10 @@ const SalesOrderReferencedProductionDetailHost: React.FC<
   const a = useAppActions();
 
   const canViewOrderDetail = hasOpsPerm(tenantRole, userPermissions, 'production:orders_detail:view');
-  const canEditOrderDetail = hasOpsPerm(tenantRole, userPermissions, 'production:orders_detail:edit');
-  const canDeleteOrderDetail = hasOpsPerm(tenantRole, userPermissions, 'production:orders_detail:delete');
+  const canEditOrderDetail =
+    !readOnly && hasOpsPerm(tenantRole, userPermissions, 'production:orders_detail:edit');
+  const canDeleteOrderDetail =
+    !readOnly && hasOpsPerm(tenantRole, userPermissions, 'production:orders_detail:delete');
 
   const [imagePreview, setImagePreview] = useState<ProductImagePreviewTarget | null>(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
@@ -60,7 +76,7 @@ const SalesOrderReferencedProductionDetailHost: React.FC<
   }, [orderId, o.orders]);
 
   const orderDetailProdQuery = useQuery({
-    queryKey: ['psiSalesOrderRefOrderDetailProd', orderId, orderDetailFamilyIds.join(',')],
+    queryKey: ['planOrderDetailHostProd', orderId, orderDetailFamilyIds.join(',')],
     enabled: !!orderId && orderDetailFamilyIds.length > 0,
     queryFn: async (): Promise<ProductionOpRecord[]> => {
       const acc: ProductionOpRecord[] = [];
@@ -111,11 +127,12 @@ const SalesOrderReferencedProductionDetailHost: React.FC<
 
   const mergePlanPrintWhitelist = useCallback(
     (kind: 'itemCode' | 'batch', templateId: string) => {
+      if (readOnly) return;
       void a.onUpdatePlanFormSettings(
         mergePlanLabelPrintWhitelistInSettings(c.planFormSettings, kind, templateId),
       );
     },
-    [a, c.planFormSettings],
+    [a, c.planFormSettings, readOnly],
   );
 
   const openPlanFormPrintTab = useCallback(() => {
@@ -131,6 +148,9 @@ const SalesOrderReferencedProductionDetailHost: React.FC<
         <PlanDetailPanel
           planId={planId}
           onClose={() => onPlanIdChange(null)}
+          readOnly={readOnly}
+          overlayZIndexClass={readOnly ? 'z-[12000]' : 'z-[60]'}
+          todoModalZIndexClass={readOnly ? 'z-[12100]' : undefined}
           plans={o.plans}
           products={m.products}
           categories={m.categories}
@@ -144,16 +164,16 @@ const SalesOrderReferencedProductionDetailHost: React.FC<
           planFormSettings={c.planFormSettings}
           orders={o.orders}
           productionLinkMode={c.productionLinkMode}
-          onUpdatePlan={a.onUpdatePlan}
-          onUpdateOrder={a.onUpdateOrder}
-          onDeletePlan={a.onDeletePlan}
-          onConvertToOrder={a.onConvertToOrder}
-          onUpdateProduct={a.onUpdateProduct}
-          onAddPSIRecord={a.onAddPSIRecord}
-          onAddPSIRecordBatch={a.onAddPSIRecordBatch}
-          onCreateSubPlan={a.onCreateSubPlan}
-          onCreateSubPlans={a.onCreateSubPlans}
-          onSplitPlan={a.onSplitPlan}
+          onUpdatePlan={readOnly ? undefined : a.onUpdatePlan}
+          onUpdateOrder={readOnly ? undefined : a.onUpdateOrder}
+          onDeletePlan={readOnly ? undefined : a.onDeletePlan}
+          onConvertToOrder={readOnly ? noopConvert : a.onConvertToOrder}
+          onUpdateProduct={readOnly ? noopAsyncProduct : a.onUpdateProduct}
+          onAddPSIRecord={readOnly ? undefined : a.onAddPSIRecord}
+          onAddPSIRecordBatch={readOnly ? undefined : a.onAddPSIRecordBatch}
+          onCreateSubPlan={readOnly ? undefined : a.onCreateSubPlan}
+          onCreateSubPlans={readOnly ? undefined : a.onCreateSubPlans}
+          onSplitPlan={readOnly ? undefined : a.onSplitPlan}
           onOpenOrderDetail={openOrderDetail}
           canViewOrderDetail={canViewOrderDetail}
           onImagePreview={product => setImagePreview(productPreviewFromProduct(product))}
@@ -168,10 +188,10 @@ const SalesOrderReferencedProductionDetailHost: React.FC<
           batchLabelPrintPickerHasWhitelist={batchLabelPrintPicker.hasWhitelist}
           onOpenLabelPrintConfig={openPlanFormPrintTab}
           printTemplates={c.printTemplates}
-          onUpdatePrintTemplates={a.onUpdatePrintTemplates}
+          onUpdatePrintTemplates={readOnly ? async () => undefined : a.onUpdatePrintTemplates}
           onRefreshPrintTemplates={a.refreshPrintTemplates}
           onMergeLabelPrintWhitelist={mergePlanPrintWhitelist}
-          onUpdatePlanFormSettings={a.onUpdatePlanFormSettings}
+          onUpdatePlanFormSettings={readOnly ? noopPlanFormSettings : a.onUpdatePlanFormSettings}
         />
       )}
 
@@ -195,16 +215,18 @@ const SalesOrderReferencedProductionDetailHost: React.FC<
         partnerCategories={m.partnerCategories}
         userPermissions={userPermissions}
         tenantRole={tenantRole}
-        onAddRecord={a.onAddProdRecord}
+        zIndexClass={readOnly ? 'z-[12100]' : 'z-[85]'}
+        todoModalZIndexClass={readOnly ? 'z-[12200]' : undefined}
+        onAddRecord={readOnly ? undefined : a.onAddProdRecord}
         onAddRecordBatch={
-          a.onAddProdRecordBatch
+          !readOnly && a.onAddProdRecordBatch
             ? async records => {
                 await a.onAddProdRecordBatch(records);
               }
             : undefined
         }
-        onUpdateRecord={a.onUpdateProdRecord}
-        onDeleteRecord={a.onDeleteProdRecord}
+        onUpdateRecord={readOnly ? undefined : a.onUpdateProdRecord}
+        onDeleteRecord={readOnly ? undefined : a.onDeleteProdRecord}
         onUpdateOrder={canEditOrderDetail ? a.onUpdateOrder : undefined}
         onDeleteOrder={
           canDeleteOrderDetail
@@ -219,13 +241,13 @@ const SalesOrderReferencedProductionDetailHost: React.FC<
       <ProductImageLightbox
         target={imagePreview}
         onClose={() => setImagePreview(null)}
-        zIndexClass="z-[200]"
+        zIndexClass={readOnly ? 'z-[12100]' : 'z-[200]'}
       />
 
       {filePreviewUrl && (
         <ModalPortal>
         <div
-          className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6"
+          className={`fixed inset-0 ${readOnly ? 'z-[12100]' : 'z-[200]'} flex items-center justify-center p-4 sm:p-6`}
           onClick={() => setFilePreviewUrl(null)}
           role="presentation"
         >
@@ -250,4 +272,4 @@ const SalesOrderReferencedProductionDetailHost: React.FC<
   );
 };
 
-export default React.memo(SalesOrderReferencedProductionDetailHost);
+export default React.memo(PlanOrderDetailHost);

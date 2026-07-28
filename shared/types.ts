@@ -664,7 +664,7 @@ export interface DevBomDto {
 
 export interface DevStyleDto {
   id: string;
-  /** 款号（对应产品名称）；选填，发布大货前须填写 */
+  /** 款号（对应产品名称）；选填，发布大货时为空则产品 sku 存 NULL */
   code: string;
   name: string;
   customerName?: string;
@@ -834,6 +834,28 @@ export interface KnowledgeTreeResponse {
 export interface KnowledgeDocumentReferencesResponse {
   products: Array<{ id: string; name: string; sku: string }>;
   devStyles: Array<{ id: string; name: string }>;
+}
+
+/** 资料库正文「关联单据」种类（内联芯片 data-doc-kind） */
+export enum KnowledgeBizDocKind {
+  PLAN = 'PLAN',
+  PURCHASE_BILL = 'PURCHASE_BILL',
+  SALES_BILL = 'SALES_BILL',
+}
+
+/** 关联单据种类 → 中文短名（插入菜单 / 芯片前缀） */
+export const KNOWLEDGE_BIZ_DOC_KIND_LABEL: Record<KnowledgeBizDocKind, string> = {
+  [KnowledgeBizDocKind.PLAN]: '生产计划',
+  [KnowledgeBizDocKind.PURCHASE_BILL]: '采购入库',
+  [KnowledgeBizDocKind.SALES_BILL]: '销售单',
+};
+
+export function isKnowledgeBizDocKind(v: unknown): v is KnowledgeBizDocKind {
+  return (
+    v === KnowledgeBizDocKind.PLAN
+    || v === KnowledgeBizDocKind.PURCHASE_BILL
+    || v === KnowledgeBizDocKind.SALES_BILL
+  );
 }
 
 /** 资料库正文最大字符数（与后端校验一致） */

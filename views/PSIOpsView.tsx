@@ -60,7 +60,7 @@ import { PSI_ORDER_BILL_FLOW_LABELS } from './psi-ops/psiOrderBillFlowHelpers';
 import PendingShipmentListModal, { PendingShipmentGroup } from './psi-ops/PendingShipmentListModal';
 import PendingShipDetailModal from './psi-ops/PendingShipDetailModal';
 import AllocationModal from './psi-ops/AllocationModal';
-import SalesOrderReferencedProductionDetailHost from './psi-ops/SalesOrderReferencedProductionDetailHost';
+import PlanOrderDetailHost from '../components/PlanOrderDetailHost';
 import PsiFormConfigModal from './psi-ops/PsiFormConfigModal';
 import {
   PsiListPrintController,
@@ -2272,7 +2272,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
       )}
 
       {(soRefPlanDetailId || soRefOrderDetailId) && (
-        <SalesOrderReferencedProductionDetailHost
+        <PlanOrderDetailHost
           planId={soRefPlanDetailId}
           orderId={soRefOrderDetailId}
           onPlanIdChange={setSoRefPlanDetailId}

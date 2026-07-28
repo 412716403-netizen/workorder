@@ -17,6 +17,7 @@ interface InsertMenuPopupProps {
   onOpenProductDialog?: () => void;
   onPickFile?: () => void;
   onOpenDocumentDialog?: () => void;
+  onOpenBizDocDialog?: () => void;
   onClose?: () => void;
 }
 
@@ -209,6 +210,7 @@ const InsertMenuPopup: React.FC<InsertMenuPopupProps> = ({
   onOpenProductDialog,
   onPickFile,
   onOpenDocumentDialog,
+  onOpenBizDocDialog,
   onClose,
 }) => {
   const { basic, common } = buildInsertMenuItems(
@@ -217,6 +219,7 @@ const InsertMenuPopup: React.FC<InsertMenuPopupProps> = ({
     onOpenProductDialog,
     onPickFile,
     onOpenDocumentDialog,
+    onOpenBizDocDialog,
   );
   // 表格单元格内不允许再嵌套插入表格
   const commonItems = editor.isActive('table')

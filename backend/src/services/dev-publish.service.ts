@@ -40,8 +40,9 @@ export async function publishDevStyleToProduct(
     throw new AppError(409, '请先归档产品后再生成商品');
   }
   if (!style.categoryId) throw new AppError(400, '发布前请选择产品分类');
-  if (!style.code?.trim()) throw new AppError(400, '款号不能为空');
   if (!style.name?.trim()) throw new AppError(400, '品名不能为空');
+  // 款号（产品名称/sku）选填：与产品档案同口径，空值由 createProduct 归一化为 NULL
+  const styleCode = style.code?.trim() ?? '';
 
   // 提前校验产品编号冲突；产品名称(sku)允许与档案重复
   const dupName = await db.product.findFirst({ where: { name: style.name.trim() } });
@@ -77,7 +78,7 @@ export async function publishDevStyleToProduct(
         id: defaultVariantId,
         colorId: '',
         sizeId: '',
-        skuSuffix: style.code,
+        skuSuffix: styleCode,
         nodeBoms: {},
       },
     ];
@@ -108,7 +109,7 @@ export async function publishDevStyleToProduct(
     await productsService.createProduct(txDb, tenantId, {
       id: productId,
       tenantId,
-      sku: style.code!.trim(),
+      sku: styleCode,
       name: style.name.trim(),
       imageUrl: style.imageUrl ?? undefined,
       categoryId: style.categoryId,

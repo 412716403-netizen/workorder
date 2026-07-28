@@ -64,7 +64,7 @@
             class="plan-form-cell__input"
             value="{{form.code}}"
             bindinput="onCodeInput"
-            placeholder="款号，选填；发布大货前须填写"
+            placeholder="款号，选填"
             placeholder-class="plan-form-cell__ph"
           />
         </view>

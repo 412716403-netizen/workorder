@@ -12,6 +12,8 @@ const PRODUCT_REF_RE =
   /<span\b[^>]*\bdata-type=(["'])product-ref\1[^>]*>[\s\S]*?<\/span>/gi;
 const DOCUMENT_REF_RE =
   /<span\b[^>]*\bdata-type=(["'])document-ref\1[^>]*>[\s\S]*?<\/span>/gi;
+const BIZ_DOC_REF_RE =
+  /<span\b[^>]*\bdata-type=(["'])biz-doc-ref\1[^>]*>[\s\S]*?<\/span>/gi;
 const FILE_ATTACH_RE =
   /<div\b(?=[^>]*\bdata-type=(["'])file-attachment\1)[^>]*>[\s\S]*?<\/div>/gi;
 const TABLE_RE = /<table\b[\s\S]*?<\/table>/gi;
@@ -160,6 +162,24 @@ function convertDocumentRefsToText(html) {
   return String(html || '').replace(DOCUMENT_REF_RE, (tag) => {
     const { label } = parseDocumentRefTag(tag);
     return `<span style="display:inline-block;padding:2px 8px;border-radius:999px;background:#ede9fe;color:#6d28d9;font-size:13px;">${escapeHtml(label)}</span>`;
+  });
+}
+
+function parseBizDocRefTag(tag) {
+  const labelMatch = tag.match(/\bdata-label=(["'])([\s\S]*?)\1/i);
+  let label = labelMatch ? decodeHtmlAttr(labelMatch[2]).trim() : '';
+  if (!label) {
+    const inner = tag.match(/>([\s\S]*?)<\/span\s*>/i);
+    label = inner ? String(inner[1] || '').replace(/<[^>]+>/g, '').trim() : '';
+    label = decodeHtmlAttr(label).trim();
+  }
+  return { label: label || '关联单据' };
+}
+
+function convertBizDocRefsToText(html) {
+  return String(html || '').replace(BIZ_DOC_REF_RE, (tag) => {
+    const { label } = parseBizDocRefTag(tag);
+    return `<span style="display:inline-block;padding:2px 8px;border-radius:999px;background:#ffedd5;color:#c2410c;font-size:13px;">${escapeHtml(label)}</span>`;
   });
 }
 
@@ -402,6 +422,9 @@ function splitInlineFlowIntoBlocks(flowHtml, previewUrls, keyPrefix, maxContentW
   const headings = [];
   const assetMap = urlById && typeof urlById === 'object' ? urlById : {};
   let s = String(flowHtml || '');
+
+  // 关联单据暂不支持点击，降级为带底色纯文本
+  s = convertBizDocRefsToText(s);
 
   s = s.replace(FILE_ATTACH_RE, (tag) => {
     const idx = files.length;
@@ -726,6 +749,7 @@ function prepareKnowledgeHtmlForRichText(html, urlById) {
   let out = String(html || '');
   out = convertProductRefsToText(out);
   out = convertDocumentRefsToText(out);
+  out = convertBizDocRefsToText(out);
   if (urlById) out = replaceKnowledgeAssetUrls(out, urlById);
   out = styleKnowledgeTables(out);
   out = styleKnowledgeMarks(out);
@@ -753,6 +777,7 @@ module.exports = {
   replaceKnowledgeAssetUrls,
   convertProductRefsToText,
   convertDocumentRefsToText,
+  convertBizDocRefsToText,
   stripUnsupportedAttrs,
   styleKnowledgeTables,
   styleKnowledgeImages,

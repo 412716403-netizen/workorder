@@ -13,6 +13,28 @@ export class AppError extends Error {
   }
 }
 
+/**
+ * P2002 唯一冲突的友好文案，key 为 `${meta.modelName}:${冲突列名以逗号连接}`。
+ * `meta.target` 给的是**数据库列名**数组（Product 冲突实测为 `["tenant_id","name"]`），
+ * 且不同模型可能有完全相同的列组合（Product 与 DevStageTemplate 都是 tenant_id+name），
+ * 因此必须带 modelName 精确匹配；按列名做子串猜测会串味（例如 `username` 命中 `name`）。
+ * 未列出的约束走兜底文案，会附带冲突列名便于排查。
+ */
+const UNIQUE_CONFLICT_MESSAGES: Record<string, string> = {
+  'Product:tenant_id,name': '产品编号已存在，请更换后再试',
+  'DevStageTemplate:tenant_id,name': '开发节点名称已存在，请更换后再试',
+  'DictionaryItem:tenant_id,type,name': '该名称在同类型字典项中已存在，请更换后再试',
+  'Partner:tenant_id,partner_list_no': '合作单位编号已存在，请更换后再试',
+  'PlanOrder:tenant_id,plan_number': '计划单号已存在，请更换后再试',
+  'ProductionOrder:tenant_id,order_number': '工单号已存在，请更换后再试',
+  'CollaborationProductMap:collaboration_id,sender_sku':
+    '该协同产品映射已存在：同一协同关系下，同一来源产品名称只能映射一条',
+  'User:username': '用户名已被占用，请更换后再试',
+  'User:phone': '手机号已被其他账号使用',
+  'User:email': '邮箱已被其他账号使用',
+  'User:wx_mini_openid': '该微信已绑定其他账号',
+};
+
 export function errorHandler(err: Error, req: Request, res: Response, _next: NextFunction) {
   if (err instanceof AppError) {
     const body: { error: string; code?: string } = { error: err.message };
@@ -84,23 +106,19 @@ export function errorHandler(err: Error, req: Request, res: Response, _next: Nex
         });
         return;
       case 'P2002': {
-        const pe = err as Prisma.PrismaClientKnownRequestError;
-        const targets = Array.isArray(pe.meta?.target) ? (pe.meta!.target as string[]) : [];
-        const hit = (key: string) => targets.some((t) => String(t).toLowerCase().includes(key));
-        // products.name = 产品编号；products.sku = 产品名称（可重复后一般不再触发）
-        if (hit('sku')) {
-          res.status(409).json({ error: '产品名称与已有产品冲突，请更换后再试' });
+        const meta = err.meta as { modelName?: unknown; target?: unknown } | undefined;
+        const model = typeof meta?.modelName === 'string' ? meta.modelName : '';
+        const columns = Array.isArray(meta?.target) ? meta.target.map((t) => String(t)) : [];
+        const mapped = UNIQUE_CONFLICT_MESSAGES[`${model}:${columns.join(',')}`];
+        if (mapped) {
+          res.status(409).json({ error: mapped });
           return;
         }
-        if (hit('code')) {
-          res.status(409).json({ error: '款号已存在，请更换后再试' });
-          return;
-        }
-        if (hit('name')) {
-          res.status(409).json({ error: '产品编号已存在，请更换后再试' });
-          return;
-        }
-        res.status(409).json({ error: '数据重复，违反唯一约束' });
+        res.status(409).json({
+          error: columns.length
+            ? `数据重复，违反唯一约束（冲突字段：${columns.join('、')}）`
+            : '数据重复，违反唯一约束',
+        });
         return;
       }
       case 'P2003':

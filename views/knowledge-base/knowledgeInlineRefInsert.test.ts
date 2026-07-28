@@ -6,7 +6,9 @@ import { Table } from '@tiptap/extension-table';
 import TableRow from '@tiptap/extension-table-row';
 import { KnowledgeProductRef } from './knowledgeProductRefExtension';
 import { KnowledgeDocumentRef } from './knowledgeDocumentRefExtension';
+import { KnowledgeBizDocRef } from './knowledgeBizDocRefExtension';
 import { KnowledgeTableCell, KnowledgeTableHeader } from './knowledgeTableCellExtensions';
+import { KnowledgeBizDocKind } from '../../shared/types';
 
 function createEditor(content: string, withTable = false) {
   return new Editor({
@@ -22,12 +24,13 @@ function createEditor(content: string, withTable = false) {
         : []),
       KnowledgeProductRef,
       KnowledgeDocumentRef,
+      KnowledgeBizDocRef,
     ],
     content,
   });
 }
 
-describe('insertProductRef / insertDocumentRef inline', () => {
+describe('insertProductRef / insertDocumentRef / insertBizDocRef inline', () => {
   let editor: Editor | null = null;
 
   afterEach(() => {
@@ -78,5 +81,50 @@ describe('insertProductRef / insertDocumentRef inline', () => {
     const cellMatch = html.match(/<td[^>]*>([\s\S]*?)<\/td>/i);
     expect(cellMatch?.[1].match(/<p[\s>]/g)?.length ?? 0).toBe(1);
     expect(cellMatch?.[1]).toMatch(/前缀[\s\S]*product-ref/);
+  });
+
+  it('关联单据内联插入', () => {
+    editor = createEditor('<p>见</p>');
+    editor.commands.setTextSelection(editor.state.doc.content.size - 1);
+    editor.commands.insertBizDocRef({
+      docKind: KnowledgeBizDocKind.PLAN,
+      docId: 'plan1',
+      docNumber: 'JH-1',
+      label: '生产计划 JH-1',
+    });
+    const html = editor.getHTML();
+    expect(html).toContain('data-type="biz-doc-ref"');
+    expect(html).toContain('data-doc-kind="PLAN"');
+    expect(html).toContain('data-doc-id="plan1"');
+    expect(html).toContain('data-doc-number="JH-1"');
+    expect(html.match(/<p[\s>]/g)?.length ?? 0).toBe(1);
+  });
+
+  it('表格单元格内关联单据不另起段落', () => {
+    editor = createEditor(
+      '<table><tr><td><p>前缀</p></td></tr></table>',
+      true,
+    );
+    let targetPos: number | null = null;
+    editor.state.doc.descendants((node, pos) => {
+      if (node.type.name === 'paragraph' && node.textContent === '前缀') {
+        targetPos = pos + node.nodeSize - 1;
+        return false;
+      }
+      return undefined;
+    });
+    expect(targetPos).not.toBeNull();
+    editor.commands.setTextSelection(targetPos!);
+    editor.commands.insertBizDocRef({
+      docKind: KnowledgeBizDocKind.SALES_BILL,
+      docId: '',
+      docNumber: 'XS-1',
+      label: '销售单 XS-1',
+    });
+    const html = editor.getHTML();
+    expect(html).toContain('data-type="biz-doc-ref"');
+    const cellMatch = html.match(/<td[^>]*>([\s\S]*?)<\/td>/i);
+    expect(cellMatch?.[1].match(/<p[\s>]/g)?.length ?? 0).toBe(1);
+    expect(cellMatch?.[1]).toMatch(/前缀[\s\S]*biz-doc-ref/);
   });
 });

@@ -1124,7 +1124,7 @@ model OutsourceRoute {
 model DevStyle {
   id                 String   @id @db.VarChar(50)
   tenantId           String   @map("tenant_id") @db.Uuid
-  /** 款号（对应产品名称/sku）；可空，发布大货前须填写 */
+  /** 款号（对应产品名称/sku）；可空且允许租户内重复，发布大货也不强制 */
   code               String?  @db.VarChar(100)
   name               String   @db.VarChar(200)
   customerName       String?  @map("customer_name") @db.VarChar(200)
@@ -1153,8 +1153,8 @@ model DevStyle {
   samples  DevSample[]
   boms     DevBom[]
 
-  @@unique([tenantId, code])
   @@index([tenantId])
+  @@index([tenantId, code])
   @@index([categoryId])
   @@index([status])
   @@index([tenantId, createdByUserId])
