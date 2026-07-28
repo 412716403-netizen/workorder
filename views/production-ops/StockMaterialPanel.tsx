@@ -38,8 +38,6 @@ import { PanelProps, hasOpsPerm, getOrderFamilyIds, type StockDocDetail } from '
 import { orderCreatedMs } from '../../utils/orderCenterSort';
 import { shouldShowOrderInIncompleteListFilter } from '../../utils/orderDispatchListFilter';
 import { buildMaterialStockCustomCollabPayload } from '../../utils/productionOpCollab/material';
-import { ProductListMetaTags } from '../../components/ProductListMetaTags';
-import { buildPartnerNameById } from '../../utils/productPartnerDisplay';
 import { categoryUsesBatchManagement, BATCH_NO_UNTAGGED } from '../../types';
 import { clampBatchNoInput } from '../../hooks/useBatchPicker';
 import * as api from '../../services/api';
