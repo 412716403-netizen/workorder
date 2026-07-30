@@ -129,6 +129,7 @@
         "development-bom-edit/development-bom-edit",
         "development-material-operation/development-material-operation",
         "development-material-records/development-material-records",
+        "development-material-doc-detail/development-material-doc-detail",
         "development-stage-templates/development-stage-templates",
         "development-stage-template-edit/development-stage-template-edit",
         "todos/todos",

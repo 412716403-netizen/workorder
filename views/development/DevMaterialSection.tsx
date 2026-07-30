@@ -33,6 +33,8 @@ export interface DevMaterialPerms {
   canViewRecords: boolean;
   canIssue: boolean;
   canReturn: boolean;
+  canEditRecords: boolean;
+  canDeleteRecords: boolean;
 }
 
 interface DevMaterialSectionProps {
@@ -389,11 +391,20 @@ const DevMaterialSection: React.FC<DevMaterialSectionProps> = ({
 
       {historyOpen && data && (
         <DevMaterialHistoryModal
+          styleId={styleId}
           styleCode={styleCode}
           styleName={styleName}
           docs={data.docs}
           warehouses={warehouses}
+          products={products}
+          categories={categories}
+          canEdit={perms.canEditRecords}
+          canDelete={perms.canDeleteRecords}
+          styleAllowsEdit={styleAllowsIssue}
           onClose={() => setHistoryOpen(false)}
+          onSaved={async () => {
+            await onRefresh();
+          }}
         />
       )}
 

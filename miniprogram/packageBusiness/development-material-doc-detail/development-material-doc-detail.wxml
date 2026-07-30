@@ -1,0 +1,106 @@
+<view class="plan-detail-shell">
+  <view class="plan-detail-header" style="padding-top: {{statusBarHeight}}px;">
+    <view class="plan-detail-header__bar" style="height: {{navBarHeight}}px;">
+      <view class="plan-detail-header__back" bindtap="onHeaderBack">‹</view>
+      <text class="plan-detail-header__title">{{editing ? '开发领退 · 编辑' : '开发领退详情'}}</text>
+      <view class="plan-detail-header__back plan-detail-header__back--placeholder"></view>
+    </view>
+  </view>
+
+  <view class="plan-detail-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
+
+  <scroll-view class="plan-detail-scroll" scroll-y show-scrollbar="{{false}}" style="height: {{scrollHeight}}px;">
+    <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
+
+    <view wx:elif="{{!lines.length}}" class="plan-detail-page">
+      <view class="dev-empty-block">
+        <text class="dev-empty-block__text">单据不存在</text>
+      </view>
+    </view>
+
+    <view wx:else class="plan-detail-page">
+      <view class="dev-section-card">
+        <view class="dev-section-card__head">
+          <view class="dev-mat-doc-head__left">
+            <text class="dev-mat-doc-badge">{{typeLabel}}</text>
+            <text class="dev-mat-doc-no">{{docNo}}</text>
+          </view>
+        </view>
+        <text class="dev-mat-doc-time">{{timeText}}{{operator && operator !== '—' ? ' · ' + operator : ''}}</text>
+        <text wx:if="{{styleName}}" class="dev-section-card__hint">{{styleName}}{{styleCode ? ' · ' + styleCode : ''}}</text>
+      </view>
+
+      <view class="dev-section-card">
+        <view class="dev-section-card__head">
+          <text class="dev-section-card__title">物料明细</text>
+        </view>
+
+        <block wx:if="{{editing}}">
+          <view wx:for="{{editLines}}" wx:key="id" class="dev-mat-edit-line">
+            <view class="dev-mat-edit-line__head">
+              <view class="dev-mat-doc-line__main">
+                <text class="dev-mat-row__name">{{item.productName}}</text>
+                <text wx:if="{{item.showProductSku}}" class="list-product-sku">{{item.productSku}}</text>
+              </view>
+              <text class="dev-mat-edit-line__remove" data-index="{{index}}" bindtap="onRemoveLine">删除行</text>
+            </view>
+            <picker
+              mode="selector"
+              range="{{warehouseNames}}"
+              value="{{item.warehouseIndex}}"
+              data-index="{{index}}"
+              bindchange="onLineWarehouseChange"
+            >
+              <view class="dev-mat-edit-field">
+                <text class="dev-mat-edit-field__label">仓库</text>
+                <text class="dev-mat-edit-field__value">{{item.warehouseName || '请选择'}}</text>
+              </view>
+            </picker>
+            <view wx:if="{{item.usesBatch || showBatchCol}}" class="dev-mat-edit-field">
+              <text class="dev-mat-edit-field__label">批次</text>
+              <input
+                class="dev-mat-edit-field__input"
+                value="{{item.batchNo}}"
+                placeholder="{{item.usesBatch ? '必填' : '选填'}}"
+                data-index="{{index}}"
+                bindinput="onLineBatchInput"
+              />
+            </view>
+            <view class="dev-mat-edit-field">
+              <text class="dev-mat-edit-field__label">数量</text>
+              <input
+                class="dev-mat-edit-field__input"
+                type="digit"
+                value="{{item.quantity}}"
+                data-index="{{index}}"
+                bindinput="onLineQtyInput"
+              />
+            </view>
+          </view>
+        </block>
+
+        <block wx:else>
+          <view wx:for="{{lines}}" wx:key="id" class="dev-mat-doc-line">
+            <view class="dev-mat-doc-line__main">
+              <text class="dev-mat-row__name">{{item.productName}}</text>
+              <text wx:if="{{item.showProductSku}}" class="list-product-sku">{{item.productSku}}</text>
+              <text class="dev-mat-row__meta">{{item.warehouseName}}{{showBatchCol ? ' · ' + item.batchText : ''}}</text>
+            </view>
+            <text class="dev-mat-doc-qty">{{item.quantity}}</text>
+          </view>
+        </block>
+      </view>
+    </view>
+  </scroll-view>
+
+  <view wx:if="{{showFooter && !loading && lines.length}}" class="report-batch-footer">
+    <view wx:if="{{editing}}" class="report-batch-footer__inner">
+      <view class="report-batch-footer__btn report-batch-footer__btn--ghost" bindtap="onCancelEdit">取消</view>
+      <view class="report-batch-footer__btn report-batch-footer__btn--primary" bindtap="onSaveEdit">{{saving ? '保存中…' : '保存'}}</view>
+    </view>
+    <view wx:else class="report-batch-footer__inner">
+      <view wx:if="{{canDelete}}" class="report-batch-footer__btn report-batch-footer__btn--danger" bindtap="onDeleteTap">删除</view>
+      <view wx:if="{{canEdit}}" class="report-batch-footer__btn report-batch-footer__btn--primary" bindtap="onEnterEdit">编辑</view>
+    </view>
+  </view>
+</view>

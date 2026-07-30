@@ -33,7 +33,7 @@ export const KNOWLEDGE_BASE_SUB_MODULES: { key: string; label: string; actions: 
 export const DEVELOPMENT_SUB_MODULES: { key: string; label: string; actions: string[] }[] = [
   { key: 'styles', label: '款式开发', actions: ['view', 'create', 'edit', 'delete'] },
   { key: 'templates', label: '开发流程模板', actions: ['view', 'create', 'edit', 'delete'] },
-  { key: 'material_records', label: '开发领退流水', actions: ['view'] },
+  { key: 'material_records', label: '开发领退流水', actions: ['view', 'edit', 'delete'] },
   { key: 'material_issue', label: '开发领料', actions: ['view', 'create'] },
   { key: 'material_return', label: '开发退料', actions: ['view', 'create'] },
 ];

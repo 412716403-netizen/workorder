@@ -47,6 +47,19 @@ const materialBatchSchema = z.object({
   timestamp: z.string().optional(),
 });
 
+const materialDocUpdateLineSchema = z.object({
+  id: z.string().min(1, '明细 id 不能为空'),
+  quantity: z.coerce.number().positive('数量须大于 0'),
+  warehouseId: z.string().min(1, '仓库不能为空'),
+  batchNo: z.string().nullable().optional(),
+});
+
+const materialDocUpdateSchema = z.object({
+  lines: z.array(materialDocUpdateLineSchema).min(1, '至少保留一条明细'),
+  operator: z.string().optional(),
+  timestamp: z.string().optional(),
+});
+
 const devTemplateFieldSchema = z.object({
   id: z.string().optional(),
   label: z.string().min(1, '参数标签不能为空'),
@@ -109,6 +122,17 @@ router.post(
   requireSubPermission('development:material_return:create'),
   validate(materialBatchSchema),
   materialCtrl.createMaterialReturnBatch,
+);
+router.put(
+  '/styles/:styleId/material-docs/:docNo',
+  requireSubPermission('development:material_records:edit'),
+  validate(materialDocUpdateSchema),
+  materialCtrl.updateMaterialDoc,
+);
+router.delete(
+  '/styles/:styleId/material-docs/:docNo',
+  requireSubPermission('development:material_records:delete'),
+  materialCtrl.deleteMaterialDoc,
 );
 
 // ── 开发流程模板 ──

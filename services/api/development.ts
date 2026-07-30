@@ -5,6 +5,8 @@ import type {
   DevStageTemplateDto,
   DevMaterialBatchRequest,
   DevMaterialBatchResult,
+  DevMaterialDocMutationResult,
+  DevMaterialDocUpdateRequest,
   DevMaterialRecordsResponse,
 } from '../../types';
 
@@ -110,4 +112,14 @@ export const devMaterial = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  updateDoc: (styleId: string, docNo: string, body: DevMaterialDocUpdateRequest) =>
+    request<DevMaterialDocMutationResult>(
+      `/dev/styles/${styleId}/material-docs/${encodeURIComponent(docNo)}`,
+      { method: 'PUT', body: JSON.stringify(body) },
+    ),
+  deleteDoc: (styleId: string, docNo: string) =>
+    request<DevMaterialDocMutationResult>(
+      `/dev/styles/${styleId}/material-docs/${encodeURIComponent(docNo)}`,
+      { method: 'DELETE' },
+    ),
 };

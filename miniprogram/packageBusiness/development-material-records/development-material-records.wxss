@@ -70,3 +70,9 @@
   font-weight: 700;
   color: #0f172a;
 }
+
+.dev-mat-doc-hint {
+  margin-top: 8rpx;
+  font-size: 20rpx;
+  color: #94a3b8;
+}

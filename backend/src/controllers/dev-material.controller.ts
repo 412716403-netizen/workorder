@@ -35,3 +35,26 @@ export const createMaterialReturnBatch = asyncHandler(async (req, res) => {
     ),
   );
 });
+
+export const updateMaterialDoc = asyncHandler(async (req, res) => {
+  const db = getTenantPrisma(req.tenantId!);
+  res.json(
+    await devMaterialService.updateDevMaterialDoc(
+      db,
+      str(req.params.styleId),
+      str(req.params.docNo),
+      req.body,
+    ),
+  );
+});
+
+export const deleteMaterialDoc = asyncHandler(async (req, res) => {
+  const db = getTenantPrisma(req.tenantId!);
+  res.json(
+    await devMaterialService.deleteDevMaterialDoc(
+      db,
+      str(req.params.styleId),
+      str(req.params.docNo),
+    ),
+  );
+});

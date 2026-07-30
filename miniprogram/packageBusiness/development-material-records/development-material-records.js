@@ -36,6 +36,9 @@ Page({
     canMaterialIssue: false,
     canMaterialReturn: false,
     canMaterialRecords: false,
+    canMaterialEdit: false,
+    canMaterialDelete: false,
+    styleAllowsEdit: false,
     issueDisabled: true,
     returnDisabled: true,
     statusBarHeight: 20,
@@ -81,10 +84,14 @@ Page({
     this._canMaterialIssue = elevated || hasPermission(perms, 'development:material_issue:create');
     this._canMaterialReturn = elevated || hasPermission(perms, 'development:material_return:create');
     this._canMaterialRecords = elevated || hasPermission(perms, 'development:material_records:view');
+    this._canMaterialEdit = elevated || hasPermission(perms, 'development:material_records:edit');
+    this._canMaterialDelete = elevated || hasPermission(perms, 'development:material_records:delete');
     this.setData({
       canMaterialIssue: this._canMaterialIssue,
       canMaterialReturn: this._canMaterialReturn,
       canMaterialRecords: this._canMaterialRecords,
+      canMaterialEdit: this._canMaterialEdit,
+      canMaterialDelete: this._canMaterialDelete,
     });
     await this.reload();
   },
@@ -124,6 +131,7 @@ Page({
         materialEmptyHint,
         issueDisabled: !(materialData && materialData.canIssue && bomIds.length > 0),
         returnDisabled: !(materialData && materialData.canReturn),
+        styleAllowsEdit: Boolean(materialData && materialData.canIssue),
         loading: false,
       });
     } catch (err) {
@@ -160,6 +168,21 @@ Page({
       return;
     }
     this.openOperation('return');
+  },
+
+  onDocTap(e) {
+    const docNo = e.currentTarget.dataset.docNo;
+    if (!docNo) return;
+    const q = [
+      `styleId=${encodeURIComponent(this.data.styleId)}`,
+      `docNo=${encodeURIComponent(docNo)}`,
+      `styleName=${encodeURIComponent(this.data.styleName || '')}`,
+      `styleCode=${encodeURIComponent(this.data.styleCode || '')}`,
+      `styleAllowsEdit=${this.data.styleAllowsEdit ? '1' : '0'}`,
+    ];
+    wx.navigateTo({
+      url: `/packageBusiness/development-material-doc-detail/development-material-doc-detail?${q.join('&')}`,
+    });
   },
 
   onHeaderBack() {

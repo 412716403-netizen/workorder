@@ -67,6 +67,8 @@ const DevManagementView: React.FC = () => {
       canViewRecords: hasDevPerm('development:material_records:view'),
       canIssue: hasDevPerm('development:material_issue:create'),
       canReturn: hasDevPerm('development:material_return:create'),
+      canEditRecords: hasDevPerm('development:material_records:edit'),
+      canDeleteRecords: hasDevPerm('development:material_records:delete'),
     }),
     [hasDevPerm],
   );

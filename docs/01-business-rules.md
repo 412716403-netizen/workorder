@@ -882,7 +882,8 @@
 - **退料**：只能退该款历史发出的「物料 + 原仓库 + 批号」净领用；归档/已发布仍可退，不可借退料改仓/改批增加库存。
 - **隔离**：生产领退料/外协/返工统计排除 `来自于开发`；生产物料「领料退料流水」亦不展示开发领退；PSI 库存聚合与仓库流水**保留**这些流水（仓库流水标注「开发领料/开发退料」）。
 - **删除**：存在开发领退流水的款式禁止物理删除（可归档）。
-- **API**：`GET /api/dev/styles/:styleId/material-records`；`POST .../material-issues/batch`；`POST .../material-returns/batch`。权限：`development:material_records:view`、`material_issue:view|create`、`material_return:view|create`。
+- **修改 / 删除单据**：仅 `developing` 款式可整单编辑（改各行数量 / 仓库 / 批次、删除单行）或整单删除；改删后按「物料 + 批次」合计仍须满足 已领 >= 已退，否则拒绝（请先处理对应退料单）。不写反向流水，库存由流水聚合自动回滚。权限 `development:material_records:edit|delete`。
+- **API**：`GET /api/dev/styles/:styleId/material-records`；`POST .../material-issues/batch`；`POST .../material-returns/batch`；`PUT|DELETE .../material-docs/:docNo`。权限：`development:material_records:view|edit|delete`、`material_issue:view|create`、`material_return:view|create`。
 
 ### 6.3 安全删除
 

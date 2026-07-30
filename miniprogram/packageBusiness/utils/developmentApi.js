@@ -176,6 +176,21 @@ function createDevMaterialReturnBatch(styleId, body) {
   });
 }
 
+function updateDevMaterialDoc(styleId, docNo, body) {
+  return request({
+    path: `/dev/styles/${encodeURIComponent(styleId)}/material-docs/${encodeURIComponent(docNo)}`,
+    method: 'PUT',
+    data: body,
+  });
+}
+
+function deleteDevMaterialDoc(styleId, docNo) {
+  return request({
+    path: `/dev/styles/${encodeURIComponent(styleId)}/material-docs/${encodeURIComponent(docNo)}`,
+    method: 'DELETE',
+  });
+}
+
 module.exports = {
   listDevStyles,
   getDevStyle,
@@ -199,4 +214,6 @@ module.exports = {
   listDevMaterialRecords,
   createDevMaterialIssueBatch,
   createDevMaterialReturnBatch,
+  updateDevMaterialDoc,
+  deleteDevMaterialDoc,
 };

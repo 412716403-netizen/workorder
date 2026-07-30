@@ -197,3 +197,29 @@ export function assertReturnWithinReturnable(
     avail.set(key, left - line.quantity);
   }
 }
+
+/**
+ * 改/删领料流水后，断言按「物料 + 批次」合计仍满足 已领 >= 已退。
+ * 与 {@link assertReturnWithinReturnable} 同口径（不锁仓库）。
+ */
+export function assertNoNegativeIssuedNet(rows: RawOpRow[]): void {
+  const byKey = new Map<string, { productId: string; batchNo: string; issued: number; returned: number }>();
+  for (const row of rows) {
+    const qty = toQty(row.quantity);
+    const productId = row.productId;
+    const batchNo = batchNoForDisplay(row.batchNo);
+    const key = `${productId}::${batchNo}`;
+    const acc = byKey.get(key) ?? { productId, batchNo, issued: 0, returned: 0 };
+    if (row.type === 'STOCK_OUT') acc.issued += qty;
+    else if (row.type === 'STOCK_RETURN') acc.returned += qty;
+    byKey.set(key, acc);
+  }
+  for (const acc of byKey.values()) {
+    if (acc.returned > acc.issued + 1e-9) {
+      throw new AppError(
+        400,
+        `修改后已退量超过已领量（物料 ${acc.productId} / 批次 ${acc.batchNo}，已领 ${acc.issued}、已退 ${acc.returned}）；请先处理对应退料单`,
+      );
+    }
+  }
+}

@@ -787,6 +787,29 @@ export interface DevMaterialBatchResult {
   recordIds: string[];
 }
 
+/** 开发领退料整单编辑行：未出现在 lines 中的原有行视为删除；不支持新增行 */
+export interface DevMaterialDocUpdateLine {
+  /** ProductionOpRecord.id */
+  id: string;
+  quantity: number;
+  warehouseId: string;
+  batchNo?: string | null;
+}
+
+export interface DevMaterialDocUpdateRequest {
+  lines: DevMaterialDocUpdateLine[];
+  operator?: string;
+  /** ISO 或本地可解析时间；缺省保留原单时间 */
+  timestamp?: string;
+}
+
+export interface DevMaterialDocMutationResult {
+  docNo: string;
+  type: 'STOCK_OUT' | 'STOCK_RETURN';
+  updatedIds: string[];
+  deletedIds: string[];
+}
+
 // ── 返工物料领退（挂在生产工单上，reason=来自于返工）──
 // 行/汇总/流水分组形状与开发物料一致，直接别名复用，避免两套契约漂移。
 

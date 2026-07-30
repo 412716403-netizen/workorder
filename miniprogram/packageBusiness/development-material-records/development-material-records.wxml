@@ -55,7 +55,7 @@
         <view wx:if="{{!docs.length}}" class="dev-empty-block">
           <text class="dev-empty-block__text">暂无流水</text>
         </view>
-        <view wx:for="{{docs}}" wx:key="docNo" class="dev-mat-doc-block">
+        <view wx:for="{{docs}}" wx:key="docNo" class="dev-mat-doc-block" data-doc-no="{{item.docNo}}" bindtap="onDocTap">
           <view class="dev-mat-doc-head">
             <view class="dev-mat-doc-head__left">
               <text class="dev-mat-doc-badge">{{item.typeLabel}}</text>
@@ -70,6 +70,9 @@
               <text class="dev-mat-row__meta">{{line.warehouseName}} · {{line.batchText}}</text>
             </view>
             <text class="dev-mat-doc-qty">{{line.quantity}}</text>
+          </view>
+          <view class="dev-mat-doc-hint">
+            <text>点击查看详情</text>
           </view>
         </view>
       </view>

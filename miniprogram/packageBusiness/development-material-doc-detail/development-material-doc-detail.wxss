@@ -1,0 +1,57 @@
+@import "/styles/plan-detail-page.wxss";
+@import "/styles/list.wxss";
+@import "../development-style-detail/development-style-detail.wxss";
+@import "../development-material-records/development-material-records.wxss";
+
+.dev-mat-edit-line {
+  padding: 20rpx 0;
+  border-top: 1rpx solid #f1f5f9;
+}
+
+.dev-mat-edit-line__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 12rpx;
+}
+
+.dev-mat-edit-line__remove {
+  flex-shrink: 0;
+  font-size: 22rpx;
+  font-weight: 600;
+  color: #e11d48;
+  padding: 4rpx 0;
+}
+
+.dev-mat-edit-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 12rpx 0;
+}
+
+.dev-mat-edit-field__label {
+  flex-shrink: 0;
+  font-size: 22rpx;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.dev-mat-edit-field__value {
+  flex: 1;
+  text-align: right;
+  font-size: 26rpx;
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.dev-mat-edit-field__input {
+  flex: 1;
+  text-align: right;
+  font-size: 26rpx;
+  color: #4f46e5;
+  font-weight: 700;
+  min-height: 48rpx;
+}
