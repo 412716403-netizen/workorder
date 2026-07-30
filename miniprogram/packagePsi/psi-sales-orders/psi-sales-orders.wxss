@@ -1,7 +1,7 @@
-@import '/styles/production-plans-page.wxss';
-@import '/styles/production-orders-page.wxss';
-@import '/styles/report-history-page.wxss';
-@import '../../styles/qty-price-amount-summary.wxss';
+@import '/packagePsi/styles/production-plans-page.wxss';
+@import '/packagePsi/styles/production-orders-page.wxss';
+@import '/packagePsi/styles/report-history-page.wxss';
+@import '/packagePsi/styles/qty-price-amount-summary.wxss';
 
 .po-orders-page {
   padding: 0 var(--spacing-page) calc(120rpx + env(safe-area-inset-bottom));

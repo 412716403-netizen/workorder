@@ -1,5 +1,5 @@
-@import '/styles/production-plans-page.wxss';
-@import '/styles/report-history-page.wxss';
+@import '/packagePsi/styles/production-plans-page.wxss';
+@import '/packagePsi/styles/report-history-page.wxss';
 
 .so-pending-page {
   padding: 0 var(--spacing-page) calc(160rpx + env(safe-area-inset-bottom));

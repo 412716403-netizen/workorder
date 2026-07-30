@@ -10,8 +10,9 @@ const {
   deleteTodo,
   listTodos,
   todoDocLabel,
+  openTodosList,
 } = require('../utils/todosApi.js');
-const { navigateTodoHref } = require('../../utils/todoNavigate.js');
+const { navigateTodoHref } = require('../utils/todoNavigate.js');
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
@@ -48,6 +49,7 @@ Page({
     remindTime: '',
     docLabel: '',
     canJumpDoc: false,
+    showRelatedBtn: false,
     noteMax: TODO_NOTE_MAX_CHARS,
     submitting: false,
     deleting: false,
@@ -116,6 +118,7 @@ Page({
         remindTime: form.remindTime,
         docLabel: form.docLabel,
         canJumpDoc: !!(editing.href && form.docLabel),
+        showRelatedBtn: !!form.docLabel,
         done: editing.status === 'done',
       });
       return;
@@ -126,6 +129,7 @@ Page({
       this.setData({
         docLabel: label,
         canJumpDoc: !!(seed.href && label),
+        showRelatedBtn: !!label,
       });
     }
   },
@@ -147,6 +151,12 @@ Page({
 
   onHeaderBack() {
     wx.navigateBack();
+  },
+
+  onRelatedTodosTap() {
+    const q = String(this.data.docLabel || '').trim();
+    if (!q) return;
+    openTodosList({ searchKeyword: q, hideCreate: true });
   },
 
   onDocTap() {

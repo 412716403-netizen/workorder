@@ -1,8 +1,8 @@
-@import '/styles/plan-detail-page.wxss';
-@import '/styles/order-detail-page.wxss';
-@import '/styles/report-history-page.wxss';
-@import '/styles/report-batch-detail-page.wxss';
-@import '../../styles/qty-price-amount-summary.wxss';
+@import '/packagePsi/styles/plan-detail-page.wxss';
+@import '/packagePsi/styles/order-detail-page.wxss';
+@import '/packagePsi/styles/report-history-page.wxss';
+@import '/packagePsi/styles/report-batch-detail-page.wxss';
+@import '/packagePsi/styles/qty-price-amount-summary.wxss';
 
 .po-detail-line {
   padding: 20rpx 0;

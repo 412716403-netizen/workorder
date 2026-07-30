@@ -1,0 +1,144 @@
+<view class="sps {{embedded ? 'sps--embedded' : ''}} {{cell ? 'sps--cell' : ''}}">
+  <view
+    wx:if="{{cell}}"
+    class="plan-form-cell"
+    bindtap="onOpen"
+  >
+    <text class="plan-form-cell__label">
+      <text wx:if="{{required}}" class="plan-form-cell__req">*</text>{{label}}
+    </text>
+    <text class="plan-form-cell__value {{value ? '' : 'plan-form-cell__value--ph'}}">{{value || placeholder}}</text>
+    <text class="plan-form-cell__chevron">›</text>
+  </view>
+
+  <view wx:else class="sps__trigger {{embedded ? 'sps__trigger--embedded' : ''}}" bindtap="onOpen">
+    <text class="sps__label {{embedded ? 'sps__label--embedded' : ''}}">
+      <text wx:if="{{required}}" class="sps__req">*</text>{{label}}
+    </text>
+    <text class="sps__value {{value ? '' : 'sps__value--placeholder'}}">{{value || placeholder}}</text>
+    <text class="sps__chevron">›</text>
+  </view>
+
+  <view wx:if="{{open}}" class="sps__overlay" catchtouchmove="noop">
+    <view
+      class="sps__mask {{sheetShow ? 'sps__mask--show' : ''}}"
+      bindtap="onClose"
+      catchtouchmove="noop"
+    />
+    <view
+      class="sps__sheet {{cell ? 'sps__sheet--picker' : ''}} {{sheetMotion ? 'sps__sheet--motion' : ''}} {{sheetShow ? 'sps__sheet--show' : ''}}"
+      style="height: {{sheetHeightPx}}px; max-height: {{sheetHeightPx}}px;"
+      catchtouchmove="noop"
+    >
+    <view wx:if="{{cell}}" class="sps__picker-bar">
+      <text class="sps__picker-cancel" bindtap="onClose">取消</text>
+      <text class="sps__picker-title">{{label}}</text>
+      <text class="sps__picker-action"></text>
+    </view>
+    <view wx:else class="sps__sheet-head">
+      <text class="sps__sheet-title">选择{{label}}</text>
+      <text class="sps__sheet-close" bindtap="onClose">关闭</text>
+    </view>
+
+    <view class="sps__search-row">
+      <view class="sps__search-wrap">
+        <image class="sps__search-icon" src="/assets/icons/search.png" mode="aspectFit" />
+        <input
+          class="sps__search-input"
+          value="{{search}}"
+          bindinput="onSearchInput"
+          placeholder="搜索单位名称、联系人..."
+          confirm-type="search"
+        />
+      </view>
+      <view
+        wx:if="{{canQuickCreate}}"
+        class="sps__quick-create-btn"
+        bindtap="onQuickCreateOpen"
+      >+ 新建</view>
+    </view>
+
+    <scroll-view
+      wx:if="{{categories.length > 0}}"
+      class="sps__tabs"
+      scroll-x
+      enhanced
+      show-scrollbar="{{false}}"
+    >
+      <view class="sps__tabs-row">
+        <view
+          class="sps__tab {{activeTab === 'all' ? 'sps__tab--active' : ''}}"
+          data-tab="all"
+          bindtap="onTabTap"
+        >全部</view>
+        <view
+          wx:for="{{categories}}"
+          wx:key="id"
+          class="sps__tab {{activeTab === item.id ? 'sps__tab--active' : ''}}"
+          data-tab="{{item.id}}"
+          bindtap="onTabTap"
+        >{{item.name}}</view>
+      </view>
+    </scroll-view>
+
+    <scroll-view class="sps__list" scroll-y enhanced show-scrollbar="{{true}}">
+      <view wx:if="{{filteredPartners.length === 0}}" class="sps__empty">未找到匹配的合作单位</view>
+      <view
+        wx:for="{{filteredPartners}}"
+        wx:key="id"
+        class="sps__row {{value === item.name ? 'sps__row--active' : ''}}"
+        data-name="{{item.name}}"
+        data-id="{{item.id}}"
+        bindtap="onSelect"
+      >
+        <view class="sps__row-main">
+          <text class="sps__row-name">{{item.name}}</text>
+          <text wx:if="{{item.categoryLabel}}" class="sps__row-cat">{{item.categoryLabel}}</text>
+        </view>
+        <text wx:if="{{item.contact}}" class="sps__row-contact">{{item.contact}}</text>
+      </view>
+    </scroll-view>
+    </view>
+  </view>
+
+  <view wx:if="{{quickCreateOpen}}" class="sps__qc-overlay" catchtouchmove="noop">
+    <view class="sps__qc-mask" bindtap="onQuickCreateClose" catchtouchmove="noop" />
+    <view class="sps__qc-panel" catchtap="noop">
+      <text class="sps__qc-title">快捷新建合作单位</text>
+      <text class="sps__qc-hint">保存后将自动选中；与「基础信息 → 合作单位」使用相同接口。</text>
+
+      <view class="sps__qc-field">
+        <text class="sps__qc-label">单位名称</text>
+        <input
+          class="sps__qc-input"
+          value="{{quickName}}"
+          bindinput="onQuickNameInput"
+          placeholder="请输入单位名称"
+          maxlength="120"
+        />
+      </view>
+
+      <view class="sps__qc-field">
+        <text class="sps__qc-label">合作单位分类</text>
+        <picker
+          mode="selector"
+          range="{{quickCategoryNames}}"
+          value="{{quickCategoryIndex}}"
+          bindchange="onQuickCategoryChange"
+        >
+          <view class="sps__qc-picker {{quickCategoryName ? '' : 'sps__qc-picker--ph'}}">
+            {{quickCategoryName || '请选择分类'}}
+          </view>
+        </picker>
+      </view>
+
+      <view class="sps__qc-actions">
+        <view class="sps__qc-btn sps__qc-btn--ghost" bindtap="onQuickCreateClose">取消</view>
+        <view
+          class="sps__qc-btn sps__qc-btn--primary {{quickSubmitting ? 'sps__qc-btn--disabled' : ''}}"
+          bindtap="onQuickCreateSubmit"
+        >{{quickSubmitting ? '保存中…' : '保存并选用'}}</view>
+      </view>
+    </view>
+  </view>
+</view>

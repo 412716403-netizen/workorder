@@ -1,2 +1,2 @@
 @import '../../../styles/tokens.wxss';
-@import '../../../styles/order-process-scroll.wxss';
+@import '/packageBusiness/styles/order-process-scroll.wxss';

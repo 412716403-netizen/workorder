@@ -46,7 +46,7 @@ const {
   computePlanCreateHeaderHeight,
 } = require('../../utils/windowMetrics.js');
 const { defaultEntryDate, defaultEntryTimeHm } = require('../../utils/docEntryTime.js');
-const { PSI_DOC_FINANCE_INIT_EVENT } = require('../../utils/psiDocFinanceEntry.js');
+const { PSI_DOC_FINANCE_INIT_EVENT } = require('../utils/psiDocFinanceEntry.js');
 
 function findIndexById(ids, id) {
   if (!id) return 0;

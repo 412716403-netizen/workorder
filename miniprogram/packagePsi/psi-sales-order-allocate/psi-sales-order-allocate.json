@@ -1,6 +1,6 @@
 {
   "navigationStyle": "custom",
   "usingComponents": {
-    "matrix-qty-keyboard": "/components/matrix-qty-keyboard/matrix-qty-keyboard"
+    "matrix-qty-keyboard": "/packagePsi/components/matrix-qty-keyboard/matrix-qty-keyboard"
   }
 }

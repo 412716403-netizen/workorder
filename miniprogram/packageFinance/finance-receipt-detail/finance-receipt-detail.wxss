@@ -1,4 +1,4 @@
-@import '/styles/psi-purchase-order-detail-page.wxss';
+@import '/packageFinance/styles/psi-purchase-order-detail-page.wxss';
 
 .plan-form-cell__value--amount {
   color: #059669;

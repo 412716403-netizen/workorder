@@ -19,7 +19,7 @@
         />
         <view wx:if="{{searchKeyword}}" class="plan-search__clear" bindtap="onSearchClear">×</view>
       </view>
-      <view class="plan-tool-btn" bindtap="onCreateTap">
+      <view wx:if="{{!hideCreate}}" class="plan-tool-btn" bindtap="onCreateTap">
         <image class="plan-tool-btn__icon" src="/assets/icons/file-plus.png" mode="aspectFit" />
       </view>
     </view>

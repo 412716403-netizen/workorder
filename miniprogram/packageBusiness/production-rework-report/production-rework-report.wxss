@@ -1,6 +1,6 @@
 @import '../../styles/tokens.wxss';
-@import '../../styles/matrix-keyboard-page.wxss';
-@import '/styles/plan-create-form.wxss';
+@import '/packageBusiness/styles/matrix-keyboard-page.wxss';
+@import '/packageBusiness/styles/plan-create-form.wxss';
 @import '../production-order-report/production-order-report.wxss';
 
 page {

@@ -1,8 +1,8 @@
-@import '/styles/order-detail-page.wxss';
-@import '/styles/report-batch-detail-page.wxss';
+@import '/packageBusiness/styles/order-detail-page.wxss';
+@import '/packageBusiness/styles/report-batch-detail-page.wxss';
 @import '../production-order-report/production-order-report.wxss';
-@import '/styles/plan-create-form.wxss';
-@import '../../styles/matrix-keyboard-page.wxss';
+@import '/packageBusiness/styles/plan-create-form.wxss';
+@import '/packageBusiness/styles/matrix-keyboard-page.wxss';
 
 .outsource-receive-confirm-page {
   padding-bottom: calc(160rpx + env(safe-area-inset-bottom));

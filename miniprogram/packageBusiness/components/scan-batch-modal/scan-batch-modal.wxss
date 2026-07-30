@@ -1,4 +1,4 @@
-@import '../../../styles/scan-primary-btn.wxss';
+@import '/packageBusiness/styles/scan-primary-btn.wxss';
 
 .scan-batch-mask {
   position: fixed;

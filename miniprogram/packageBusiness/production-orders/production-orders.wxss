@@ -1,6 +1,6 @@
 /* 工单中心样式全部沉在 styles/production-orders-page.wxss（外协 / 返工 / 领退料 / PSI 列表共用），
    本文件只放工单中心自己的差异，改共用规则请改那边。 */
-@import '/styles/production-orders-page.wxss';
+@import '/packageBusiness/styles/production-orders-page.wxss';
 
 /* 工单中心缩略图底色跟随页面底色，其余列表用纯白 */
 .order-list-row__img {

@@ -1,6 +1,6 @@
-@import '/styles/plan-create-form.wxss';
-@import '/styles/psi-warehouse-transfer-edit-page.wxss';
-@import '/styles/finance-record-form.wxss';
+@import '/packageFinance/styles/plan-create-form.wxss';
+@import '/packageFinance/styles/psi-warehouse-transfer-edit-page.wxss';
+@import '/packageFinance/styles/finance-record-form.wxss';
 
 .fin-transfer-delete {
   margin-top: 32rpx;

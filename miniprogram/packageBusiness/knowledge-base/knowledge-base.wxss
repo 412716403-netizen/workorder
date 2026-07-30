@@ -1,4 +1,4 @@
-@import '/styles/production-plans-page.wxss';
+@import '/packageBusiness/styles/production-plans-page.wxss';
 
 .kb-crumb {
   display: flex;

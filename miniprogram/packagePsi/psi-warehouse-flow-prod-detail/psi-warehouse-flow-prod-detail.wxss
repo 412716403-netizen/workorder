@@ -1,6 +1,6 @@
-@import '/styles/production-plans-page.wxss';
-@import '/styles/order-detail-page.wxss';
-@import '../../styles/qty-price-amount-summary.wxss';
+@import '/packagePsi/styles/production-plans-page.wxss';
+@import '/packagePsi/styles/order-detail-page.wxss';
+@import '/packagePsi/styles/qty-price-amount-summary.wxss';
 
 .wh-prod-detail-page {
   padding: 0 var(--spacing-page) 48rpx;

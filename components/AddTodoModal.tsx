@@ -26,6 +26,10 @@ interface AddTodoModalProps {
   /** 传入则为编辑态 */
   editing?: TodoItemDTO | null;
   zIndexClass?: string;
+  /** 由宿主层级派生出的 z-index；传入时优先于 zIndexClass（见 utils/modalZIndex） */
+  zIndex?: number;
+  /** 有关联单据时，标题栏「相关待办」回调（传入单据搜索文案） */
+  onViewRelatedTodos?: (searchQuery: string) => void;
 }
 
 /** ISO → datetime-local 输入值（本地时区，去掉秒） */
@@ -43,6 +47,8 @@ const AddTodoModal: React.FC<AddTodoModalProps> = ({
   seed,
   editing,
   zIndexClass = 'z-[140]',
+  zIndex,
+  onViewRelatedTodos,
 }) => {
   const { createTodo, isCreating, updateTodo, isUpdating } = useTodos({ enabled: false });
   const isEdit = !!editing;
@@ -115,7 +121,8 @@ const AddTodoModal: React.FC<AddTodoModalProps> = ({
   return (
     <ModalPortal>
     <div
-      className={`fixed inset-0 ${zIndexClass} flex items-center justify-center p-4 sm:p-6`}
+      className={`fixed inset-0 ${zIndex == null ? zIndexClass : ''} flex items-center justify-center p-4 sm:p-6`}
+      style={zIndex == null ? undefined : { zIndex }}
       role="presentation"
     >
       <div className="absolute inset-0 bg-slate-900/45" onClick={onClose} aria-hidden />
@@ -125,16 +132,27 @@ const AddTodoModal: React.FC<AddTodoModalProps> = ({
         aria-modal="true"
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
           <h2 className="text-base font-black text-slate-900">{isEdit ? '编辑待办' : '新建待办'}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-            aria-label="关闭"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex shrink-0 items-center gap-1">
+            {docLabel && onViewRelatedTodos ? (
+              <button
+                type="button"
+                onClick={() => onViewRelatedTodos(docLabel)}
+                className="rounded-xl bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-600 hover:bg-indigo-100"
+              >
+                相关待办
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              aria-label="关闭"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         <div className="space-y-4 px-5 py-4">

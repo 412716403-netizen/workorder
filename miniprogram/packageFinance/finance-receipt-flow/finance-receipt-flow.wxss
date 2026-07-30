@@ -1,2 +1,2 @@
 @import '../finance-receipts/finance-receipts.wxss';
-@import '/styles/report-history-page.wxss';
+@import '/packageFinance/styles/report-history-page.wxss';

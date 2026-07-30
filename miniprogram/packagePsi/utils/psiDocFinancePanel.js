@@ -20,7 +20,7 @@ const {
   fetchPsiDocLinkedFinanceAmount,
   flushStagedPsiDocFinance,
 } = require('../../utils/psiDocFinance.js');
-const { openPsiDocFinanceEntry } = require('../../utils/psiDocFinanceEntry.js');
+const { openPsiDocFinanceEntry } = require('./psiDocFinanceEntry.js');
 
 /** 页面 data 初值，展开进 Page({ data }) */
 function emptyPsiDocFinancePanelState() {

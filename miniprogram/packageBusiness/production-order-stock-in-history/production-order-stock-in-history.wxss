@@ -1,4 +1,4 @@
-@import '/styles/report-history-page.wxss';
+@import '/packageBusiness/styles/report-history-page.wxss';
 
 .report-history-row__doc-no {
   font-size: 22rpx;

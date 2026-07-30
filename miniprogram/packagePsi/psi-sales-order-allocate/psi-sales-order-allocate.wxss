@@ -1,6 +1,6 @@
-@import '/styles/plan-create-form.wxss';
+@import '/packagePsi/styles/plan-create-form.wxss';
 @import '../psi-purchase-order-edit/psi-purchase-order-edit.wxss';
-@import '../../styles/qty-price-amount-summary.wxss';
+@import '/packagePsi/styles/qty-price-amount-summary.wxss';
 
 .so-alloc-stats {
   display: flex;

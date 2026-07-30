@@ -1,5 +1,5 @@
-@import '/styles/psi-purchase-order-detail-page.wxss';
-@import '/styles/report-batch-detail-page.wxss';
+@import '/packagePsi/styles/psi-purchase-order-detail-page.wxss';
+@import '/packagePsi/styles/report-batch-detail-page.wxss';
 
 .report-batch-footer__btn--pressed {
   opacity: 0.88;

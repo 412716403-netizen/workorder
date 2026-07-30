@@ -1,0 +1,117 @@
+@import '/styles/tokens.wxss';
+
+.mqk-root {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 2000;
+  /* 根层不拦触摸，表单区可继续滚动；仅键盘本体接收事件 */
+  pointer-events: none;
+}
+
+.mqk {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: auto;
+  background: var(--color-bg-page);
+  padding-bottom: env(safe-area-inset-bottom);
+  box-shadow: 0 -8rpx 32rpx rgba(31, 35, 41, 0.1);
+  border-radius: 24rpx 24rpx 0 0;
+  overflow: hidden;
+}
+
+.mqk__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 72rpx;
+  padding: 0 24rpx;
+  background: var(--color-bg-card);
+  border-bottom: 1rpx solid var(--color-border);
+}
+
+.mqk__toolbar-spacer {
+  flex: 1;
+}
+
+.mqk__confirm {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--color-primary);
+  padding: 12rpx 8rpx;
+}
+
+.mqk__grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(4, 88rpx);
+  gap: 12rpx;
+  padding: 16rpx 16rpx 20rpx;
+  box-sizing: border-box;
+}
+
+.mqk__key {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-button);
+  font-size: 36rpx;
+  font-weight: 600;
+  user-select: none;
+}
+
+.mqk__key--num {
+  background: var(--color-bg-card);
+  color: var(--color-text-primary);
+  border: 1rpx solid var(--color-border);
+  box-shadow: var(--shadow-card);
+}
+
+.mqk__key--fn {
+  background: var(--color-bg-input);
+  color: var(--color-text-primary);
+  border: 1rpx solid transparent;
+  font-size: 40rpx;
+}
+
+.mqk__key--next {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  border: 1rpx solid rgba(47, 107, 255, 0.16);
+}
+
+.mqk__key--enter {
+  grid-row: 3 / 5;
+  grid-column: 4;
+  background: linear-gradient(160deg, var(--color-primary-gradient-start), var(--color-primary-gradient-end));
+  color: var(--color-text-inverse);
+  box-shadow: 0 6rpx 16rpx rgba(47, 107, 255, 0.32);
+}
+
+.mqk__key--hover {
+  background: var(--color-bg-input);
+}
+
+.mqk__key--hover-enter {
+  opacity: 0.92;
+}
+
+.mqk__key--hover-next {
+  background: rgba(47, 107, 255, 0.14);
+}
+
+.mqk__fn-icon {
+  font-size: 32rpx;
+  line-height: 1;
+}
+
+.mqk__enter-icon,
+.mqk__next-icon {
+  font-size: 40rpx;
+  line-height: 1;
+  font-weight: 700;
+}

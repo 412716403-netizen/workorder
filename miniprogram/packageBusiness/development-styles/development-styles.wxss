@@ -1,6 +1,6 @@
 @import '/styles/plan-list-shell.wxss';
 @import '/styles/list.wxss';
-@import '/styles/report-history-page.wxss';
+@import '/packageBusiness/styles/report-history-page.wxss';
 
 .dev-styles-tabs {
   display: flex;

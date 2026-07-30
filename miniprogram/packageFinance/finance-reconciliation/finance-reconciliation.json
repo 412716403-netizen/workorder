@@ -2,7 +2,7 @@
   "navigationStyle": "custom",
   "usingComponents": {
     "empty-state": "/components/empty-state/empty-state",
-    "searchable-partner-select": "/components/searchable-partner-select/searchable-partner-select",
-    "searchable-worker-select": "/components/searchable-worker-select/searchable-worker-select"
+    "searchable-partner-select": "/packageFinance/components/searchable-partner-select/searchable-partner-select",
+    "searchable-worker-select": "/packageFinance/components/searchable-worker-select/searchable-worker-select"
   }
 }

@@ -28,21 +28,21 @@ alwaysApply: false
 | 采购入库批次 | `batch-return-input` | 点击选择；弹窗内可选已有批次或输入新批号；未填保存时默认「无批号」 |
 | 进销存四单的收付款登记 | 页脚合计区右侧图标 → [`psi-doc-finance-entry`](../miniprogram/packagePsi/psi-doc-finance-entry/) 页 | [`packagePsi/utils/psiDocFinancePanel.js`](../miniprogram/packagePsi/utils/psiDocFinancePanel.js)（`init/load/open/flush` 四件套），口径见 [`utils/psiDocFinance.js`](../miniprogram/utils/psiDocFinance.js) |
 
-**跨分包共享（必做）**：`packagePsi` / `packageBusiness` / `packageFinance` **不能互相 `require`**。多个分包都要用的逻辑放主包 `miniprogram/utils/`，原分包改为 re-export（如收付款表单逻辑在 [`utils/financeRecordForm.js`](../miniprogram/utils/financeRecordForm.js)，`packageFinance/utils/financeRecords.js` 只留展示侧）；共享样式放 `miniprogram/styles/`。
+**跨分包共享（必做）**：`packagePsi` / `packageBusiness` / `packageFinance` **不能互相 `require`**。多个分包都要用的 **JS 工具**放主包 `miniprogram/utils/`（如收付款表单逻辑在 [`utils/financeRecordForm.js`](../miniprogram/utils/financeRecordForm.js)）。**组件 / 仅分包使用的样式**按使用包复制到各自分包 `components/` / `styles/`，不要再塞进主包依赖图。
 
 ## 页面 `.json` 注册
 
 ```json
 {
   "usingComponents": {
-    "searchable-product-select": "/components/searchable-product-select/searchable-product-select",
-    "searchable-partner-select": "/components/searchable-partner-select/searchable-partner-select",
-    "matrix-qty-keyboard": "/components/matrix-qty-keyboard/matrix-qty-keyboard"
+    "searchable-product-select": "/packageBusiness/components/searchable-product-select/searchable-product-select",
+    "searchable-partner-select": "/packageBusiness/components/searchable-partner-select/searchable-partner-select",
+    "matrix-qty-keyboard": "/packageBusiness/components/matrix-qty-keyboard/matrix-qty-keyboard"
   }
 }
 ```
 
-按需注册，未用到的组件不必引入。
+路径按**当前页面所在分包**填写（`packagePsi` / `packageFinance` 用对应包内副本）。按需注册，未用到的组件不必引入。跨分包共用组件已迁出主包，禁止再写 `/components/searchable-*` 等主包路径。
 
 ## 样式
 

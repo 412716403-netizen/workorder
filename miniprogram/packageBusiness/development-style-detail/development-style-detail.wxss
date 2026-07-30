@@ -1,6 +1,6 @@
-@import "/styles/plan-detail-page.wxss";
+@import '/packageBusiness/styles/plan-detail-page.wxss';
 @import "/styles/list.wxss";
-@import "/styles/category-select-pills.wxss";
+@import '/packageBusiness/styles/category-select-pills.wxss';
 
 .dev-detail-page {
   padding-bottom: calc(48rpx + env(safe-area-inset-bottom));

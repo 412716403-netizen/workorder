@@ -1,4 +1,4 @@
-@import '/styles/psi-purchase-orders-page.wxss';
+@import '/packageFinance/styles/psi-purchase-orders-page.wxss';
 
 .fin-acct-flow-page {
   padding: 0 var(--spacing-page) calc(120rpx + env(safe-area-inset-bottom));

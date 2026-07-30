@@ -1,6 +1,6 @@
 {
   "navigationStyle": "custom",
   "usingComponents": {
-    "datetime-calendar-select": "/components/datetime-calendar-select/datetime-calendar-select"
+    "datetime-calendar-select": "/packageBusiness/components/datetime-calendar-select/datetime-calendar-select"
   }
 }

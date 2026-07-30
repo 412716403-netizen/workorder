@@ -90,6 +90,7 @@
                 class="worker-report-card__img"
                 src="{{task.productImageUrl}}"
                 mode="aspectFill"
+                lazy-load="{{true}}"
                 data-key="{{task.key}}"
                 binderror="onProductImageError"
               />
@@ -166,6 +167,7 @@
                 class="worker-report-card__img"
                 src="{{report.productImageUrl}}"
                 mode="aspectFill"
+                lazy-load="{{true}}"
                 data-key="{{report.id}}"
                 binderror="onProductImageError"
               />

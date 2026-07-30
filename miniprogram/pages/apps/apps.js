@@ -25,7 +25,7 @@ Page({
         wx.reLaunch({ url: '/pages/tenant-select/tenant-select' });
         return;
       }
-      loadFeaturePlugins(true).then((plugins) => {
+      loadFeaturePlugins(false).then((plugins) => {
         syncCurrentCustomTabBar(activeCtx);
         if (!canShowAppsTab(activeCtx, plugins)) {
           wx.switchTab({ url: resolveDefaultTabPath(activeCtx, plugins) });

@@ -1,7 +1,7 @@
 {
   "navigationStyle": "custom",
   "usingComponents": {
-    "searchable-product-select": "/components/searchable-product-select/searchable-product-select",
+    "searchable-product-select": "/packageBusiness/components/searchable-product-select/searchable-product-select",
     "empty-state": "/components/empty-state/empty-state"
   }
 }

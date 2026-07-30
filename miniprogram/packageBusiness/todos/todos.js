@@ -1,7 +1,7 @@
 const { readTenantCtx } = require('../../utils/session.js');
 const { loadFeaturePlugins, isPluginEnabled } = require('../../utils/featurePlugins.js');
 const { readNavBarMetrics, readWindowMetrics } = require('../../utils/windowMetrics.js');
-const { navigateTodoHref } = require('../../utils/todoNavigate.js');
+const { navigateTodoHref } = require('../utils/todoNavigate.js');
 const {
   listTodos,
   updateTodo,
@@ -48,6 +48,7 @@ Page({
     loading: true,
     tab: 'open',
     searchKeyword: '',
+    hideCreate: false,
     rows: [],
     emptyText: '暂无待办，点「新建」添加',
     statusBarHeight: 20,
@@ -55,13 +56,23 @@ Page({
     headerBlockHeight: 120,
   },
 
-  onLoad() {
+  onLoad(options) {
     const nav = readNavBarMetrics();
     this._allRows = [];
+    let searchKeyword = '';
+    try {
+      searchKeyword = options && options.q ? decodeURIComponent(options.q) : '';
+    } catch (e) {
+      searchKeyword = (options && options.q) || '';
+    }
+    const hideCreate =
+      !!(options && (options.hideCreate === '1' || options.hideCreate === 'true'));
     this.setData({
       statusBarHeight: nav.statusBarHeight,
       navBarHeight: nav.navBarHeight,
       headerBlockHeight: computeHeaderBlockHeight(nav),
+      searchKeyword,
+      hideCreate,
     });
   },
 
@@ -148,7 +159,9 @@ Page({
     const emptyText = this.data.searchKeyword.trim()
       ? '未找到匹配的待办'
       : this.data.tab === 'open'
-        ? '暂无待办，点「新建」添加'
+        ? this.data.hideCreate
+          ? '暂无相关待办'
+          : '暂无待办，点「新建」添加'
         : '暂无已完成待办';
     this.setData({ rows, emptyText });
   },

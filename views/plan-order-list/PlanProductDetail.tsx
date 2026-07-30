@@ -16,6 +16,7 @@ import ProductImageLightbox, {
   type ProductImagePreviewTarget,
 } from '../../components/ProductImageLightbox';
 import { useEscapeToClose } from '../../hooks/useEscapeToClose';
+import { parseModalZIndex } from '../../utils/modalZIndex';
 
 interface PlanProductDetailProps {
   viewProductId: string;
@@ -34,12 +35,6 @@ interface PlanProductDetailProps {
 const DEFAULT_STACK_Z = 95;
 /** 下钻各层之间的 z-index 间距，留出空间给层内的灯箱等浮层 */
 const LAYER_Z_STEP = 200;
-
-/** 从 `z-[N]` 解析基准 z-index 数字 */
-function parseStackZBase(stackZClass: string): number {
-  const m = /^z-\[(\d+)\]$/.exec(stackZClass.trim());
-  return m ? Number(m[1]) : DEFAULT_STACK_Z;
-}
 
 /**
  * 产品只读详情：用 productId 栈做多层下钻（BOM 子件 / 被调用父产品）。
@@ -60,7 +55,7 @@ const PlanProductDetail: React.FC<PlanProductDetailProps> = ({
 }) => {
   const [stack, setStack] = useState<string[]>([viewProductId]);
   const [imagePreview, setImagePreview] = useState<ProductImagePreviewTarget | null>(null);
-  const zBase = parseStackZBase(stackZClass);
+  const zBase = parseModalZIndex(stackZClass, DEFAULT_STACK_Z);
 
   useEffect(() => {
     setStack([viewProductId]);

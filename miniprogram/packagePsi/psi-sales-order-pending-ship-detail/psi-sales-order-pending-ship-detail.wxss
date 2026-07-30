@@ -1,4 +1,4 @@
-@import '/styles/plan-create-form.wxss';
+@import '/packagePsi/styles/plan-create-form.wxss';
 @import '../styles/rework-defect-detail-page.wxss';
 
 .so-pending-detail-meta {

@@ -10,6 +10,10 @@ const {
   getProductCategoryCustomFieldEntries,
 } = require('../../utils/reportCustomDocField.js');
 const { productColorSizeEnabled } = require('../utils/productColorSize.js');
+const {
+  DEV_MATERIAL_BOM_MAX_DEPTH,
+  buildProductBomChildIndex,
+} = require('./devMaterialTree.js');
 
 /** 超过此长度的 data URL 禁止进入 setData（易触发渲染层「Expected updated data…」） */
 const HEAVY_DATA_URL_CHARS = 64 * 1024;
@@ -301,14 +305,120 @@ function resolveDefaultBomSkuId(options, productBomsWithItems) {
   return firstConfigured ? firstConfigured.id : '';
 }
 
-function buildBomGroups(product, bomSkuId, productBomsWithItems, globalNodes, products, dictionaries, categories) {
+function formatBomQtyText(quantity, unitName) {
+  if (quantity == null || !Number.isFinite(Number(quantity))) return '—';
+  const t = Number(Number(quantity).toFixed(6));
+  return `×${t} ${unitName || '件'}`;
+}
+
+function buildBomMaterialRow(productId, quantity, note, level, rowKey, hasChildren, expanded, productMap, dictionaries, categories) {
+  const sub = productMap[productId];
+  const unitName = sub ? getProductUnitName(sub, dictionaries) || '件' : '件';
+  const parts = productNameSkuParts(sub || { name: '', sku: productId });
+  const cats = categories || [];
+  const subCat = sub
+    ? cats.find((c) => c && c.id === sub.categoryId) || null
+    : null;
+  const customEntries = getProductCategoryCustomFieldEntries(sub, subCat, {
+    includeFile: false,
+    includeEmpty: false,
+  });
+  const customTags = (customEntries || []).map((e) => ({
+    id: e.field.id,
+    text: `${e.field.label}: ${e.display}`,
+  }));
+  const code = parts.name || (sub && sub.name) || '未知物料';
+  const titleName = parts.showSku && parts.sku ? `${code} ${parts.sku}` : code;
+  const noteText = note && String(note).trim() ? String(note).trim() : '';
+  return {
+    key: rowKey,
+    rowKey,
+    productId: sub ? sub.id : '',
+    canOpen: Boolean(sub),
+    productName: titleName,
+    customTags,
+    showCustomTags: customTags.length > 0,
+    qtyText: formatBomQtyText(quantity, unitName),
+    note: noteText,
+    showNote: Boolean(noteText),
+    level,
+    indentPx: Math.max(0, (level - 1) * 24),
+    hasChildren: Boolean(hasChildren),
+    expanded: Boolean(expanded),
+    expandIcon: expanded ? '▾' : '▸',
+  };
+}
+
+/**
+ * 工艺 BOM 按展开集合扁平化（对齐 Web utils/productBomExpand.ts）
+ */
+function flattenBomItems(items, bomId, childrenByParent, unitQtyByParentChild, expandedKeys, productMap, dictionaries, categories) {
+  const rows = [];
+  const expanded = expandedKeys instanceof Set
+    ? expandedKeys
+    : new Set(Object.keys(expandedKeys || {}).filter((k) => expandedKeys[k]));
+
+  const walk = (productId, quantity, note, level, parentPath, pathVisited) => {
+    const rowKey = parentPath ? `${parentPath}/${productId}` : `${bomId}:${productId}`;
+    const canDescend = level < DEV_MATERIAL_BOM_MAX_DEPTH && !pathVisited.has(productId);
+    const childIds = canDescend ? (childrenByParent.get(productId) || []) : [];
+    const hasChildren = childIds.length > 0;
+    const isExpanded = expanded.has(rowKey);
+    rows.push(
+      buildBomMaterialRow(
+        productId,
+        quantity,
+        note,
+        level,
+        rowKey,
+        hasChildren,
+        isExpanded,
+        productMap,
+        dictionaries,
+        categories,
+      ),
+    );
+    if (!hasChildren || !isExpanded) return;
+    const nextVisited = new Set(pathVisited);
+    nextVisited.add(productId);
+    const qtyUnderParent = unitQtyByParentChild.get(productId);
+    childIds.forEach((childId) => {
+      const childQty = qtyUnderParent ? qtyUnderParent.get(childId) : null;
+      walk(
+        childId,
+        childQty == null || !Number.isFinite(childQty) ? null : childQty,
+        '',
+        level + 1,
+        rowKey,
+        nextVisited,
+      );
+    });
+  };
+
+  (items || []).forEach((item) => {
+    const productId = String((item && item.productId) || '').trim();
+    if (!productId) return;
+    const qty = Number(item && item.quantity);
+    walk(
+      productId,
+      Number.isFinite(qty) ? qty : null,
+      item && item.note,
+      1,
+      '',
+      new Set(),
+    );
+  });
+  return rows;
+}
+
+function buildBomGroups(product, bomSkuId, productBomsWithItems, globalNodes, products, dictionaries, categories, allBoms, expandedKeys) {
   if (!bomSkuId) return [];
   const nodes = globalNodes || [];
-  const cats = categories || [];
   const productMap = {};
   (products || []).forEach((p) => {
     if (p && p.id) productMap[p.id] = p;
   });
+  const { childrenByParent, unitQtyByParentChild } = buildProductBomChildIndex(allBoms || productBomsWithItems);
 
   return productBomsWithItems
     .filter((b) => b.variantId === bomSkuId)
@@ -316,37 +426,16 @@ function buildBomGroups(product, bomSkuId, productBomsWithItems, globalNodes, pr
       const nodeName = bom.nodeId
         ? ((nodes.find((n) => n.id === bom.nodeId) || {}).name) || ''
         : '';
-      const items = ((bom.items) || [])
-        .filter((it) => String((it && it.productId) || '').trim() !== '')
-        .map((item, idx) => {
-          const sub = productMap[item.productId];
-          const unitName = sub ? getProductUnitName(sub, dictionaries) || '件' : '件';
-          const parts = productNameSkuParts(sub || { name: '', sku: item.productId });
-          const subCat = sub
-            ? cats.find((c) => c && c.id === sub.categoryId) || null
-            : null;
-          const customEntries = getProductCategoryCustomFieldEntries(sub, subCat, {
-            includeFile: false,
-            includeEmpty: false,
-          });
-          const customTags = (customEntries || []).map((e) => ({
-            id: e.field.id,
-            text: `${e.field.label}: ${e.display}`,
-          }));
-          const code = parts.name || (sub && sub.name) || '未知物料';
-          const titleName = parts.showSku && parts.sku ? `${code} ${parts.sku}` : code;
-          return {
-            key: `${bom.id}-${idx}`,
-            productId: sub ? sub.id : '',
-            canOpen: Boolean(sub),
-            productName: titleName,
-            customTags,
-            showCustomTags: customTags.length > 0,
-            qtyText: `×${item.quantity} ${unitName}`,
-            note: item.note && String(item.note).trim() ? String(item.note).trim() : '',
-            showNote: Boolean(item.note && String(item.note).trim()),
-          };
-        });
+      const items = flattenBomItems(
+        bom.items,
+        bom.id,
+        childrenByParent,
+        unitQtyByParentChild,
+        expandedKeys,
+        productMap,
+        dictionaries,
+        categories,
+      );
       return {
         id: bom.id,
         name: bom.name || 'BOM',
@@ -474,6 +563,8 @@ function buildKnowledgeProductDetailView(ctx) {
     products,
     dictionaries,
     categories,
+    boms,
+    ctx.bomExpandedKeys,
   );
 
   let bomEmptyText = '';

@@ -1,0 +1,35 @@
+<view wx:if="{{visible}}" class="mqk-root">
+  <!-- 不铺全屏可点 mask：避免挡掉表单滚动；收起用「完成」 -->
+  <view class="mqk" catchtap="onKeyboardCatch">
+    <view class="mqk__toolbar">
+      <view class="mqk__toolbar-spacer"></view>
+      <text class="mqk__confirm" bindtap="onConfirm">完成</text>
+    </view>
+    <view class="mqk__grid">
+      <view class="mqk__key mqk__key--num" data-key="1" hover-class="mqk__key--hover" bindtap="onKeyTap">1</view>
+      <view class="mqk__key mqk__key--num" data-key="2" hover-class="mqk__key--hover" bindtap="onKeyTap">2</view>
+      <view class="mqk__key mqk__key--num" data-key="3" hover-class="mqk__key--hover" bindtap="onKeyTap">3</view>
+      <view class="mqk__key mqk__key--fn" data-key="backspace" hover-class="mqk__key--hover" bindtap="onKeyTap">
+        <text class="mqk__fn-icon">⌫</text>
+      </view>
+
+      <view class="mqk__key mqk__key--num" data-key="4" hover-class="mqk__key--hover" bindtap="onKeyTap">4</view>
+      <view class="mqk__key mqk__key--num" data-key="5" hover-class="mqk__key--hover" bindtap="onKeyTap">5</view>
+      <view class="mqk__key mqk__key--num" data-key="6" hover-class="mqk__key--hover" bindtap="onKeyTap">6</view>
+      <view class="mqk__key mqk__key--fn" data-key="minus" hover-class="mqk__key--hover" bindtap="onKeyTap">−</view>
+
+      <view class="mqk__key mqk__key--num" data-key="7" hover-class="mqk__key--hover" bindtap="onKeyTap">7</view>
+      <view class="mqk__key mqk__key--num" data-key="8" hover-class="mqk__key--hover" bindtap="onKeyTap">8</view>
+      <view class="mqk__key mqk__key--num" data-key="9" hover-class="mqk__key--hover" bindtap="onKeyTap">9</view>
+      <view class="mqk__key mqk__key--enter" data-key="enter" hover-class="mqk__key--hover-enter" bindtap="onKeyTap">
+        <text class="mqk__enter-icon">↵</text>
+      </view>
+
+      <view class="mqk__key mqk__key--num" data-key="dot" hover-class="mqk__key--hover" bindtap="onKeyTap">.</view>
+      <view class="mqk__key mqk__key--num" data-key="0" hover-class="mqk__key--hover" bindtap="onKeyTap">0</view>
+      <view class="mqk__key mqk__key--next" data-key="next" hover-class="mqk__key--hover-next" bindtap="onKeyTap">
+        <text class="mqk__next-icon">→</text>
+      </view>
+    </view>
+  </view>
+</view>

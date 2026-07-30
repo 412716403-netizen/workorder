@@ -1,0 +1,55 @@
+<view class="fas">
+  <view class="plan-form-cell {{last ? 'plan-form-cell--last' : ''}}" bindtap="onOpen">
+    <text class="plan-form-cell__label">
+      <text wx:if="{{required}}" class="plan-form-cell__req">*</text>{{label}}
+    </text>
+    <text class="plan-form-cell__value {{displayName ? '' : 'plan-form-cell__value--ph'}}">{{displayName || placeholder}}</text>
+    <text class="plan-form-cell__chevron">›</text>
+  </view>
+
+  <view wx:if="{{open}}" class="fas__overlay" catchtouchmove="noop">
+    <view
+      class="fas__mask {{sheetShow ? 'fas__mask--show' : ''}}"
+      bindtap="onClose"
+      catchtouchmove="noop"
+    />
+    <view
+      class="fas__sheet {{sheetMotion ? 'fas__sheet--motion' : ''}} {{sheetShow ? 'fas__sheet--show' : ''}}"
+      style="height: {{sheetHeightPx}}px; max-height: {{sheetHeightPx}}px;"
+      catchtouchmove="noop"
+    >
+      <view class="fas__bar">
+        <text class="fas__bar-title">选择{{label}}</text>
+        <view class="fas__bar-collapse" bindtap="onClose" aria-role="button" aria-label="收起">
+          <text class="fas__bar-collapse-icon">˅</text>
+        </view>
+      </view>
+
+      <scroll-view class="fas__body" scroll-y enhanced show-scrollbar="{{false}}">
+        <view wx:if="{{accounts.length === 0}}" class="fas__empty">暂无可用账户</view>
+        <view wx:else class="fas__list">
+          <view
+            wx:for="{{accounts}}"
+            wx:key="id"
+            class="fas__row"
+            data-id="{{item.id}}"
+            bindtap="onSelect"
+          >
+            <image class="fas__row-icon" src="{{iconSrc}}" mode="aspectFit" />
+            <view class="fas__row-main">
+              <text class="fas__row-name">{{item.name}}</text>
+              <text
+                wx:if="{{item.balanceText}}"
+                class="fas__row-balance {{item.balanceNegative ? 'fas__row-balance--neg' : ''}}"
+              >{{item.balanceText}}</text>
+            </view>
+            <text
+              wx:if="{{showSelectedMark && selectedId === item.id}}"
+              class="fas__row-check"
+            >✓</text>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+</view>

@@ -1,4 +1,4 @@
-@import '/styles/production-plans-page.wxss';
+@import '/packagePsi/styles/production-plans-page.wxss';
 
 .wh-doc-list-page {
   padding: 0 var(--spacing-page) calc(120rpx + env(safe-area-inset-bottom));

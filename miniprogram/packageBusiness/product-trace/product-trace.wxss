@@ -1,5 +1,5 @@
-@import '/styles/plan-create-form.wxss';
-@import '../../styles/scan-primary-btn.wxss';
+@import '/packageBusiness/styles/plan-create-form.wxss';
+@import '/packageBusiness/styles/scan-primary-btn.wxss';
 
 .trace-intro-card {
   padding: 24rpx var(--spacing-card);

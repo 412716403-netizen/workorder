@@ -1,4 +1,4 @@
-@import "/styles/plan-detail-page.wxss";
+@import '/packageBusiness/styles/plan-detail-page.wxss';
 @import "/styles/list.wxss";
 @import "../development-style-detail/development-style-detail.wxss";
 @import "../development-material-records/development-material-records.wxss";

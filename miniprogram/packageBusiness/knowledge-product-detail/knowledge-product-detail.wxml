@@ -12,6 +12,7 @@
   <scroll-view
     class="plan-detail-scroll"
     scroll-y
+    enhanced
     show-scrollbar="{{false}}"
     style="height: {{scrollHeight}}px;"
   >
@@ -37,6 +38,7 @@
       whereUsedToggleText="{{whereUsedToggleText}}"
       bind:previewimage="onPreviewImage"
       bind:bomskutap="onBomSkuTap"
+      bind:bomexpandtap="onBomExpandTap"
       bind:producttap="onProductTap"
       bind:whereusedtoggle="onWhereUsedToggle"
       bind:customknowledgetap="onCustomKnowledgeTap"

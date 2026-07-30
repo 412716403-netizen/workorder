@@ -1,8 +1,8 @@
-@import '../../styles/production-plans-page.wxss';
-@import '../../styles/order-detail-page.wxss';
-@import '../../styles/report-batch-detail-page.wxss';
-@import '../../styles/plan-create-form.wxss';
-@import '../../styles/matrix-keyboard-page.wxss';
+@import '/packagePsi/styles/production-plans-page.wxss';
+@import '/packagePsi/styles/order-detail-page.wxss';
+@import '/packagePsi/styles/report-batch-detail-page.wxss';
+@import '/packagePsi/styles/plan-create-form.wxss';
+@import '/packagePsi/styles/matrix-keyboard-page.wxss';
 
 .rework-defect-detail-page {
   padding: 0 var(--spacing-page) calc(32rpx + env(safe-area-inset-bottom));

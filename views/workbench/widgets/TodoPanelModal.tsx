@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { X, Plus, Bell, Pencil, Trash2, Check, RotateCcw, Loader2, ListTodo, Search } from 'lucide-react';
@@ -7,12 +7,19 @@ import { useTodos } from '../../../hooks/useTodos';
 import { useConfirm } from '../../../contexts/ConfirmContext';
 import { formatTimestamp } from '../../../utils/formatTime';
 import { navigateTodoHref } from '../../../utils/todoHrefNavigate';
+import { parseModalZIndex } from '../../../utils/modalZIndex';
 import AddTodoModal from '../../../components/AddTodoModal';
 import type { TodoItemDTO, TodoStatus } from '../../../types';
 
 interface TodoPanelModalProps {
   open: boolean;
   onClose: () => void;
+  /** 打开时预填搜索（如详情页关联单据文案） */
+  initialSearch?: string;
+  /** 根遮罩层级；嵌套高 z-index 详情时需上调 */
+  zIndexClass?: string;
+  /** 为 true 时隐藏标题栏「新建待办」（单据相关待办只读浏览） */
+  hideCreateButton?: boolean;
 }
 
 const TABS: { id: TodoStatus; label: string }[] = [
@@ -20,13 +27,30 @@ const TABS: { id: TodoStatus; label: string }[] = [
   { id: 'done', label: '已完成' },
 ];
 
-const TodoPanelModal: React.FC<TodoPanelModalProps> = ({ open, onClose }) => {
+const DEFAULT_PANEL_Z = 130;
+/** 新建/编辑弹窗要压在面板之上，宿主上调面板层级时必须跟着上调 */
+const CHILD_Z_STEP = 10;
+
+const TodoPanelModal: React.FC<TodoPanelModalProps> = ({
+  open,
+  onClose,
+  initialSearch,
+  zIndexClass = `z-[${DEFAULT_PANEL_Z}]`,
+  hideCreateButton = false,
+}) => {
+  const childZIndex = parseModalZIndex(zIndexClass, DEFAULT_PANEL_Z) + CHILD_Z_STEP;
   const navigate = useNavigate();
   const confirm = useConfirm();
   const [tab, setTab] = useState<TodoStatus>('open');
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<TodoItemDTO | null>(null);
   const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    if (!open) return;
+    setSearch(initialSearch ?? '');
+    setTab('open');
+  }, [open, initialSearch]);
 
   const { items, isLoading, updateTodo, removeTodo } = useTodos({ status: tab, enabled: open });
 
@@ -67,7 +91,7 @@ const TodoPanelModal: React.FC<TodoPanelModalProps> = ({ open, onClose }) => {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-900/45 p-4"
+      className={`fixed inset-0 ${zIndexClass} flex items-center justify-center bg-slate-900/45 p-4`}
       role="presentation"
       onClick={onClose}
     >
@@ -82,13 +106,15 @@ const TodoPanelModal: React.FC<TodoPanelModalProps> = ({ open, onClose }) => {
             <ListTodo className="h-5 w-5 text-rose-500" /> 待办事项
           </h2>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setAddOpen(true)}
-              className="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-700"
-            >
-              <Plus className="h-3.5 w-3.5" /> 新建待办
-            </button>
+            {!hideCreateButton ? (
+              <button
+                type="button"
+                onClick={() => setAddOpen(true)}
+                className="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-700"
+              >
+                <Plus className="h-3.5 w-3.5" /> 新建待办
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={onClose}
@@ -244,12 +270,14 @@ const TodoPanelModal: React.FC<TodoPanelModalProps> = ({ open, onClose }) => {
         )}
       </div>
 
-      <AddTodoModal open={addOpen} onClose={() => setAddOpen(false)} zIndexClass="z-[140]" />
+      {!hideCreateButton ? (
+        <AddTodoModal open={addOpen} onClose={() => setAddOpen(false)} zIndex={childZIndex} />
+      ) : null}
       <AddTodoModal
         open={editing != null}
         editing={editing}
         onClose={() => setEditing(null)}
-        zIndexClass="z-[140]"
+        zIndex={childZIndex}
       />
     </div>,
     document.body,

@@ -1,5 +1,5 @@
-@import '/styles/plan-create-form.wxss';
-@import '/styles/category-select-pills.wxss';
+@import '/packageBusiness/styles/plan-create-form.wxss';
+@import '/packageBusiness/styles/category-select-pills.wxss';
 
 .basic-partner-edit-page {
   padding-bottom: calc(160rpx + env(safe-area-inset-bottom));

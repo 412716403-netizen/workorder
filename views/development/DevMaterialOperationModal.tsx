@@ -17,8 +17,9 @@ import {
   returnableRowKey,
 } from '../../utils/devMaterialHelpers';
 import {
+  buildDevBomUnitQtyMap,
   buildDevMaterialTree,
-  buildProductChildrenIndex,
+  buildProductBomChildIndex,
   collectTreeProductIds,
   flattenVisibleRows,
   resolveTopLevelRootIds,
@@ -27,6 +28,7 @@ import { formatMaterialQtyDisplay } from '../../utils/formatMaterialQtyDisplay';
 import * as api from '../../services/api';
 import type {
   BOM,
+  DevBomDto,
   DevMaterialRecordsResponse,
   Product,
   ProductCategory,
@@ -51,6 +53,8 @@ interface DevMaterialOperationModalProps {
   warehouses: Warehouse[];
   /** 产品档案 BOM，领料时展开子物料 */
   boms?: BOM[];
+  /** 试制 BOM，用于展示顶层单个用量 */
+  devBoms?: DevBomDto[];
   onClose: () => void;
   onSaved: () => Promise<void> | void;
 }
@@ -65,6 +69,7 @@ const DevMaterialOperationModal: React.FC<DevMaterialOperationModalProps> = ({
   categoryById,
   warehouses,
   boms = [],
+  devBoms = [],
   onClose,
   onSaved,
 }) => {
@@ -78,16 +83,25 @@ const DevMaterialOperationModal: React.FC<DevMaterialOperationModalProps> = ({
   const [entryTimestamp, setEntryTimestamp] = useState(() => defaultEntryDatetimeLocal());
   const [submitting, setSubmitting] = useState(false);
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => new Set());
-  const { listAvailableBatches, getStock } = useStockSnapshot({ enabled: true });
+  const { listAvailableBatches, getStock, getBatchStock } = useStockSnapshot({ enabled: true });
 
-  const childrenIndex = useMemo(() => buildProductChildrenIndex(boms), [boms]);
+  const productBomIndex = useMemo(() => buildProductBomChildIndex(boms), [boms]);
+  const childrenIndex = productBomIndex.childrenByParent;
+  const rootUnitQty = useMemo(
+    () => buildDevBomUnitQtyMap(devBoms.filter((b) => b.parentStyleId === styleId)),
+    [devBoms, styleId],
+  );
   const issueRootIds = useMemo(
     () => resolveTopLevelRootIds(data.bomProductIds, childrenIndex),
     [data.bomProductIds, childrenIndex],
   );
   const issueTree = useMemo(
-    () => buildDevMaterialTree(issueRootIds, childrenIndex),
-    [issueRootIds, childrenIndex],
+    () =>
+      buildDevMaterialTree(issueRootIds, childrenIndex, {
+        rootUnitQty,
+        childUnitQty: productBomIndex.unitQtyByParentChild,
+      }),
+    [issueRootIds, childrenIndex, rootUnitQty, productBomIndex.unitQtyByParentChild],
   );
   const treeProductIds = useMemo(() => collectTreeProductIds(issueTree), [issueTree]);
   const issueVisibleRows = useMemo(
@@ -231,16 +245,21 @@ const DevMaterialOperationModal: React.FC<DevMaterialOperationModalProps> = ({
                 <p className="py-8 text-center text-xs font-medium text-slate-400">请先配置试制 BOM</p>
               ) : (
                 <div className="overflow-x-auto rounded-2xl border border-slate-100">
-                  <table className="w-full min-w-[520px] text-left">
+                  <table className={`w-full text-left ${showBatchCol ? 'min-w-[720px]' : 'min-w-[600px]'}`}>
                     <thead>
                       <tr className="border-b border-slate-100 bg-slate-50/80">
                         <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap">物料</th>
+                        <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap" title="试制 BOM / 产品档案 BOM 单位用量">单个用量</th>
                         <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap">净领用</th>
+                        <th
+                          className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap"
+                          title={showBatchCol ? '启用批次时显示所选批次余量；未选批次或未启用批次时显示仓库库存' : '当前出库仓库库存'}
+                        >
+                          库存数量
+                        </th>
                         {showBatchCol ? (
                           <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap">批次</th>
-                        ) : (
-                          <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap">库存数量</th>
-                        )}
+                        ) : null}
                         <th className="px-3 py-2 text-center text-[10px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap">本次领料</th>
                       </tr>
                     </thead>
@@ -253,6 +272,12 @@ const DevMaterialOperationModal: React.FC<DevMaterialOperationModalProps> = ({
                         const netQty = summary?.netQty ?? 0;
                         const isExpanded = expandedKeys.has(row.rowKey);
                         const padLeft = 12 + (row.level - 1) * 14;
+                        const needsBatch = batchManagedIds.has(row.productId);
+                        const selectedBatch = String(batchByProduct[row.productId] ?? '').trim();
+                        const stockQty =
+                          needsBatch && selectedBatch
+                            ? getBatchStock(row.productId, warehouseId, selectedBatch)
+                            : getStock(row.productId, warehouseId);
                         return (
                           <tr key={row.rowKey}>
                             <td className="py-2 pr-3" style={{ paddingLeft: padLeft }}>
@@ -280,10 +305,16 @@ const DevMaterialOperationModal: React.FC<DevMaterialOperationModalProps> = ({
                                 </div>
                               </div>
                             </td>
+                            <td className="px-3 py-2 text-right text-xs font-semibold text-slate-600 tabular-nums">
+                              {row.unitQty == null ? '—' : formatMaterialQtyDisplay(row.unitQty)}
+                            </td>
                             <td className="px-3 py-2 text-right text-xs font-semibold text-slate-600">{netQty}</td>
+                            <td className="px-3 py-2 text-right text-xs font-semibold text-slate-700 tabular-nums">
+                              {formatMaterialQtyDisplay(stockQty)}
+                            </td>
                             {showBatchCol ? (
                               <td className="px-3 py-2 align-top">
-                                {batchManagedIds.has(row.productId) ? (
+                                {needsBatch ? (
                                   <MaterialIssueBatchSelect
                                     product={productMap.get(row.productId)}
                                     categories={[...categoryById.values()]}
@@ -303,11 +334,7 @@ const DevMaterialOperationModal: React.FC<DevMaterialOperationModalProps> = ({
                                   <span className="text-[10px] font-medium text-slate-300">—</span>
                                 )}
                               </td>
-                            ) : (
-                              <td className="px-3 py-2 text-right text-xs font-semibold text-slate-700 tabular-nums">
-                                {formatMaterialQtyDisplay(getStock(row.productId, warehouseId))}
-                              </td>
-                            )}
+                            ) : null}
                             <td className="px-3 py-2">
                               <input
                                 type="number"

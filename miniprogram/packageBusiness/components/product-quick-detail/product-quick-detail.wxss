@@ -1,4 +1,4 @@
-@import '/styles/psi-purchase-order-detail-page.wxss';
+@import '/packageBusiness/styles/psi-purchase-order-detail-page.wxss';
 
 .kb-product-page {
   padding: 0 var(--spacing-page) calc(48rpx + env(safe-area-inset-bottom));
@@ -195,7 +195,23 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16rpx;
+  gap: 12rpx;
+}
+
+.kb-bom-item__expand {
+  flex-shrink: 0;
+  width: 36rpx;
+  height: 36rpx;
+  margin-top: 2rpx;
+  line-height: 36rpx;
+  text-align: center;
+  font-size: 22rpx;
+  font-weight: 700;
+  color: #94a3b8;
+}
+
+.kb-bom-item__expand--spacer {
+  visibility: hidden;
 }
 
 .kb-bom-item__text {

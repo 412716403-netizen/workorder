@@ -1,0 +1,183 @@
+<view class="dcs">
+  <view class="plan-form-cell {{last ? 'plan-form-cell--last' : ''}}" bindtap="onOpen">
+    <text class="plan-form-cell__label">
+      <text wx:if="{{required}}" class="plan-form-cell__req">*</text>{{label}}
+    </text>
+    <text class="plan-form-cell__value {{displayText ? '' : 'plan-form-cell__value--ph'}}">{{displayText || placeholder}}</text>
+    <text class="plan-form-cell__chevron">›</text>
+  </view>
+
+  <view wx:if="{{open}}" class="dcs__overlay">
+    <view
+      class="dcs__mask {{sheetShow ? 'dcs__mask--show' : ''}}"
+      bindtap="onClose"
+      catchtouchmove="noop"
+    />
+    <view
+      class="dcs__sheet {{sheetMotion ? 'dcs__sheet--motion' : ''}} {{sheetShow ? 'dcs__sheet--show' : ''}}"
+      style="height: {{sheetHeightPx}}px; max-height: {{sheetHeightPx}}px;"
+    >
+      <view class="dcs__bar">
+        <view class="dcs__bar-spacer"></view>
+        <text class="dcs__bar-done" bindtap="onDone">完成</text>
+      </view>
+
+      <!-- 日历 -->
+      <block wx:if="{{panel === 'calendar'}}">
+        <view class="dcs__month-nav">
+          <view class="dcs__nav-btn" bindtap="onPrevMonth">‹</view>
+          <view class="dcs__month-title" bindtap="onOpenYearMonth">
+            <text class="dcs__month-title-text">{{monthTitle}}</text>
+            <text class="dcs__month-title-caret">▾</text>
+          </view>
+          <view class="dcs__nav-btn" bindtap="onNextMonth">›</view>
+        </view>
+
+        <view class="dcs__weekdays">
+          <text wx:for="{{weekdays}}" wx:key="*this" class="dcs__weekday">{{item}}</text>
+        </view>
+
+        <swiper
+          class="dcs__month-swiper"
+          current="{{swiperCurrent}}"
+          duration="{{swiperDuration}}"
+          bindchange="onMonthSwiperChange"
+          easing-function="easeOutCubic"
+        >
+          <swiper-item wx:for="{{monthPanels}}" wx:for-item="panelItem" wx:key="key">
+            <view class="dcs__grid">
+              <view
+                wx:for="{{panelItem.cells}}"
+                wx:for-item="cell"
+                wx:key="key"
+                class="dcs__cell"
+                data-ymd="{{cell.ymd}}"
+                data-empty="{{cell.empty}}"
+                bindtap="onPickDay"
+              >
+                <view
+                  wx:if="{{!cell.empty}}"
+                  class="dcs__cell-label {{cell.isSelected ? 'dcs__cell-label--selected' : ''}} {{cell.isToday && !cell.isSelected ? 'dcs__cell-label--today' : ''}}"
+                >{{cell.label}}</view>
+              </view>
+            </view>
+          </swiper-item>
+        </swiper>
+
+        <view class="dcs__time-row" catchtap="onOpenTime">
+          <text class="dcs__time-label">时刻</text>
+          <text class="dcs__time-value">{{draftTime}}</text>
+          <text class="dcs__time-chevron">›</text>
+        </view>
+      </block>
+
+      <!-- 年月滚轮（scroll-view，无系统音效） -->
+      <block wx:elif="{{panel === 'yearMonth'}}">
+        <view class="dcs__ym-head">
+          <text class="dcs__ym-head-text">{{monthTitle}}</text>
+          <text class="dcs__month-title-caret">▾</text>
+        </view>
+        <view class="dcs__wheels" style="height: {{wheelHeightPx}}px;">
+          <view class="dcs__wheel-indicator" style="height: {{wheelItemPx}}px; top: {{wheelPadPx}}px;"></view>
+          <scroll-view
+            class="dcs__wheel"
+            scroll-y
+            enhanced
+            show-scrollbar="{{false}}"
+            scroll-with-animation="{{true}}"
+            scroll-top="{{yearScrollTop}}"
+            data-col="year"
+            bindscroll="onWheelScroll"
+          >
+            <view style="height: {{wheelPadPx}}px;"></view>
+            <view
+              wx:for="{{yearOptions}}"
+              wx:key="*this"
+              class="dcs__wheel-item {{yearIndex === index ? 'dcs__wheel-item--active' : ''}}"
+              style="height: {{wheelItemPx}}px; line-height: {{wheelItemPx}}px;"
+            >{{item}}年</view>
+            <view style="height: {{wheelPadPx}}px;"></view>
+          </scroll-view>
+          <scroll-view
+            class="dcs__wheel"
+            scroll-y
+            enhanced
+            show-scrollbar="{{false}}"
+            scroll-with-animation="{{true}}"
+            scroll-top="{{monthScrollTop}}"
+            data-col="month"
+            bindscroll="onWheelScroll"
+          >
+            <view style="height: {{wheelPadPx}}px;"></view>
+            <view
+              wx:for="{{monthOptions}}"
+              wx:key="*this"
+              class="dcs__wheel-item {{monthIndex === index ? 'dcs__wheel-item--active' : ''}}"
+              style="height: {{wheelItemPx}}px; line-height: {{wheelItemPx}}px;"
+            >{{item}}月</view>
+            <view style="height: {{wheelPadPx}}px;"></view>
+          </scroll-view>
+        </view>
+        <view class="dcs__confirm-wrap">
+          <view class="dcs__confirm-btn" bindtap="onConfirmYearMonth">确定</view>
+        </view>
+      </block>
+
+      <!-- 时刻滚轮（无启用开关、无系统音效） -->
+      <block wx:else>
+        <view class="dcs__info-row" bindtap="onBackToCalendar">
+          <text class="dcs__info-label">日期</text>
+          <view class="dcs__info-value-wrap">
+            <text class="dcs__info-value">{{dateCn}}</text>
+            <text class="dcs__info-chevron">›</text>
+          </view>
+        </view>
+        <view class="dcs__info-row dcs__info-row--last">
+          <text class="dcs__info-label">时刻</text>
+          <text class="dcs__info-value">{{draftTime}}</text>
+        </view>
+        <view class="dcs__wheels dcs__wheels--time" style="height: {{wheelHeightPx}}px;">
+          <view class="dcs__wheel-indicator" style="height: {{wheelItemPx}}px; top: {{wheelPadPx}}px;"></view>
+          <scroll-view
+            class="dcs__wheel"
+            scroll-y
+            enhanced
+            show-scrollbar="{{false}}"
+            scroll-with-animation="{{true}}"
+            scroll-top="{{hourScrollTop}}"
+            data-col="hour"
+            bindscroll="onWheelScroll"
+          >
+            <view style="height: {{wheelPadPx}}px;"></view>
+            <view
+              wx:for="{{hourOptions}}"
+              wx:key="*this"
+              class="dcs__wheel-item {{hourIndex === index ? 'dcs__wheel-item--active' : ''}}"
+              style="height: {{wheelItemPx}}px; line-height: {{wheelItemPx}}px;"
+            >{{item}}</view>
+            <view style="height: {{wheelPadPx}}px;"></view>
+          </scroll-view>
+          <scroll-view
+            class="dcs__wheel"
+            scroll-y
+            enhanced
+            show-scrollbar="{{false}}"
+            scroll-with-animation="{{true}}"
+            scroll-top="{{minuteScrollTop}}"
+            data-col="minute"
+            bindscroll="onWheelScroll"
+          >
+            <view style="height: {{wheelPadPx}}px;"></view>
+            <view
+              wx:for="{{minuteOptions}}"
+              wx:key="*this"
+              class="dcs__wheel-item {{minuteIndex === index ? 'dcs__wheel-item--active' : ''}}"
+              style="height: {{wheelItemPx}}px; line-height: {{wheelItemPx}}px;"
+            >{{item}}</view>
+            <view style="height: {{wheelPadPx}}px;"></view>
+          </scroll-view>
+        </view>
+      </block>
+    </view>
+  </view>
+</view>

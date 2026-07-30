@@ -1,0 +1,59 @@
+@import '/styles/tokens.wxss';
+
+/**
+ * 仓库调拨 / 盘点等编辑页选择行（主包共享）。
+ * 注意：历史页面曾引用本文件，但样式误留在分包本地 wxss，导致财务等跨包页样式丢失。
+ */
+.wh-edit-picker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  min-height: 96rpx;
+  padding: 24rpx var(--spacing-card);
+  border-bottom: 1rpx solid var(--color-border);
+  box-sizing: border-box;
+}
+
+.wh-edit-picker:last-child {
+  border-bottom: none;
+}
+
+.wh-edit-picker__label {
+  flex-shrink: 0;
+  min-width: 160rpx;
+  font-size: 30rpx;
+  color: var(--color-text-primary);
+}
+
+.wh-edit-picker__label--req::before {
+  content: '*';
+  color: var(--color-danger);
+  margin-right: 4rpx;
+}
+
+.wh-edit-picker__value {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+  font-size: var(--font-body);
+  font-weight: 500;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wh-edit-picker__value--ph {
+  color: var(--color-text-tertiary);
+  font-weight: 400;
+}
+
+.wh-edit-picker__chevron {
+  margin-left: 8rpx;
+  font-size: 36rpx;
+  font-weight: 300;
+  color: var(--color-text-tertiary);
+  line-height: 1;
+  flex-shrink: 0;
+}

@@ -1,5 +1,5 @@
 @import '../finance-receipts/finance-receipts.wxss';
-@import '/styles/report-history-page.wxss';
+@import '/packageFinance/styles/report-history-page.wxss';
 
 .fin-recon-page {
   padding: 0 var(--spacing-page) calc(40rpx + env(safe-area-inset-bottom));

@@ -1,5 +1,5 @@
-@import '/styles/plan-detail-page.wxss';
-@import '/styles/report-batch-detail-page.wxss';
+@import '/packageBusiness/styles/plan-detail-page.wxss';
+@import '/packageBusiness/styles/report-batch-detail-page.wxss';
 
 .rework-detail-table {
   margin: 0 24rpx;

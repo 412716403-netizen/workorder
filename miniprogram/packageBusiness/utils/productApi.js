@@ -14,7 +14,13 @@ function buildQs(params) {
 }
 
 function fetchProductsAll() {
-  return request({ path: '/products?all=true&lite=true', method: 'GET', timeout: 60000 })
+  // 与 planApi 共用 products:all，避免知识库/BOM 钻取重复打全量产品接口
+  const { cachedFetch } = require('../../utils/masterDataCache.js');
+  return cachedFetch(
+    'products:all',
+    () => request({ path: '/products?all=true&lite=true', method: 'GET', timeout: 60000 }),
+    90 * 1000,
+  )
     .then((body) => normalizeListBody(body))
     .catch(() => []);
 }

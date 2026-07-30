@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ListTodo } from 'lucide-react';
 import { useFeaturePlugins } from '../hooks/useFeaturePlugins';
 import AddTodoModal, { type AddTodoSeed } from './AddTodoModal';
+import TodoPanelModal from '../views/workbench/widgets/TodoPanelModal';
 
 interface AddTodoButtonProps {
   seed: AddTodoSeed;
@@ -19,8 +20,12 @@ interface AddTodoButtonProps {
 const AddTodoButton: React.FC<AddTodoButtonProps> = ({ seed, variant = 'button', className = '', modalZIndexClass }) => {
   const { isPluginEnabled } = useFeaturePlugins();
   const [open, setOpen] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [panelSearch, setPanelSearch] = useState('');
 
   if (!isPluginEnabled('todo_reminder')) return null;
+
+  const panelZIndexClass = modalZIndexClass ?? 'z-[150]';
 
   return (
     <>
@@ -43,7 +48,24 @@ const AddTodoButton: React.FC<AddTodoButtonProps> = ({ seed, variant = 'button',
           <ListTodo className="h-4 w-4" /> 待办
         </button>
       )}
-      <AddTodoModal open={open} onClose={() => setOpen(false)} seed={seed} zIndexClass={modalZIndexClass} />
+      <AddTodoModal
+        open={open}
+        onClose={() => setOpen(false)}
+        seed={seed}
+        zIndexClass={modalZIndexClass}
+        onViewRelatedTodos={(q) => {
+          setOpen(false);
+          setPanelSearch(q);
+          setPanelOpen(true);
+        }}
+      />
+      <TodoPanelModal
+        open={panelOpen}
+        onClose={() => setPanelOpen(false)}
+        initialSearch={panelSearch}
+        zIndexClass={panelZIndexClass}
+        hideCreateButton
+      />
     </>
   );
 };

@@ -1,4 +1,4 @@
-@import '/styles/plan-detail-page.wxss';
+@import '/packageFinance/styles/plan-detail-page.wxss';
 @import '../finance-accounts/finance-accounts.wxss';
 
 .fin-acct-types-page {

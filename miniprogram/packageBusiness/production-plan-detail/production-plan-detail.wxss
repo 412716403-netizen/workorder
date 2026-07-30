@@ -1,5 +1,5 @@
 @import '../../styles/list.wxss';
-@import '../../styles/plan-form-cell.wxss';
+@import '/packageBusiness/styles/plan-form-cell.wxss';
 @import '../../styles/todo-entry.wxss';
 
 .plan-detail-shell {

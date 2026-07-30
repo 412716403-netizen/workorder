@@ -195,6 +195,12 @@
     }
   ],
   "preloadRule": {
+    "pages/home/home": {
+      "network": "wifi",
+      "packages": [
+        "business"
+      ]
+    },
     "pages/apps/apps": {
       "network": "wifi",
       "packages": [

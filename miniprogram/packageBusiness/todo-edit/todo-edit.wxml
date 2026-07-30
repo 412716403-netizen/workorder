@@ -15,20 +15,31 @@
     show-scrollbar="{{false}}"
     style="height: {{scrollHeight}}px;"
   >
-    <view class="plan-create-page">
-      <view
-        wx:if="{{docLabel}}"
-        class="todo-edit-doc {{canJumpDoc ? 'todo-edit-doc--link' : ''}}"
-        bindtap="onDocTap"
-      >
-        <view class="todo-edit-doc__body">
-          <text class="todo-edit-doc__label">关联单据</text>
-          <text class="todo-edit-doc__title">{{docLabel}}</text>
+    <view class="todo-edit-page">
+      <view wx:if="{{done}}" class="todo-edit-status">已完成</view>
+
+      <view wx:if="{{docLabel}}" class="todo-edit-doc-card">
+        <text class="todo-edit-doc-card__eyebrow">关联单据</text>
+        <text class="todo-edit-doc-card__title">{{docLabel}}</text>
+        <view wx:if="{{canJumpDoc || showRelatedBtn}}" class="todo-edit-doc-actions">
+          <view
+            wx:if="{{canJumpDoc}}"
+            class="todo-edit-doc-action"
+            bindtap="onDocTap"
+          >打开单据</view>
+          <view
+            wx:if="{{showRelatedBtn}}"
+            class="todo-edit-doc-action todo-edit-doc-action--primary"
+            bindtap="onRelatedTodosTap"
+          >相关待办</view>
         </view>
-        <text wx:if="{{canJumpDoc}}" class="todo-edit-doc__chevron">›</text>
       </view>
 
       <view class="plan-form-card">
+        <view class="todo-edit-note-head">
+          <text class="todo-edit-note-head__label">待办内容</text>
+          <text class="todo-edit-note-head__count">{{note.length}}/{{noteMax}}</text>
+        </view>
         <view class="plan-form-cell plan-form-cell--textarea plan-form-cell--last">
           <textarea
             class="todo-edit-textarea"
@@ -44,7 +55,10 @@
 
       <view class="plan-form-card">
         <view class="todo-edit-remind" bindtap="onRemindToggle">
-          <text class="todo-edit-remind__label">定时提醒</text>
+          <view class="todo-edit-remind__text">
+            <text class="todo-edit-remind__label">定时提醒</text>
+            <text class="todo-edit-remind__hint">到点后在消息中心提醒</text>
+          </view>
           <view class="todo-edit-switch {{remindEnabled ? 'todo-edit-switch--on' : ''}}">
             <view class="todo-edit-switch__knob"></view>
           </view>
@@ -68,17 +82,17 @@
     <view class="report-batch-footer__inner">
       <block wx:if="{{isEdit}}">
         <view
-          class="report-batch-footer__btn report-batch-footer__btn--danger {{deleting || togglingDone ? 'report-batch-footer__btn--disabled' : ''}}"
+          class="report-batch-footer__btn report-batch-footer__btn--danger todo-edit-footer__danger {{deleting || togglingDone ? 'report-batch-footer__btn--disabled' : ''}}"
           bindtap="onDeleteTap"
         >删除</view>
-        <view
-          class="report-batch-footer__btn {{done ? 'report-batch-footer__btn--ghost' : 'report-batch-footer__btn--success'}} {{togglingDone || submitting || deleting ? 'report-batch-footer__btn--disabled' : ''}}"
-          bindtap="onToggleDone"
-        >{{done ? '取消完成' : '标记完成'}}</view>
         <view
           class="report-batch-footer__btn report-batch-footer__btn--primary {{submitting || togglingDone ? 'report-batch-footer__btn--disabled' : ''}}"
           bindtap="onSubmit"
         >保存</view>
+        <view
+          class="report-batch-footer__btn {{done ? 'report-batch-footer__btn--ghost' : 'report-batch-footer__btn--success'}} {{togglingDone || submitting || deleting ? 'report-batch-footer__btn--disabled' : ''}}"
+          bindtap="onToggleDone"
+        >{{done ? '取消完成' : '标记完成'}}</view>
       </block>
       <block wx:else>
         <view class="report-batch-footer__btn report-batch-footer__btn--ghost" bindtap="onHeaderBack">取消</view>

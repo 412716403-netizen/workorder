@@ -1,4 +1,4 @@
-@import '../../../components/searchable-partner-select/searchable-partner-select.wxss';
+@import '/packageBusiness/components/searchable-partner-select/searchable-partner-select.wxss';
 
 .cssp__confirm-link {
   min-width: 96rpx;

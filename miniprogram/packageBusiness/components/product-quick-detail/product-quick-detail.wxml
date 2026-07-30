@@ -155,8 +155,16 @@
           wx:for-item="mat"
           wx:key="key"
           class="kb-bom-item"
+          style="padding-left: {{mat.indentPx}}rpx;"
         >
           <view class="kb-bom-item__main">
+            <view
+              wx:if="{{mat.hasChildren}}"
+              class="kb-bom-item__expand"
+              data-row-key="{{mat.rowKey}}"
+              catchtap="onBomExpandTap"
+            >{{mat.expandIcon}}</view>
+            <view wx:else class="kb-bom-item__expand kb-bom-item__expand--spacer"></view>
             <view class="kb-bom-item__text">
               <text
                 class="kb-bom-item__name {{mat.canOpen ? 'kb-bom-item__name--link' : ''}}"

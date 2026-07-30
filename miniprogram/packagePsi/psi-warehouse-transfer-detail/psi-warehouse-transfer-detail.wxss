@@ -1,4 +1,4 @@
-@import '/styles/psi-purchase-order-detail-page.wxss';
+@import '/packagePsi/styles/psi-purchase-order-detail-page.wxss';
 
 .wh-detail-hero__route {
   font-size: 34rpx;

@@ -1,7 +1,7 @@
 @import '../../styles/tokens.wxss';
-@import '../../styles/plan-form-cell.wxss';
-@import '../../styles/doc-entry-datetime.wxss';
-@import '../../styles/matrix-keyboard-page.wxss';
+@import '/packageBusiness/styles/plan-form-cell.wxss';
+@import '/packageBusiness/styles/doc-entry-datetime.wxss';
+@import '/packageBusiness/styles/matrix-keyboard-page.wxss';
 
 page {
   background: var(--color-bg-page);

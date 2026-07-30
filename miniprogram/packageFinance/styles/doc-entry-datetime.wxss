@@ -1,0 +1,68 @@
+@import '/styles/tokens.wxss';
+
+/* 创建时间：日期 + 时间同一行 */
+.report-batch-edit__datetime {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12rpx;
+  flex-wrap: nowrap;
+}
+
+.report-batch-edit__datetime picker {
+  flex-shrink: 0;
+}
+
+.report-batch-edit__picker {
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+/* plan-form-cell 内：标签左、日期时间右对齐 */
+.plan-form-cell .report-batch-edit__datetime {
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+.plan-form-cell .report-batch-edit__picker {
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  font-size: var(--font-body);
+  color: var(--color-text-primary);
+  text-align: right;
+}
+
+/* 领退料等独立卡片行 */
+.material-issue-entry-time,
+.material-confirm-entry-time {
+  display: flex;
+  align-items: center;
+  min-height: 96rpx;
+}
+
+.material-issue-entry-time__label,
+.material-confirm-entry-time__label {
+  flex-shrink: 0;
+  min-width: 160rpx;
+  margin-bottom: 0;
+  font-size: 30rpx;
+  color: var(--color-text-primary);
+}
+
+.material-issue-entry-time .report-batch-edit__datetime,
+.material-confirm-entry-time .report-batch-edit__datetime {
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+.material-issue-entry-time .report-batch-edit__picker,
+.material-confirm-entry-time .report-batch-edit__picker {
+  padding: 0;
+  background: transparent;
+  font-size: var(--font-body);
+  color: var(--color-text-primary);
+  text-align: right;
+}

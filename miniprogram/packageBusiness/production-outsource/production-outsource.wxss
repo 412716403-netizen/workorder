@@ -1,2 +1,2 @@
-@import '/styles/production-orders-page.wxss';
-@import '../../styles/outsource-shared.wxss';
+@import '/packageBusiness/styles/production-orders-page.wxss';
+@import '/packageBusiness/styles/outsource-shared.wxss';

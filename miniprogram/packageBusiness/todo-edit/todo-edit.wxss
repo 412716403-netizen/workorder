@@ -1,60 +1,99 @@
-@import "/styles/plan-create-form.wxss";
-@import "/styles/report-batch-detail-page.wxss";
+@import '/packageBusiness/styles/plan-create-form.wxss';
+@import '/packageBusiness/styles/report-batch-detail-page.wxss';
 @import "/styles/tokens.wxss";
 
-.todo-edit-doc {
-  display: flex;
-  align-items: center;
-  gap: 16rpx;
+/* 本页内容区：只留底栏高度，避免短内容时大片空白 */
+.todo-edit-page {
+  padding: 16rpx var(--spacing-page) calc(140rpx + env(safe-area-inset-bottom));
+}
+
+.todo-edit-status {
+  margin-bottom: 16rpx;
+  padding: 14rpx 20rpx;
+  border-radius: 16rpx;
+  background: #ecfdf5;
+  color: #059669;
+  font-size: 24rpx;
+  font-weight: 700;
+  text-align: center;
+}
+
+.todo-edit-doc-card {
   margin: 0 0 16rpx;
-  padding: 24rpx;
+  padding: 20rpx 24rpx;
   border-radius: var(--radius-card);
   background: var(--color-primary-light);
   box-sizing: border-box;
 }
 
-.todo-edit-doc--link:active {
-  opacity: 0.88;
-}
-
-.report-batch-footer__btn--success {
-  background: var(--color-success);
-  color: #fff;
-}
-
-.todo-edit-doc__body {
-  flex: 1;
-  min-width: 0;
-}
-
-.todo-edit-doc__label {
+.todo-edit-doc-card__eyebrow {
   display: block;
+  margin-bottom: 8rpx;
   font-size: 22rpx;
   font-weight: 600;
   color: rgba(47, 107, 255, 0.72);
-  margin-bottom: 6rpx;
 }
 
-.todo-edit-doc__title {
+.todo-edit-doc-card__title {
   display: block;
   font-size: 28rpx;
   font-weight: 700;
   color: var(--color-primary);
-  line-height: 1.4;
+  line-height: 1.45;
   word-break: break-word;
 }
 
-.todo-edit-doc__chevron {
-  flex-shrink: 0;
-  font-size: 40rpx;
-  font-weight: 300;
-  color: var(--color-primary);
-  line-height: 1;
+.todo-edit-doc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  margin-top: 20rpx;
+}
+
+.todo-edit-doc-action {
+  padding: 12rpx 28rpx;
+  border-radius: 999rpx;
+  background: #fff;
+  font-size: 24rpx;
+  font-weight: 700;
+  color: var(--color-primary, #2f6bff);
+  line-height: 1.2;
+}
+
+.todo-edit-doc-action:active {
+  opacity: 0.85;
+}
+
+.todo-edit-doc-action--primary {
+  background: var(--color-primary, #2f6bff);
+  color: #fff;
+}
+
+.todo-edit-note-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 24rpx 24rpx 0;
+}
+
+.todo-edit-note-head__label {
+  font-size: 24rpx;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+}
+
+.todo-edit-note-head__count {
+  font-size: 22rpx;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  opacity: 0.8;
 }
 
 .todo-edit-textarea {
   width: 100%;
-  min-height: 180rpx;
+  min-height: 160rpx;
+  max-height: 420rpx;
   padding: 0;
   font-size: 28rpx;
   color: var(--color-text-primary);
@@ -74,10 +113,24 @@
   padding: 28rpx 24rpx;
 }
 
+.todo-edit-remind__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
 .todo-edit-remind__label {
   font-size: 28rpx;
   font-weight: 600;
   color: var(--color-text-primary);
+}
+
+.todo-edit-remind__hint {
+  font-size: 22rpx;
+  font-weight: 500;
+  color: var(--color-text-secondary);
 }
 
 .todo-edit-switch {
@@ -107,4 +160,14 @@
 
 .todo-edit-switch--on .todo-edit-switch__knob {
   transform: translateX(32rpx);
+}
+
+.report-batch-footer__btn--success {
+  background: var(--color-success);
+  color: #fff;
+}
+
+/* 删除次要、完成/保存主操作：删除不占满等宽 */
+.todo-edit-footer__danger {
+  flex: 0 0 148rpx;
 }

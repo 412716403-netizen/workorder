@@ -2,6 +2,7 @@ const { request } = require('./request.js');
 
 const TODO_NOTE_MAX_CHARS = 2000;
 const TODO_EDIT_PATH = '/packageBusiness/todo-edit/todo-edit';
+const TODOS_LIST_PATH = '/packageBusiness/todos/todos';
 
 function normalizeListBody(body) {
   if (Array.isArray(body)) return body;
@@ -60,6 +61,20 @@ function openTodoEdit(opts) {
   });
 }
 
+/**
+ * 打开待办事项列表；可预填搜索并隐藏「新建」入口（对齐 Web 单据相关待办）。
+ * @param {{ searchKeyword?: string, hideCreate?: boolean }} [opts]
+ */
+function openTodosList(opts) {
+  const q = opts && opts.searchKeyword ? String(opts.searchKeyword).trim() : '';
+  const hideCreate = !!(opts && opts.hideCreate);
+  const parts = [];
+  if (q) parts.push(`q=${encodeURIComponent(q)}`);
+  if (hideCreate) parts.push('hideCreate=1');
+  const qs = parts.length ? `?${parts.join('&')}` : '';
+  wx.navigateTo({ url: `${TODOS_LIST_PATH}${qs}` });
+}
+
 function formatTodoRemindAt(iso) {
   if (!iso) return '';
   const d = new Date(iso);
@@ -76,11 +91,13 @@ function todoDocLabel(item) {
 module.exports = {
   TODO_NOTE_MAX_CHARS,
   TODO_EDIT_PATH,
+  TODOS_LIST_PATH,
   listTodos,
   createTodo,
   updateTodo,
   deleteTodo,
   openTodoEdit,
+  openTodosList,
   formatTodoRemindAt,
   todoDocLabel,
   normalizeListBody,

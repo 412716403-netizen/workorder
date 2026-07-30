@@ -1,4 +1,4 @@
-@import '/styles/psi-warehouse-transfer-edit-page.wxss';
+@import '/packagePsi/styles/psi-warehouse-transfer-edit-page.wxss';
 
 .plan-create-matrix__cell-stack {
   width: 100%;

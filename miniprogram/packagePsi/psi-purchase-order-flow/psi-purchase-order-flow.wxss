@@ -1,5 +1,5 @@
-@import '/styles/production-plans-page.wxss';
-@import '/styles/report-history-page.wxss';
+@import '/packagePsi/styles/production-plans-page.wxss';
+@import '/packagePsi/styles/report-history-page.wxss';
 
 .po-flow-filter-section {
   margin-bottom: 8rpx;

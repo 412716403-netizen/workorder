@@ -68,6 +68,7 @@
                 class="report-history-row__img"
                 src="{{item.productImageUrl}}"
                 mode="aspectFill"
+                lazy-load="{{true}}"
                 data-id="{{item.id}}"
                 binderror="onProductImageError"
               />

@@ -1,4 +1,4 @@
-@import "/styles/plan-create-form.wxss";
+@import '/packageBusiness/styles/plan-create-form.wxss';
 
 .dev-tpl-edit-page {
   padding-bottom: calc(160rpx + env(safe-area-inset-bottom));

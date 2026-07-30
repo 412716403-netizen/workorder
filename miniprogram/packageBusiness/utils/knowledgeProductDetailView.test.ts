@@ -55,7 +55,55 @@ describe('knowledgeProductDetailView', () => {
     expect(view.bomGroups).toHaveLength(1);
     expect(view.bomGroups[0].items[0].productName).toBe('面料 M1');
     expect(view.bomGroups[0].items[0].qtyText).toContain('×2');
+    expect(view.bomGroups[0].items[0].hasChildren).toBe(false);
     expect(view.showBomSkuTabs).toBe(false);
+  });
+
+  it('expands nested child bom materials under a parent line', () => {
+    const view = buildKnowledgeProductDetailView({
+      product: {
+        id: 'p1',
+        name: '成品A',
+        sku: 'A01',
+        categoryId: 'c1',
+        milestoneNodeIds: ['n1'],
+        variants: [],
+      },
+      category: { id: 'c1', name: '成衣' },
+      dictionaries: { units: [], colors: [], sizes: [] },
+      partners: [],
+      globalNodes: [{ id: 'n1', name: '裁剪', hasBOM: true }],
+      boms: [
+        {
+          id: 'b1',
+          parentProductId: 'p1',
+          variantId: 'single-p1',
+          nodeId: 'n1',
+          name: '裁剪BOM',
+          items: [{ productId: 'm1', quantity: 1 }],
+        },
+        {
+          id: 'b2',
+          parentProductId: 'm1',
+          variantId: 'single-m1',
+          name: '面料下级',
+          items: [{ productId: 'c1', quantity: 2.5 }],
+        },
+      ],
+      products: [
+        { id: 'm1', name: '面料', sku: 'M1' },
+        { id: 'c1', name: '纱线', sku: 'Y1' },
+      ],
+      bomSkuId: 'single-p1',
+      bomExpandedKeys: { 'b1:m1': true },
+    });
+
+    expect(view.bomGroups[0].items).toHaveLength(2);
+    expect(view.bomGroups[0].items[0].hasChildren).toBe(true);
+    expect(view.bomGroups[0].items[0].expanded).toBe(true);
+    expect(view.bomGroups[0].items[1].productName).toBe('纱线 Y1');
+    expect(view.bomGroups[0].items[1].qtyText).toContain('×2.5');
+    expect(view.bomGroups[0].items[1].level).toBe(2);
   });
 
   it('hides single-sku tab when product has no variants', () => {

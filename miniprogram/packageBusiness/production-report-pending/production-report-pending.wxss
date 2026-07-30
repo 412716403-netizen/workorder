@@ -1,6 +1,6 @@
 @import "/styles/tokens.wxss";
 @import "/styles/plan-list-shell.wxss";
-@import "/styles/worker-report-card.wxss";
+@import '/packageBusiness/styles/worker-report-card.wxss';
 
 .pending-page {
   padding: 32rpx 24rpx calc(160rpx + env(safe-area-inset-bottom));

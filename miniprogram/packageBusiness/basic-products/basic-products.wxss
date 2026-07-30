@@ -1,5 +1,5 @@
-@import '/styles/production-plans-page.wxss';
-@import '/styles/report-history-page.wxss';
+@import '/packageBusiness/styles/production-plans-page.wxss';
+@import '/packageBusiness/styles/report-history-page.wxss';
 
 .basic-products-cats {
   white-space: nowrap;

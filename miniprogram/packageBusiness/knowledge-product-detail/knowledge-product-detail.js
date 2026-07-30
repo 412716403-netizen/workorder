@@ -155,8 +155,10 @@ Page({
   onLoad(options) {
     const nav = readNavBarMetrics();
     this._productId = options.id ? decodeURIComponent(options.id) : '';
-    this._bomSkuId = '';
-    this._whereUsedExpanded = false;
+      this._bomSkuId = '';
+      this._bomExpandedKeys = {};
+      this._whereUsedExpanded = false;
+    this._bomExpandedKeys = {};
     this._imageTempPath = '';
     this.setData({
       statusBarHeight: nav.statusBarHeight,
@@ -217,21 +219,37 @@ Page({
     const id = e.detail && e.detail.id;
     if (!id || id === this._bomSkuId) return;
     this._bomSkuId = id;
-    this.applyView();
+    this._bomExpandedKeys = {};
+    this.applyView({ fields: 'bom' });
+  },
+
+  onBomExpandTap(e) {
+    const rowKey = e.detail && e.detail.rowKey;
+    if (!rowKey) return;
+    const next = { ...(this._bomExpandedKeys || {}) };
+    if (next[rowKey]) delete next[rowKey];
+    else next[rowKey] = true;
+    this._bomExpandedKeys = next;
+    this.applyView({ fields: 'bom' });
   },
 
   /** BOM 子件 / 被调用父产品：同一路由再开一层，可逐级 navigateBack */
   onProductTap(e) {
     const productId = (e.detail && e.detail.productId) || '';
     if (!productId || productId === this._productId) return;
-    wx.navigateTo({
-      url: `/packageBusiness/knowledge-product-detail/knowledge-product-detail?id=${encodeURIComponent(productId)}`,
-    });
+    const url = `/packageBusiness/knowledge-product-detail/knowledge-product-detail?id=${encodeURIComponent(productId)}`;
+    // 微信页面栈上限 10；钻取过深时用 redirectTo 避免 navigateTo:fail
+    const stackDepth = (getCurrentPages() || []).length;
+    if (stackDepth >= 9) {
+      wx.redirectTo({ url });
+      return;
+    }
+    wx.navigateTo({ url });
   },
 
   onWhereUsedToggle() {
     this._whereUsedExpanded = !this._whereUsedExpanded;
-    this.applyView();
+    this.applyView({ fields: 'whereUsed' });
   },
 
   onCustomKnowledgeTap(e) {
@@ -352,8 +370,13 @@ Page({
       });
   },
 
-  applyView() {
+  /**
+   * @param {{ fields?: 'all' | 'bom' | 'whereUsed' }} [options]
+   * 规格切换 / 展开被调用只推相关字段，避免整包视图反复 setData。
+   */
+  applyView(options) {
     if (!this._product) return;
+    const fields = (options && options.fields) || 'all';
     const view = buildKnowledgeProductDetailView({
       product: this._product,
       category: this._category,
@@ -365,10 +388,29 @@ Page({
       products: this._products,
       bomSkuId: this._bomSkuId,
       whereUsedExpanded: this._whereUsedExpanded,
+      bomExpandedKeys: this._bomExpandedKeys,
     });
     if (!this._bomSkuId && view.defaultBomSkuId) {
       this._bomSkuId = view.defaultBomSkuId;
-      return this.applyView();
+      return this.applyView(options);
+    }
+    if (fields === 'bom') {
+      this.setData({
+        bomSkuOptions: view.bomSkuOptions || [],
+        showBomSkuTabs: view.showBomSkuTabs,
+        bomGroups: view.bomGroups || [],
+        bomEmptyText: view.bomEmptyText || '',
+        showBomEmpty: view.showBomEmpty,
+      });
+      return;
+    }
+    if (fields === 'whereUsed') {
+      this.setData({
+        whereUsedRows: view.whereUsedRows || [],
+        whereUsedCollapsible: view.whereUsedCollapsible,
+        whereUsedToggleText: view.whereUsedToggleText || '',
+      });
+      return;
     }
     this.setData({
       loading: false,
@@ -444,7 +486,8 @@ Page({
         }
       }
 
-      // 图片类扩展附件落本地，供缩略图直接展示（禁止大 base64 进 setData）
+      // 图片类扩展附件落本地，供缩略图直接展示（禁止大 base64 进 setData）；并行写盘缩短首屏
+      const attachJobs = [];
       const fieldIds = Object.keys(fileFieldsById);
       for (let fi = 0; fi < fieldIds.length; fi += 1) {
         const fieldId = fieldIds[fi];
@@ -455,20 +498,22 @@ Page({
           const asImage = it.isImage || isImageDataUrl(it.url);
           if (!asImage) continue;
           it.isImage = true;
-          try {
-            const localPath = await writeAttachDataUrlTempFile(
-              it.url,
-              it.name || `img-${fi}-${i}.jpg`,
-            );
-            if (localPath) {
-              it.localPath = localPath;
-              this._fileTempPaths.push(localPath);
-            }
-          } catch {
-            // 写失败则仍可点文字打开
-          }
+          const name = it.name || `img-${fi}-${i}.jpg`;
+          attachJobs.push(
+            writeAttachDataUrlTempFile(it.url, name)
+              .then((localPath) => {
+                if (localPath) {
+                  it.localPath = localPath;
+                  this._fileTempPaths.push(localPath);
+                }
+              })
+              .catch(() => {
+                // 写失败则仍可点文字打开
+              }),
+          );
         }
       }
+      if (attachJobs.length) await Promise.all(attachJobs);
       product._fileFieldsById = fileFieldsById;
 
       this._loaded = true;
@@ -483,6 +528,7 @@ Page({
         ? this._categories.find((c) => c.id === product.categoryId)
         : null;
       this._bomSkuId = '';
+      this._bomExpandedKeys = {};
       this.applyView();
     } catch (err) {
       this.setData({

@@ -1,9 +1,9 @@
-@import '/styles/production-plans-page.wxss';
-@import '../../styles/outsource-shared.wxss';
-@import '/styles/plan-create-form.wxss';
+@import '/packageBusiness/styles/production-plans-page.wxss';
+@import '/packageBusiness/styles/outsource-shared.wxss';
+@import '/packageBusiness/styles/plan-create-form.wxss';
 @import '../production-order-report/production-order-report.wxss';
 
-@import '../../styles/matrix-keyboard-page.wxss';
+@import '/packageBusiness/styles/matrix-keyboard-page.wxss';
 
 .outsource-confirm-shell {
   min-height: 100vh;

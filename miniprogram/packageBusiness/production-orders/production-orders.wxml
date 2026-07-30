@@ -226,6 +226,7 @@
                 class="order-list-row__img"
                 src="{{item.productImageUrl}}"
                 mode="aspectFill"
+                lazy-load="{{true}}"
                 data-id="{{item.id}}"
                 binderror="onProductImageError"
               />

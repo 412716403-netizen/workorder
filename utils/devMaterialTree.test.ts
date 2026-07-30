@@ -3,6 +3,8 @@ import { DEV_MATERIAL_BOM_MAX_DEPTH } from '../shared/types';
 import type { BOM } from '../types';
 import {
   buildProductChildrenIndex,
+  buildProductBomChildIndex,
+  buildDevBomUnitQtyMap,
   buildDevMaterialTree,
   buildRootCoverageIndex,
   flattenVisibleRows,
@@ -11,13 +13,21 @@ import {
   resolveTopLevelRootIds,
 } from './devMaterialTree';
 
-function bom(parentProductId: string, childIds: string[], id = `bom-${parentProductId}`): BOM {
+function bom(
+  parentProductId: string,
+  childIds: string[],
+  id = `bom-${parentProductId}`,
+  qtyByChild?: Record<string, number>,
+): BOM {
   return {
     id,
     name: id,
     parentProductId,
     version: '1',
-    items: childIds.map((productId) => ({ productId, quantity: 1 })),
+    items: childIds.map((productId) => ({
+      productId,
+      quantity: qtyByChild?.[productId] ?? 1,
+    })),
   };
 }
 
@@ -147,5 +157,52 @@ describe('buildRootCoverageIndex', () => {
     expect([...(coverage.get('c1') ?? [])]).toEqual(['m1']);
     expect([...(coverage.get('shared') ?? [])].sort()).toEqual(['m1', 'm2']);
     expect(coverage.has('unrelated')).toBe(false);
+  });
+});
+
+describe('unitQty on material tree', () => {
+  it('buildDevBomUnitQtyMap keeps first quantity per productId', () => {
+    const map = buildDevBomUnitQtyMap([
+      { items: [{ productId: 'm1', quantity: 1.5 }, { productId: 'm2', quantity: 2 }] },
+      { items: [{ productId: 'm1', quantity: 9 }, { productId: 'm3', quantity: 0.5 }] },
+    ]);
+    expect(map.get('m1')).toBe(1.5);
+    expect(map.get('m2')).toBe(2);
+    expect(map.get('m3')).toBe(0.5);
+  });
+
+  it('attaches root and child unitQty when building/flattening tree', () => {
+    const { childrenByParent, unitQtyByParentChild } = buildProductBomChildIndex([
+      bom('m1', ['c1', 'c2'], 'b1', { c1: 2, c2: 0.5 }),
+      bom('c1', ['g1'], 'b2', { g1: 3 }),
+    ]);
+    const tree = buildDevMaterialTree(['m1', 'm2'], childrenByParent, {
+      rootUnitQty: new Map([
+        ['m1', 1.2],
+        ['m2', 4],
+      ]),
+      childUnitQty: unitQtyByParentChild,
+    });
+    expect(tree[0].unitQty).toBe(1.2);
+    expect(tree[0].children[0].unitQty).toBe(2);
+    expect(tree[0].children[1].unitQty).toBe(0.5);
+    expect(tree[0].children[0].children[0].unitQty).toBe(3);
+    expect(tree[1].unitQty).toBe(4);
+
+    const rows = flattenVisibleRows(tree, new Set(['m1', 'm1/c1']));
+    expect(rows.map((r) => ({ key: r.rowKey, unitQty: r.unitQty }))).toEqual([
+      { key: 'm1', unitQty: 1.2 },
+      { key: 'm1/c1', unitQty: 2 },
+      { key: 'm1/c1/g1', unitQty: 3 },
+      { key: 'm1/c2', unitQty: 0.5 },
+      { key: 'm2', unitQty: 4 },
+    ]);
+  });
+
+  it('uses null unitQty when qty maps are omitted', () => {
+    const index = buildProductChildrenIndex([bom('m1', ['c1'])]);
+    const tree = buildDevMaterialTree(['m1'], index);
+    expect(tree[0].unitQty).toBeNull();
+    expect(tree[0].children[0].unitQty).toBeNull();
   });
 });

@@ -3,6 +3,7 @@ import { ArrowDownToLine, ArrowUpFromLine, ChevronDown, ChevronRight, History, P
 import type {
   AppDictionaries,
   BOM,
+  DevBomDto,
   DevMaterialRecordsResponse,
   DevMaterialSummaryRow,
   GlobalNodeTemplate,
@@ -17,8 +18,9 @@ import {
   sectionTitleClass,
 } from '../../styles/uiDensity';
 import {
+  buildDevBomUnitQtyMap,
   buildDevMaterialTree,
-  buildProductChildrenIndex,
+  buildProductBomChildIndex,
   buildRootCoverageIndex,
   flattenVisibleRows,
   resolveTopLevelRootIds,
@@ -46,6 +48,8 @@ interface DevMaterialSectionProps {
   products: Product[];
   /** 产品档案 BOM，用于展开子物料 */
   boms?: BOM[];
+  /** 试制 BOM，领料时展示顶层单个用量 */
+  devBoms?: DevBomDto[];
   categories: ProductCategory[];
   warehouses: Warehouse[];
   partners?: Partner[];
@@ -93,6 +97,7 @@ const DevMaterialSection: React.FC<DevMaterialSectionProps> = ({
   loading,
   products,
   boms = [],
+  devBoms = [],
   categories,
   warehouses,
   partners = [],
@@ -116,7 +121,12 @@ const DevMaterialSection: React.FC<DevMaterialSectionProps> = ({
   // `?? []` 直接写在渲染体里会每次产生新引用，让下游 useMemo 全部失效
   const summary = useMemo(() => data?.summary ?? EMPTY_SUMMARY, [data]);
   const bomIds = useMemo(() => data?.bomProductIds ?? EMPTY_IDS, [data]);
-  const childrenIndex = useMemo(() => buildProductChildrenIndex(boms), [boms]);
+  const productBomIndex = useMemo(() => buildProductBomChildIndex(boms), [boms]);
+  const childrenIndex = productBomIndex.childrenByParent;
+  const rootUnitQty = useMemo(
+    () => buildDevBomUnitQtyMap(devBoms.filter((b) => b.parentStyleId === styleId)),
+    [devBoms, styleId],
+  );
   const summaryByProductId = useMemo(() => {
     const map = new Map<string, DevMaterialSummaryRow>();
     for (const row of summary) map.set(row.productId, row);
@@ -160,8 +170,12 @@ const DevMaterialSection: React.FC<DevMaterialSectionProps> = ({
   }, [topLevelBomIds, rootCoverage, summary]);
 
   const materialTree = useMemo(
-    () => buildDevMaterialTree(rootIdsForSummary, childrenIndex),
-    [rootIdsForSummary, childrenIndex],
+    () =>
+      buildDevMaterialTree(rootIdsForSummary, childrenIndex, {
+        rootUnitQty,
+        childUnitQty: productBomIndex.unitQtyByParentChild,
+      }),
+    [rootIdsForSummary, childrenIndex, rootUnitQty, productBomIndex.unitQtyByParentChild],
   );
 
   const visibleRows = useMemo(
@@ -381,6 +395,7 @@ const DevMaterialSection: React.FC<DevMaterialSectionProps> = ({
           categoryById={categoryById}
           warehouses={warehouses}
           boms={boms}
+          devBoms={devBoms}
           onClose={() => setOpMode(null)}
           onSaved={async () => {
             await onRefresh();

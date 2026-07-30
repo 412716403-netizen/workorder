@@ -1,5 +1,5 @@
-@import '/styles/production-plans-page.wxss';
-@import '/styles/report-history-page.wxss';
+@import '/packagePsi/styles/production-plans-page.wxss';
+@import '/packagePsi/styles/report-history-page.wxss';
 @import '../psi-purchase-order-flow/psi-purchase-order-flow.wxss';
 
 .so-flow-row__head-partner {

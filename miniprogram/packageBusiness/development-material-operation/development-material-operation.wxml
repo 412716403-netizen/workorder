@@ -9,7 +9,7 @@
 
   <view class="plan-detail-header-spacer" style="height: {{headerBlockHeight}}px;"></view>
 
-  <scroll-view class="plan-detail-scroll" scroll-y show-scrollbar="{{false}}" style="height: {{scrollHeight}}px;">
+  <scroll-view class="plan-detail-scroll" scroll-y enhanced show-scrollbar="{{false}}" style="height: {{scrollHeight}}px;">
     <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
 
     <view wx:else class="plan-detail-page">
@@ -49,29 +49,116 @@
           <text class="dev-empty-block__text">{{isIssue ? '请先配置试制 BOM' : '暂无可退物料'}}</text>
         </view>
 
-        <view wx:for="{{rows}}" wx:key="{{isIssue ? productId : key}}" class="dev-mat-row">
-          <view class="dev-mat-row__main">
-            <text class="dev-mat-row__name">{{item.productName}}</text>
-            <text wx:if="{{item.showProductSku}}" class="list-product-sku">{{item.productSku}}</text>
-            <text wx:if="{{!isIssue}}" class="dev-mat-row__meta">{{item.warehouseName}} · {{item.batchNo}} · 可退 {{item.returnableQty}}</text>
-            <text wx:else class="dev-mat-row__meta">净领用 {{item.netQty}}</text>
-          </view>
+        <!-- 领料：物料 | 单个用量 | 净领用 | 库存 | (批次) | 本次领料 -->
+        <scroll-view
+          wx:elif="{{isIssue}}"
+          scroll-x
+          enhanced
+          show-scrollbar="{{false}}"
+          class="material-issue-table-scroll"
+        >
+          <view class="material-issue-table {{showBatchCol ? 'material-issue-table--batch' : ''}}">
+            <view class="material-issue-table__thead">
+              <view class="material-issue-table__th material-issue-table__th--name">物料</view>
+              <view class="material-issue-table__th material-issue-table__th--num">单个用量</view>
+              <view class="material-issue-table__th material-issue-table__th--num">净领用</view>
+              <view class="material-issue-table__th material-issue-table__th--stock">库存数量</view>
+              <view wx:if="{{showBatchCol}}" class="material-issue-table__th material-issue-table__th--batch">批次</view>
+              <view class="material-issue-table__th material-issue-table__th--input">本次领料</view>
+            </view>
 
-          <view wx:if="{{isIssue && item.needsBatch}}" class="dev-mat-row__batch">
-            <picker mode="selector" range="{{item.batchPickerRange}}" value="{{item.batchIndex}}" data-index="{{index}}" bindchange="onBatchChange">
-              <view class="dev-mat-form-value">{{item.batchDisplayText || item.batchPickerRange[item.batchIndex] || '选择批次'}}</view>
-            </picker>
+            <view wx:for="{{rows}}" wx:key="rowKey" class="material-issue-table__tr">
+              <view class="material-issue-table__td material-issue-table__td--name">
+                <view class="material-issue-table__name-wrap" style="padding-left: {{item.indentPx}}px;">
+                  <view
+                    wx:if="{{item.hasChildren}}"
+                    class="material-issue-table__expand {{item.expanded ? 'material-issue-table__expand--open' : ''}}"
+                    data-row-key="{{item.rowKey}}"
+                    catchtap="onToggleExpand"
+                  >{{item.expanded ? '▼' : '▶'}}</view>
+                  <view wx:else class="material-issue-table__expand material-issue-table__expand--placeholder"></view>
+                  <view class="material-issue-table__name-line">
+                    <text class="material-issue-table__name">{{item.productName}}</text>
+                    <text wx:if="{{item.showProductSku}}" class="material-issue-table__sku">{{item.productSku}}</text>
+                  </view>
+                </view>
+              </view>
+              <view class="material-issue-table__td material-issue-table__td--num">{{item.unitQtyText || '—'}}</view>
+              <view class="material-issue-table__td material-issue-table__td--num">{{item.netQty}}</view>
+              <view class="material-issue-table__td material-issue-table__td--stock">{{item.stockText}}</view>
+              <view wx:if="{{showBatchCol}}" class="material-issue-table__td material-issue-table__td--batch">
+                <picker
+                  wx:if="{{item.needsBatch}}"
+                  mode="selector"
+                  range="{{item.batchPickerRange}}"
+                  value="{{item.batchIndex}}"
+                  data-index="{{index}}"
+                  bindchange="onBatchChange"
+                >
+                  <view class="material-issue-batch-picker">
+                    {{item.batchDisplayText || item.batchPickerRange[item.batchIndex] || '选择批次'}}
+                  </view>
+                </picker>
+                <view wx:else class="material-issue-batch-picker material-issue-batch-picker--readonly">—</view>
+              </view>
+              <view class="material-issue-table__td material-issue-table__td--input">
+                <input
+                  class="material-issue-input"
+                  type="digit"
+                  placeholder="0"
+                  value="{{item.issueQty}}"
+                  data-index="{{index}}"
+                  bindinput="onQtyInput"
+                />
+              </view>
+            </view>
           </view>
+        </scroll-view>
 
-          <input
-            class="dev-mat-row__qty"
-            type="digit"
-            placeholder="数量"
-            value="{{isIssue ? item.issueQty : item.returnQty}}"
-            data-index="{{index}}"
-            bindinput="onQtyInput"
-          />
-        </view>
+        <!-- 退料：物料 | 仓库 | 批次或库存 | 可退 | 本次退料 -->
+        <scroll-view
+          wx:else
+          scroll-x
+          enhanced
+          show-scrollbar="{{false}}"
+          class="material-issue-table-scroll"
+        >
+          <view class="material-issue-table material-issue-table--return {{showBatchCol ? 'material-issue-table--batch' : ''}}">
+            <view class="material-issue-table__thead">
+              <view class="material-issue-table__th material-issue-table__th--name">物料</view>
+              <view class="material-issue-table__th material-issue-table__th--wh">仓库</view>
+              <view wx:if="{{showBatchCol}}" class="material-issue-table__th material-issue-table__th--batch">批次</view>
+              <view wx:else class="material-issue-table__th material-issue-table__th--stock">库存数量</view>
+              <view class="material-issue-table__th material-issue-table__th--num">可退</view>
+              <view class="material-issue-table__th material-issue-table__th--input">本次退料</view>
+            </view>
+
+            <view wx:for="{{rows}}" wx:key="key" class="material-issue-table__tr">
+              <view class="material-issue-table__td material-issue-table__td--name">
+                <view class="material-issue-table__name-line">
+                  <text class="material-issue-table__name">{{item.productName}}</text>
+                  <text wx:if="{{item.showProductSku}}" class="material-issue-table__sku">{{item.productSku}}</text>
+                </view>
+              </view>
+              <view class="material-issue-table__td material-issue-table__td--wh">{{item.warehouseName}}</view>
+              <view wx:if="{{showBatchCol}}" class="material-issue-table__td material-issue-table__td--batch">
+                <text class="material-issue-batch-picker material-issue-batch-picker--readonly">{{item.batchNo}}</text>
+              </view>
+              <view wx:else class="material-issue-table__td material-issue-table__td--stock">{{item.stockText}}</view>
+              <view class="material-issue-table__td material-issue-table__td--num">{{item.returnableQty}}</view>
+              <view class="material-issue-table__td material-issue-table__td--input">
+                <input
+                  class="material-issue-input"
+                  type="digit"
+                  placeholder="0"
+                  value="{{item.returnQty}}"
+                  data-index="{{index}}"
+                  bindinput="onQtyInput"
+                />
+              </view>
+            </view>
+          </view>
+        </scroll-view>
       </view>
 
       <view class="dev-mat-submit-wrap">

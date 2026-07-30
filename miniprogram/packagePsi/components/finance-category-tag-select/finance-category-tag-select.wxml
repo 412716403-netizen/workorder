@@ -1,0 +1,45 @@
+<view class="fcts">
+  <view class="plan-form-cell" bindtap="onOpen">
+    <text class="plan-form-cell__label">
+      <text wx:if="{{required}}" class="plan-form-cell__req">*</text>{{label}}
+    </text>
+    <text class="plan-form-cell__value {{displayName ? '' : 'plan-form-cell__value--ph'}}">{{displayName || placeholder}}</text>
+    <text class="plan-form-cell__chevron">›</text>
+  </view>
+
+  <view wx:if="{{open}}" class="fcts__overlay" catchtouchmove="noop">
+    <view
+      class="fcts__mask {{sheetShow ? 'fcts__mask--show' : ''}}"
+      bindtap="onClose"
+      catchtouchmove="noop"
+    />
+    <view
+      class="fcts__sheet {{sheetMotion ? 'fcts__sheet--motion' : ''}} {{sheetShow ? 'fcts__sheet--show' : ''}}"
+      style="height: {{sheetHeightPx}}px; max-height: {{sheetHeightPx}}px;"
+      catchtouchmove="noop"
+    >
+      <view class="fcts__bar">
+        <text class="fcts__bar-title">选择{{label}}</text>
+        <view class="fcts__bar-collapse" bindtap="onClose" aria-role="button" aria-label="收起">
+          <text class="fcts__bar-collapse-icon">˅</text>
+        </view>
+      </view>
+
+      <scroll-view class="fcts__body" scroll-y enhanced show-scrollbar="{{false}}">
+        <view wx:if="{{categories.length === 0}}" class="fcts__empty">暂无可用分类</view>
+        <view wx:else class="fcts__grid">
+          <view
+            wx:for="{{categories}}"
+            wx:key="id"
+            class="fcts__item {{showSelectedStyle && value === item.id ? 'fcts__item--active' : ''}}"
+            data-id="{{item.id}}"
+            bindtap="onSelect"
+          >
+            <image class="fcts__item-icon" src="{{iconSrc}}" mode="aspectFit" />
+            <text class="fcts__item-label">{{item.name}}</text>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+</view>

@@ -1,6 +1,6 @@
-@import '/styles/production-plans-page.wxss';
-@import '/styles/order-detail-page.wxss';
-@import '/styles/report-batch-detail-page.wxss';
+@import '/packageBusiness/styles/production-plans-page.wxss';
+@import '/packageBusiness/styles/order-detail-page.wxss';
+@import '/packageBusiness/styles/report-batch-detail-page.wxss';
 
 .stock-in-detail-page {
   padding: 0 var(--spacing-page) 24rpx;

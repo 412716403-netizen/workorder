@@ -2,6 +2,6 @@
   "navigationStyle": "custom",
   "usingComponents": {
     "empty-state": "/components/empty-state/empty-state",
-    "matrix-qty-keyboard": "/components/matrix-qty-keyboard/matrix-qty-keyboard"
+    "matrix-qty-keyboard": "/packageBusiness/components/matrix-qty-keyboard/matrix-qty-keyboard"
   }
 }

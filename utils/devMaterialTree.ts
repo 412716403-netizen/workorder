@@ -5,6 +5,11 @@ export interface DevMaterialTreeNode {
   productId: string;
   /** 深度：顶层为 1 */
   level: number;
+  /**
+   * 相对父件（或试制 BOM）的单个用量；未知时为 null。
+   * 顶层取试制 BOM 用量，下级取产品档案 BOM 用量。
+   */
+  unitQty: number | null;
   children: DevMaterialTreeNode[];
 }
 
@@ -14,56 +19,123 @@ export interface DevMaterialFlatRow {
   hasChildren: boolean;
   /** 祖先路径拼接，同一物料在不同父下互不干扰 */
   rowKey: string;
+  /** 相对父件（或试制 BOM）的单个用量；未知时为 null */
+  unitQty: number | null;
 }
 
-/** 按 parentProductId 聚合子件 productId，跨变体/工序去重保序 */
-export function buildProductChildrenIndex(
+export interface ProductBomChildIndex {
+  childrenByParent: Map<string, string[]>;
+  /** parentId → childId → 单个用量（同 parent 下去重时保留首次出现的用量） */
+  unitQtyByParentChild: Map<string, Map<string, number>>;
+}
+
+export interface DevMaterialTreeQtyOptions {
+  /** 试制 BOM 顶层物料 productId → 单个用量 */
+  rootUnitQty?: ReadonlyMap<string, number>;
+  /** 产品档案 BOM：parent → child → 单个用量 */
+  childUnitQty?: ReadonlyMap<string, ReadonlyMap<string, number>>;
+}
+
+function toFiniteQty(raw: unknown): number | null {
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isFinite(n)) return null;
+  return n;
+}
+
+/**
+ * 试制 BOM 顶层物料的单个用量（跨变体/工序按 productId 去重，保留首次用量）。
+ */
+export function buildDevBomUnitQtyMap(
+  boms: Array<{ items?: Array<{ productId?: string | null; quantity?: number | null }> } | null | undefined> | null | undefined,
+): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const bom of boms ?? []) {
+    for (const item of bom?.items ?? []) {
+      const productId = String(item.productId ?? '').trim();
+      if (!productId || map.has(productId)) continue;
+      const qty = toFiniteQty(item.quantity);
+      if (qty == null) continue;
+      map.set(productId, qty);
+    }
+  }
+  return map;
+}
+
+/** 按 parentProductId 聚合子件与用量，跨变体/工序去重保序 */
+export function buildProductBomChildIndex(
   boms: Array<Pick<BOM, 'parentProductId' | 'items'>>,
-): Map<string, string[]> {
-  const index = new Map<string, string[]>();
+): ProductBomChildIndex {
+  const childrenByParent = new Map<string, string[]>();
+  const unitQtyByParentChild = new Map<string, Map<string, number>>();
   const seenByParent = new Map<string, Set<string>>();
   for (const bom of boms) {
     const parentId = String(bom.parentProductId ?? '').trim();
     if (!parentId) continue;
-    let list = index.get(parentId);
+    let list = childrenByParent.get(parentId);
     let seen = seenByParent.get(parentId);
+    let qtyMap = unitQtyByParentChild.get(parentId);
     if (!list) {
       list = [];
       seen = new Set();
-      index.set(parentId, list);
-      seenByParent.set(parentId, seen!);
+      qtyMap = new Map();
+      childrenByParent.set(parentId, list);
+      seenByParent.set(parentId, seen);
+      unitQtyByParentChild.set(parentId, qtyMap);
     }
     for (const item of bom.items ?? []) {
       const childId = String(item.productId ?? '').trim();
       if (!childId || seen!.has(childId)) continue;
       seen!.add(childId);
       list.push(childId);
+      const qty = toFiniteQty(item.quantity);
+      if (qty != null) qtyMap!.set(childId, qty);
     }
   }
-  return index;
+  return { childrenByParent, unitQtyByParentChild };
+}
+
+/** 按 parentProductId 聚合子件 productId，跨变体/工序去重保序 */
+export function buildProductChildrenIndex(
+  boms: Array<Pick<BOM, 'parentProductId' | 'items'>>,
+): Map<string, string[]> {
+  return buildProductBomChildIndex(boms).childrenByParent;
 }
 
 function buildNode(
   productId: string,
   level: number,
+  unitQty: number | null,
   childrenIndex: Map<string, string[]>,
+  childUnitQty: ReadonlyMap<string, ReadonlyMap<string, number>> | undefined,
   pathVisited: Set<string>,
 ): DevMaterialTreeNode {
   const children: DevMaterialTreeNode[] = [];
   if (level < DEV_MATERIAL_BOM_MAX_DEPTH && !pathVisited.has(productId)) {
     const nextVisited = new Set(pathVisited);
     nextVisited.add(productId);
+    const qtyUnderParent = childUnitQty?.get(productId);
     for (const childId of childrenIndex.get(productId) ?? []) {
-      children.push(buildNode(childId, level + 1, childrenIndex, nextVisited));
+      const childQty = qtyUnderParent?.get(childId);
+      children.push(
+        buildNode(
+          childId,
+          level + 1,
+          childQty == null || !Number.isFinite(childQty) ? null : childQty,
+          childrenIndex,
+          childUnitQty,
+          nextVisited,
+        ),
+      );
     }
   }
-  return { productId, level, children };
+  return { productId, level, unitQty, children };
 }
 
 /** 以试制 BOM 顶层 id 为根，按产品档案 BOM 递归建树（路径防环 + 深度上限） */
 export function buildDevMaterialTree(
   rootIds: string[],
   childrenIndex: Map<string, string[]>,
+  qty?: DevMaterialTreeQtyOptions,
 ): DevMaterialTreeNode[] {
   const roots: DevMaterialTreeNode[] = [];
   const seenRoot = new Set<string>();
@@ -71,7 +143,17 @@ export function buildDevMaterialTree(
     const productId = String(raw ?? '').trim();
     if (!productId || seenRoot.has(productId)) continue;
     seenRoot.add(productId);
-    roots.push(buildNode(productId, 1, childrenIndex, new Set()));
+    const rootQty = qty?.rootUnitQty?.get(productId);
+    roots.push(
+      buildNode(
+        productId,
+        1,
+        rootQty == null || !Number.isFinite(rootQty) ? null : rootQty,
+        childrenIndex,
+        qty?.childUnitQty,
+        new Set(),
+      ),
+    );
   }
   return roots;
 }
@@ -91,6 +173,7 @@ export function flattenVisibleRows(
       level: node.level,
       hasChildren,
       rowKey,
+      unitQty: node.unitQty,
     });
     if (hasChildren && expandedIds.has(rowKey)) {
       rows.push(...flattenVisibleRows(node.children, expandedIds, rowKey));

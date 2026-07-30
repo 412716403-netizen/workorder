@@ -1,7 +1,7 @@
-@import '/styles/production-plans-page.wxss';
-@import '/styles/production-orders-page.wxss';
-@import '/styles/report-history-page.wxss';
-@import '../../styles/qty-price-amount-summary.wxss';
+@import '/packagePsi/styles/production-plans-page.wxss';
+@import '/packagePsi/styles/production-orders-page.wxss';
+@import '/packagePsi/styles/report-history-page.wxss';
+@import '/packagePsi/styles/qty-price-amount-summary.wxss';
 
 .po-flow-btn {
   flex-shrink: 0;

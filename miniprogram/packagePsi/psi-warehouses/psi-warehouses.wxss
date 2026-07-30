@@ -1,1 +1,1 @@
-@import '../../styles/warehouse-inventory.wxss';
+@import '/packagePsi/styles/warehouse-inventory.wxss';

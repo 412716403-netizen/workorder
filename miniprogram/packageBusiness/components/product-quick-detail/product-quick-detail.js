@@ -48,6 +48,12 @@ Component({
       this.triggerEvent('bomskutap', { id });
     },
 
+    onBomExpandTap(e) {
+      const rowKey = e.currentTarget.dataset.rowKey;
+      if (!rowKey) return;
+      this.triggerEvent('bomexpandtap', { rowKey });
+    },
+
     onCustomKnowledgeTap(e) {
       const id = e.currentTarget.dataset.id;
       if (!id) return;

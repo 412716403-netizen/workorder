@@ -248,18 +248,18 @@ const {
 - **编辑态**：单号已存在，登记页直接 `POST /finance/records`，回传后重新反查金额。
 - 无对应 `finance:receipt|payment` 查看权限时**不发起**反查请求（该端点要求 `finance` 下任一权限，否则 403）。
 
-**分包约束**：`packagePsi` 不能 require `packageFinance`，收付款表单逻辑因此放在主包 [`utils/financeRecordForm.js`](../miniprogram/utils/financeRecordForm.js)（`packageFinance/utils/financeRecords.js` 只做展示侧 + re-export），样式在 [`styles/finance-record-form.wxss`](../miniprogram/styles/finance-record-form.wxss)。
+**分包约束**：`packagePsi` 不能 require `packageFinance`，收付款表单逻辑因此放在主包 [`utils/financeRecordForm.js`](../miniprogram/utils/financeRecordForm.js)（`packageFinance/utils/financeRecords.js` 只做展示侧 + re-export）。样式按实际使用包复制到 `packagePsi/styles/` 与 `packageFinance/styles/`，避免只被分包使用的 WXSS 进入主包。
 
 ### 组件
 
 | 组件 | 路径 | 用途 |
 |------|------|------|
-| `searchable-partner-select` | [`components/searchable-partner-select/`](../miniprogram/components/searchable-partner-select/) | 合作单位 / 客户 / 加工厂（搜索 + 分类 Tab 底栏弹层） |
-| `searchable-product-select` | [`components/searchable-product-select/`](../miniprogram/components/searchable-product-select/) | 产品（搜索 + 分类 Tab + 缩略图/SKU）；**弹层统一**对齐生产计划新建：顶栏「取消 / 标题」、约 75% 屏高；`cell` / `embedded` 只影响触发行样式，不影响弹层 |
-| `finance-category-tag-select` | [`components/finance-category-tag-select/`](../miniprogram/components/finance-category-tag-select/) | 收/付款单据分类：5 列图标标签宫格，底栏与创建时间同高（约 55%）；统一细线简约 `finance-category` 图标；仅一项时不显示已选高亮；无「最近使用」/分组标题 |
-| `finance-account-select` | [`components/finance-account-select/`](../miniprogram/components/finance-account-select/) | 收/付款收支账户与转账转出/转入：列表行（蓝线 `wallet` 图标 + 名称 + 余额副标题 + 勾选）；`valueMode=name|id`；底栏与创建时间同高（约 55%）；仅一项时不显示勾选；无「最近使用」/「添加账户」 |
-| `datetime-calendar-select` | [`components/datetime-calendar-select/`](../miniprogram/components/datetime-calendar-select/) | 创建时间：日历选日 + 点「时刻」进时分滚轮；点月标题进年月滚轮；无时间启用开关；右上角「完成」提交；底栏约 55% 屏高 |
-| `matrix-qty-keyboard` | [`components/matrix-qty-keyboard/`](../miniprogram/components/matrix-qty-keyboard/) | 矩阵格数量自定义键盘（↵ 同行下一格、→ 同列下一行、完成关闭） |
+| `searchable-partner-select` | 各使用分包的 `components/searchable-partner-select/` | 合作单位 / 客户 / 加工厂（搜索 + 分类 Tab 底栏弹层） |
+| `searchable-product-select` | 各使用分包的 `components/searchable-product-select/` | 产品（搜索 + 分类 Tab + 缩略图/SKU）；**弹层统一**对齐生产计划新建：顶栏「取消 / 标题」、约 75% 屏高；`cell` / `embedded` 只影响触发行样式，不影响弹层 |
+| `finance-category-tag-select` | `packagePsi/components/`、`packageFinance/components/` | 收/付款单据分类：5 列图标标签宫格，底栏与创建时间同高（约 55%）；统一细线简约 `finance-category` 图标；仅一项时不显示已选高亮；无「最近使用」/分组标题 |
+| `finance-account-select` | `packagePsi/components/`、`packageFinance/components/` | 收/付款收支账户与转账转出/转入：列表行（蓝线 `wallet` 图标 + 名称 + 余额副标题 + 勾选）；`valueMode=name|id`；底栏与创建时间同高（约 55%）；仅一项时不显示勾选；无「最近使用」/「添加账户」 |
+| `datetime-calendar-select` | 各使用分包的 `components/datetime-calendar-select/` | 创建时间：日历选日 + 点「时刻」进时分滚轮；点月标题进年月滚轮；无时间启用开关；右上角「完成」提交；底栏约 55% 屏高 |
+| `matrix-qty-keyboard` | `packageBusiness/components/`、`packagePsi/components/` | 矩阵格数量自定义键盘（↵ 同行下一格、→ 同列下一行、完成关闭） |
 
 ### 数据加载（planApi）
 
@@ -288,7 +288,7 @@ const {
 
 | 包 | root | 内容 |
 |---|---|---|
-| 主包 | `miniprogram/` | Tab/登录等；**多分包共用**的 `utils/`、`components/`（选择器、矩阵键盘等）、`styles/` |
+| 主包 | `miniprogram/` | Tab/登录等；主包页面依赖以及不能复制的跨分包共享 `utils/` |
 | 生产分包 | `packageBusiness` | 计划/工单/外协/返工/物料/基础档案等 |
 | 进销存分包 | `packagePsi` | 采购/销售/仓库 |
 | 财务分包 | `packageFinance` | 收款/付款/对账/资金账户 |
@@ -296,10 +296,11 @@ const {
 约定：
 
 1. **仅单一分包使用的代码**放在该分包内，不要塞进主包（避免「主包仅被分包依赖」）。例如：`scan-batch-modal` → `packageBusiness`；`batch-return-input` → `packagePsi`。
-2. **两个及以上分包都要用的**组件/工具/样式放主包（主包定位：公共资源），如矩阵键盘、可搜索选择器、`orderApi` / `saveNavigation`。
+2. **两个及以上分包共用的组件 / 样式**按使用包复制到各自分包，避免进入主包依赖图；跨分包共享 JS 工具仍放主包，如 `orderApi` / `saveNavigation`。
 3. 分包之间**不可** `require` / `@import` / 引用对方组件；跨包跳转用绝对路径（`/packagePsi/...`）。
-4. `preloadRule` 仅在 Wi‑Fi 下预下载高频的 `business` 分包，避免一进应用就拉满全量业务包。
-5. 已开启 `"lazyCodeLoading": "requiredComponents"`（按需注入）；定期用开发者工具「代码质量 / 依赖分析」清理无依赖文件。
+4. `preloadRule`：Wi‑Fi 下从首页 / 应用 Tab 预下载 `business` 分包；勿默认预载全部三个分包。
+5. 已开启 `"lazyCodeLoading": "requiredComponents"`（按需注入）；包体收敛脚本：`miniprogram/scripts/optimize-main-package.cjs`。
+6. 列表产品缩略图优先 `lazy-load`；产品详情 BOM 钻取注意页面栈上限（≥9 层改 `redirectTo`）。
 
 ### 矩阵键盘
 
@@ -314,7 +315,7 @@ const {
 
 ### 分包体积
 
-- 单包上限 2MB。超限时优先**按业务再拆分包**，公共能力留主包；勿用「全塞主包」规避。
+- 单包上限 2MB。超限时优先**按业务再拆分包**；组件 / 样式可按使用包复制，跨分包 JS 公共能力留主包。
 
 ### 禁止项
 
@@ -1062,7 +1063,7 @@ npm run miniprogram:icons
 | 创建/编辑 | [`development-style-edit/`](../miniprogram/packageBusiness/development-style-edit/) | 分类商品字段（产品编号可按分类规则自动取号，与产品档案同口径；产品名称/款号选填）、开发流程节点（新建默认不勾选，须手动选择）、大货工序；保存回列表 |
 | 节点登记 | [`development-stage-register/`](../miniprogram/packageBusiness/development-stage-register/) | 四态 + 模板自定义字段；`todo_reminder` 开启时可加待办 |
 | BOM 录入 | [`development-bom-edit/`](../miniprogram/packageBusiness/development-bom-edit/) | **格子下钻**（变体×工序 → 物料行），非 Web 整表矩阵；同数据源 `dev_boms` + `syncVariantNodeBoms` |
-| 开发领/退料 | [`development-material-operation/`](../miniprogram/packageBusiness/development-material-operation/) | `mode=issue|return`；试制 BOM / 可退行；仓库与批次；写 `/dev/styles/:id/material-issues|returns/batch` |
+| 开发领/退料 | [`development-material-operation/`](../miniprogram/packageBusiness/development-material-operation/) | `mode=issue|return`；横滑表对齐 Web：领料「物料 / 单个用量 / 净领用 / 库存数量 / (批次) / 本次领料」，试制 BOM 顶层可展开产品档案 BOM 子料（深度 ≤8）；退料「物料 / 仓库 / 批次或库存 / 可退 / 本次退料」；库存来自 `fetchStockSnapshot`；写 `/dev/styles/:id/material-issues|returns/batch` |
 | 开发物料 | [`development-material-records/`](../miniprogram/packageBusiness/development-material-records/) | 汇总 + 领料/退料入口 + 按单号流水（对齐 Web 开发物料弹窗） |
 | 节点库 | [`development-stage-templates/`](../miniprogram/packageBusiness/development-stage-templates/) + [`development-stage-template-edit/`](../miniprogram/packageBusiness/development-stage-template-edit/) | 模板 CRUD、排序、字段配置 |
 
@@ -1081,18 +1082,20 @@ npm run miniprogram:icons
 
 ## 分包与上传体积
 
-微信代码质量要求**主包（不含插件）< 1.5 MB**。业务页全部放在 [`app.json`](../miniprogram/app.json) 的 `business` 分包（`root: packageBusiness`），主包仅保留 Tab 壳、登录/租户、消息聊天、系统设置等入口页（仍在 `pages/` 目录）。
+微信代码质量要求**主包（不含插件）< 1.5 MB**。业务页按生产、进销存、财务拆入 [`app.json`](../miniprogram/app.json) 的三个分包，主包仅保留 Tab 壳、登录/租户、消息聊天、系统设置等入口页（仍在 `pages/` 目录）。
 
 | 包 | 目录 / 页面范围 |
 |----|----------------|
 | **主包** | `pages/`：`home` / `apps` / `scan` / `messages` / `mine`、登录与租户、`messages-chat`、`settings*` |
-| **business 分包** | `packageBusiness/`：生产 / 进销存 / 财务 / 产品档案 / 合作单位 / 成员管理 / 公共数据字典 / 扫码连续作业（`scan-setup`、`scan-session`） |
+| **business 分包** | `packageBusiness/`：生产 / 产品档案 / 合作单位 / 成员管理 / 公共数据字典 / 扫码连续作业 |
+| **PSI 分包** | `packagePsi/`：采购 / 销售 / 仓库 |
+| **finance 分包** | `packageFinance/`：收付款 / 对账 / 资金账户 |
 
-新增业务页时：**不要**写入主包 `pages` 数组；在 `packageBusiness/` 下新建页面目录，并追加到 `subPackages[0].pages`（路径相对 `packageBusiness/`，如 `finance-foo/finance-foo`）。跳转 URL 使用 `/packageBusiness/...`（见 [`saveNavigation.js`](../miniprogram/packageBusiness/utils/saveNavigation.js) `LIST_ROUTES`）。
+新增业务页时：**不要**写入主包 `pages` 数组；按领域在对应分包下新建页面，并追加到相应 `subPackages[].pages`。跳转 URL 使用对应分包绝对路径。
 
 `preloadRule`：进入「应用」「扫码」Tab 时预下载 `business` 分包，减少首次打开业务页的等待。
 
-上传优化（[`project.config.json`](../miniprogram/project.config.json)）：`uploadWithSourceMap: false`、`ignoreDevUnusedFiles: true`。
+上传优化（[`project.config.json`](../miniprogram/project.config.json)）：`uploadWithSourceMap: false`、`ignoreDevUnusedFiles: true`，并忽略 `*.test.ts` / `*.test.js`。
 
 若主包仍超限：检查主包页是否 `require` 了仅分包使用的 `utils/`；或将图标等资源进一步压缩。
 
@@ -1100,15 +1103,16 @@ npm run miniprogram:icons
 
 | 目录 | 用途 |
 |------|------|
-| `miniprogram/utils/` | **仅主包**可达的工具（`session`、`request`、`permissions`、工作台、消息 Tab 等） |
+| `miniprogram/utils/` | 主包能力及跨多个分包共享的 JS 工具（`session`、`request`、`orderApi`、`saveNavigation` 等） |
 | `miniprogram/config/` | **仅主包**菜单/设置/扫码类型等 |
 | `miniprogram/components/` | **仅主包**页注册的组件（`tab-shell`、`icon-grid`、`page-header` 等） |
-| `packageBusiness/utils/` | 生产 / 进销存 / 财务 / 档案等业务工具 |
+| `packageBusiness/utils/` | 生产 / 档案等业务工具 |
 | `packageBusiness/config/` | 各业务模块列表配置 |
-| `packageBusiness/components/` | 仅分包页引用的表单组件（产品/合作单位选择、矩阵键盘等） |
+| `package*/components/` | 各分包页面使用的组件；跨分包复用组件在各使用包保留副本 |
+| `package*/styles/` | 各分包页面使用的样式；跨分包复用样式在各使用包保留副本 |
 
 分包页引用：`require('../utils/...')` / `require('../config/...')`；需用主包能力时用 `require('../../utils/...')`（如 `session.js`）。**禁止**主包 `require` 分包内 JS。
 
-分析脚本：`miniprogram/scripts/analyze-main-package-deps.cjs`（输出主包未使用的 utils/config）。
+分析脚本：`miniprogram/scripts/analyze-main-package-deps.cjs`（输出主包未使用的 utils/config）；迁移与依赖校验脚本：`miniprogram/scripts/optimize-main-package.cjs`。
 
-**WXSS 跨包**：主包 `styles/` **不得** `@import` 分包内 `.wxss`（微信编译报错）。共用样式须放在主包 `styles/`（如 `plan-list-shell.wxss`），分包页面再 `@import '../../styles/...'`。
+**WXSS 跨包**：主包 `styles/` **不得** `@import` 分包内 `.wxss`（微信编译报错）。主包页面需要的共用样式保留主包；仅分包使用的样式按包复制后，从 `/packageX/styles/...` 引入。

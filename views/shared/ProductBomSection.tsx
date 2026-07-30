@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Boxes, ChevronRight } from 'lucide-react';
+import { Boxes, ChevronDown, ChevronRight } from 'lucide-react';
 import type {
   AppDictionaries,
   BOM,
@@ -8,6 +8,9 @@ import type {
   ProductCategory,
 } from '../../types';
 import { bomHasConfiguredItems } from '../../utils/bomEffective';
+import { buildProductBomChildIndex } from '../../utils/devMaterialTree';
+import { buildProductBomExpandLines } from '../../utils/productBomExpand';
+import { formatMaterialQtyDisplay } from '../../utils/formatMaterialQtyDisplay';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 
 export interface ProductBomSectionProps {
@@ -31,6 +34,7 @@ const ProductBomSection: React.FC<ProductBomSectionProps> = ({
   onOpenProduct,
 }) => {
   const [bomSkuId, setBomSkuId] = useState<string | null>(null);
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => new Set());
 
   // boms 是全量清单，堆叠详情时每层都会重渲染，这里收敛为一次过滤
   const productBomsWithItems = useMemo(
@@ -38,6 +42,7 @@ const ProductBomSection: React.FC<ProductBomSectionProps> = ({
     [boms, p.id],
   );
   const productsById = useMemo(() => new Map(products.map(x => [x.id, x])), [products]);
+  const productBomIndex = useMemo(() => buildProductBomChildIndex(boms), [boms]);
 
   useEffect(() => {
     const singleId = `single-${p.id}`;
@@ -52,6 +57,10 @@ const ProductBomSection: React.FC<ProductBomSectionProps> = ({
     }
     setBomSkuId(null);
   }, [p.id, p.variants, productBomsWithItems]);
+
+  useEffect(() => {
+    setExpandedKeys(new Set());
+  }, [p.id, bomSkuId]);
 
   const hasBomNodes = (p.milestoneNodeIds || []).some(
     nid => globalNodes.find(n => n.id === nid)?.hasBOM
@@ -73,6 +82,15 @@ const ProductBomSection: React.FC<ProductBomSectionProps> = ({
   const selectedSkuBoms = bomSkuId
     ? productBomsWithItems.filter(b => b.variantId === bomSkuId)
     : [];
+
+  const toggleExpand = (rowKey: string) => {
+    setExpandedKeys(prev => {
+      const next = new Set(prev);
+      if (next.has(rowKey)) next.delete(rowKey);
+      else next.add(rowKey);
+      return next;
+    });
+  };
 
   if (productBomsWithItems.length === 0 && !hasBomNodes) return null;
 
@@ -110,6 +128,13 @@ const ProductBomSection: React.FC<ProductBomSectionProps> = ({
         <div className="space-y-4 pt-1">
           {selectedSkuBoms.map(bom => {
             const nodeName = bom.nodeId ? globalNodes.find(n => n.id === bom.nodeId)?.name : null;
+            const lines = buildProductBomExpandLines(
+              bom.items ?? [],
+              bom.id,
+              productBomIndex.childrenByParent,
+              productBomIndex.unitQtyByParentChild,
+              expandedKeys,
+            );
             return (
               <div key={bom.id} className="bg-slate-50 rounded-2xl p-4 border border-slate-100 space-y-1">
                 <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2">
@@ -121,74 +146,101 @@ const ProductBomSection: React.FC<ProductBomSectionProps> = ({
                   </div>
                 </div>
                 <div className="space-y-2">
-                  {bom.items
-                    .filter(it => (it.productId ?? '').trim() !== '')
-                    .map((item, idx) => {
-                      const subProd = productsById.get(item.productId);
-                      const subUnit = subProd?.unitId
-                        ? dictionaries.units?.find(u => u.id === subProd.unitId)?.name
-                        : '件';
-                      const subCat = categories.find(c => c.id === subProd?.categoryId);
-                      const customTags = getProductCategoryCustomFieldEntries(subProd, subCat, {
-                        includeFile: false,
-                      });
-                      const label = subProd
-                        ? [
-                            (subProd.name || '').trim() || '未知物料',
-                            (subProd.sku || '').trim(),
-                          ]
-                            .filter(Boolean)
-                            .join(' ')
-                        : '未知物料';
-                      return (
-                        <div
-                          key={`${bom.id}-${idx}`}
-                          className="rounded-xl bg-white border border-slate-100 px-3 py-2"
-                        >
-                          <div className="flex justify-between gap-2 items-start">
-                            <div className="min-w-0 flex-1">
-                              {subProd && onOpenProduct ? (
+                  {lines.map(line => {
+                    const subProd = productsById.get(line.productId);
+                    const subUnit = subProd?.unitId
+                      ? dictionaries.units?.find(u => u.id === subProd.unitId)?.name
+                      : '件';
+                    const subCat = categories.find(c => c.id === subProd?.categoryId);
+                    const customTags = getProductCategoryCustomFieldEntries(subProd, subCat, {
+                      includeFile: false,
+                    });
+                    const label = subProd
+                      ? [
+                          (subProd.name || '').trim() || '未知物料',
+                          (subProd.sku || '').trim(),
+                        ]
+                          .filter(Boolean)
+                          .join(' ')
+                      : '未知物料';
+                    const isExpanded = expandedKeys.has(line.rowKey);
+                    const padLeft = 4 + (line.level - 1) * 14;
+                    return (
+                      <div
+                        key={line.rowKey}
+                        className="rounded-xl bg-white border border-slate-100 px-3 py-2"
+                      >
+                        <div className="flex justify-between gap-2 items-start">
+                          <div className="min-w-0 flex-1" style={{ paddingLeft: padLeft }}>
+                            <div className="flex min-w-0 items-start gap-1">
+                              {line.hasChildren ? (
                                 <button
                                   type="button"
-                                  onClick={e => {
-                                    e.stopPropagation();
-                                    onOpenProduct(subProd.id);
-                                  }}
-                                  className="text-sm font-bold text-indigo-600 hover:underline inline-flex items-center gap-1 max-w-full text-left"
-                                  title="查看物料详情"
+                                  onClick={() => toggleExpand(line.rowKey)}
+                                  className="mt-0.5 shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                                  title={isExpanded ? '收起子物料' : '展开子物料 BOM'}
+                                  aria-label={isExpanded ? '收起子物料' : '展开子物料 BOM'}
                                 >
-                                  <span className="truncate">{label}</span>
-                                  <ChevronRight className="w-3.5 h-3.5 shrink-0" />
+                                  {isExpanded ? (
+                                    <ChevronDown className="h-3.5 w-3.5" />
+                                  ) : (
+                                    <ChevronRight className="h-3.5 w-3.5" />
+                                  )}
                                 </button>
                               ) : (
-                                <p className="text-sm font-bold text-slate-800 truncate">{label}</p>
+                                <span className="mt-0.5 inline-block h-3.5 w-3.5 shrink-0" aria-hidden />
                               )}
-                              {customTags.length > 0 && (
-                                <div className="mt-0.5 flex flex-wrap items-center gap-1">
-                                  {customTags.map(({ field, display }) => (
-                                    <span
-                                      key={field.id}
-                                      className="rounded bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-500"
-                                    >
-                                      {field.label}: {display}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
+                              <div className="min-w-0 flex-1">
+                                {subProd && onOpenProduct ? (
+                                  <button
+                                    type="button"
+                                    onClick={e => {
+                                      e.stopPropagation();
+                                      onOpenProduct(subProd.id);
+                                    }}
+                                    className="text-sm font-bold text-indigo-600 hover:underline inline-flex items-center gap-1 max-w-full text-left"
+                                    title="查看物料详情"
+                                  >
+                                    <span className="truncate">{label}</span>
+                                    <ChevronRight className="w-3.5 h-3.5 shrink-0" />
+                                  </button>
+                                ) : (
+                                  <p className="text-sm font-bold text-slate-800 truncate">{label}</p>
+                                )}
+                                {customTags.length > 0 && (
+                                  <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                                    {customTags.map(({ field, display }) => (
+                                      <span
+                                        key={field.id}
+                                        className="rounded bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-500"
+                                      >
+                                        {field.label}: {display}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                            <span className="text-sm font-black text-indigo-600 shrink-0">
-                              ×{item.quantity}{' '}
-                              <span className="text-xs font-bold text-slate-500">{subUnit}</span>
-                            </span>
                           </div>
-                          {item.note?.trim() && (
-                            <p className="text-[11px] text-slate-500 mt-1.5 border-t border-slate-100 pt-1.5">
-                              备注：{item.note.trim()}
-                            </p>
-                          )}
+                          <span className="text-sm font-black text-indigo-600 shrink-0">
+                            {line.quantity == null ? (
+                              '—'
+                            ) : (
+                              <>
+                                ×{formatMaterialQtyDisplay(line.quantity)}{' '}
+                                <span className="text-xs font-bold text-slate-500">{subUnit}</span>
+                              </>
+                            )}
+                          </span>
                         </div>
-                      );
-                    })}
+                        {line.note?.trim() && (
+                          <p className="text-[11px] text-slate-500 mt-1.5 border-t border-slate-100 pt-1.5">
+                            备注：{line.note.trim()}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );

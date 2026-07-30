@@ -584,6 +584,7 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
                   loading={materialLoading}
                   products={products}
                   boms={boms}
+                  devBoms={devBoms}
                   categories={categories}
                   warehouses={warehouses}
                   partners={partners}

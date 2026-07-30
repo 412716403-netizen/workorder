@@ -1,5 +1,5 @@
 @import '../psi-warehouse-transfer-detail/psi-warehouse-transfer-detail.wxss';
-@import '../../styles/qty-price-amount-summary.wxss';
+@import '/packagePsi/styles/qty-price-amount-summary.wxss';
 
 .wh-diff--pos {
   color: #16a34a !important;

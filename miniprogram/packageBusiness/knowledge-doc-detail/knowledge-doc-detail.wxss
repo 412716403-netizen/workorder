@@ -1,4 +1,4 @@
-@import '/styles/psi-purchase-order-detail-page.wxss';
+@import '/packageBusiness/styles/psi-purchase-order-detail-page.wxss';
 
 .kb-doc-header-bar {
   position: relative;

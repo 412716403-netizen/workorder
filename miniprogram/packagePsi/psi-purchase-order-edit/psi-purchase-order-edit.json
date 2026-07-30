@@ -1,9 +1,9 @@
 {
   "navigationStyle": "custom",
   "usingComponents": {
-    "datetime-calendar-select": "/components/datetime-calendar-select/datetime-calendar-select",
-    "searchable-product-select": "/components/searchable-product-select/searchable-product-select",
-    "searchable-partner-select": "/components/searchable-partner-select/searchable-partner-select",
-    "matrix-qty-keyboard": "/components/matrix-qty-keyboard/matrix-qty-keyboard"
+    "datetime-calendar-select": "/packagePsi/components/datetime-calendar-select/datetime-calendar-select",
+    "searchable-product-select": "/packagePsi/components/searchable-product-select/searchable-product-select",
+    "searchable-partner-select": "/packagePsi/components/searchable-partner-select/searchable-partner-select",
+    "matrix-qty-keyboard": "/packagePsi/components/matrix-qty-keyboard/matrix-qty-keyboard"
   }
 }

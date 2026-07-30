@@ -18,6 +18,14 @@
       {
         "type": "suffix",
         "value": ".example"
+      },
+      {
+        "type": "suffix",
+        "value": ".test.ts"
+      },
+      {
+        "type": "suffix",
+        "value": ".test.js"
       }
     ]
   },
