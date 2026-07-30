@@ -301,6 +301,11 @@ interface BOM {
 
 **关联**：`Product.variants[].nodeBOMs` 为 `{ [nodeId]: bomId }`，按工序绑定 BOM。`Product.variants[].nodeUnitWeights` 为 `{ [nodeId]: number }`（kg），按规格×工序维护单件标准重量，供扫码称重校验。
 
+**子件自引用**：`BOMItem.productId` 指向另一个 `Product`（物料即产品）。只读产品详情支持双向下钻，无专用后端接口，均用已全量加载的 `boms` 在前端反查：
+
+- **正向**：点击 BOM 子件打开该物料详情。Web 端叠加弹窗（`PlanProductDetail` 内维护 productId 栈，点到已在栈中的产品回退到那一层）；小程序端 `wx.navigateTo` 再开一层。
+- **反向（where-used）**：当前产品被其他产品 BOM 引用时展示「被以下产品调用」，只列产品编号 + 名称，一层直接父级、排除自引用，超过 10 条折叠。Web 见 `utils/bomWhereUsed.ts` 的 `findBomParentProductIds`；小程序同口径实现在 `miniprogram/packageBusiness/utils/knowledgeProductDetailView.js`。
+
 ### 5.1 开发款式 BOM（DevBom）
 
 与产品 BOM 同形，见 `shared/types.ts` 中 `DevBomDto` / `DevBomItemDto`：

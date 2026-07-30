@@ -1,4 +1,5 @@
 const { productNameSkuParts } = require('../../utils/productionPlans.js');
+const { listProductNameSkuFields } = require('../../utils/listProductThumb.js');
 const { getProductUnitName } = require('../utils/productionOrders.js');
 const {
   effectiveCustomDocFieldType,
@@ -336,6 +337,8 @@ function buildBomGroups(product, bomSkuId, productBomsWithItems, globalNodes, pr
           const titleName = parts.showSku && parts.sku ? `${code} ${parts.sku}` : code;
           return {
             key: `${bom.id}-${idx}`,
+            productId: sub ? sub.id : '',
+            canOpen: Boolean(sub),
             productName: titleName,
             customTags,
             showCustomTags: customTags.length > 0,
@@ -353,6 +356,55 @@ function buildBomGroups(product, bomSkuId, productBomsWithItems, globalNodes, pr
       };
     })
     .filter((g) => g.items.length > 0);
+}
+
+/** 通用辅料可能被上百个产品引用，默认折叠到这个条数（对齐 Web ProductBomWhereUsedSection） */
+const WHERE_USED_COLLAPSED_COUNT = 10;
+
+/**
+ * 反查：哪些产品的 BOM 把 materialProductId 当子件用（一层直接父级，排除自引用）。
+ * 与 Web `utils/bomWhereUsed.ts` 的 findBomParentProductIds 同口径。
+ */
+function findBomParentProductIds(boms, materialProductId) {
+  const id = String(materialProductId || '').trim();
+  if (!id) return [];
+  const seen = {};
+  const result = [];
+  (boms || []).forEach((bom) => {
+    const parentId = String((bom && bom.parentProductId) || '').trim();
+    if (!parentId || parentId === id || seen[parentId]) return;
+    const hit = ((bom && bom.items) || []).some(
+      (item) => String((item && item.productId) || '').trim() === id,
+    );
+    if (hit) {
+      seen[parentId] = true;
+      result.push(parentId);
+    }
+  });
+  return result;
+}
+
+/** 「被以下产品调用」列表：只展示产品编号 + 名称，按编号排序 */
+function buildWhereUsedRows(product, boms, products) {
+  const parentIds = findBomParentProductIds(boms, product && product.id);
+  if (!parentIds.length) return [];
+  const productMap = {};
+  (products || []).forEach((p) => {
+    if (p && p.id) productMap[p.id] = p;
+  });
+  return parentIds
+    .map((parentProductId) => {
+      const parent = productMap[parentProductId] || null;
+      const fields = listProductNameSkuFields(parent, { name: parentProductId });
+      return {
+        productId: parentProductId,
+        canOpen: Boolean(parent),
+        productName: fields.productName,
+        productSku: fields.productSku,
+        showProductSku: fields.showProductSku,
+      };
+    })
+    .sort((a, b) => String(a.productName).localeCompare(String(b.productName), 'zh'));
 }
 
 /**
@@ -437,6 +489,14 @@ function buildKnowledgeProductDetailView(ctx) {
 
   const imageUrl = resolveSafeProductImageUrl(product);
 
+  const whereUsedAll = buildWhereUsedRows(product, boms, products);
+  const whereUsedExpanded = Boolean(ctx.whereUsedExpanded);
+  const whereUsedCollapsible = whereUsedAll.length > WHERE_USED_COLLAPSED_COUNT;
+  const whereUsedRows =
+    whereUsedCollapsible && !whereUsedExpanded
+      ? whereUsedAll.slice(0, WHERE_USED_COLLAPSED_COUNT)
+      : whereUsedAll;
+
   return {
     productName: parts.name || product.name || '产品',
     productSku: parts.sku || product.sku || '',
@@ -456,12 +516,19 @@ function buildKnowledgeProductDetailView(ctx) {
     bomEmptyText,
     showBomEmpty: Boolean(bomEmptyText),
     defaultBomSkuId: resolveDefaultBomSkuId(bomSkuOptions, productBomsWithItems),
+    whereUsedRows,
+    showWhereUsedSection: whereUsedAll.length > 0,
+    whereUsedCollapsible,
+    whereUsedToggleText: whereUsedExpanded
+      ? `收起（共 ${whereUsedAll.length} 个）`
+      : `展开全部（共 ${whereUsedAll.length} 个）`,
   };
 }
 
 module.exports = {
   buildKnowledgeProductDetailView,
   bomHasConfiguredItems,
+  findBomParentProductIds,
   resolveDefaultBomSkuId,
   isHeavyDataUrl,
   resolveSafeProductImageUrl,

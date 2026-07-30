@@ -158,7 +158,11 @@
         >
           <view class="kb-bom-item__main">
             <view class="kb-bom-item__text">
-              <text class="kb-bom-item__name">{{mat.productName}}</text>
+              <text
+                class="kb-bom-item__name {{mat.canOpen ? 'kb-bom-item__name--link' : ''}}"
+                data-product-id="{{mat.productId}}"
+                bindtap="onProductTap"
+              >{{mat.productName}}</text>
               <view wx:if="{{mat.showCustomTags}}" class="kb-bom-item__tags">
                 <text
                   wx:for="{{mat.customTags}}"
@@ -174,5 +178,28 @@
         </view>
       </view>
     </view>
+  </view>
+
+  <view wx:if="{{showWhereUsedSection}}" class="plan-detail-section">
+    <view class="plan-detail-section__head">
+      <text class="plan-detail-section__title">被以下产品调用</text>
+    </view>
+    <view class="kb-where-used">
+      <view
+        wx:for="{{whereUsedRows}}"
+        wx:key="productId"
+        class="kb-where-used__row"
+        data-product-id="{{item.productId}}"
+        bindtap="onProductTap"
+      >
+        <text class="kb-where-used__name {{item.canOpen ? 'kb-where-used__name--link' : ''}}">{{item.productName}}</text>
+        <text wx:if="{{item.showProductSku}}" class="kb-where-used__sku">{{item.productSku}}</text>
+      </view>
+    </view>
+    <view
+      wx:if="{{whereUsedCollapsible}}"
+      class="kb-where-used__toggle"
+      bindtap="onWhereUsedToggle"
+    >{{whereUsedToggleText}}</view>
   </view>
 </view>

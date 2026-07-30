@@ -1013,7 +1013,7 @@ npm run miniprogram:icons
 |------|------|------|
 | 树 / 搜索 | [`packageBusiness/knowledge-base/`](../miniprogram/packageBusiness/knowledge-base/) | 文件夹面包屑、当前层列表、标题/正文搜索、进入文档 |
 | 文档详情 | [`packageBusiness/knowledge-doc-detail/`](../miniprogram/packageBusiness/knowledge-doc-detail/) | 标题 + 更新时间 + 消毒后 HTML（块渲染）；鉴权图片；按文档宽度展示图片；表格可横向滚动；**附件卡片**（PDF/Excel/Office 点按 `wx.openDocument`，图片点按预览，视频标签点按 `wx.previewMedia` 播放、`data-display-mode=player` 时内嵌 `<video>`，其它类型提示无法预览）；**关联产品** / **关联文档** 芯片可点跳转 |
-| 产品快览 | [`packageBusiness/knowledge-product-detail/`](../miniprogram/packageBusiness/knowledge-product-detail/) + [`components/product-quick-detail/`](../miniprogram/packageBusiness/components/product-quick-detail/) | 只读商品信息共用组件：基本信息、分类扩展属性、标准生产路线、工艺 BOM；入口含资料库关联产品、生产计划详情点产品名；无编辑/删除；大图不进 `setData` |
+| 产品快览 | [`packageBusiness/knowledge-product-detail/`](../miniprogram/packageBusiness/knowledge-product-detail/) + [`components/product-quick-detail/`](../miniprogram/packageBusiness/components/product-quick-detail/) | 只读商品信息共用组件：基本信息、分类扩展属性、标准生产路线、工艺 BOM、被以下产品调用（反向 BOM，只列编号+名称，超 10 条折叠）；BOM 子件与被调用产品可点按 `wx.navigateTo` 再开一层同页；入口含资料库关联产品、生产计划详情点产品名；无编辑/删除；大图不进 `setData` |
 
 | 工具 | 作用 |
 |------|------|

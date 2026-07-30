@@ -20,11 +20,26 @@ Component({
     bomGroups: { type: Array, value: [] },
     bomEmptyText: { type: String, value: '' },
     showBomEmpty: { type: Boolean, value: false },
+    showWhereUsedSection: { type: Boolean, value: false },
+    whereUsedRows: { type: Array, value: [] },
+    whereUsedCollapsible: { type: Boolean, value: false },
+    whereUsedToggleText: { type: String, value: '' },
   },
 
   methods: {
     onPreviewImage() {
       this.triggerEvent('previewimage');
+    },
+
+    /** BOM 子件与「被以下产品调用」共用：上抛产品 id 由页面决定如何打开 */
+    onProductTap(e) {
+      const productId = e.currentTarget.dataset.productId;
+      if (!productId) return;
+      this.triggerEvent('producttap', { productId });
+    },
+
+    onWhereUsedToggle() {
+      this.triggerEvent('whereusedtoggle');
     },
 
     onBomSkuTap(e) {

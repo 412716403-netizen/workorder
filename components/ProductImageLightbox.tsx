@@ -30,8 +30,10 @@ export function productPreviewFromSrc(src: string | null | undefined): ProductIm
 export interface ProductImageLightboxProps {
   target: ProductImagePreviewTarget | null;
   onClose: () => void;
-  /** 遮罩 z-index，默认 100 */
+  /** 遮罩 z-index Tailwind 类，默认 z-[100]；动态层级请改用 zIndex 数字 */
   zIndexClass?: string;
+  /** 遮罩 z-index 数字（内联 style，避免动态 Tailwind 类不被 JIT 收录） */
+  zIndex?: number;
   alt?: string;
 }
 
@@ -43,6 +45,7 @@ const ProductImageLightbox: React.FC<ProductImageLightboxProps> = ({
   target,
   onClose,
   zIndexClass = 'z-[100]',
+  zIndex,
   alt = '产品图片',
 }) => {
   const [displaySrc, setDisplaySrc] = useState<string>('');
@@ -89,7 +92,8 @@ const ProductImageLightbox: React.FC<ProductImageLightboxProps> = ({
   return (
     <ModalPortal>
     <div
-      className={`fixed inset-0 ${zIndexClass} flex items-center justify-center p-4 sm:p-6`}
+      className={`fixed inset-0 ${zIndex == null ? `${zIndexClass} ` : ''}flex items-center justify-center p-4 sm:p-6`}
+      style={zIndex == null ? undefined : { zIndex }}
       onClick={onClose}
       role="dialog"
       aria-modal="true"

@@ -142,6 +142,10 @@ Page({
     bomGroups: [],
     bomEmptyText: '',
     showBomEmpty: false,
+    showWhereUsedSection: false,
+    whereUsedRows: [],
+    whereUsedCollapsible: false,
+    whereUsedToggleText: '',
     statusBarHeight: 20,
     navBarHeight: 44,
     headerBlockHeight: 64,
@@ -152,6 +156,7 @@ Page({
     const nav = readNavBarMetrics();
     this._productId = options.id ? decodeURIComponent(options.id) : '';
     this._bomSkuId = '';
+    this._whereUsedExpanded = false;
     this._imageTempPath = '';
     this.setData({
       statusBarHeight: nav.statusBarHeight,
@@ -212,6 +217,20 @@ Page({
     const id = e.detail && e.detail.id;
     if (!id || id === this._bomSkuId) return;
     this._bomSkuId = id;
+    this.applyView();
+  },
+
+  /** BOM 子件 / 被调用父产品：同一路由再开一层，可逐级 navigateBack */
+  onProductTap(e) {
+    const productId = (e.detail && e.detail.productId) || '';
+    if (!productId || productId === this._productId) return;
+    wx.navigateTo({
+      url: `/packageBusiness/knowledge-product-detail/knowledge-product-detail?id=${encodeURIComponent(productId)}`,
+    });
+  },
+
+  onWhereUsedToggle() {
+    this._whereUsedExpanded = !this._whereUsedExpanded;
     this.applyView();
   },
 
@@ -345,6 +364,7 @@ Page({
       boms: this._boms,
       products: this._products,
       bomSkuId: this._bomSkuId,
+      whereUsedExpanded: this._whereUsedExpanded,
     });
     if (!this._bomSkuId && view.defaultBomSkuId) {
       this._bomSkuId = view.defaultBomSkuId;
@@ -373,6 +393,10 @@ Page({
       bomGroups: view.bomGroups || [],
       bomEmptyText: view.bomEmptyText || '',
       showBomEmpty: view.showBomEmpty,
+      showWhereUsedSection: view.showWhereUsedSection,
+      whereUsedRows: view.whereUsedRows || [],
+      whereUsedCollapsible: view.whereUsedCollapsible,
+      whereUsedToggleText: view.whereUsedToggleText || '',
     });
   },
 
