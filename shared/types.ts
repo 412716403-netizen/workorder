@@ -174,6 +174,12 @@ export type ProdOpType =
  */
 export const PROD_OP_REASON_FROM_DEV = '来自于开发' as const;
 
+/**
+ * 开发领料按产品档案 BOM 展开下级物料时的最大深度（含顶层为 1）。
+ * 前后端同一上限，环路由路径 visited 截断。
+ */
+export const DEV_MATERIAL_BOM_MAX_DEPTH = 8;
+
 /** 生产流水 `reason`：返工领料（既有字面量收口，避免散落硬编码） */
 export const PROD_OP_REASON_FROM_REWORK = '来自于返工' as const;
 

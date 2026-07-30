@@ -25,6 +25,7 @@ const DevManagementView: React.FC = () => {
     categories,
     globalNodes,
     products,
+    boms,
     dictionaries,
     partners,
     partnerCategories,
@@ -32,6 +33,7 @@ const DevManagementView: React.FC = () => {
     refreshDictionaries,
     refreshPartners,
     refreshProducts,
+    refreshBoms,
   } = useAppData();
   const {
     templates,
@@ -189,6 +191,22 @@ const DevManagementView: React.FC = () => {
     setProductModal({ open: true, style: newStyleDraft(), isEdit: false });
   };
 
+  const refreshPublishedCatalog = useCallback(async () => {
+    await Promise.all([refreshProducts(), refreshBoms()]);
+  }, [refreshProducts, refreshBoms]);
+
+  const handleSaveDevBom = useCallback(
+    async (bom: Parameters<typeof saveDevBom>[0], exists: boolean) => {
+      const saved = await saveDevBom(bom, exists);
+      // 试制 BOM 保存后后端会回写大货 BOM；刷新产品/BOM 列表，避免产品档案页看到旧数据
+      if (selected?.publishedProductId || styles.find((s) => s.id === bom.parentStyleId)?.publishedProductId) {
+        await refreshPublishedCatalog();
+      }
+      return saved;
+    },
+    [saveDevBom, selected?.publishedProductId, styles, refreshPublishedCatalog],
+  );
+
   const handlePublish = useCallback(async () => {
     if (!selected) return;
     if (selected.status !== DevStyleStatus.ARCHIVED) {
@@ -202,35 +220,46 @@ const DevManagementView: React.FC = () => {
     if (!ok) return;
     try {
       const { productId } = await publishStyle(selected.id);
-      await refreshProducts();
+      await refreshPublishedCatalog();
       setActiveTab('archived');
       setSelectedId(selected.id);
       toast.success(`已生成商品，产品档案已同步（${productId}）`);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : '发布失败');
     }
-  }, [selected, confirm, publishStyle, refreshProducts]);
+  }, [selected, confirm, publishStyle, refreshPublishedCatalog]);
 
   const handleToggleArchive = useCallback(async () => {
     if (!selected || !canEdit) return;
+    const fromPublished = selected.status === DevStyleStatus.PUBLISHED;
+    // 已生成商品：开发中点「归档」回到 published，继续显示「已发布」
     const next =
-      selected.status === DevStyleStatus.ARCHIVED
-        ? DevStyleStatus.DEVELOPING
-        : DevStyleStatus.ARCHIVED;
-    const label = next === DevStyleStatus.ARCHIVED ? '归档' : '还原至开发中';
+      selected.status === DevStyleStatus.DEVELOPING
+        ? selected.publishedProductId
+          ? DevStyleStatus.PUBLISHED
+          : DevStyleStatus.ARCHIVED
+        : DevStyleStatus.DEVELOPING;
+    const label = next === DevStyleStatus.DEVELOPING ? '还原至开发中' : '归档';
     const ok = await confirm({
       title: label,
-      message: next === DevStyleStatus.ARCHIVED ? '归档后可在「已归档」页签中查看。' : '将恢复为开发中状态。',
+      message:
+        next === DevStyleStatus.DEVELOPING
+          ? fromPublished
+            ? '将恢复为开发中，可继续编辑样品与 BOM；已生成的产品档案保留，不再重复生成商品。'
+            : '将恢复为开发中状态。'
+          : next === DevStyleStatus.PUBLISHED
+            ? '归档后回到已发布状态，列表将继续显示「已发布」标签。'
+            : '归档后可在「已归档」页签中查看。',
     });
     if (!ok) return;
     try {
       await saveStyle({ ...selected, status: next }, false);
-      if (next === DevStyleStatus.ARCHIVED) {
-        setActiveTab('archived');
-      } else {
+      if (next === DevStyleStatus.DEVELOPING) {
         setActiveTab('developing');
+      } else {
+        setActiveTab('archived');
       }
-      toast.success(next === DevStyleStatus.ARCHIVED ? '已归档' : '已还原');
+      toast.success(next === DevStyleStatus.DEVELOPING ? '已还原' : '已归档');
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : '操作失败');
     }
@@ -263,11 +292,12 @@ const DevManagementView: React.FC = () => {
       partners={partners}
       partnerCategories={partnerCategories}
       products={products}
+      styles={styles}
       templates={templates}
       canManageTemplates={canManageTemplates}
       templatePerms={templatePerms}
       devBoms={devBoms}
-      onSaveBom={saveDevBom}
+      onSaveBom={handleSaveDevBom}
       onCreateTemplate={async (name) => {
         await createTemplate(name);
       }}
@@ -290,6 +320,8 @@ const DevManagementView: React.FC = () => {
           }
         }
         await refresh();
+        // 已生成商品的款式保存后，后端会回写产品档案（色码/工序/变体/BOM）；刷新产品与 BOM 列表
+        if (saved.publishedProductId) await refreshPublishedCatalog();
         setProductModal(null);
         setSelectedId(saved.id);
         setActiveTab(
@@ -332,6 +364,7 @@ const DevManagementView: React.FC = () => {
               selectedId && (detailLoading || selectedDetail?.id !== selectedId),
             )}
             products={products}
+            boms={boms}
             partners={partners}
             dictionaries={dictionaries}
             templates={templates}
@@ -340,7 +373,7 @@ const DevManagementView: React.FC = () => {
             warehouses={warehouses}
             materialPerms={materialPerms}
             devBoms={devBoms}
-            onSaveBom={saveDevBom}
+            onSaveBom={handleSaveDevBom}
             readOnly={readOnly}
             canEdit={canEdit}
             canDeleteStyle={canDeleteStyle}

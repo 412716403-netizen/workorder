@@ -37,6 +37,8 @@ interface DevCreateStyleModalProps {
   partners: Partner[];
   partnerCategories: PartnerCategory[];
   products: Product[];
+  /** 开发款式列表，用于产品编号与其它款式查重 */
+  styles?: DevStyleDto[];
   templates: DevStageTemplateDto[];
   canManageTemplates?: boolean;
   templatePerms?: DevTemplatePerms;
@@ -67,6 +69,7 @@ const DevCreateStyleModal: React.FC<DevCreateStyleModalProps> = ({
   partners,
   partnerCategories,
   products,
+  styles = [],
   templates,
   canManageTemplates,
   templatePerms,
@@ -93,12 +96,15 @@ const DevCreateStyleModal: React.FC<DevCreateStyleModalProps> = ({
 
   useEffect(() => {
     if (!open) return;
+    // 仅 published 只读态会用产品档案覆盖；developing（含已生成商品后还原）以款式自身为准
     const merged = resolveDevStyleWithPublishedProduct(initial, products);
     setWorking(JSON.parse(JSON.stringify(merged)));
     setStageNames(Array.isArray(initial.defaultStageNames) ? [...initial.defaultStageNames] : []);
     setPendingBoms([]);
     setSaving(false);
-  }, [open, initial, products]);
+    // 不把 products 放进依赖：档案列表后台刷新时不应冲掉正在编辑的内容
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅随打开/切换款式重置
+  }, [open, initial]);
 
   if (!open) return null;
 
@@ -113,6 +119,8 @@ const DevCreateStyleModal: React.FC<DevCreateStyleModalProps> = ({
       name: p.name,
       sku: p.sku,
       excludeProductId: style.publishedProductId,
+      styles,
+      excludeStyleId: style.id,
     });
     if (catalogConflict) {
       toast.error(catalogConflict);

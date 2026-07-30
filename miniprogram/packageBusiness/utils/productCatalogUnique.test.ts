@@ -27,4 +27,27 @@ describe('validateProductCatalogUnique (miniprogram parity)', () => {
       validateProductCatalogUnique(catalog, { name: '产品A', sku: 'SKU-A', excludeProductId: 'p1' }),
     ).toBeNull();
   });
+
+  it('detects duplicate product number against other dev styles', () => {
+    const styles = [
+      { id: 's1', name: '开发款A' },
+      { id: 's2', name: '开发款B' },
+    ];
+    expect(
+      validateProductCatalogUnique(catalog, {
+        name: '开发款A',
+        sku: '',
+        styles,
+        excludeStyleId: 's-new',
+      }),
+    ).toBe(PRODUCT_NAME_TAKEN_MSG);
+    expect(
+      validateProductCatalogUnique(catalog, {
+        name: '开发款A',
+        sku: '',
+        styles,
+        excludeStyleId: 's1',
+      }),
+    ).toBeNull();
+  });
 });

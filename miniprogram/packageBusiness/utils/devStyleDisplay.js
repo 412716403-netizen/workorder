@@ -51,6 +51,15 @@ function isDevStylePublished(style) {
   return style && style.status === DevStyleStatus.PUBLISHED;
 }
 
+/**
+ * 展示口径的「已发布」：生成过大货产品就算，哪怕状态被还原回开发中。
+ * 与只读判断不同——还原后款式可继续编辑，但标识要一直留着。
+ */
+function isDevStylePublishedForDisplay(style) {
+  if (!style) return false;
+  return style.status === DevStyleStatus.PUBLISHED || !!style.publishedProductId;
+}
+
 function isDevStyleReadOnly(style) {
   return isDevStylePublished(style);
 }
@@ -109,6 +118,7 @@ module.exports = {
   formatDevStyleCreatedAt,
   isDevStyleArchived,
   isDevStylePublished,
+  isDevStylePublishedForDisplay,
   isDevStyleReadOnly,
   canDeleteDevStyle,
   canDeleteDevSample,

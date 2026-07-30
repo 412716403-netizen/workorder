@@ -12,6 +12,26 @@
     <empty-state wx:if="{{loading}}" loading="{{true}}" text="加载中…" />
 
     <view wx:elif="{{mode === 'cells'}}" class="plan-create-page">
+      <view wx:if="{{styleHeader}}" class="dev-bom-style-card">
+        <view class="dev-bom-style-card__media">
+          <image
+            wx:if="{{styleHeader.showProductImage}}"
+            class="dev-bom-style-card__img"
+            src="{{styleHeader.productImageUrl}}"
+            mode="aspectFill"
+            binderror="onHeaderImageError"
+          />
+          <view wx:else class="dev-bom-style-card__img dev-bom-style-card__img--ph">
+            <image class="dev-bom-style-card__ph-icon" src="{{styleHeader.placeholderIconSrc}}" mode="aspectFit" />
+          </view>
+        </view>
+        <view class="dev-bom-style-card__main">
+          <text class="dev-bom-style-card__name">{{styleHeader.productName}}</text>
+          <text wx:if="{{styleHeader.showProductSku}}" class="dev-bom-style-card__sku">{{styleHeader.productSku}}</text>
+          <text class="dev-bom-style-card__hint">{{styleHeader.isSingleSku ? '单规格 · 按工序配置 BOM' : '按颜色尺码 × 工序配置 BOM'}}</text>
+        </view>
+      </view>
+
       <view wx:if="{{!cells.length}}" class="plan-create-muted">暂无可配置格子（请先配置大货工序与颜色尺码）</view>
       <view
         wx:for="{{cells}}"

@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { DevSampleDto } from '../types';
-import { DevStageStatus } from '../types';
+import { DevStageStatus, DevStyleStatus } from '../types';
 import {
   canDeleteDevSample,
   getDevSampleDeleteBlockReason,
   getDevSampleSidebarProgress,
+  isDevStylePublishedForDisplay,
 } from './devStyleDisplay';
 
 type StageSpec = DevStageStatus | { status: DevStageStatus; withData?: boolean };
@@ -27,6 +28,47 @@ const sample = (stages: StageSpec[]): DevSampleDto => ({
     };
   }),
   logs: [],
+});
+
+describe('isDevStylePublishedForDisplay', () => {
+  it('keeps the published mark after restoring to developing', () => {
+    expect(
+      isDevStylePublishedForDisplay({
+        status: DevStyleStatus.DEVELOPING,
+        publishedProductId: 'prod1',
+      }),
+    ).toBe(true);
+    expect(
+      isDevStylePublishedForDisplay({
+        status: DevStyleStatus.ARCHIVED,
+        publishedProductId: 'prod1',
+      }),
+    ).toBe(true);
+  });
+
+  it('marks published styles even without a resolved product id', () => {
+    expect(
+      isDevStylePublishedForDisplay({
+        status: DevStyleStatus.PUBLISHED,
+        publishedProductId: undefined,
+      }),
+    ).toBe(true);
+  });
+
+  it('leaves never-published styles unmarked', () => {
+    expect(
+      isDevStylePublishedForDisplay({
+        status: DevStyleStatus.DEVELOPING,
+        publishedProductId: undefined,
+      }),
+    ).toBe(false);
+    expect(
+      isDevStylePublishedForDisplay({
+        status: DevStyleStatus.ARCHIVED,
+        publishedProductId: undefined,
+      }),
+    ).toBe(false);
+  });
 });
 
 describe('getDevSampleSidebarProgress', () => {

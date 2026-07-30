@@ -24,7 +24,11 @@ const {
 } = require('../../utils/windowMetrics.js');
 const { LIST_ROUTES, afterSaveReturnToList } = require('../../utils/saveNavigation.js');
 const { applyPartnerCreatedOnPage } = require('../../utils/mergePartnerList.js');
-const { chooseProductImageAsDataUrl } = require('../utils/fileBase64.js');
+const {
+  chooseProductImage,
+  isSafeImageSrcForSetData,
+  resolveImageDisplaySrc,
+} = require('../utils/fileBase64.js');
 const {
   writeLastUnitForCategory,
   resolveDefaultUnitForNewProductCategory,
@@ -161,26 +165,26 @@ Page({
     try {
       if (this._codeAutoFill) this._codeAutoFill.reset();
 
+      // 启动不拉全量 products（保存前再取），避免新增页长时间卡在「加载中」
       const results = await Promise.all([
-        fetchProductsAll(),
         fetchCategoriesAll(),
         fetchDictionaries(),
         fetchPartnersAll(),
         fetchPartnerCategoriesAll(),
         fetchProductCodeRules(),
       ]);
-      const products = results[0];
-      const categories = results[1];
-      const dictionariesRaw = results[2];
-      const partners = results[3];
-      const partnerCategories = results[4];
-      const rulesRaw = results[5];
+      const categories = results[0];
+      const dictionariesRaw = results[1];
+      const partners = results[2];
+      const partnerCategories = results[3];
+      const rulesRaw = results[4];
 
-      this._products = products || [];
+      this._products = [];
       this._categories = categories || [];
       this._dictionaries = normalizeAppDictionaries(dictionariesRaw);
       this._partners = partners || [];
       this._partnerCategories = partnerCategories || [];
+      this._imageDisplaySrc = '';
 
       if (this._codeAutoFill) {
         this._codeAutoFill.setRules(normalizeProductCodeRuleMap(rulesRaw));
@@ -204,10 +208,46 @@ Page({
       this._originalProduct = this._productId ? product : null;
       this.applyUiFromWorking();
       this.scheduleAutoCode();
+      this.primeImageDisplay().then(() => {
+        if (this._imageDisplaySrc) {
+          this.setData({ 'form.imageUrl': this._imageDisplaySrc });
+        }
+      });
     } catch (err) {
       wx.showToast({ title: (err && err.message) || '加载失败', icon: 'none' });
       this.setData({ loading: false });
     }
+  },
+
+  /** 预览用本地/http 路径；大图 data URL 不进 setData */
+  resolveFormImageSrc() {
+    if (this._imageDisplaySrc) return this._imageDisplaySrc;
+    const p = this._workingProduct || {};
+    const candidates = [p.imageThumb, p.imageUrl];
+    for (let i = 0; i < candidates.length; i += 1) {
+      if (isSafeImageSrcForSetData(candidates[i])) return candidates[i];
+    }
+    return '';
+  },
+
+  async primeImageDisplay() {
+    const p = this._workingProduct || {};
+    const raw = p.imageUrl || p.imageThumb || '';
+    if (!raw) {
+      this._imageDisplaySrc = '';
+      return;
+    }
+    if (isSafeImageSrcForSetData(raw)) {
+      this._imageDisplaySrc = raw;
+      return;
+    }
+    const token = raw;
+    const path = await resolveImageDisplaySrc(raw, this._productId || p.id || 'new');
+    // 落盘期间用户可能已重新选图
+    if ((this._workingProduct && (this._workingProduct.imageUrl || this._workingProduct.imageThumb || '')) !== token) {
+      return;
+    }
+    this._imageDisplaySrc = path || '';
   },
 
   isNewRecord() {
@@ -291,7 +331,7 @@ Page({
         id: this._workingProduct.id,
         name: this._workingProduct.name || '',
         sku: this._workingProduct.sku || '',
-        imageUrl: this._workingProduct.imageUrl || this._workingProduct.imageThumb || '',
+        imageUrl: this.resolveFormImageSrc(),
         colorIds: this._workingProduct.colorIds || [],
         sizeIds: this._workingProduct.sizeIds || [],
         salesPriceText:
@@ -447,19 +487,23 @@ Page({
 
   async onPickImage() {
     try {
-      const dataUrl = await chooseProductImageAsDataUrl();
-      if (!dataUrl) return;
-      this._workingProduct.imageUrl = dataUrl;
+      const picked = await chooseProductImage({ count: 1 });
+      if (!picked) return;
+      this._workingProduct.imageUrl = picked.dataUrl;
       this._workingProduct.imageThumb = null;
-      this.setData({ 'form.imageUrl': dataUrl });
-    } catch {
-      wx.showToast({ title: '图片读取失败', icon: 'none' });
+      this._imageDisplaySrc = picked.tempFilePath || '';
+      this.setData({ 'form.imageUrl': this._imageDisplaySrc });
+    } catch (err) {
+      const title =
+        err && err.code === 'FILE_TOO_LARGE' ? '图片不能超过4MB' : '图片读取失败';
+      wx.showToast({ title, icon: 'none' });
     }
   },
 
   onClearImage() {
     this._workingProduct.imageUrl = '';
     this._workingProduct.imageThumb = null;
+    this._imageDisplaySrc = '';
     this.setData({ 'form.imageUrl': '' });
   },
 
@@ -559,27 +603,30 @@ Page({
     }
 
     const category = this.getActiveCategory();
-    const prepared = prepareProductForSave(
-      syncVariantsIfNeeded(this._workingProduct, category, this._dictionaries),
-      this._products,
-      category,
-      this._originalProduct || undefined,
-    );
-    if (prepared.error) {
-      wx.showToast({ title: prepared.error, icon: 'none' });
-      return;
-    }
-
-    const codeAutoGen =
-      this._codeAutoFill &&
-      this._codeAutoFill.buildCodeAutoGenPayload(this._workingProduct, this.isNewRecord());
-    const payload = codeAutoGen
-      ? { ...prepared.payload, codeAutoGen }
-      : prepared.payload;
-
     this.setData({ submitting: true });
     try {
-      const exists = (this._products || []).some((p) => p.id === prepared.product.id);
+      // 编号/SKU 唯一性校验用目录，延后到保存时再拉，避免拖慢进页
+      this._products = await fetchProductsAll();
+      const prepared = prepareProductForSave(
+        syncVariantsIfNeeded(this._workingProduct, category, this._dictionaries),
+        this._products,
+        category,
+        this._originalProduct || undefined,
+      );
+      if (prepared.error) {
+        wx.showToast({ title: prepared.error, icon: 'none' });
+        this.setData({ submitting: false });
+        return;
+      }
+
+      const codeAutoGen =
+        this._codeAutoFill &&
+        this._codeAutoFill.buildCodeAutoGenPayload(this._workingProduct, this.isNewRecord());
+      const payload = codeAutoGen
+        ? { ...prepared.payload, codeAutoGen }
+        : prepared.payload;
+
+      const exists = !!(this._productId || (this._products || []).some((p) => p.id === prepared.product.id));
       const saved = exists
         ? await updateProduct(prepared.product.id, payload)
         : await createProduct(payload);
@@ -588,6 +635,12 @@ Page({
         saved.categoryId,
         saved.unitId,
       );
+      // 关联开发款式会反向回写试制 BOM；清缓存避免其它页读到旧 BOM
+      try {
+        require('../../utils/masterDataCache.js').invalidateMasterDataCache('boms');
+      } catch {
+        // ignore
+      }
       afterSaveReturnToList({
         listUrl: LIST_ROUTES.BASIC_PRODUCTS,
         toastTitle: '保存成功',

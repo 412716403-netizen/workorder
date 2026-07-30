@@ -56,6 +56,16 @@ export function isDevStyleArchived(style: DevStyleDto): boolean {
   return style.status === DevStyleStatus.ARCHIVED;
 }
 
+/**
+ * 展示口径的「已发布」：生成过大货产品就算，哪怕状态被还原回开发中。
+ * 与只读判断（`status === PUBLISHED`）不同——还原后款式可继续编辑，但标识要一直留着。
+ */
+export function isDevStylePublishedForDisplay(
+  style: Pick<DevStyleDto, 'status' | 'publishedProductId'>,
+): boolean {
+  return style.status === DevStyleStatus.PUBLISHED || !!style.publishedProductId;
+}
+
 export function canDeleteDevStyle(style: DevStyleDto): boolean {
   if (style.status === DevStyleStatus.PUBLISHED) return false;
   return style.samples.every((s) =>

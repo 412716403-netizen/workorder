@@ -20,9 +20,16 @@ function fetchProductsAll() {
 }
 
 function fetchBomsAll() {
-  return request({ path: '/products/boms/all?all=true', method: 'GET', timeout: 60000 })
-    .then((body) => normalizeListBody(body))
-    .catch(() => []);
+  // 与 orderApi/planApi 共用缓存键，避免知识库/维护入口重复打全量 BOM
+  const { cachedFetch } = require('../../utils/masterDataCache.js');
+  return cachedFetch(
+    'boms:all',
+    () =>
+      request({ path: '/products/boms/all?all=true', method: 'GET', timeout: 60000 }).then((body) =>
+        normalizeListBody(body),
+      ),
+    90 * 1000,
+  ).catch(() => []);
 }
 
 function getProduct(id) {

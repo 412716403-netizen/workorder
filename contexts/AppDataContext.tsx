@@ -228,6 +228,7 @@ export interface AppDataContextValue {
   refreshFinanceCategories: () => Promise<void>;
   refreshFinanceAccountTypes: () => Promise<void>;
   refreshProducts: () => Promise<void>;
+  refreshBoms: () => Promise<void>;
   refreshOrders: () => Promise<void>;
   refreshPlans: () => Promise<void>;
   refreshPMP: () => Promise<void>;
@@ -1268,7 +1269,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     refreshDictionaries, refreshWorkers, refreshEquipment, refreshPartners,
     refreshPartnerCategories, refreshCategories, applyCategories, refreshGlobalNodes, applyGlobalNodes, refreshWarehouses,
     refreshFinanceCategories, refreshFinanceAccountTypes,
-    refreshProducts, refreshOrders, refreshPlans, refreshPMP,
+    refreshProducts, refreshBoms, refreshOrders, refreshPlans, refreshPMP,
     refreshPrintTemplates,
     ensureDeferredLoaded,
   }), [
@@ -1291,7 +1292,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     refreshDictionaries, refreshWorkers, refreshEquipment, refreshPartners,
     refreshPartnerCategories, refreshCategories, applyCategories, refreshGlobalNodes, applyGlobalNodes, refreshWarehouses,
     refreshFinanceCategories, refreshFinanceAccountTypes,
-    refreshProducts, refreshOrders, refreshPlans, refreshPMP,
+    refreshProducts, refreshBoms, refreshOrders, refreshPlans, refreshPMP,
     refreshPrintTemplates,
     ensureDeferredLoaded,
   ]);

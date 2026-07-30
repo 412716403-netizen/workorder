@@ -28,6 +28,13 @@ const { loadProductMetaMaps } = require('../../utils/productMetaMaps.js');
 const _require1 = require('../../utils/productionPlans.js'),normalizeMasterList = _require1.normalizeMasterList;
 const _require10 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require10.readNavBarMetrics,readWindowMetrics = _require10.readWindowMetrics;
 const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../../utils/planFilterPanel.js');
+const {
+  shouldHubListRefetch,
+  trackHubListHidden,
+  LIST_ROUTES,
+} = require('../../utils/saveNavigation.js');
+
+const HUB_LIST_ROUTE = LIST_ROUTES.OUTSOURCE_HUB;
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
@@ -82,7 +89,16 @@ Page({
   },
 
   onShow() {
-    this.bootstrap();
+    if (!this._initialized) {
+      this._initialized = true;
+      this.bootstrap();
+    } else if (shouldHubListRefetch(this, HUB_LIST_ROUTE, { skipWasHidden: true })) {
+      this.bootstrap();
+    }
+  },
+
+  onHide() {
+    trackHubListHidden(this);
   },
 
   onPullDownRefresh() {
@@ -300,18 +316,17 @@ Page({
     }
     this.setData({ loading: true });
     try {
-      const config = await fetchTenantConfig();
+      const [config, allOrders, productMeta, nodesRaw] = await Promise.all([
+        fetchTenantConfig(),
+        fetchAllOrdersPaginated({}),
+        loadProductMetaMaps(),
+        fetchNodesAll(),
+      ]);
       this._productionLinkMode = config.productionLinkMode || 'order';
       this._outsourceFormSettings = config.outsourceFormSettings || {};
       if (this._outsourceFormSettings.onlyShowNotCompletedOrder === true && !this._userToggledIncomplete) {
         this.setData({ onlyShowIncomplete: true });
       }
-
-      const [allOrders, productMeta, nodesRaw] = await Promise.all([
-        fetchAllOrdersPaginated({}),
-        loadProductMetaMaps(),
-        fetchNodesAll()
-      ]);
 
       this._products = productMeta.products;
       this._nodes = normalizeMasterList(nodesRaw);

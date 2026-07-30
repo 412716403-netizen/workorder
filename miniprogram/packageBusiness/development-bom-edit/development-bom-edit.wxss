@@ -4,6 +4,71 @@
   padding-bottom: calc(160rpx + env(safe-area-inset-bottom));
 }
 
+.dev-bom-style-card {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  padding: 20rpx;
+  margin-bottom: 20rpx;
+  background: #fff;
+  border-radius: 16rpx;
+  border: 1rpx solid #eef0f3;
+}
+
+.dev-bom-style-card__media {
+  flex-shrink: 0;
+}
+
+.dev-bom-style-card__img {
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 12rpx;
+  background: #f2f3f5;
+}
+
+.dev-bom-style-card__img--ph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dev-bom-style-card__ph-icon {
+  width: 40rpx;
+  height: 40rpx;
+  opacity: 0.45;
+}
+
+.dev-bom-style-card__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.dev-bom-style-card__name {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #1f2329;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dev-bom-style-card__sku {
+  font-size: 22rpx;
+  color: #8f959e;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dev-bom-style-card__hint {
+  margin-top: 4rpx;
+  font-size: 22rpx;
+  color: #646a73;
+}
+
 .dev-bom-cell {
   position: relative;
   display: flex;

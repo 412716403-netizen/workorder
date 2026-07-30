@@ -57,6 +57,7 @@ export {
   type ProdOpType,
   PROD_OP_REASON_FROM_DEV,
   PROD_OP_REASON_FROM_REWORK,
+  DEV_MATERIAL_BOM_MAX_DEPTH,
   isDevMaterialOpReason,
   isReworkMaterialOpReason,
   DevStyleStatus,

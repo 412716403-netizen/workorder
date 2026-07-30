@@ -253,8 +253,12 @@ function trackHubListHidden(page) {
 /**
  * Hub 列表页 onShow 调用：保存/删除回退后是否需重新拉 API。
  * 返回 true 时须 bootstrap / refetch，不能只 reloadList 重筛本地缓存。
+ *
+ * @param {{ skipWasHidden?: boolean }} [opts]
+ *   skipWasHidden=true：仅在显式刷新标记（afterSaveReturnToList 等）时重拉，
+ *   用于外协/领退料等重接口 Hub，避免「进详情再返回」也全量重拉。
  */
-function shouldHubListRefetch(page, listRoute) {
+function shouldHubListRefetch(page, listRoute, opts) {
   const needsRefresh = !!(page && page._hubListNeedsRefresh);
   if (page && page._hubListNeedsRefresh) {
     page._hubListNeedsRefresh = false;
@@ -263,7 +267,12 @@ function shouldHubListRefetch(page, listRoute) {
   if (page) {
     page._hubWasHidden = false;
   }
-  return needsRefresh || wasHidden || consumeListRefreshOnShow(page, listRoute);
+  const skipWasHidden = !!(opts && opts.skipWasHidden);
+  return (
+    needsRefresh ||
+    (!skipWasHidden && wasHidden) ||
+    consumeListRefreshOnShow(page, listRoute)
+  );
 }
 
 /**

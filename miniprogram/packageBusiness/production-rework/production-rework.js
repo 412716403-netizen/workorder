@@ -23,6 +23,13 @@ const { loadProductMetaMaps } = require('../../utils/productMetaMaps.js');
 const _require9 = require('../utils/productionOrders.js'),normalizeMasterList = _require9.normalizeMasterList;
 const _require0 = require('../../utils/windowMetrics.js'),readNavBarMetrics = _require0.readNavBarMetrics,readWindowMetrics = _require0.readWindowMetrics;
 const { markFilterPanelOpen, shouldCloseFilterPanelOnScroll } = require('../../utils/planFilterPanel.js');
+const {
+  shouldHubListRefetch,
+  trackHubListHidden,
+  LIST_ROUTES,
+} = require('../../utils/saveNavigation.js');
+
+const HUB_LIST_ROUTE = LIST_ROUTES.REWORK_HUB;
 
 function computeHeaderBlockHeight(nav) {
   const win = readWindowMetrics();
@@ -160,7 +167,16 @@ Page({
   },
 
   onShow() {
-    this.bootstrap();
+    if (!this._initialized) {
+      this._initialized = true;
+      this.bootstrap();
+    } else if (shouldHubListRefetch(this, HUB_LIST_ROUTE, { skipWasHidden: true })) {
+      this.bootstrap();
+    }
+  },
+
+  onHide() {
+    trackHubListHidden(this);
   },
 
   onPullDownRefresh() {
@@ -350,7 +366,13 @@ Page({
     }
     this.setData({ loading: true });
     try {
-      const config = await fetchTenantConfig();
+      const [config, allOrders, productMeta, nodesRaw, pmpRaw] = await Promise.all([
+        fetchTenantConfig(),
+        fetchAllOrdersPaginated({}),
+        loadProductMetaMaps(),
+        fetchNodesAll(),
+        listProductProgressAll(),
+      ]);
       this._productionLinkMode = config.productionLinkMode || 'order';
       this._processSequenceMode = config.processSequenceMode || 'sequential';
       this._reworkFormSettings = config.reworkFormSettings || {};
@@ -360,13 +382,6 @@ Page({
       {
         this.setData({ onlyShowIncomplete: true });
       }
-
-      const [allOrders, productMeta, nodesRaw, pmpRaw] = await Promise.all([
-        fetchAllOrdersPaginated({}),
-        loadProductMetaMaps(),
-        fetchNodesAll(),
-        listProductProgressAll()
-      ]);
 
       this._products = productMeta.products;
       this._nodes = normalizeMasterList(nodesRaw);

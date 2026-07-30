@@ -1,9 +1,17 @@
 import { getTenantPrisma } from '../lib/prisma.js';
 import { str, optStr } from '../utils/request.js';
 import * as productsService from '../services/products.service.js';
+import { syncDevStyleFromPublishedProduct } from '../services/dev-published-sync.service.js';
 import { getReceiveUnitWeightAverages } from '../services/receiveUnitWeightAverages.service.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { listQueryFromRequest, warnListAllFromRequest } from '../utils/listQuery.js';
+
+/** 仅改 enabled 开关时不回写开发款式 */
+function isEnabledOnlyPatch(body: unknown): boolean {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
+  const keys = Object.keys(body as Record<string, unknown>);
+  return keys.length === 1 && keys[0] === 'enabled';
+}
 
 export const listProducts = asyncHandler(async (req, res) => {
   const db = getTenantPrisma(req.tenantId!);
@@ -49,7 +57,13 @@ export const createProduct = asyncHandler(async (req, res) => {
 });
 
 export const updateProduct = asyncHandler(async (req, res) => {
-  res.json(await productsService.updateProduct(getTenantPrisma(req.tenantId!), req.tenantId!, str(req.params.id), req.body));
+  const db = getTenantPrisma(req.tenantId!);
+  const productId = str(req.params.id);
+  const updated = await productsService.updateProduct(db, req.tenantId!, productId, req.body);
+  if (!isEnabledOnlyPatch(req.body)) {
+    await syncDevStyleFromPublishedProduct(db, productId);
+  }
+  res.json(updated);
 });
 
 export const deleteProduct = asyncHandler(async (req, res) => {
@@ -61,7 +75,11 @@ export const listVariants = asyncHandler(async (req, res) => {
 });
 
 export const syncVariants = asyncHandler(async (req, res) => {
-  res.json(await productsService.syncVariants(getTenantPrisma(req.tenantId!), str(req.params.id), req.body.variants || []));
+  const db = getTenantPrisma(req.tenantId!);
+  const productId = str(req.params.id);
+  const result = await productsService.syncVariants(db, productId, req.body.variants || []);
+  await syncDevStyleFromPublishedProduct(db, productId);
+  res.json(result);
 });
 
 export const listBoms = asyncHandler(async (req, res) => {
@@ -76,15 +94,42 @@ export const getBom = asyncHandler(async (req, res) => {
 });
 
 export const createBom = asyncHandler(async (req, res) => {
-  res.status(201).json(await productsService.createBom(getTenantPrisma(req.tenantId!), req.body));
+  const db = getTenantPrisma(req.tenantId!);
+  const created = await productsService.createBom(db, req.body, req.tenantId!);
+  const parentProductId = String(
+    (created as { parentProductId?: string }).parentProductId
+      ?? req.body?.parentProductId
+      ?? '',
+  ).trim();
+  if (parentProductId) await syncDevStyleFromPublishedProduct(db, parentProductId);
+  res.status(201).json(created);
 });
 
 export const updateBom = asyncHandler(async (req, res) => {
-  res.json(await productsService.updateBom(getTenantPrisma(req.tenantId!), str(req.params.id), req.body));
+  const db = getTenantPrisma(req.tenantId!);
+  const bomId = str(req.params.id);
+  const updated = await productsService.updateBom(db, bomId, req.body);
+  const parentProductId = String(
+    (updated as { parentProductId?: string } | null)?.parentProductId
+      ?? req.body?.parentProductId
+      ?? '',
+  ).trim();
+  if (parentProductId) await syncDevStyleFromPublishedProduct(db, parentProductId);
+  res.json(updated);
 });
 
 export const deleteBom = asyncHandler(async (req, res) => {
-  res.json(await productsService.deleteBom(getTenantPrisma(req.tenantId!), str(req.params.id)));
+  const db = getTenantPrisma(req.tenantId!);
+  const bomId = str(req.params.id);
+  const existing = await db.bom.findUnique({
+    where: { id: bomId },
+    select: { parentProductId: true },
+  });
+  const result = await productsService.deleteBom(db, bomId);
+  if (existing?.parentProductId) {
+    await syncDevStyleFromPublishedProduct(db, existing.parentProductId);
+  }
+  res.json(result);
 });
 
 export const importProducts = asyncHandler(async (req, res) => {

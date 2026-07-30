@@ -243,9 +243,15 @@ function fetchWorkersForReport(tenantId) {
 }
 
 function fetchBomsAll() {
-  return request({ path: '/products/boms/all?all=true', method: 'GET', timeout: 60000 })
-    .then((body) => normalizeListBody(body))
-    .catch(() => []);
+  const { cachedFetch } = require('./masterDataCache.js');
+  return cachedFetch(
+    'boms:all',
+    () =>
+      request({ path: '/products/boms/all?all=true', method: 'GET', timeout: 60000 }).then((body) =>
+        normalizeListBody(body),
+      ),
+    90 * 1000,
+  ).catch(() => []);
 }
 
 function getPlan(id) {

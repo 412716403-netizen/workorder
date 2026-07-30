@@ -28,7 +28,14 @@ export const createStyle = asyncHandler(async (req, res) => {
 });
 
 export const updateStyle = asyncHandler(async (req, res) => {
-  res.json(await devStylesService.updateDevStyle(getTenantPrisma(req.tenantId!), str(req.params.id), req.body));
+  res.json(
+    await devStylesService.updateDevStyle(
+      getTenantPrisma(req.tenantId!),
+      req.tenantId!,
+      str(req.params.id),
+      req.body,
+    ),
+  );
 });
 
 export const deleteStyle = asyncHandler(async (req, res) => {
@@ -91,17 +98,31 @@ export const createBom = asyncHandler(async (req, res) => {
 });
 
 export const updateBom = asyncHandler(async (req, res) => {
-  res.json(await devStylesService.updateDevBom(getTenantPrisma(req.tenantId!), str(req.params.id), req.body));
+  res.json(
+    await devStylesService.updateDevBom(
+      getTenantPrisma(req.tenantId!),
+      req.tenantId!,
+      str(req.params.id),
+      req.body,
+    ),
+  );
 });
 
 export const deleteBom = asyncHandler(async (req, res) => {
-  res.json(await devStylesService.deleteDevBom(getTenantPrisma(req.tenantId!), str(req.params.id)));
+  res.json(
+    await devStylesService.deleteDevBom(
+      getTenantPrisma(req.tenantId!),
+      req.tenantId!,
+      str(req.params.id),
+    ),
+  );
 });
 
 export const syncVariantNodeBoms = asyncHandler(async (req, res) => {
   res.json(
     await devStylesService.syncDevVariantNodeBoms(
       getTenantPrisma(req.tenantId!),
+      req.tenantId!,
       str(req.params.id),
       str(req.params.variantId),
       (req.body.nodeBoms ?? req.body.nodeBOMs ?? {}) as Record<string, string>,

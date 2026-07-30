@@ -98,8 +98,18 @@ Page({
     if (this._loadedOnce && !this._bootstrapping) {
       this._selectState = { partnerKey: '', scopeKey: '', mode: '', selectedIds: new Set() };
       this._page = 1;
-      this.bootstrap(false);
+      const { shouldHubListRefetch, LIST_ROUTES } = require('../../utils/saveNavigation.js');
+      if (shouldHubListRefetch(this, LIST_ROUTES.STOCK_OUT, { skipWasHidden: true })) {
+        this.bootstrap(false);
+      } else {
+        this.applyPagination();
+      }
     }
+  },
+
+  onHide() {
+    const { trackHubListHidden } = require('../../utils/saveNavigation.js');
+    trackHubListHidden(this);
   },
 
   onPullDownRefresh() {

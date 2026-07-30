@@ -16,7 +16,11 @@ import {
   hasActiveDevStyleListFilter,
   type DevStyleListFilters,
 } from '../../utils/devStyleListFilter';
-import { getDevSampleSidebarProgress, resolveDevStyleCustomerName } from '../../utils/devStyleDisplay';
+import {
+  getDevSampleSidebarProgress,
+  isDevStylePublishedForDisplay,
+  resolveDevStyleCustomerName,
+} from '../../utils/devStyleDisplay';
 import { buildPartnerNameById, resolveProductPartnerName } from '../../utils/productPartnerDisplay';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 import { devStyleThumbSrc } from '../../utils/devStyleImageSrc';
@@ -99,7 +103,7 @@ function StyleListCard({
                 <span className="ml-1.5 font-medium text-slate-500 break-all">{productName}</span>
               ) : null}
             </h4>
-            {style.status === DevStyleStatus.PUBLISHED && (
+            {isDevStylePublishedForDisplay(style) && (
               <span className="shrink-0 rounded bg-emerald-500 px-1.5 py-0.5 text-[10px] font-medium text-white mt-0.5">已发布</span>
             )}
           </div>

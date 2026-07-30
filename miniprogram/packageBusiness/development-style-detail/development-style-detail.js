@@ -10,9 +10,9 @@ const {
   fetchPartnersAll,
   fetchCategoriesAll,
   fetchDictionaries,
+  fetchNodesAll,
 } = require('../../utils/planApi.js');
 const { normalizeAppDictionaries } = require('../../utils/productionPlans.js');
-const { request } = require('../../utils/request.js');
 const {
   getDevStyle,
   updateDevStyle,
@@ -23,6 +23,7 @@ const {
 const { buildStyleDetailView, findSampleById } = require('../utils/devStyleDetailView.js');
 const { DevStyleStatus } = require('../utils/devStyleConstants.js');
 const { promptCreateTodo } = require('../utils/devTodoCreate.js');
+const { resolveImageDisplaySrc } = require('../../utils/fileBase64.js');
 
 function computeScrollHeight(nav) {
   const win = readWindowMetrics();
@@ -75,6 +76,9 @@ Page({
       headerBlockHeight: computePlanCreateHeaderHeight(nav),
       scrollHeight: computeScrollHeight(nav),
     });
+    this._bootstrapped = false;
+    /** 子页（BOM/登记/编辑）返回后仅软刷新款式，不重拉主数据 */
+    this._needStyleRefresh = false;
   },
 
   onShow() {
@@ -109,8 +113,16 @@ Page({
         showTodoBtn: isPluginEnabled(plugins, 'todo_reminder'),
         showMaterialSection: canMaterialIssue || canMaterialReturn || canMaterialRecords,
       });
-      this.bootstrap();
+      if (!this._bootstrapped) {
+        this.bootstrap({ full: true });
+      } else if (this._needStyleRefresh) {
+        this.bootstrap({ full: false });
+      }
     });
+  },
+
+  markStyleDirty() {
+    this._needStyleRefresh = true;
   },
 
   onHeaderBack() {
@@ -119,33 +131,51 @@ Page({
 
   noop() {},
 
-  async bootstrap() {
+  async bootstrap(opts) {
     const styleId = this.data.styleId;
     if (!styleId) {
       this.setData({ loading: false, detail: null });
       return;
     }
-    this.setData({ loading: true });
+    const full = !(opts && opts.full === false);
+    // 软刷新：已有详情时不闪全页 loading
+    if (full || !this.data.detail) {
+      this.setData({ loading: true });
+    }
     try {
-      const [style, partners, categories, dictRaw, nodesRaw] = await Promise.all([
-        getDevStyle(styleId),
-        fetchPartnersAll().catch(() => []),
-        fetchCategoriesAll().catch(() => []),
-        fetchDictionaries().catch(() => ({})),
-        request({ path: '/settings/nodes?all=true', method: 'GET', timeout: 60000 }).catch(() => []),
-      ]);
+      if (full) {
+        const [style, partners, categories, dictRaw, nodesRaw] = await Promise.all([
+          getDevStyle(styleId),
+          fetchPartnersAll().catch(() => []),
+          fetchCategoriesAll().catch(() => []),
+          fetchDictionaries().catch(() => ({})),
+          fetchNodesAll().catch(() => []),
+        ]);
+        if (!style) {
+          wx.showToast({ title: '款式不存在', icon: 'none' });
+          setTimeout(() => wx.navigateBack(), 800);
+          return;
+        }
+        this._style = style;
+        this._partners = partners || [];
+        this._categories = categories || [];
+        this._dictionaries = normalizeAppDictionaries(dictRaw);
+        this._globalNodes = Array.isArray(nodesRaw) ? nodesRaw : [];
+        this._bootstrapped = true;
+        this._needStyleRefresh = false;
+        this.applyStyle(style);
+        this.handleDeepLinks();
+        return;
+      }
+      const style = await getDevStyle(styleId);
       if (!style) {
         wx.showToast({ title: '款式不存在', icon: 'none' });
         setTimeout(() => wx.navigateBack(), 800);
         return;
       }
       this._style = style;
-      this._partners = partners || [];
-      this._categories = categories || [];
-      this._dictionaries = normalizeAppDictionaries(dictRaw);
-      this._globalNodes = Array.isArray(nodesRaw) ? nodesRaw : [];
+      this._needStyleRefresh = false;
       this.applyStyle(style);
-      this.handleDeepLinks();
     } catch (err) {
       wx.showToast({ title: (err && err.message) || '加载失败', icon: 'none' });
       this.setData({ loading: false });
@@ -166,11 +196,27 @@ Page({
       activeSampleId = detail.samples[0] ? detail.samples[0].id : '';
     }
     const activeSample = detail.samples.find((s) => s.id === activeSampleId) || null;
+    const rawImageSrc = detail.rawImageSrc || '';
+    // rawImageSrc 仅给落盘用，不进 setData
+    delete detail.rawImageSrc;
     this.setData({
       loading: false,
       detail,
       activeSampleId,
       activeSample,
+    });
+    this.primeDetailImage(rawImageSrc, style && style.id);
+  },
+
+  async primeDetailImage(rawSrc, styleId) {
+    if (!rawSrc) return;
+    // 已有可展示图（安全 thumb / http）则跳过
+    if (this.data.detail && this.data.detail.showProductImage) return;
+    const path = await resolveImageDisplaySrc(rawSrc, styleId || this.data.styleId || 'style');
+    if (!path || !this.data.detail) return;
+    this.setData({
+      'detail.productImageUrl': path,
+      'detail.showProductImage': true,
     });
   },
 
@@ -188,6 +234,7 @@ Page({
   },
 
   onMaterialTap() {
+    this.markStyleDirty();
     this.openMaterialPage();
   },
 
@@ -201,6 +248,7 @@ Page({
         if ((sample.stages || []).some((st) => st.id === stageId)) {
           this.setData({ activeSampleId: sample.id });
           this.applyStyle(style);
+          this.markStyleDirty();
           wx.navigateTo({
             url: `/packageBusiness/development-stage-register/development-stage-register?styleId=${encodeURIComponent(style.id)}&stageId=${encodeURIComponent(stageId)}`,
           });
@@ -235,6 +283,7 @@ Page({
 
   onEditTap() {
     if (!this.data.detail || !this.data.detail.actions.showEdit) return;
+    this.markStyleDirty();
     wx.navigateTo({
       url: `/packageBusiness/development-style-edit/development-style-edit?id=${encodeURIComponent(this.data.styleId)}`,
     });
@@ -268,26 +317,42 @@ Page({
 
   async toggleArchive(nextStatus) {
     if (!this._style || this.data.saving) return;
-    const label = nextStatus === DevStyleStatus.ARCHIVED ? '归档' : '还原至开发中';
+    const fromPublished = this._style.status === DevStyleStatus.PUBLISHED;
+    // 已生成商品：开发中点「归档」回到 published
+    let resolvedStatus = nextStatus;
+    if (
+      nextStatus === DevStyleStatus.ARCHIVED &&
+      this._style.publishedProductId &&
+      this._style.status === DevStyleStatus.DEVELOPING
+    ) {
+      resolvedStatus = DevStyleStatus.PUBLISHED;
+    }
+    const label = resolvedStatus === DevStyleStatus.DEVELOPING ? '还原至开发中' : '归档';
     const ok = await new Promise((resolve) => {
       wx.showModal({
         title: label,
         content:
-          nextStatus === DevStyleStatus.ARCHIVED
-            ? '归档后可在「已归档」页签中查看。'
-            : '将恢复为开发中状态。',
+          resolvedStatus === DevStyleStatus.DEVELOPING
+            ? fromPublished
+              ? '将恢复为开发中，可继续编辑样品与 BOM；已生成的产品档案保留，不再重复生成商品。'
+              : '将恢复为开发中状态。'
+            : resolvedStatus === DevStyleStatus.PUBLISHED
+              ? '归档后回到已发布状态，列表将继续显示「已发布」标签。'
+              : '归档后可在「已归档」页签中查看。',
         success: (res) => resolve(!!res.confirm),
       });
     });
     if (!ok) return;
     this.setData({ saving: true });
     try {
-      // 只改状态：不要把整棵详情（主图 + 样品附件 data URL）重传
-      const saved = await updateDevStyle(this._style.id, { status: nextStatus });
+      const saved = await updateDevStyle(this._style.id, { status: resolvedStatus });
       this._style = saved;
       this.applyStyle(saved);
       notifyHubChanged.call(this);
-      wx.showToast({ title: nextStatus === DevStyleStatus.ARCHIVED ? '已归档' : '已还原', icon: 'success' });
+      wx.showToast({
+        title: resolvedStatus === DevStyleStatus.DEVELOPING ? '已还原' : '已归档',
+        icon: 'success',
+      });
     } catch (err) {
       wx.showToast({ title: (err && err.message) || '操作失败', icon: 'none' });
     } finally {
@@ -456,6 +521,7 @@ Page({
       wx.showToast({ title: '暂无编辑权限', icon: 'none' });
       return;
     }
+    this.markStyleDirty();
     wx.navigateTo({
       url: `/packageBusiness/development-stage-register/development-stage-register?styleId=${encodeURIComponent(this._style.id)}&stageId=${encodeURIComponent(stageId)}`,
     });
@@ -467,6 +533,7 @@ Page({
       wx.showToast({ title: '已发布不可编辑', icon: 'none' });
       return;
     }
+    this.markStyleDirty();
     const sampleId = this.data.activeSampleId;
     // 有选中样品：按样品颜色尺码过滤；无样品时打开款式级全量 BOM
     if (sampleId) {
@@ -484,6 +551,7 @@ Page({
       wx.showToast({ title: '已发布不可编辑', icon: 'none' });
       return;
     }
+    this.markStyleDirty();
     const sample = findSampleById(this._style, sampleId);
     const qs = [
       `styleId=${encodeURIComponent(this._style.id)}`,

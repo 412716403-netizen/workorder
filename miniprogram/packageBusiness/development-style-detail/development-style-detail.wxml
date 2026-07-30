@@ -44,6 +44,7 @@
               </view>
               <view class="dev-detail-hero__badges">
                 <text class="dev-status-badge dev-status-badge--{{detail.statusTone}}">{{detail.statusLabel}}</text>
+                <text wx:if="{{detail.showPublishedBadge}}" class="dev-status-badge dev-status-badge--published">已发布</text>
               </view>
               <view wx:if="{{detail.showCustomer}}" class="dev-detail-hero__customer">
                 客户 · {{detail.customerName}}
@@ -66,7 +67,7 @@
               wx:if="{{detail.actions.showRestore}}"
               class="dev-hero-outline-btn"
               bindtap="onRestoreTap"
-            >返回开发</view>
+            >还原至开发中</view>
             <view
               wx:if="{{detail.actions.showPublish}}"
               class="dev-hero-outline-btn"

@@ -2,6 +2,7 @@ import type { TenantPrismaClient } from '../lib/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
 import {
   BATCH_NO_UNTAGGED,
+  DEV_MATERIAL_BOM_MAX_DEPTH,
   DevStyleStatus,
   PROD_OP_REASON_FROM_DEV,
   isUntaggedBatch,
@@ -42,6 +43,51 @@ async function loadBomProductIds(db: TenantPrismaClient, styleId: string): Promi
     }
   }
   return [...ids];
+}
+
+/**
+ * 可领物料 = 试制 BOM 顶层 ∪ 产品档案 BOM 下级（BFS，深度上限 + visited 防环）
+ */
+async function loadIssuableProductIds(
+  db: TenantPrismaClient,
+  rootIds: string[],
+): Promise<Set<string>> {
+  const issuable = new Set<string>();
+  const queue: Array<{ id: string; depth: number }> = [];
+  for (const raw of rootIds) {
+    const id = String(raw ?? '').trim();
+    if (!id || issuable.has(id)) continue;
+    issuable.add(id);
+    queue.push({ id, depth: 1 });
+  }
+
+  while (queue.length > 0) {
+    // 入队时已保证 depth < DEV_MATERIAL_BOM_MAX_DEPTH，这里整层取出即可
+    const frontier = queue.splice(0, queue.length);
+    const parentIds = frontier.map((q) => q.id);
+    const depthByParent = new Map(frontier.map((q) => [q.id, q.depth]));
+    const archiveBoms = await db.bom.findMany({
+      where: { parentProductId: { in: parentIds } },
+      select: {
+        parentProductId: true,
+        items: { select: { productId: true } },
+      },
+    });
+    for (const bom of archiveBoms) {
+      const parentDepth = depthByParent.get(bom.parentProductId) ?? 1;
+      const childDepth = parentDepth + 1;
+      for (const item of bom.items) {
+        const childId = String(item.productId ?? '').trim();
+        if (!childId || issuable.has(childId)) continue;
+        issuable.add(childId);
+        if (childDepth < DEV_MATERIAL_BOM_MAX_DEPTH) {
+          queue.push({ id: childId, depth: childDepth });
+        }
+      }
+    }
+  }
+
+  return issuable;
 }
 
 async function listDevMaterialOpRows(db: TenantPrismaClient, styleId: string): Promise<RawOpRow[]> {
@@ -117,14 +163,15 @@ async function createDevMaterialBatch(
     throw new AppError(409, '仅开发中的款式可继续领料；归档/已发布仅可退料');
   }
 
-  const bomProductIds = new Set(await loadBomProductIds(db, styleId));
+  const bomProductIds = await loadBomProductIds(db, styleId);
   if (type === 'STOCK_OUT') {
-    if (bomProductIds.size === 0) {
+    if (bomProductIds.length === 0) {
       throw new AppError(400, '请先配置试制 BOM 后再领料');
     }
+    const issuable = await loadIssuableProductIds(db, bomProductIds);
     for (const line of lines) {
-      if (!bomProductIds.has(line.productId)) {
-        throw new AppError(400, `物料不在该款式试制 BOM 中：${line.productId}`);
+      if (!issuable.has(line.productId)) {
+        throw new AppError(400, `物料不在该款式试制 BOM（含下级 BOM）中：${line.productId}`);
       }
     }
   }

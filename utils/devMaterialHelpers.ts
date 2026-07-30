@@ -25,6 +25,22 @@ export function returnableRowKey(row: Pick<DevMaterialReturnableRow, 'productId'
   return `${row.productId}::${row.warehouseId}::${batchNoForDisplay(row.batchNo)}`;
 }
 
+/**
+ * 只保留当前可见物料的数量。
+ * 领料表是可折叠树，收起的子行会从界面消失，但输入过的数量仍留在 state 里，
+ * 不过滤就会把用户看不到的行也一起出库。
+ */
+export function pickVisibleQty(
+  qtyByProduct: Record<string, number>,
+  visibleProductIds: ReadonlySet<string>,
+): Record<string, number> {
+  const picked: Record<string, number> = {};
+  for (const [productId, qty] of Object.entries(qtyByProduct)) {
+    if (visibleProductIds.has(productId)) picked[productId] = qty;
+  }
+  return picked;
+}
+
 export function buildIssueLines(
   qtyByProduct: Record<string, number>,
   warehouseId: string,

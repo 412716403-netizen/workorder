@@ -1,5 +1,10 @@
 const { DevStyleStatus } = require('./devStyleConstants.js');
-const { resolveDevStyleCustomerName, getDevSampleSidebarProgress, resolveDevStyleThumb } = require('./devStyleDisplay.js');
+const {
+  resolveDevStyleCustomerName,
+  getDevSampleSidebarProgress,
+  isDevStylePublishedForDisplay,
+  resolveDevStyleThumb,
+} = require('./devStyleDisplay.js');
 const { listProductMetaFields, buildPartnerNameById } = require('../../utils/listProductThumb.js');
 
 const DEV_STYLE_LIST_FILTERS_DEFAULT = {
@@ -149,12 +154,13 @@ function buildDevStyleListRows(styles, opts) {
       showProductMeta: meta.showProductMeta,
       status: style.status,
       statusLabel:
-        style.status === 'published'
+        style.status === DevStyleStatus.PUBLISHED
           ? '已发布'
-          : style.status === 'archived'
+          : style.status === DevStyleStatus.ARCHIVED
             ? '已归档'
             : '',
-      showPublishedBadge: style.status === 'published',
+      // 还原至开发中的款式仍保留「已发布」标识
+      showPublishedBadge: isDevStylePublishedForDisplay(style),
       progressParts,
       updatedAt: style.updatedAt,
     };

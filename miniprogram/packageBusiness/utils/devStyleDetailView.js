@@ -1,9 +1,9 @@
 const {
   resolveDevStyleCustomerName,
-  resolveDevStyleThumb,
   styleStatusLabel,
   stageStatusLabel,
   formatDevStyleCreatedAt,
+  isDevStylePublishedForDisplay,
   isDevStyleReadOnly,
   canDeleteDevStyle,
   canDeleteDevSample,
@@ -11,6 +11,29 @@ const {
 } = require('./devStyleDisplay.js');
 const { DevStyleStatus } = require('./devStyleConstants.js');
 const { listDevStageImageUrls, parseDevStageFileItems } = require('./devStageFileValue.js');
+
+/** 超过此长度的 data URL 禁止进 setData（易导致主图/缩略图整页不渲染） */
+const HEAVY_DATA_URL_CHARS = 64 * 1024;
+
+function isHeavyDataUrl(s) {
+  return typeof s === 'string' && s.indexOf('data:') === 0 && s.length > HEAVY_DATA_URL_CHARS;
+}
+
+/** 详情主图：优先非重 thumb；禁止把原图 base64 直接塞进视图 */
+function resolveSafeDetailImageUrl(style) {
+  if (!style) return '';
+  const thumb = String(style.imageThumb || '').trim();
+  if (thumb && !isHeavyDataUrl(thumb)) return thumb;
+  const url = String(style.imageUrl || '').trim();
+  if (url && url.indexOf('data:') !== 0) return url;
+  return '';
+}
+
+/** 供页面落盘的原始图源（优先 thumb） */
+function resolveDetailImageRawSrc(style) {
+  if (!style) return '';
+  return String(style.imageThumb || style.imageUrl || '').trim();
+}
 
 function resolveDictName(items, id) {
   if (!id) return '';
@@ -70,6 +93,8 @@ function buildStageRows(sample) {
     filled.forEach((f) => {
       listDevStageImageUrls(f.value).forEach((src, i) => {
         if (fieldThumbs.length >= 8) return;
+        // 重图不进首屏 setData，避免拖垮整页主图渲染；有图时仍用 fieldPreview 提示
+        if (isHeavyDataUrl(src)) return;
         fieldThumbs.push({
           id: `${f.id || f.label}-${i}`,
           label: f.label || '图片',
@@ -107,7 +132,8 @@ function buildStyleDetailView(style, ctx) {
 
   const customerName = resolveDevStyleCustomerName(style, partners) || '';
   const category = categories.find((c) => c.id === style.categoryId);
-  const thumb = resolveDevStyleThumb(style);
+  const thumb = resolveSafeDetailImageUrl(style);
+  const rawImageSrc = resolveDetailImageRawSrc(style);
   const code = String(style.code || '').trim();
   const name = String(style.name || '').trim();
   const showProductSku = !!(name && code && name !== code);
@@ -153,9 +179,14 @@ function buildStyleDetailView(style, ctx) {
     showProductSku,
     productImageUrl: thumb,
     showProductImage: !!thumb,
+    /** 重图时首屏可能无 productImageUrl，页面用此字段落盘后再填 */
+    rawImageSrc,
     placeholderIconSrc: '/assets/icons/boxes.png',
     status,
     statusLabel: styleStatusLabel(status),
+    /** 已生成商品但状态被还原时，状态徽章旁再挂一个「已发布」；published 本身已含该文案 */
+    showPublishedBadge:
+      isDevStylePublishedForDisplay(style) && status !== DevStyleStatus.PUBLISHED,
     customerName,
     showCustomer: !!customerName,
     unitName,
@@ -188,8 +219,14 @@ function buildStyleDetailView(style, ctx) {
       showEdit: canEdit && !readOnly,
       showDelete: canDelete && canDeleteDevStyle(style),
       showArchive: canEdit && !readOnly && status === DevStyleStatus.DEVELOPING,
-      showRestore: canEdit && !readOnly && status === DevStyleStatus.ARCHIVED,
-      showPublish: canEdit && !readOnly && status === DevStyleStatus.ARCHIVED,
+      showRestore:
+        canEdit &&
+        (status === DevStyleStatus.ARCHIVED || status === DevStyleStatus.PUBLISHED),
+      showPublish:
+        canEdit &&
+        !readOnly &&
+        status === DevStyleStatus.ARCHIVED &&
+        !style.publishedProductId,
       showAddSample: canEdit && !readOnly && status === DevStyleStatus.DEVELOPING,
       showDeleteSample: canEdit && !readOnly,
       showBom: canEdit && !readOnly,
@@ -219,4 +256,6 @@ module.exports = {
   buildSampleVariantLabel,
   findSampleById,
   findStageById,
+  resolveSafeDetailImageUrl,
+  resolveDetailImageRawSrc,
 };

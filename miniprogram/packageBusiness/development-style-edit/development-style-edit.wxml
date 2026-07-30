@@ -16,7 +16,7 @@
       <view class="plan-form-card">
         <view class="dev-section-head">
           <text class="dev-section-head__title">商品信息</text>
-          <text class="dev-section-head__hint">与产品档案字段一致</text>
+          <text class="dev-section-head__hint">{{syncToProductHint || '与产品档案字段一致'}}</text>
         </view>
 
         <view class="category-select">
@@ -220,7 +220,7 @@
             <text class="dev-section-head__count">已选 {{nodeSelectedCount}}</text>
           </view>
         </view>
-        <text class="dev-section-head__desc">发布大货后的报工路线，可选；点选后可调序</text>
+        <text class="dev-section-head__desc">{{milestoneHint}}</text>
 
         <view wx:if="{{!nodeOptions.length}}" class="dev-empty-tip">暂无工序节点，请在系统设置中维护</view>
         <view wx:else class="dev-chip-pool">

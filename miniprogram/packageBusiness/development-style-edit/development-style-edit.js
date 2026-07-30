@@ -12,11 +12,15 @@ const {
   fetchDictionaries,
   fetchPartnersAll,
   fetchPartnerCategoriesAll,
+  fetchNodesAll,
 } = require('../../utils/planApi.js');
 const { normalizeAppDictionaries } = require('../../utils/productionPlans.js');
-const { request } = require('../../utils/request.js');
 const { applyPartnerCreatedOnPage } = require('../../utils/mergePartnerList.js');
-const { chooseProductImageAsDataUrl } = require('../utils/fileBase64.js');
+const {
+  chooseProductImage,
+  isSafeImageSrcForSetData,
+  resolveImageDisplaySrc,
+} = require('../utils/fileBase64.js');
 const { createDictionaryItem } = require('../utils/dictionaryApi.js');
 const {
   buildCategoryCustomFieldsForForm,
@@ -88,6 +92,8 @@ Page({
     showColorSize: false,
     canQuickAddUnit: false,
     canQuickAddDict: false,
+    syncToProductHint: '',
+    milestoneHint: '发布大货后的报工路线，可选；点选后可调序',
     stageOptions: [],
     nodeOptions: [],
     canManageTemplates: false,
@@ -218,22 +224,20 @@ Page({
     try {
       if (this._codeAutoFill) this._codeAutoFill.reset();
 
-      const [categories, dictionariesRaw, partners, partnerCategories, templates, nodesRaw, rulesRaw] =
-        await Promise.all([
-          fetchCategoriesAll(),
-          fetchDictionaries(),
-          fetchPartnersAll(),
-          fetchPartnerCategoriesAll(),
-          listDevStageTemplates().catch(() => []),
-          request({ path: '/settings/nodes?all=true', method: 'GET', timeout: 60000 }).catch(() => []),
-          fetchProductCodeRules().catch(() => ({})),
-        ]);
+      // 先拉表单必需数据并出界面；合作单位/全局节点后台补齐（避免打开「商品信息」久等）
+      const [categories, dictionariesRaw, templates, rulesRaw] = await Promise.all([
+        fetchCategoriesAll(),
+        fetchDictionaries(),
+        listDevStageTemplates().catch(() => []),
+        fetchProductCodeRules().catch(() => ({})),
+      ]);
       this._categories = categories || [];
       this._dictionaries = normalizeAppDictionaries(dictionariesRaw);
-      this._partners = partners || [];
-      this._partnerCategories = partnerCategories || [];
+      this._partners = [];
+      this._partnerCategories = [];
       this._templates = templates || [];
-      this._globalNodes = Array.isArray(nodesRaw) ? nodesRaw : [];
+      this._globalNodes = [];
+      this._imageDisplaySrc = '';
 
       if (this._codeAutoFill) {
         this._codeAutoFill.setRules(normalizeProductCodeRuleMap(rulesRaw));
@@ -256,10 +260,58 @@ Page({
       this._originalImageUrl = String(style.imageUrl || '');
       this.applyUi();
       this.scheduleAutoCode();
+      this.primeImageDisplay().then(() => {
+        if (this._imageDisplaySrc) {
+          this.setData({ 'form.imageUrl': this._imageDisplaySrc });
+        }
+      });
+      this.loadSecondaryMasterData();
     } catch (err) {
       wx.showToast({ title: (err && err.message) || '加载失败', icon: 'none' });
       this.setData({ loading: false });
     }
+  },
+
+  async loadSecondaryMasterData() {
+    try {
+      const [partners, partnerCategories, nodesRaw] = await Promise.all([
+        fetchPartnersAll().catch(() => []),
+        fetchPartnerCategoriesAll().catch(() => []),
+        fetchNodesAll().catch(() => []),
+      ]);
+      this._partners = partners || [];
+      this._partnerCategories = partnerCategories || [];
+      this._globalNodes = Array.isArray(nodesRaw) ? nodesRaw : [];
+      this.syncAutoCodeMasterData();
+      if (this._working) {
+        this.applyUi();
+        this.scheduleAutoCode();
+      }
+    } catch {
+      // ignore secondary failures
+    }
+  },
+
+  resolveFormImageSrc() {
+    if (this._imageDisplaySrc) return this._imageDisplaySrc;
+    const url = (this._working && this._working.imageUrl) || '';
+    return isSafeImageSrcForSetData(url) ? url : '';
+  },
+
+  async primeImageDisplay() {
+    const raw = (this._working && this._working.imageUrl) || '';
+    if (!raw) {
+      this._imageDisplaySrc = '';
+      return;
+    }
+    if (isSafeImageSrcForSetData(raw)) {
+      this._imageDisplaySrc = raw;
+      return;
+    }
+    const token = raw;
+    const path = await resolveImageDisplaySrc(raw, this._styleId || (this._working && this._working.id) || 'new');
+    if ((this._working && this._working.imageUrl) !== token) return;
+    this._imageDisplaySrc = path || '';
   },
 
   async reloadTemplatesOnly() {
@@ -349,7 +401,7 @@ Page({
       form: {
         name: s.name || '',
         code: s.code || '',
-        imageUrl: s.imageUrl || '',
+        imageUrl: this.resolveFormImageSrc(),
         colorIds: s.colorIds || [],
         sizeIds: s.sizeIds || [],
         salesPriceText: s.salesPrice != null ? String(s.salesPrice) : '',
@@ -364,6 +416,12 @@ Page({
       showPurchasePrice: !!(category && category.hasPurchasePrice),
       showSupplier: !!(category && category.linkPartner),
       showColorSize: !!(category && category.hasColorSize),
+      syncToProductHint: s.publishedProductId
+        ? '已生成商品：保存后同步到产品档案'
+        : '与产品档案字段一致',
+      milestoneHint: s.publishedProductId
+        ? '已生成商品：修改大货工序后保存，将同步到产品档案'
+        : '发布大货后的报工路线，可选；点选后可调序',
       stageOptions,
       nodeOptions,
       selectedStageRows,
@@ -425,12 +483,17 @@ Page({
 
   async onPickImage() {
     try {
-      const dataUrl = await chooseProductImageAsDataUrl();
-      if (!dataUrl) return;
-      this._working.imageUrl = dataUrl;
-      this.setData({ 'form.imageUrl': dataUrl });
+      const picked = await chooseProductImage({ count: 1 });
+      if (!picked) return;
+      this._working.imageUrl = picked.dataUrl;
+      this._imageDisplaySrc = picked.tempFilePath || '';
+      this.setData({ 'form.imageUrl': this._imageDisplaySrc });
     } catch (err) {
-      wx.showToast({ title: (err && err.message) || '选图失败', icon: 'none' });
+      const title =
+        err && err.code === 'FILE_TOO_LARGE'
+          ? '图片不能超过4MB'
+          : (err && err.message) || '选图失败';
+      wx.showToast({ title, icon: 'none' });
     }
   },
 
@@ -618,13 +681,24 @@ Page({
       } else {
         await createDevStyle(buildDevStyleSavePayload(this._working, partnerName));
       }
+      // 已生成商品时后端会回写产品档案 BOM，清掉小程序 BOM 缓存避免档案页看到旧数据
+      if (this._working && this._working.publishedProductId) {
+        try {
+          require('../../utils/masterDataCache.js').invalidateMasterDataCache('boms');
+        } catch {
+          // ignore
+        }
+      }
       try {
         const ec = this.getOpenerEventChannel && this.getOpenerEventChannel();
         if (ec && ec.emit) ec.emit('hubListChanged');
       } catch {
         // ignore
       }
-      wx.showToast({ title: '已保存', icon: 'success' });
+      wx.showToast({
+        title: this._working && this._working.publishedProductId ? '已保存并同步商品' : '已保存',
+        icon: 'success',
+      });
       afterSaveReturnToList(LIST_ROUTES.DEVELOPMENT_STYLES);
     } catch (e) {
       wx.showToast({ title: (e && e.message) || '保存失败', icon: 'none' });

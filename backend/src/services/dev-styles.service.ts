@@ -7,6 +7,7 @@ import { buildImageThumb } from '../lib/imageThumb.js';
 import { devStyleInclude, devStyleListInclude, mapDevStyleRow } from './dev-styles.mapper.js';
 import { publishDevStyleToProduct } from './dev-publish.service.js';
 import { countDevMaterialRecords } from './dev-material.service.js';
+import { syncPublishedProductFromDevStyle } from './dev-published-sync.service.js';
 
 const STYLE_JSON_FIELDS = [
   'categoryCustomData', 'colorIds', 'sizeIds', 'milestoneNodeIds', 'defaultStageNames',
@@ -180,13 +181,22 @@ async function assertNoProductCatalogConflict(
   db: TenantPrismaClient,
   _code: string,
   name: string,
-  excludeProductId?: string,
+  opts?: { excludeProductId?: string; excludeStyleId?: string },
 ): Promise<void> {
   const productName = name.trim();
-  const idFilter = excludeProductId ? { id: { not: excludeProductId } } : {};
-  // 产品名称(sku/code)允许重复；仅校验产品编号(name/品名)
-  const dupName = await db.product.findFirst({ where: { name: productName, ...idFilter } });
-  if (dupName) throw new AppError(409, '产品编号在租户内已存在，请更换');
+  if (!productName) return;
+  // 产品编号须在租户内唯一：不得与产品档案或其它开发款式品名冲突
+  const productWhere = opts?.excludeProductId
+    ? { name: productName, id: { not: opts.excludeProductId } }
+    : { name: productName };
+  const dupProduct = await db.product.findFirst({ where: productWhere });
+  if (dupProduct) throw new AppError(409, '产品编号在租户内已存在，请更换');
+
+  const styleWhere = opts?.excludeStyleId
+    ? { name: productName, id: { not: opts.excludeStyleId } }
+    : { name: productName };
+  const dupStyle = await db.devStyle.findFirst({ where: styleWhere });
+  if (dupStyle) throw new AppError(409, '产品编号在租户内已存在，请更换');
 }
 
 async function syncDevStyleCustomerNameFromSupplier(
@@ -265,26 +275,42 @@ export async function createDevStyle(
 
 export async function updateDevStyle(
   db: TenantPrismaClient,
+  tenantId: string,
   styleId: string,
   body: Record<string, unknown>,
 ) {
   const existing = await db.devStyle.findUnique({ where: { id: styleId } });
   if (!existing) throw new AppError(404, '款式不存在');
+
+  // 已发布：仅允许「还原至开发中」（只改 status，保留 publishedProductId）
   if (existing.status === DevStyleStatus.PUBLISHED) {
-    throw new AppError(409, '已发布大货的款式不可编辑，请在产品档案中维护');
+    if (body.status !== DevStyleStatus.DEVELOPING) {
+      throw new AppError(409, '已发布大货的款式不可编辑；可先还原至开发中');
+    }
+    await db.devStyle.update({
+      where: { id: styleId },
+      data: { status: DevStyleStatus.DEVELOPING },
+    });
+    return getDevStyle(db, styleId);
   }
 
   const { variants, samples, ...rest } = body;
   const data = sanitizeUpdate(rest);
   delete data.createdByUserId;
-  // 状态机：常规编辑只允许在 开发中 / 已归档 间切换；
-  // 发布（published）必须走 publishDevStyleToProduct，避免出现无产品档案的“已发布”脏数据。
+  // 状态机：常规可在 开发中 / 已归档 间切换；
+  // 已生成过商品（publishedProductId）再点「归档」→ 回到 published（列表/详情继续显示已发布）。
+  // 首次发布仍须走 publishDevStyleToProduct。
   if ('status' in data) {
-    const nextStatus = data.status;
-    if (nextStatus === DevStyleStatus.PUBLISHED) {
-      throw new AppError(400, '请通过「生成商品」发布，不能直接将款式标记为已发布');
+    let nextStatus = data.status;
+    if (nextStatus === DevStyleStatus.ARCHIVED && existing.publishedProductId) {
+      nextStatus = DevStyleStatus.PUBLISHED;
+      data.status = DevStyleStatus.PUBLISHED;
     }
-    if (nextStatus !== DevStyleStatus.DEVELOPING && nextStatus !== DevStyleStatus.ARCHIVED) {
+    if (nextStatus === DevStyleStatus.PUBLISHED) {
+      if (!existing.publishedProductId) {
+        throw new AppError(400, '请通过「生成商品」发布，不能直接将款式标记为已发布');
+      }
+    } else if (nextStatus !== DevStyleStatus.DEVELOPING && nextStatus !== DevStyleStatus.ARCHIVED) {
       throw new AppError(400, '非法的款式状态');
     }
   }
@@ -299,8 +325,12 @@ export async function updateDevStyle(
   const nextCode = ('code' in data ? String(data.code ?? '').trim() : String(existing.code ?? '').trim());
   const nextName = ('name' in data ? String(data.name ?? '').trim() : existing.name) || existing.name;
   if ('code' in data || 'name' in data) {
-    await assertNoProductCatalogConflict(db, nextCode, nextName, existing.publishedProductId ?? undefined);
+    await assertNoProductCatalogConflict(db, nextCode, nextName, {
+      excludeProductId: existing.publishedProductId ?? undefined,
+      excludeStyleId: styleId,
+    });
   }
+
   if ('categoryId' in data) data.categoryId = await assertCategory(db, data.categoryId);
   coerceStyleJson(data);
   await syncDevStyleCustomerNameFromSupplier(db, data);
@@ -326,6 +356,11 @@ export async function updateDevStyle(
       }
     }
   });
+
+  // 款式落库后再回写商品：含色码/工序/变体/试制 BOM（失败则抛错，下次保存可重试）
+  if (existing.publishedProductId) {
+    await syncPublishedProductFromDevStyle(db, tenantId, styleId, existing.publishedProductId);
+  }
 
   return getDevStyle(db, styleId);
 }
@@ -556,6 +591,19 @@ async function assertDevParentStyle(db: TenantPrismaClient, parentStyleId: unkno
   return parent;
 }
 
+async function maybeSyncPublishedProductAfterBomChange(
+  db: TenantPrismaClient,
+  tenantId: string,
+  styleId: string,
+): Promise<void> {
+  const style = await db.devStyle.findUnique({
+    where: { id: styleId },
+    select: { publishedProductId: true },
+  });
+  if (!style?.publishedProductId) return;
+  await syncPublishedProductFromDevStyle(db, tenantId, styleId, style.publishedProductId);
+}
+
 export async function createDevBom(
   db: TenantPrismaClient,
   tenantId: string,
@@ -570,7 +618,7 @@ export async function createDevBom(
   const cleanItems = items
     ? sanitizeItems(items as Record<string, unknown>[], ['bomId'])
     : undefined;
-  return db.devBom.create({
+  const created = await db.devBom.create({
     data: {
       ...data,
       tenantId,
@@ -578,9 +626,16 @@ export async function createDevBom(
     },
     include: { items: true },
   });
+  await maybeSyncPublishedProductAfterBomChange(db, tenantId, String(created.parentStyleId));
+  return created;
 }
 
-export async function updateDevBom(db: TenantPrismaClient, bomId: string, body: Record<string, unknown>) {
+export async function updateDevBom(
+  db: TenantPrismaClient,
+  tenantId: string,
+  bomId: string,
+  body: Record<string, unknown>,
+) {
   const { items, ...rest } = body;
   const data = sanitizeUpdate(rest);
   delete data.createdByUserId;
@@ -599,16 +654,22 @@ export async function updateDevBom(db: TenantPrismaClient, bomId: string, body: 
       if (cleanItems.length > 0) await tx.devBomItem.createMany({ data: cleanItems });
     }
   });
+  const styleId = String(('parentStyleId' in data ? data.parentStyleId : existing.parentStyleId) ?? '');
+  if (styleId) await maybeSyncPublishedProductAfterBomChange(db, tenantId, styleId);
   return getDevBom(db, bomId);
 }
 
-export async function deleteDevBom(db: TenantPrismaClient, id: string) {
+export async function deleteDevBom(db: TenantPrismaClient, tenantId: string, id: string) {
+  const existing = await db.devBom.findUnique({ where: { id }, select: { parentStyleId: true } });
+  if (!existing) throw new AppError(404, '开发 BOM 不存在');
   await db.devBom.delete({ where: { id } });
+  await maybeSyncPublishedProductAfterBomChange(db, tenantId, existing.parentStyleId);
   return { message: '已删除' };
 }
 
 export async function syncDevVariantNodeBoms(
   db: TenantPrismaClient,
+  tenantId: string,
   styleId: string,
   variantId: string,
   nodeBoms: Record<string, string>,
@@ -619,6 +680,7 @@ export async function syncDevVariantNodeBoms(
     where: { id: variantId },
     data: { nodeBoms },
   });
+  await maybeSyncPublishedProductAfterBomChange(db, tenantId, styleId);
   return getDevStyle(db, styleId);
 }
 

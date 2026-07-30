@@ -123,8 +123,18 @@ Page({
     if (this._loadedOnce && !this._bootstrapping) {
       this._selectedKeys = new Set();
       this.setData({ selectedCount: 0 });
-      this.bootstrap();
+      const { shouldHubListRefetch, LIST_ROUTES } = require('../../utils/saveNavigation.js');
+      if (shouldHubListRefetch(this, LIST_ROUTES.OUTSOURCE_RECEIVE, { skipWasHidden: true })) {
+        this.bootstrap();
+      } else {
+        this.applyRows();
+      }
     }
+  },
+
+  onHide() {
+    const { trackHubListHidden } = require('../../utils/saveNavigation.js');
+    trackHubListHidden(this);
   },
 
   onPullDownRefresh() {

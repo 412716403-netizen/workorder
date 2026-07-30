@@ -33,7 +33,10 @@ export async function publishDevStyleToProduct(
     },
   });
   if (!style) throw new AppError(404, '款式不存在');
-  if (style.status === DevStyleStatus.PUBLISHED && style.publishedProductId) {
+  if (style.publishedProductId) {
+    throw new AppError(409, '该款式已生成过商品，请在产品档案中维护大货信息');
+  }
+  if (style.status === DevStyleStatus.PUBLISHED) {
     throw new AppError(409, '该款式已发布为大货产品');
   }
   if (style.status !== DevStyleStatus.ARCHIVED) {

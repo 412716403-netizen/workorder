@@ -18,10 +18,13 @@ import {
 function mockDb(opts: {
   styleStatus?: string;
   bomProductIds?: string[];
+  /** 产品档案 BOM：parentProductId -> child productIds */
+  archiveBoms?: Array<{ parentProductId: string; childIds: string[] }>;
   opRows?: Array<Record<string, unknown>>;
 }) {
   const styleStatus = opts.styleStatus ?? DevStyleStatus.DEVELOPING;
   const bomProductIds = opts.bomProductIds ?? ['m1'];
+  const archiveBoms = opts.archiveBoms ?? [];
   const opRows = opts.opRows ?? [];
   return {
     devStyle: {
@@ -35,6 +38,17 @@ function mockDb(opts: {
       findMany: vi.fn(async () => [
         { items: bomProductIds.map((productId) => ({ productId })) },
       ]),
+    },
+    bom: {
+      findMany: vi.fn(async ({ where }: { where: { parentProductId: { in: string[] } } }) => {
+        const parents = new Set(where.parentProductId.in ?? []);
+        return archiveBoms
+          .filter((b) => parents.has(b.parentProductId))
+          .map((b) => ({
+            parentProductId: b.parentProductId,
+            items: b.childIds.map((productId) => ({ productId })),
+          }));
+      }),
     },
     productionOpRecord: {
       findMany: vi.fn(async () => opRows),
@@ -74,6 +88,39 @@ describe('dev-material.service', () => {
         lines: [{ productId: 'm9', quantity: 1, warehouseId: 'wh1' }],
       }),
     ).rejects.toBeInstanceOf(AppError);
+    expect(createRecordBatch).not.toHaveBeenCalled();
+  });
+
+  it('allows issue for archive-BOM child under试制 BOM material', async () => {
+    const db = mockDb({
+      bomProductIds: ['m1'],
+      archiveBoms: [{ parentProductId: 'm1', childIds: ['c1'] }],
+    });
+    const result = await createDevMaterialIssueBatch(db, 'tenant1', 'style1', {
+      lines: [{ productId: 'c1', quantity: 3, warehouseId: 'wh1' }],
+    });
+    expect(result.docNo).toBe('LL20260101001');
+    expect(createRecordBatch).toHaveBeenCalledTimes(1);
+    const [, records] = createRecordBatch.mock.calls[0];
+    expect(records[0]).toMatchObject({
+      type: 'STOCK_OUT',
+      productId: 'c1',
+      quantity: 3,
+      reason: PROD_OP_REASON_FROM_DEV,
+      customData: { devStyleId: 'style1' },
+    });
+  });
+
+  it('still rejects unrelated material even when archive BOM exists', async () => {
+    const db = mockDb({
+      bomProductIds: ['m1'],
+      archiveBoms: [{ parentProductId: 'm1', childIds: ['c1'] }],
+    });
+    await expect(
+      createDevMaterialIssueBatch(db, 'tenant1', 'style1', {
+        lines: [{ productId: 'm9', quantity: 1, warehouseId: 'wh1' }],
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
     expect(createRecordBatch).not.toHaveBeenCalled();
   });
 

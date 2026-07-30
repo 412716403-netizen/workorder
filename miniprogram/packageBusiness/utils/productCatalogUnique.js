@@ -12,12 +12,23 @@ function isProductNameTakenInCatalog(catalog, name, excludeProductId) {
   );
 }
 
+function isDevStyleNameTaken(styles, name, excludeStyleId) {
+  const n = String(name || '').trim();
+  if (!n) return false;
+  return (styles || []).some(
+    (s) => s.id !== excludeStyleId && String(s.name || '').trim() === n,
+  );
+}
+
 function isProductSkuTakenInCatalog() {
   return false;
 }
 
 function validateProductCatalogUnique(catalog, opts) {
   if (isProductNameTakenInCatalog(catalog, opts.name, opts.excludeProductId)) {
+    return PRODUCT_NAME_TAKEN_MSG;
+  }
+  if (opts.styles && isDevStyleNameTaken(opts.styles, opts.name, opts.excludeStyleId)) {
     return PRODUCT_NAME_TAKEN_MSG;
   }
   return null;
@@ -27,6 +38,7 @@ module.exports = {
   PRODUCT_NAME_TAKEN_MSG,
   PRODUCT_SKU_TAKEN_MSG,
   isProductNameTakenInCatalog,
+  isDevStyleNameTaken,
   isProductSkuTakenInCatalog,
   validateProductCatalogUnique,
 };

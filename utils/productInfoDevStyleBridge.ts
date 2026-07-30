@@ -1,4 +1,5 @@
 import type { DevStyleDto, Product } from '../types';
+import { DevStyleStatus } from '../types';
 import { devStyleToProductForBom } from './devStyleToProduct';
 
 /** 开发款式 → 与产品档案一致的编辑形状（sku = 款号/产品名称） */
@@ -32,12 +33,17 @@ export function patchDevStyleFromProduct(base: DevStyleDto, product: Product): D
   };
 }
 
-/** 已发布大货时，用产品档案数据覆盖展示/编辑用的商品信息字段 */
+/**
+ * 仅在「已发布且只读」时用产品档案覆盖展示字段。
+ * 还原至开发中后款式本身是编辑真源（保存时再回写产品）；若此时仍覆盖：
+ * 1) 输入失焦会被档案旧值盖回（看起来改不动，保存却是新值）；
+ * 2) 变体会被换成产品档案的 variant id，试制 BOM 对不上。
+ */
 export function resolveDevStyleWithPublishedProduct(
   style: DevStyleDto,
   products: Product[],
 ): DevStyleDto {
-  if (!style.publishedProductId) return style;
+  if (style.status !== DevStyleStatus.PUBLISHED || !style.publishedProductId) return style;
   const published = products.find((p) => p.id === style.publishedProductId);
   if (!published) return style;
   return patchDevStyleFromProduct(style, published);

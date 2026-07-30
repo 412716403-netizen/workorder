@@ -849,7 +849,7 @@
 
 **开发管理左侧列表卡片**：首行「产品编号」（`name`）后紧跟「产品名称」（`code`）；下一行展示合作单位（分类开启 `linkPartner` 时）与分类自定义字段标签（与产品档案列表同口径，不含附件类）。
 
-**款号 / 品名唯一性**：创建或编辑开发款式时，`name`（品名，对应产品编号）必填且须在租户内与已有 **产品档案** 不重复；`code`（款号，对应产品名称/`sku`）**选填、不自动生成**，且**允许租户内重复**——既可与产品档案中的产品名称重复，也可与其它开发款式的款号重复（与 `products.sku` 同口径，见 migration `20260728120000_dev_style_code_drop_unique`）。**发布大货**同样不强制款号：为空时生成的产品 `sku` 存 NULL，单 SKU 变体的 `skuSuffix` 为空串（与产品档案新建/导入同口径）。
+**款号 / 品名唯一性**：创建或编辑开发款式时，`name`（品名，对应产品编号）必填且须在租户内唯一——不得与已有 **产品档案** 或其它 **开发款式** 的品名重复；`code`（款号，对应产品名称/`sku`）**选填、不自动生成**，且**允许租户内重复**——既可与产品档案中的产品名称重复，也可与其它开发款式的款号重复（与 `products.sku` 同口径，见 migration `20260728120000_dev_style_code_drop_unique`）。**发布大货**同样不强制款号：为空时生成的产品 `sku` 存 NULL，单 SKU 变体的 `skuSuffix` 为空串（与产品档案新建/导入同口径）。
 
 **路由**：前端 `/development`；API `/api/dev/*`。权限 `development:styles:*`、`development:templates:*`。
 
@@ -865,14 +865,20 @@
 - 开发期 BOM 存 `dev_boms` / `dev_bom_items`；维度与产品档案一致：**一条 BOM = 父款式 × 变体（颜色×尺码）× 工序 `nodeId`**；子件为 `dev_bom_items` 行。
 - 变体索引 `DevStyleVariant.nodeBoms`：`{ [nodeId]: devBomId }`，保存 BOM 后通过 `PUT /api/dev/styles/:id/variants/:variantId/node-boms` 同步（形状同 `ProductVariant.nodeBoms`）。
 - **录入 UI**：`DevBomConfigSection` + `BomVariantMatrix`（与「基础信息 → 产品与 BOM」矩阵一致）；创建款式弹窗可预配 `pendingBoms`，保存款式后批量写入 `dev_boms`。单 SKU（无颜色尺码变体）时 `dev_boms.variant_id` 为空。
-- **发布**（`POST /api/dev/styles/:id/publish`）：须先将开发产品 **归档**（`status=archived`）；事务内创建 `Product`、`ProductVariant`、`Bom`；预生成新产品 `bom-*` id，`nodeBoms` 与 `boms` 表 id 一致重映射；单 SKU 虚拟变体 `dvar-single-*` 映射到默认 `ProductVariant`；`Bom.nodeId` **原样拷贝**，不做工序名称映射。
-- 已发布款式（`status=published`）不可再编辑；`publishedProductId` 指向产品档案。
+- 已发布款式（`status=published`）默认只读；可「还原至开发中」继续编辑（`publishedProductId` 保留，产品档案不删）。还原后再点「归档此货号」会回到 `published`，不可再次「生成商品」。`published` 状态下除「还原至开发中」外不接受任何字段修改。
+- **「已发布」标识按 `publishedProductId` 判定，不按状态**：只要生成过大货产品，款式在「开发中」页签里也照常显示「已发布」标签（Web 列表绿色 pill + 详情「商品信息已发布」；小程序列表「已发布」徽章 + 详情在状态徽章旁多挂一枚「已发布」）。判定收口在 `utils/devStyleDisplay.ts` 与 `miniprogram/packageBusiness/utils/devStyleDisplay.js` 的 `isDevStylePublishedForDisplay(style)`，两端同口径。注意这与只读判定（`status === published`）是两回事：还原后有标签但仍可编辑。
+- **还原后编辑 ↔ 产品档案双向回写**：已有 `publishedProductId` 的款式与对应 `Product` 互为同步源。
+  - **开发 → 商品**：款式保存 / 试制 BOM 增删改 / `nodeBoms` 同步时调用 `syncPublishedProductFromDevStyle`，覆盖写回产品档案的 `name` / `code`（→ `sku`）、主图、分类与自定义字段、售价 / 进价、单位、供应商、**颜色尺码、大货工序、变体、大货 BOM**。变体按 `colorId×sizeId` 对齐已有产品规格 id；大货 BOM 全量替换。若产品侧工序已锁定或规格不可删，回写会 409（款式可能已先落库，再次保存即可重试）。**Web 与小程序共用同一套后端接口**（小程序：详情「还原至开发中」→ 编辑商品信息 / BOM 保存；成功提示「已保存并同步商品」，并失效 BOM 缓存）。
+  - **商品 → 开发**：在产品档案（含 BOM / 变体同步接口）保存时，经 `products.controller` 调用 `syncDevStyleFromPublishedProduct`，把当前产品状态覆盖写回关联款式的档案字段、色码、工序、变体与试制 BOM（直接写 Prisma，不经 `updateDevStyle`，避免与上一方向形成环）。仅改产品 `enabled` 开关不触发回写。款式处于 `published` 只读时也会更新底层数据，还原至开发中后即可看到最新内容。小程序产品档案保存同样走该接口。
+- **展示覆盖口径**：`resolveDevStyleWithPublishedProduct` **仅在 `status=published`（只读）**时用产品档案覆盖展示；还原至开发中后以款式自身为编辑真源，避免输入失焦被档案旧值盖回，也避免把变体 id 换成产品档案的 `pv-*` 导致试制 BOM 对不上。
+- **发布**（`POST /api/dev/styles/:id/publish`）：须先将开发产品 **归档**（`status=archived`）且尚无 `publishedProductId`；事务内创建 `Product`、`ProductVariant`、`Bom`；预生成新产品 `bom-*` id，`nodeBoms` 与 `boms` 表 id 一致重映射；单 SKU 虚拟变体 `dvar-single-*` 映射到默认 `ProductVariant`；`Bom.nodeId` **原样拷贝**，不做工序名称映射。
+- 已发布款式的 `publishedProductId` 指向产品档案。
 
 ### 6.2.1 开发领料 / 开发退料
 
 - **范围**：本厂领料与退料；挂 `DevStyle`；入口仅在开发管理（Web / 小程序），不在生产物料中心。
 - **持久化**：写入既有 `ProductionOpRecord`（领料 `STOCK_OUT` / 退料 `STOCK_RETURN`），固定 `reason = 来自于开发`、`customData.devStyleId`，`orderId` / `partner` / `sourceProductId` 为空；单号仍为 `LL` / `TL`。
-- **领料**：仅 `developing` 款式可领；物料必须来自该款试制 BOM（按 `productId` 去重）；扣减仓库库存，启用批次管理时须选批号。
+- **领料**：仅 `developing` 款式可领；可领范围为该款试制 BOM 顶层物料（按 `productId` 去重）**及其产品档案 BOM 下级物料**（前端汇总表 / 领料弹窗可逐级展开，深度上限 `DEV_MATERIAL_BOM_MAX_DEPTH = 8`，环路按路径截断）；扣减仓库库存，启用批次管理时须选批号。
 - **退料**：只能退该款历史发出的「物料 + 原仓库 + 批号」净领用；归档/已发布仍可退，不可借退料改仓/改批增加库存。
 - **隔离**：生产领退料/外协/返工统计排除 `来自于开发`；生产物料「领料退料流水」亦不展示开发领退；PSI 库存聚合与仓库流水**保留**这些流水（仓库流水标注「开发领料/开发退料」）。
 - **删除**：存在开发领退流水的款式禁止物理删除（可归档）。

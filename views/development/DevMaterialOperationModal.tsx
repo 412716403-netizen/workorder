@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowDownToLine, ArrowUpFromLine, X } from 'lucide-react';
+import { ArrowDownToLine, ArrowUpFromLine, ChevronDown, ChevronRight, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { ModalPortal } from '../../components/ModalPortal';
 import { MaterialIssueBatchSelect } from '../../components/MaterialIssueBatchSelect';
@@ -9,10 +9,24 @@ import { useStockSnapshot } from '../../hooks/useStockSnapshot';
 import { clampBatchNoInput } from '../../hooks/useBatchPicker';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 import { defaultEntryDatetimeLocal, entryDatetimeLocalToTimestamp } from '../../utils/docEntryTime';
-import { buildIssueLines, buildReturnLines, productLabel, returnableRowKey } from '../../utils/devMaterialHelpers';
+import {
+  buildIssueLines,
+  buildReturnLines,
+  pickVisibleQty,
+  productLabel,
+  returnableRowKey,
+} from '../../utils/devMaterialHelpers';
+import {
+  buildDevMaterialTree,
+  buildProductChildrenIndex,
+  collectTreeProductIds,
+  flattenVisibleRows,
+  resolveTopLevelRootIds,
+} from '../../utils/devMaterialTree';
 import { formatMaterialQtyDisplay } from '../../utils/formatMaterialQtyDisplay';
 import * as api from '../../services/api';
 import type {
+  BOM,
   DevMaterialRecordsResponse,
   Product,
   ProductCategory,
@@ -35,6 +49,8 @@ interface DevMaterialOperationModalProps {
   productMap: Map<string, Product>;
   categoryById: Map<string, ProductCategory>;
   warehouses: Warehouse[];
+  /** 产品档案 BOM，领料时展开子物料 */
+  boms?: BOM[];
   onClose: () => void;
   onSaved: () => Promise<void> | void;
 }
@@ -48,6 +64,7 @@ const DevMaterialOperationModal: React.FC<DevMaterialOperationModalProps> = ({
   productMap,
   categoryById,
   warehouses,
+  boms = [],
   onClose,
   onSaved,
 }) => {
@@ -60,18 +77,39 @@ const DevMaterialOperationModal: React.FC<DevMaterialOperationModalProps> = ({
   const [qtyByReturnKey, setQtyByReturnKey] = useState<Record<string, number>>({});
   const [entryTimestamp, setEntryTimestamp] = useState(() => defaultEntryDatetimeLocal());
   const [submitting, setSubmitting] = useState(false);
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => new Set());
   const { listAvailableBatches, getStock } = useStockSnapshot({ enabled: true });
+
+  const childrenIndex = useMemo(() => buildProductChildrenIndex(boms), [boms]);
+  const issueRootIds = useMemo(
+    () => resolveTopLevelRootIds(data.bomProductIds, childrenIndex),
+    [data.bomProductIds, childrenIndex],
+  );
+  const issueTree = useMemo(
+    () => buildDevMaterialTree(issueRootIds, childrenIndex),
+    [issueRootIds, childrenIndex],
+  );
+  const treeProductIds = useMemo(() => collectTreeProductIds(issueTree), [issueTree]);
+  const issueVisibleRows = useMemo(
+    () => flattenVisibleRows(issueTree, expandedKeys),
+    [issueTree, expandedKeys],
+  );
+  /** 折叠后的子物料不参与提交：界面上看不到的行不应该出库 */
+  const visibleProductIds = useMemo(
+    () => new Set(issueVisibleRows.map((row) => row.productId)),
+    [issueVisibleRows],
+  );
 
   const batchManagedIds = useMemo(() => {
     const set = new Set<string>();
-    for (const productId of data.bomProductIds) {
+    for (const productId of treeProductIds) {
       const p = productMap.get(productId);
       if (p?.categoryId && categoryUsesBatchManagement(categoryById.get(p.categoryId))) {
         set.add(productId);
       }
     }
     return set;
-  }, [data.bomProductIds, productMap, categoryById]);
+  }, [treeProductIds, productMap, categoryById]);
 
   const showBatchCol = isIssue && batchManagedIds.size > 0;
   const showReturnBatchCol = useMemo(
@@ -82,21 +120,20 @@ const DevMaterialOperationModal: React.FC<DevMaterialOperationModalProps> = ({
       }),
     [data.returnable, productMap, categoryById],
   );
-  const issueRows = useMemo(
-    () =>
-      data.bomProductIds.map((productId) => {
-        const p = productMap.get(productId);
-        const summary = data.summary.find((s) => s.productId === productId);
-        return {
-          productId,
-          name: p?.name ?? summary?.productName ?? productId,
-          sku: p?.sku ?? summary?.productSku ?? '',
-          issuedQty: summary?.issuedQty ?? 0,
-          netQty: summary?.netQty ?? 0,
-        };
-      }),
-    [data.bomProductIds, data.summary, productMap],
-  );
+
+  const summaryByProductId = useMemo(() => {
+    const map = new Map(data.summary.map((s) => [s.productId, s]));
+    return map;
+  }, [data.summary]);
+
+  const toggleExpand = (rowKey: string) => {
+    setExpandedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(rowKey)) next.delete(rowKey);
+      else next.add(rowKey);
+      return next;
+    });
+  };
 
   const handleSubmit = async () => {
     if (!warehouseId && isIssue) {
@@ -104,7 +141,12 @@ const DevMaterialOperationModal: React.FC<DevMaterialOperationModalProps> = ({
       return;
     }
     const lines = isIssue
-      ? buildIssueLines(qtyByProduct, warehouseId, batchByProduct, batchManagedIds)
+      ? buildIssueLines(
+          pickVisibleQty(qtyByProduct, visibleProductIds),
+          warehouseId,
+          batchByProduct,
+          batchManagedIds,
+        )
       : buildReturnLines(qtyByReturnKey, data.returnable);
     if (lines.length === 0) {
       toast.error(isIssue ? '请填写本次领料数量' : '请填写本次退料数量');
@@ -185,7 +227,7 @@ const DevMaterialOperationModal: React.FC<DevMaterialOperationModalProps> = ({
             )}
 
             {isIssue ? (
-              issueRows.length === 0 ? (
+              issueVisibleRows.length === 0 ? (
                 <p className="py-8 text-center text-xs font-medium text-slate-400">请先配置试制 BOM</p>
               ) : (
                 <div className="overflow-x-auto rounded-2xl border border-slate-100">
@@ -203,55 +245,85 @@ const DevMaterialOperationModal: React.FC<DevMaterialOperationModalProps> = ({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
-                      {issueRows.map((row) => (
-                        <tr key={row.productId}>
-                          <td className="px-3 py-2">
-                            <p className="text-xs font-semibold text-slate-800">{row.name}</p>
-                            {row.sku ? <p className="text-[10px] font-medium text-slate-400">{row.sku}</p> : null}
-                          </td>
-                          <td className="px-3 py-2 text-right text-xs font-semibold text-slate-600">{row.netQty}</td>
-                          {showBatchCol ? (
-                            <td className="px-3 py-2 align-top">
-                              {batchManagedIds.has(row.productId) ? (
-                                <MaterialIssueBatchSelect
-                                  product={productMap.get(row.productId)}
-                                  categories={[...categoryById.values()]}
-                                  warehouseId={warehouseId}
-                                  value={batchByProduct[row.productId] ?? ''}
-                                  onChange={(v) =>
-                                    setBatchByProduct((prev) => ({
-                                      ...prev,
-                                      [row.productId]: clampBatchNoInput(v),
-                                    }))
-                                  }
-                                  mode="issue"
-                                  hideLabel
-                                  mergeBatches={listAvailableBatches(row.productId, warehouseId)}
-                                />
-                              ) : (
-                                <span className="text-[10px] font-medium text-slate-300">—</span>
-                              )}
+                      {issueVisibleRows.map((row) => {
+                        const p = productMap.get(row.productId);
+                        const summary = summaryByProductId.get(row.productId);
+                        const name = p?.name ?? summary?.productName ?? row.productId;
+                        const sku = p?.sku ?? summary?.productSku ?? '';
+                        const netQty = summary?.netQty ?? 0;
+                        const isExpanded = expandedKeys.has(row.rowKey);
+                        const padLeft = 12 + (row.level - 1) * 14;
+                        return (
+                          <tr key={row.rowKey}>
+                            <td className="py-2 pr-3" style={{ paddingLeft: padLeft }}>
+                              <div className="flex min-w-0 items-start gap-1">
+                                {row.hasChildren ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleExpand(row.rowKey)}
+                                    className="mt-0.5 shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                                    title={isExpanded ? '收起子物料' : '展开子物料'}
+                                    aria-label={isExpanded ? '收起子物料' : '展开子物料'}
+                                  >
+                                    {isExpanded ? (
+                                      <ChevronDown className="h-3.5 w-3.5" />
+                                    ) : (
+                                      <ChevronRight className="h-3.5 w-3.5" />
+                                    )}
+                                  </button>
+                                ) : (
+                                  <span className="mt-0.5 inline-block h-3.5 w-3.5 shrink-0" aria-hidden />
+                                )}
+                                <div className="min-w-0">
+                                  <p className="text-xs font-semibold text-slate-800">{name}</p>
+                                  {sku ? <p className="text-[10px] font-medium text-slate-400">{sku}</p> : null}
+                                </div>
+                              </div>
                             </td>
-                          ) : (
-                            <td className="px-3 py-2 text-right text-xs font-semibold text-slate-700 tabular-nums">
-                              {formatMaterialQtyDisplay(getStock(row.productId, warehouseId))}
+                            <td className="px-3 py-2 text-right text-xs font-semibold text-slate-600">{netQty}</td>
+                            {showBatchCol ? (
+                              <td className="px-3 py-2 align-top">
+                                {batchManagedIds.has(row.productId) ? (
+                                  <MaterialIssueBatchSelect
+                                    product={productMap.get(row.productId)}
+                                    categories={[...categoryById.values()]}
+                                    warehouseId={warehouseId}
+                                    value={batchByProduct[row.productId] ?? ''}
+                                    onChange={(v) =>
+                                      setBatchByProduct((prev) => ({
+                                        ...prev,
+                                        [row.productId]: clampBatchNoInput(v),
+                                      }))
+                                    }
+                                    mode="issue"
+                                    hideLabel
+                                    mergeBatches={listAvailableBatches(row.productId, warehouseId)}
+                                  />
+                                ) : (
+                                  <span className="text-[10px] font-medium text-slate-300">—</span>
+                                )}
+                              </td>
+                            ) : (
+                              <td className="px-3 py-2 text-right text-xs font-semibold text-slate-700 tabular-nums">
+                                {formatMaterialQtyDisplay(getStock(row.productId, warehouseId))}
+                              </td>
+                            )}
+                            <td className="px-3 py-2">
+                              <input
+                                type="number"
+                                min={0}
+                                step="any"
+                                value={qtyByProduct[row.productId] ?? ''}
+                                onChange={(e) => {
+                                  const v = e.target.value === '' ? 0 : Number(e.target.value);
+                                  setQtyByProduct((prev) => ({ ...prev, [row.productId]: v }));
+                                }}
+                                className={`w-28 text-center ${formStandardControlClass}`}
+                              />
                             </td>
-                          )}
-                          <td className="px-3 py-2">
-                            <input
-                              type="number"
-                              min={0}
-                              step="any"
-                              value={qtyByProduct[row.productId] ?? ''}
-                              onChange={(e) => {
-                                const v = e.target.value === '' ? 0 : Number(e.target.value);
-                                setQtyByProduct((prev) => ({ ...prev, [row.productId]: v }));
-                              }}
-                              className={`w-28 text-center ${formStandardControlClass}`}
-                            />
-                          </td>
-                        </tr>
-                      ))}
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

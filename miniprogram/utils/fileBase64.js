@@ -205,6 +205,66 @@ function isImageDataUrl(dataUrl) {
   return typeof dataUrl === 'string' && dataUrl.indexOf('data:image/') === 0;
 }
 
+/** 是否可直接作为 image.src / setData（禁止大体积 data URL） */
+function isSafeImageSrcForSetData(src) {
+  if (!src || typeof src !== 'string') return false;
+  return src.indexOf('data:') !== 0;
+}
+
+/**
+ * 将 data URL 写到本地临时路径，供 image / previewImage 使用（避免大 base64 进 setData）。
+ * @returns {Promise<string>} 本地路径；失败时空串
+ */
+function writeDataUrlTempFile(dataUrl, fileKey) {
+  return new Promise((resolve) => {
+    if (!dataUrl || typeof dataUrl !== 'string' || dataUrl.indexOf('data:') !== 0) {
+      resolve('');
+      return;
+    }
+    const comma = dataUrl.indexOf(',');
+    if (comma < 0) {
+      resolve('');
+      return;
+    }
+    const meta = dataUrl.slice(0, comma);
+    const b64 = dataUrl.slice(comma + 1);
+    const mimeMatch = /data:([^;]+)/.exec(meta);
+    const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+    let ext = 'jpg';
+    if (mime.indexOf('png') >= 0) ext = 'png';
+    else if (mime.indexOf('webp') >= 0) ext = 'webp';
+    else if (mime.indexOf('gif') >= 0) ext = 'gif';
+    const base =
+      (typeof wx !== 'undefined' && wx.env && wx.env.USER_DATA_PATH) || '';
+    if (!base || typeof wx === 'undefined' || !wx.getFileSystemManager) {
+      resolve('');
+      return;
+    }
+    const safeKey = String(fileKey || `img-${Date.now()}`).replace(/[^\w-]/g, '').slice(0, 48);
+    const filePath = `${base}/stpro-img-${safeKey || Date.now()}.${ext}`;
+    try {
+      wx.getFileSystemManager().writeFile({
+        filePath,
+        data: b64,
+        encoding: 'base64',
+        success: () => resolve(filePath),
+        fail: () => resolve(''),
+      });
+    } catch {
+      resolve('');
+    }
+  });
+}
+
+/**
+ * 解析可安全 setData 的预览地址：http(s)/本地路径原样返回；data URL 落盘后返回临时路径。
+ */
+function resolveImageDisplaySrc(src, fileKey) {
+  if (!src || typeof src !== 'string') return Promise.resolve('');
+  if (isSafeImageSrcForSetData(src)) return Promise.resolve(src);
+  return writeDataUrlTempFile(src, fileKey);
+}
+
 module.exports = {
   MAX_CUSTOM_FILE_BYTES,
   guessMime,
@@ -218,4 +278,7 @@ module.exports = {
   chooseCustomFieldFiles,
   formatCustomFileLabel,
   isImageDataUrl,
+  isSafeImageSrcForSetData,
+  writeDataUrlTempFile,
+  resolveImageDisplaySrc,
 };

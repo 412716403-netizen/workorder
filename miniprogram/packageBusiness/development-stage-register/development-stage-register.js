@@ -20,7 +20,7 @@ const {
   splitIsoToDateTime,
   joinDateTimeToIso,
 } = require('../utils/devStageRegister.js');
-const { chooseCustomFieldFiles, isImageDataUrl } = require('../utils/fileBase64.js');
+const { chooseCustomFieldFiles, isImageDataUrl, resolveImageDisplaySrc } = require('../utils/fileBase64.js');
 const {
   DEV_STAGE_FILE_MAX_COUNT,
   parseDevStageFileItems,
@@ -226,7 +226,10 @@ Page({
       this._templates = templates || [];
       this._fileValues = {};
       this._filePreviews = {};
-      const fields = buildStageRegisterFields(found.stage, this._templates).map((f) => {
+      const rawFields = buildStageRegisterFields(found.stage, this._templates);
+      const fields = [];
+      for (let fi = 0; fi < rawFields.length; fi += 1) {
+        const f = rawFields[fi];
         const parts = f.type === 'date' ? splitIsoToDateTime(f.value) : { datePart: '', timePart: '' };
         const base = {
           ...f,
@@ -236,11 +239,19 @@ Page({
         if (f.type === 'file') {
           const items = parseDevStageFileItems(f.value);
           this._fileValues[f.id] = items;
-          this._filePreviews[f.id] = items.map((i) => i.url);
-          return enrichFileField(base, items, items.map((i) => i.url));
+          // 图片 data URL 落盘后再进 setData，避免大 base64 卡渲染
+          const previews = await Promise.all(
+            items.map((item, idx) => {
+              if (!isImageDataUrl(item.url)) return Promise.resolve('');
+              return resolveImageDisplaySrc(item.url, `${f.id}-${idx}`);
+            }),
+          );
+          this._filePreviews[f.id] = previews;
+          fields.push(enrichFileField(base, items, previews));
+        } else {
+          fields.push(base);
         }
-        return base;
-      });
+      }
       const statusIndex = Math.max(
         0,
         STAGE_STATUS_OPTIONS.findIndex((o) => o.id === found.stage.status),

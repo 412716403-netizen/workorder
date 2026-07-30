@@ -1,5 +1,6 @@
 const { productColorSizeEnabled, validateProductColorSizeSelection } = require('./productColorSize.js');
 const { generateVariants } = require('./productForm.js');
+const { validateProductCatalogUnique } = require('./productCatalogUnique.js');
 const { DevStyleStatus } = require('./devStyleConstants.js');
 
 function genDraftStyleId() {
@@ -50,12 +51,20 @@ function syncDevStyleVariants(style, category, dictionaries) {
   return { ...style, variants };
 }
 
-function validateDevStyleForSave(style, category) {
+function validateDevStyleForSave(style, category, opts) {
   const name = String((style && style.name) || '').trim();
   if (!name) return '产品编号不能为空';
   if (!String((style && style.categoryId) || '').trim()) return '请选择产品分类';
   const stageNames = (style && style.defaultStageNames) || [];
   if (!stageNames.length) return '请至少选择一个开发流程节点';
+  const catalogErr = validateProductCatalogUnique(opts && opts.products ? opts.products : [], {
+    name,
+    sku: String((style && style.code) || ''),
+    excludeProductId: style && style.publishedProductId,
+    styles: opts && opts.styles,
+    excludeStyleId: style && style.id,
+  });
+  if (catalogErr) return catalogErr;
   const colorSizeErr = validateProductColorSizeSelection(
     {
       colorIds: style.colorIds,

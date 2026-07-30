@@ -29,7 +29,7 @@ const _require7 =
 
 
 
-  require('../../utils/orderApi.js'),getOrder = _require7.getOrder,updateOrder = _require7.updateOrder,updateOrderDispatchStatus = _require7.updateOrderDispatchStatus,fetchTenantConfig = _require7.fetchTenantConfig,fetchProductsAll = _require7.fetchProductsAll,fetchCategoriesAll = _require7.fetchCategoriesAll,fetchProductionRecords = _require7.fetchProductionRecords,fetchBomsAll = _require7.fetchBomsAll,fetchNodesAll = _require7.fetchNodesAll,listProductProgressAll = _require7.listProductProgressAll,getPlan = _require7.getPlan,listOrdersPaginated = _require7.listOrdersPaginated;
+  require('../../utils/orderApi.js'),getOrder = _require7.getOrder,updateOrder = _require7.updateOrder,updateOrderDispatchStatus = _require7.updateOrderDispatchStatus,fetchTenantConfig = _require7.fetchTenantConfig,fetchProductsAll = _require7.fetchProductsAll,fetchCategoriesAll = _require7.fetchCategoriesAll,fetchProductionRecords = _require7.fetchProductionRecords,fetchBomsAll = _require7.fetchBomsAll,fetchNodesAll = _require7.fetchNodesAll,listProductProgressByProductId = _require7.listProductProgressByProductId,getPlan = _require7.getPlan,listOrdersPaginated = _require7.listOrdersPaginated;
 const _require8 =
 
 
@@ -402,25 +402,29 @@ Page({
           : Promise.resolve([order]),
         fetchBomsAll(),
         fetchNodesAll(),
-        this._productionLinkMode === 'product' ? listProductProgressAll() : Promise.resolve([])]
+        order.productId && this._productionLinkMode === 'product'
+          ? listProductProgressByProductId(order.productId)
+          : Promise.resolve([])]
         ),productsRaw = _await$Promise$all2[0],categoriesRaw = _await$Promise$all2[1],plan = _await$Promise$all2[2],prodRecordsRaw = _await$Promise$all2[3],relatedOrders = _await$Promise$all2[4],bomsRaw = _await$Promise$all2[5],nodesRaw = _await$Promise$all2[6],pmpRaw = _await$Promise$all2[7];
       if (seq !== this._loadSeq) return;
 
       const orders = relatedOrders && relatedOrders.length ? relatedOrders : [order];
       const familyOrderIds = buildOrderFamilyIds(order, orders, buildMaterialIndexes(productsRaw, bomsRaw, orders));
-      const stockRecordsRaw = await fetchProductionRecords({
-        types: 'STOCK_OUT,STOCK_RETURN',
-        all: 'true',
-        orderIds: familyOrderIds.join(','),
-        ...(this._productionLinkMode === 'product' && order.productId ?
-        { sourceProductIds: order.productId } :
-        {})
-      });
-      const outsourceRecordsRaw = await fetchProductionRecords({
-        types: 'OUTSOURCE',
-        all: 'true',
-        orderIds: this._orderId
-      });
+      const [stockRecordsRaw, outsourceRecordsRaw] = await Promise.all([
+        fetchProductionRecords({
+          types: 'STOCK_OUT,STOCK_RETURN',
+          all: 'true',
+          orderIds: familyOrderIds.join(','),
+          ...(this._productionLinkMode === 'product' && order.productId ?
+          { sourceProductIds: order.productId } :
+          {})
+        }),
+        fetchProductionRecords({
+          types: 'OUTSOURCE',
+          all: 'true',
+          orderIds: this._orderId
+        }),
+      ]);
       if (seq !== this._loadSeq) return;
 
       const products = normalizeMasterList(productsRaw);

@@ -19,13 +19,14 @@ import {
   FileArchive as FileArchiveIcon,
   Package,
 } from 'lucide-react';
-import type { AppDictionaries, DevAttachmentDto, DevBomDto, DevSampleDto, DevStageDto, DevStageTemplateDto, DevStyleDto, GlobalNodeTemplate, Partner, Product, ProductCategory, Warehouse } from '../../types';
+import type { AppDictionaries, BOM, DevAttachmentDto, DevBomDto, DevSampleDto, DevStageDto, DevStageTemplateDto, DevStyleDto, GlobalNodeTemplate, Partner, Product, ProductCategory, Warehouse } from '../../types';
 import { DevStyleStatus, DEV_STAGE_STATUS_LABEL, DevStageStatus } from '../../types';
 import { toast } from 'sonner';
 import {
   canDeleteDevStyle,
   formatDevStyleCreatedAt,
   getDevSampleDeleteBlockReason,
+  isDevStylePublishedForDisplay,
   resolveColorNames,
   resolveSizeNames,
   resolveDevStyleCustomerName,
@@ -88,6 +89,8 @@ interface DevStyleMainContentProps {
   /** 详情原图/附件仍在拉取 */
   detailLoading?: boolean;
   products: Product[];
+  /** 产品档案 BOM，用于开发领料展开子物料 */
+  boms?: BOM[];
   partners: Partner[];
   dictionaries: AppDictionaries;
   templates: DevStageTemplateDto[];
@@ -109,6 +112,7 @@ interface DevStyleMainContentProps {
   onEditProduct: () => void;
   onPublish: () => void;
   onDelete: () => void;
+  /** 归档 ↔ 还原；已生成商品的款式归档后会回到 published */
   onToggleArchive: () => void;
   onAddSample: (data: { name: string; stageNames: string[]; colorId?: string; sizeId?: string }) => Promise<void>;
   onDeleteSample: (sampleId: string) => Promise<void>;
@@ -128,6 +132,7 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
   style,
   detailLoading,
   products,
+  boms = [],
   partners,
   dictionaries,
   templates,
@@ -310,10 +315,21 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
                 href: `/development?styleId=${encodeURIComponent(style.id)}`,
               }}
             />
-            {style.status === DevStyleStatus.PUBLISHED ? (
-              <span className="flex items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-600">
-                <CheckCircle2 className="w-3.5 h-3.5" /> 商品信息已发布
-              </span>
+            {isDevStylePublishedForDisplay(style) ? (
+              <>
+                <span className="flex items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-600">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> 商品信息已发布
+                </span>
+                {canEdit && style.status === DevStyleStatus.PUBLISHED ? (
+                  <button
+                    type="button"
+                    onClick={onToggleArchive}
+                    className={`flex items-center gap-2 ${outlineToolbarButtonClass} border-indigo-100 bg-indigo-50 text-indigo-600 hover:bg-indigo-100`}
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> 还原至开发中
+                  </button>
+                ) : null}
+              </>
             ) : canEdit && !readOnly && style.status === DevStyleStatus.ARCHIVED ? (
               <button
                 type="button"
@@ -567,8 +583,12 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
                   data={materialData}
                   loading={materialLoading}
                   products={products}
+                  boms={boms}
                   categories={categories}
                   warehouses={warehouses}
+                  partners={partners}
+                  dictionaries={dictionaries}
+                  globalNodes={globalNodes}
                   perms={materialPerms}
                   styleAllowsIssue={style.status === DevStyleStatus.DEVELOPING}
                   onRefresh={refreshMaterials}

@@ -3,6 +3,7 @@ import {
   uniqueDevBomProductIds,
   buildIssueLines,
   buildReturnLines,
+  pickVisibleQty,
   returnableRowKey,
 } from '../utils/devMaterialHelpers';
 import { shouldExcludeFromProductionMaterialStats, isDevMaterialOpReason } from '../utils/productionMaterialReason';
@@ -41,6 +42,16 @@ describe('devMaterialHelpers', () => {
     expect(lines).toEqual([
       { productId: 'm1', quantity: 2, warehouseId: 'wh1', batchNo: 'B1' },
       { productId: 'm3', quantity: 1.5, warehouseId: 'wh1' },
+    ]);
+  });
+
+  it('pickVisibleQty drops quantities of collapsed (hidden) rows', () => {
+    const qty = { m1: 2, child1: 5, child2: 3 };
+    const visible = new Set(['m1', 'child2']);
+    expect(pickVisibleQty(qty, visible)).toEqual({ m1: 2, child2: 3 });
+    expect(buildIssueLines(pickVisibleQty(qty, visible), 'wh1', {}, new Set())).toEqual([
+      { productId: 'm1', quantity: 2, warehouseId: 'wh1' },
+      { productId: 'child2', quantity: 3, warehouseId: 'wh1' },
     ]);
   });
 
