@@ -277,7 +277,15 @@ export function SearchableProductSelect({
               className={rowBtnCls(p.id === value, unavailable)}
             >
               <div className="flex justify-between items-start gap-1.5 -my-px">
-                <p className={`font-bold truncate leading-tight min-w-0 flex-1 ${compact ? 'text-xs' : 'text-sm'}`}>{p.name}</p>
+                <p className={`font-bold truncate leading-tight min-w-0 flex-1 ${compact ? 'text-xs' : 'text-sm'}`}>
+                  {p.name}
+                  {(p.sku ?? '').trim() ? (
+                    <span className={`font-semibold ${p.id === value ? 'text-indigo-500' : 'text-slate-500'}`}>
+                      {' '}
+                      【{(p.sku ?? '').trim()}】
+                    </span>
+                  ) : null}
+                </p>
                 {cat && (
                   <span
                     className={`rounded bg-slate-100 text-slate-500 font-bold uppercase shrink-0 leading-tight ${compact ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-0.5 text-[11px]'}`}
@@ -287,13 +295,6 @@ export function SearchableProductSelect({
                 )}
               </div>
               <div className="flex flex-wrap items-center gap-1">
-                {(p.sku ?? '').trim() ? (
-                  <p
-                    className={`font-semibold uppercase tracking-tight leading-tight ${compact ? 'text-[9px]' : 'text-[10px]'} ${p.id === value ? 'text-indigo-400' : 'text-slate-400'}`}
-                  >
-                    {(p.sku ?? '').trim()}
-                  </p>
-                ) : null}
                 {partnerName && (
                   <span
                     className={`inline-flex items-center gap-0.5 font-bold text-slate-500 rounded bg-slate-50 leading-tight ${compact ? 'text-[10px] px-1.5 py-0.5' : 'text-[11px] px-1.5 py-0.5'}`}
