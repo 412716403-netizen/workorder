@@ -64,8 +64,12 @@
 | `CORS_ORIGIN` | `https://procx.wanpuxx.com` | **改为正式域名**（如 `https://pro.wanpuxx.com`） |
 | `NODE_ENV` | `production` | 一致 |
 | `COOKIE_SECURE` | `true`（HTTPS） | 一致 |
+| `WX_MINI_APPID` / `WX_MINI_SECRET` | 小程序登录 | 正式与小程序后台一致 |
+| `WX_MP_APPID` / `WX_MP_SECRET` / `WX_MP_TOKEN` | 服务号推送（可选） | 正式填服务号凭证；`TOKEN` 与公众平台「服务器配置」一致 |
+| `WX_MP_TEMPLATE_TODO_REMIND` | 待办提醒模板 ID | 公众平台「我的模板」中的模版 ID |
 
-> 生成密钥可用：`openssl rand -base64 48`。
+> 生成密钥可用：`openssl rand -base64 48`。  
+> 服务号回调 URL：`https://<域名>/webhooks/wechat-mp`（Nginx 须反代该路径到 Node，见附录 A）。
 
 ### 测试服务器 PostgreSQL 现状（2026-04 实测）
 
@@ -475,6 +479,16 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_read_timeout 120s;
         proxy_send_timeout 120s;
+    }
+
+    # 微信服务号回调（验签 / 关注扫码事件；勿走 SPA try_files）
+    location /webhooks/wechat-mp {
+        proxy_pass http://127.0.0.1:3001/webhooks/wechat-mp;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 10s;
     }
 
     location / {

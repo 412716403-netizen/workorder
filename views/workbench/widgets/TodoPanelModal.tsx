@@ -9,6 +9,7 @@ import { formatTimestamp } from '../../../utils/formatTime';
 import { navigateTodoHref } from '../../../utils/todoHrefNavigate';
 import { parseModalZIndex } from '../../../utils/modalZIndex';
 import AddTodoModal from '../../../components/AddTodoModal';
+import WxMpBindModal from './WxMpBindModal';
 import type { TodoItemDTO, TodoStatus } from '../../../types';
 
 interface TodoPanelModalProps {
@@ -43,6 +44,7 @@ const TodoPanelModal: React.FC<TodoPanelModalProps> = ({
   const confirm = useConfirm();
   const [tab, setTab] = useState<TodoStatus>('open');
   const [addOpen, setAddOpen] = useState(false);
+  const [wxBindOpen, setWxBindOpen] = useState(false);
   const [editing, setEditing] = useState<TodoItemDTO | null>(null);
   const [search, setSearch] = useState('');
 
@@ -106,6 +108,13 @@ const TodoPanelModal: React.FC<TodoPanelModalProps> = ({
             <ListTodo className="h-5 w-5 text-rose-500" /> 待办事项
           </h2>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setWxBindOpen(true)}
+              className="flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
+            >
+              <Bell className="h-3.5 w-3.5" /> 微信提醒
+            </button>
             {!hideCreateButton ? (
               <button
                 type="button"
@@ -279,6 +288,7 @@ const TodoPanelModal: React.FC<TodoPanelModalProps> = ({
         onClose={() => setEditing(null)}
         zIndex={childZIndex}
       />
+      <WxMpBindModal open={wxBindOpen} onClose={() => setWxBindOpen(false)} />
     </div>,
     document.body,
   );

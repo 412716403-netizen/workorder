@@ -281,9 +281,9 @@ export async function publishPlatformAnnouncement(
   if (body.length > 2000) throw new AppError(400, '内容最多 2000 字');
 
   const platformAnnouncement = getPlatformAnnouncementDelegate();
-  await platformAnnouncement.create({
+  const created = (await platformAnnouncement.create({
     data: { title, body },
-  });
+  })) as { id: string; title: string; body: string; createdAt: Date };
   const all = await platformAnnouncement.findMany({
     orderBy: { createdAt: 'desc' },
   });
@@ -293,6 +293,18 @@ export async function publishPlatformAnnouncement(
       where: { id: { in: toRemove.map(r => r.id) } },
     });
   }
+
+  // 异步广播服务号推送，不阻塞发布接口
+  void import('./wxMpPush.service.js')
+    .then(({ fanoutAnnouncementPush }) =>
+      fanoutAnnouncementPush({
+        id: created.id,
+        title: created.title,
+        createdAt: created.createdAt,
+      }),
+    )
+    .catch(err => console.warn('[wx-mp] announcement fanout failed:', err));
+
   return loadPlatformAnnouncements();
 }
 

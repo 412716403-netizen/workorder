@@ -30,6 +30,8 @@ import devRoutes from './routes/dev.js';
 import dashboardRoutes from './routes/dashboard.js';
 import todosRoutes from './routes/todos.js';
 import knowledgeBaseRoutes from './routes/knowledge-base.js';
+import wxMpRoutes from './routes/wxMp.js';
+import wechatMpWebhookRoutes from './routes/wechatMpWebhook.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -67,6 +69,14 @@ app.use(helmet({ contentSecurityPolicy: false }));
 app.use(compression());
 app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
 app.use(cookieParser());
+
+/** 服务号回调：须在 express.json 之前挂载，以便接收 text/xml */
+app.use(
+  '/webhooks/wechat-mp',
+  express.text({ type: ['text/xml', 'application/xml', 'text/plain', '*/*'], limit: '1mb' }),
+  wechatMpWebhookRoutes,
+);
+
 app.use(express.json({ limit: env.JSON_BODY_LIMIT }));
 
 const apiLimiter = rateLimit({
@@ -102,6 +112,7 @@ app.use('/api/products',   authMiddleware, requireTenant, apiLimiter, cacheContr
 app.use('/api/dev',        authMiddleware, requireTenant, apiLimiter, devRoutes);
 app.use('/api/dashboard',  authMiddleware, requireTenant, apiLimiter, dashboardRoutes);
 app.use('/api/todos',      authMiddleware, requireTenant, apiLimiter, todosRoutes);
+app.use('/api/wx-mp',      authMiddleware, requireTenant, apiLimiter, wxMpRoutes);
 app.use('/api/knowledge-base', authMiddleware, requireTenant, apiLimiter, knowledgeBaseRoutes);
 app.use('/api/plans',      authMiddleware, requireTenant, apiLimiter, plansRoutes);
 app.use('/api/orders',     authMiddleware, requireTenant, requireProductionModuleAccess(), apiLimiter, ordersRoutes);

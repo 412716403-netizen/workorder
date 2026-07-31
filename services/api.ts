@@ -73,5 +73,8 @@ export type { WorkbenchResponse, WorkbenchPageSummary, DashboardNotification, Da
 export { todos } from './api/todos';
 export type { TodoCreatePayload, TodoUpdatePayload } from './api/todos';
 
+export { wxMp } from './api/wxMp';
+export type { WxMpStatus, WxMpBindQrcode } from './api/wxMp';
+
 export { knowledgeBase } from './api/knowledgeBase';
 export type { KnowledgeTreeResponse } from './api/knowledgeBase';

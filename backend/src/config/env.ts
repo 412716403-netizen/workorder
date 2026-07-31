@@ -44,4 +44,24 @@ export const env = {
     const v = process.env.WX_MINI_SECRET?.trim();
     return v || undefined;
   },
+  /** 微信服务号 AppID（未配置时绑定/推送接口返回 503） */
+  get WX_MP_APPID(): string | undefined {
+    const v = process.env.WX_MP_APPID?.trim();
+    return v || undefined;
+  },
+  /** 微信服务号 AppSecret */
+  get WX_MP_SECRET(): string | undefined {
+    const v = process.env.WX_MP_SECRET?.trim();
+    return v || undefined;
+  },
+  /** 服务号服务器配置 Token（回调验签） */
+  get WX_MP_TOKEN(): string | undefined {
+    const v = process.env.WX_MP_TOKEN?.trim();
+    return v || undefined;
+  },
+  /** 待办提醒模板 template_id（公众平台「企业任务待办提醒」等） */
+  get WX_MP_TEMPLATE_TODO_REMIND(): string | undefined {
+    const v = process.env.WX_MP_TEMPLATE_TODO_REMIND?.trim();
+    return v || undefined;
+  },
 };

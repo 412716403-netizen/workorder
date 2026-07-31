@@ -658,6 +658,7 @@ export async function getMe(userId: string) {
     isEnterprise: user.isEnterprise,
     accountExpiresAt: user.accountExpiresAt?.toISOString() ?? null,
     wechatBound: Boolean(user.wxMiniOpenId),
+    wechatMpBound: Boolean(user.wxMpOpenId),
     tenants: memberships.map(m => ({
       id: m.tenant.id,
       name: m.tenant.name,
@@ -682,6 +683,7 @@ function mePayload(user: {
   isEnterprise: boolean;
   accountExpiresAt: Date | null;
   wxMiniOpenId?: string | null;
+  wxMpOpenId?: string | null;
 }) {
   return {
     id: user.id,
@@ -694,6 +696,7 @@ function mePayload(user: {
     isEnterprise: user.isEnterprise,
     accountExpiresAt: user.accountExpiresAt?.toISOString() ?? null,
     wechatBound: Boolean(user.wxMiniOpenId),
+    wechatMpBound: Boolean(user.wxMpOpenId),
   };
 }
 

@@ -30,6 +30,8 @@ model User {
   wxMiniOpenId     String?   @unique @map("wx_mini_openid") @db.VarChar(64)
   /** 微信开放平台 unionid（跨端打通预留，可空） */
   wxUnionId        String?   @map("wx_unionid") @db.VarChar(64)
+  /** 微信服务号 openid（模板消息推送；同一 openid 仅可绑一个系统账号） */
+  wxMpOpenId       String?   @unique @map("wx_mp_openid") @db.VarChar(64)
   createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
 
@@ -41,6 +43,26 @@ model User {
   @@index([lastLoginAt])
   @@index([wxUnionId])
   @@map("users")
+}
+
+/** 微信服务号模板消息发送日志（幂等 / 重试 / 排查） */
+model WxPushLog {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  channel     String    @default("mp_template") @db.VarChar(20)
+  templateKey String    @map("template_key") @db.VarChar(60)
+  dedupeKey   String    @unique @map("dedupe_key") @db.VarChar(120)
+  status      String    @db.VarChar(20)
+  errCode     String?   @map("err_code") @db.VarChar(40)
+  errMsg      String?   @map("err_msg") @db.VarChar(500)
+  attempts    Int       @default(0)
+  sentAt      DateTime? @map("sent_at") @db.Timestamptz()
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  @@index([status, createdAt])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("wx_push_logs")
 }
 
 /** 平台管理员关键操作审计（改企业/账号等） */

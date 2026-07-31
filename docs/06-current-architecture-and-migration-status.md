@@ -48,6 +48,7 @@
 | 页面聚合状态 | `AppDataContext` |
 | 打印模板 / 表单配置 | 已进入聚合状态与后端配置并存阶段，需持续收口 |
 | 待办提醒（`todo_reminder` 插件） | 后端 `TodoItem` 表 + `/api/todos`（个人区，按 `userId` 隔离，不挂 `requireSubPermission`）；工作台首页「待办事项」组件（`todos`，插件开启自动出现）管理清单；提醒经 `dashboard.getNotifications` 注入工作台消息中心，无业务字段落本地 |
+| 微信服务号模板消息 | `users.wx_mp_openid` + `wx_push_logs`；公开回调 `/webhooks/wechat-mp`；个人区 `/api/wx-mp/*`；对齐小程序消息 Tab：公告 / 到期 / 待办到点 / 协作待处理，约 60s 轮询推送（公告发布时即时 fanout）；模板暂复用 `WX_MP_TEMPLATE_TODO_REMIND` |
 
 ## 3. 当前最重要的结构事实
 

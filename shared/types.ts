@@ -957,6 +957,42 @@ export function isTodoSourceType(value: unknown): value is TodoSourceType {
 }
 
 // ============================================================
+// 微信服务号模板消息
+// ============================================================
+
+/** 业务侧模板语义键（映射到环境变量中的真实 template_id；未单独配置时回落到待办模板） */
+export const WX_MP_TEMPLATE_KEYS = {
+  TODO_REMIND: 'todo_remind',
+  ANNOUNCEMENT: 'announcement',
+  EXPIRY_REMINDER: 'expiry_reminder',
+  COLLAB: 'collab',
+} as const;
+export type WxMpTemplateKey = (typeof WX_MP_TEMPLATE_KEYS)[keyof typeof WX_MP_TEMPLATE_KEYS];
+
+/** 微信 thing 类型字段建议上限（超出会拒发） */
+export const WX_TEMPLATE_THING_MAX_CHARS = 20;
+
+/** 截断微信模板 thing 文本（按字符，保留可读后缀） */
+export function truncateWxTemplateThing(
+  value: string,
+  max = WX_TEMPLATE_THING_MAX_CHARS,
+): string {
+  const text = value.trim();
+  if (text.length <= max) return text;
+  if (max <= 1) return text.slice(0, max);
+  return `${text.slice(0, max - 1)}…`;
+}
+
+/** 小程序消息模块会话落地页（与 messagesChatBuilder 会话 id 对齐） */
+export const WX_MP_MESSAGE_PAGEPATHS = {
+  notifications: 'pages/messages-chat/messages-chat?id=notifications',
+  todos: 'pages/messages-chat/messages-chat?id=todos',
+  todosList: 'packageBusiness/todos/todos',
+  collab: (peerTenantId: string) =>
+    `pages/messages-chat/messages-chat?id=${encodeURIComponent(`collab:${peerTenantId}`)}`,
+} as const;
+
+// ============================================================
 // 产品经营 / 物料成本口径
 // ============================================================
 

@@ -33,6 +33,7 @@ const UNIQUE_CONFLICT_MESSAGES: Record<string, string> = {
   'User:phone': '手机号已被其他账号使用',
   'User:email': '邮箱已被其他账号使用',
   'User:wx_mini_openid': '该微信已绑定其他账号',
+  'User:wx_mp_openid': '该微信服务号已绑定其他账号',
 };
 
 export function errorHandler(err: Error, req: Request, res: Response, _next: NextFunction) {

@@ -15,6 +15,7 @@ Page({
     displayName: '用户',
     user: null,
     wechatBound: false,
+    wechatMpBound: false,
     wechatBusy: false,
     tenantName: '',
     tenantRole: '',
@@ -51,6 +52,7 @@ Page({
         this.setData({
           user,
           wechatBound: Boolean(user.wechatBound),
+          wechatMpBound: Boolean(user.wechatMpBound),
           displayName: display,
           tenantCount: tenants.length,
           avatarText: display.slice(0, 1),
@@ -81,7 +83,13 @@ Page({
         arrow: true,
       },
       { key: 'security', label: '账号与安全', desc: '', icon: icon('security'), arrow: true },
-      { key: 'notify', label: '通知设置', desc: '', icon: icon('notify'), arrow: true },
+      {
+        key: 'notify',
+        label: '微信提醒',
+        desc: this.data.wechatMpBound ? '已开启 · 点击管理' : '未开启 · 扫码关注服务号',
+        icon: icon('notify'),
+        arrow: true,
+      },
       { key: 'help', label: '帮助与反馈', desc: '', icon: icon('help'), arrow: true },
       { key: 'about', label: '关于', desc: '万濮云生产报工', icon: icon('about'), arrow: true },
     );
@@ -111,6 +119,10 @@ Page({
       this.onWechatTap();
       return;
     }
+    if (key === 'notify') {
+      this.onNotifyTap();
+      return;
+    }
     if (key === 'about') {
       wx.showModal({
         title: '关于',
@@ -120,6 +132,75 @@ Page({
       return;
     }
     wx.showToast({ title: '功能开发中', icon: 'none' });
+  },
+
+  async onNotifyTap() {
+    if (this.data.wechatBusy) return;
+    this.setData({ wechatBusy: true });
+    try {
+      const status = await request({ path: '/wx-mp/status', method: 'GET' });
+      if (!status || !status.configured) {
+        wx.showModal({
+          title: '微信提醒',
+          content: '服务号推送尚未配置，请联系管理员。',
+          showCancel: false,
+        });
+        return;
+      }
+      if (status.bound) {
+        wx.showModal({
+          title: '微信提醒',
+          content: '已开启：待办到点后将通过服务号推送到微信。是否关闭？',
+          confirmText: '关闭提醒',
+          success: (res) => {
+            if (res.confirm) this.unbindWxMp();
+          },
+        });
+        return;
+      }
+      const qr = await request({ path: '/wx-mp/bind-qrcode', method: 'POST', data: {} });
+      if (!qr || !qr.qrcodeUrl) {
+        wx.showToast({ title: '二维码获取失败', icon: 'none' });
+        return;
+      }
+      wx.previewImage({ urls: [qr.qrcodeUrl], current: qr.qrcodeUrl });
+      wx.showToast({ title: '请用微信扫码关注', icon: 'none', duration: 2500 });
+      // 扫码后轮询绑定状态
+      let tries = 0;
+      const timer = setInterval(async () => {
+        tries += 1;
+        try {
+          const s = await request({ path: '/wx-mp/status', method: 'GET' });
+          if (s && s.bound) {
+            clearInterval(timer);
+            this.setData({ wechatMpBound: true });
+            this.buildMenu(readTenantCtx() || {});
+            wx.showToast({ title: '已开启微信提醒', icon: 'success' });
+          }
+        } catch (_) { /* ignore */ }
+        if (tries >= 40) clearInterval(timer);
+      }, 3000);
+    } catch (e) {
+      const msg = (e && e.message) || '操作失败';
+      wx.showToast({ title: String(msg).slice(0, 40), icon: 'none' });
+    } finally {
+      this.setData({ wechatBusy: false });
+    }
+  },
+
+  async unbindWxMp() {
+    this.setData({ wechatBusy: true });
+    try {
+      await request({ path: '/wx-mp/unbind', method: 'POST', data: {} });
+      this.setData({ wechatMpBound: false });
+      this.buildMenu(readTenantCtx() || {});
+      wx.showToast({ title: '已关闭微信提醒', icon: 'success' });
+    } catch (e) {
+      const msg = (e && e.message) || '操作失败';
+      wx.showToast({ title: String(msg).slice(0, 40), icon: 'none' });
+    } finally {
+      this.setData({ wechatBusy: false });
+    }
   },
 
   onWechatTap() {
