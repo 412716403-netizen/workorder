@@ -116,7 +116,8 @@ async function buildDocxHtml(blob: Blob, title: string): Promise<string> {
   body { margin: 0; background: #e5e7eb; font-family: system-ui, -apple-system, sans-serif; }
   .kb-docx-wrapper { padding: 24px 0; display: flex; flex-direction: column; align-items: center; gap: 16px; }
   .kb-docx { background: #fff; box-shadow: 0 4px 24px rgba(15,23,42,.12); }
-  .kb-docx img, .kb-docx image { max-width: 100%; }
+  /* wrapNone 浮动图挂在 0×0 锚点上，勿用 max-width:100% 否则图宽被压成 0 */
+  .kb-docx img, .kb-docx image { max-width: none; }
 </style>
 ${styleHost.innerHTML}
 </head><body>${body.innerHTML}</body></html>`;

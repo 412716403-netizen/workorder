@@ -1905,5 +1905,6 @@
 
 .kb-word-preview .kb-docx img,
 .kb-word-preview .kb-docx image {
-  max-width: 100%;
+  /* wrapNone 浮动图挂在 width/height:0 的锚点容器上；max-width:100% 会按父级 0 宽把图压没 */
+  max-width: none;
 }

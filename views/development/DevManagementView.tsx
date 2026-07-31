@@ -221,11 +221,11 @@ const DevManagementView: React.FC = () => {
     });
     if (!ok) return;
     try {
-      const { productId } = await publishStyle(selected.id);
+      await publishStyle(selected.id);
       await refreshPublishedCatalog();
       setActiveTab('archived');
       setSelectedId(selected.id);
-      toast.success(`已生成商品，产品档案已同步（${productId}）`);
+      toast.success('已生成商品，产品档案已同步');
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : '发布失败');
     }

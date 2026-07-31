@@ -21,6 +21,7 @@ import { isProductBlockedAsBomMaterial } from '../../utils/productBomMaterial';
 import { sortVariantsByColorThenSize } from '../../utils/sortVariantsByProduct';
 import BomVariantMatrix from '../../components/product/BomVariantMatrix';
 import BomEditorPortal, { useBomEditorPortalState } from '../product-management/BomEditorPortal';
+import { BomBatchAddPanel } from '../product-management/BomBatchAddPanel';
 import DevFlowNodePicker from './DevFlowNodePicker';
 import DevCreateSectionCard from './DevCreateSectionCard';
 import { pageSubtitleClass, sectionTitleClass } from '../../styles/uiDensity';
@@ -427,7 +428,7 @@ const DevBomConfigSection: React.FC<DevBomConfigSectionProps> = ({
         embeddedInQuickCreateModal={!!embeddedInCreateModal}
         allowQuickCreate
         nestedOverlayZ={bomNestedOverlayZ}
-        BomBatchAddPanelComponent={() => null}
+        BomBatchAddPanelComponent={BomBatchAddPanel}
         copyBOMTriggerRef={copyBOMTriggerRef}
         onCopyBOMFrom={copyBOMFrom}
         onUpdateBOMItem={(idx, updates) => {
