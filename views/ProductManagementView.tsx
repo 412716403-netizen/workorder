@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { 
   Package, 
   Plus, 
@@ -9,14 +9,18 @@ import {
   Upload,
   Loader2,
   Building2,
+  Copy,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Product, GlobalNodeTemplate, ProductCategory, PartnerCategory, BOM, AppDictionaries, Partner } from '../types';
+import { Product, GlobalNodeTemplate, ProductCategory, PartnerCategory, BOM, AppDictionaries, Partner, ProductCodeAutoGen } from '../types';
 import ProductImportModal from './ProductImportModal';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { pageSubtitleClass, pageTitleClass, formStandardControlIconClass } from '../styles/uiDensity';
 import ProductEditForm from './product-management/ProductEditForm';
+import PlanProductDetail from './plan-order-list/PlanProductDetail';
 import { bomHasConfiguredItems } from '../utils/bomEffective';
+import { buildProductCopyDraft } from '../utils/buildProductCopyDraft';
+import { getProductCodeRule } from '../utils/productCodeRule';
 import { getProductCategoryCustomFieldEntries } from '../utils/reportCustomDocField';
 import { productMatchesSearchQuery } from '../utils/productSearchMatch';
 import { compareProductsArchiveOrder } from '../utils/productSort';
@@ -31,6 +35,9 @@ import ProductImageLightbox, {
   productPreviewFromProduct,
   type ProductImagePreviewTarget,
 } from '../components/ProductImageLightbox';
+import MediaFilePreviewOverlay, {
+  type MediaFilePreview,
+} from '../components/MediaFilePreviewOverlay';
 
 const PRODUCT_ARCHIVE_PAGE_SIZE = 20;
 
@@ -44,7 +51,7 @@ interface ProductManagementViewProps {
   dictionaries: AppDictionaries;
   partners: Partner[];
   partnerCategories: PartnerCategory[];
-  onUpdateProduct: (product: Product) => Promise<Product | null>;
+  onUpdateProduct: (product: Product & { codeAutoGen?: ProductCodeAutoGen }) => Promise<Product | null>;
   onDeleteProduct?: (id: string) => Promise<boolean>;
   onUpdateBOM: (bom: BOM) => Promise<boolean>;
   onRefreshDictionaries: () => Promise<void>;
@@ -80,12 +87,20 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   onClearInitialProductId,
 }) => {
   const { productionLinkMode, productCodeRules } = useConfigData();
-  const { onUpdateProductCodeRules } = useAppActions();
+  const { onUpdateProductCodeRules, refreshBoms } = useAppActions();
   const { masterDataReady } = useMasterData();
   const [imagePreview, setImagePreview] = useState<ProductImagePreviewTarget | null>(null);
+  const [viewProductId, setViewProductId] = useState<string | null>(null);
+  const [filePreview, setFilePreview] = useState<MediaFilePreview | null>(null);
   const { orders } = useOrdersData();
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>(PRODUCT_ARCHIVE_ALL);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  /** 复制产品时尚未落库的 BOM 草稿，保存产品后一并 create */
+  const [pendingBoms, setPendingBoms] = useState<BOM[]>([]);
+  const pendingBomsRef = useRef<BOM[]>([]);
+  pendingBomsRef.current = pendingBoms;
+  /** 本会话已成功写入过的 BOM id，避免 saveBOM 紧跟 flush 时因 React 未重渲再次 create */
+  const createdBomIdsRef = useRef<Set<string>>(new Set());
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [productArchiveSearch, setProductArchiveSearch] = useState('');
   const debouncedProductSearch = useDebouncedValue(productArchiveSearch);
@@ -168,6 +183,8 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   }, [permCanEdit, togglingEnabledId, onRefreshProducts, onUpdateProduct]);
 
   const handleStartCreateProduct = () => {
+    setPendingBoms([]);
+    createdBomIdsRef.current.clear();
     const newId = `p-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     setEditingProduct({
       id: newId, sku: '', name: '',
@@ -178,6 +195,85 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
       colorIds: [], sizeIds: [], variants: [], imageUrl: ''
     });
   };
+
+  const handleStartCopyProduct = useCallback(async (source: Product) => {
+    if (!permCanCreate) {
+      toast.error('没有新建产品权限');
+      return;
+    }
+    let full = source;
+    try {
+      // 列表可能是 lite 缓存（缺原图等），复制前拉完整档案
+      full = await api.products.get(source.id) as Product;
+    } catch {
+      /* 拉详情失败则用列表数据继续 */
+    }
+    const draft = buildProductCopyDraft(full, boms, {
+      catalog: products,
+      useAutoCode: getProductCodeRule(productCodeRules ?? {}, full.categoryId).mode === 'auto',
+    });
+    createdBomIdsRef.current.clear();
+    setPendingBoms(draft.boms);
+    setEditingProduct(draft.product);
+    toast.message(draft.boms.length > 0
+      ? `已复制为新建草稿（含 ${draft.boms.length} 份 BOM），请确认后保存`
+      : '已复制为新建草稿，请确认后保存');
+  }, [permCanCreate, boms, products, productCodeRules]);
+
+  const effectiveBoms = useMemo(() => {
+    if (pendingBoms.length === 0) return boms;
+    const pendingIds = new Set(pendingBoms.map(b => b.id));
+    return [...boms.filter(b => !pendingIds.has(b.id)), ...pendingBoms];
+  }, [boms, pendingBoms]);
+
+  const persistBom = useCallback(async (bom: BOM): Promise<boolean> => {
+    const known =
+      createdBomIdsRef.current.has(bom.id) || boms.some(b => b.id === bom.id);
+    if (known) {
+      try {
+        await api.boms.update(bom.id, bom);
+        createdBomIdsRef.current.add(bom.id);
+        void refreshBoms();
+        return true;
+      } catch (err) {
+        toast.error((err as Error).message || 'BOM 更新失败');
+        return false;
+      }
+    }
+    const ok = await onUpdateBOM(bom);
+    if (ok) createdBomIdsRef.current.add(bom.id);
+    return ok;
+  }, [boms, onUpdateBOM, refreshBoms]);
+
+  const handleUpdateProductWithPendingBoms = useCallback(async (
+    product: Product & { codeAutoGen?: ProductCodeAutoGen },
+  ) => {
+    const saved = await onUpdateProduct(product);
+    if (!saved) return null;
+    const drafts = pendingBomsRef.current.filter(bomHasConfiguredItems);
+    if (drafts.length === 0) return saved;
+    // 先清空 pending，避免并发路径重复 flush
+    setPendingBoms([]);
+    pendingBomsRef.current = [];
+    let failed = 0;
+    for (const bom of drafts) {
+      const ok = await persistBom({ ...bom, parentProductId: saved.id });
+      if (!ok) failed += 1;
+    }
+    void refreshBoms();
+    if (failed > 0) {
+      toast.error(`产品已保存，但有 ${failed} 份 BOM 未写入成功，请在编辑页重新配置`);
+    }
+    return saved;
+  }, [onUpdateProduct, persistBom, refreshBoms]);
+
+  const handleUpdateBomDropPending = useCallback(async (bom: BOM) => {
+    const ok = await persistBom(bom);
+    if (ok) {
+      setPendingBoms(prev => prev.filter(b => b.id !== bom.id));
+    }
+    return ok;
+  }, [persistBom]);
 
   const filteredProducts = useMemo(() => {
     const inCategory =
@@ -219,16 +315,20 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
         products={products}
         globalNodes={globalNodes}
         categories={categories}
-        boms={boms}
+        boms={effectiveBoms}
         dictionaries={dictionaries}
         partners={partners}
         partnerCategories={partnerCategories}
-        onUpdateProduct={onUpdateProduct}
+        onUpdateProduct={handleUpdateProductWithPendingBoms}
         onDeleteProduct={onDeleteProduct}
-        onUpdateBOM={onUpdateBOM}
+        onUpdateBOM={handleUpdateBomDropPending}
         onRefreshDictionaries={onRefreshDictionaries}
         onRefreshPartners={onRefreshPartners}
-        onBack={() => setEditingProduct(null)}
+        onBack={() => {
+          setPendingBoms([]);
+          createdBomIdsRef.current.clear();
+          setEditingProduct(null);
+        }}
         permCanDelete={permCanDelete}
         isPersistedProduct={products.some(p => p.id === editingProduct.id)}
         productionLinkMode={productionLinkMode}
@@ -374,13 +474,12 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                     return (
                       <tr
                         key={product.id}
-                        className={`group hover:bg-indigo-50/40 transition-colors cursor-pointer ${!enabled ? 'opacity-60' : ''}`}
-                        onClick={() => permCanEdit && handleStartEditProduct(product)}
+                        className={`group hover:bg-indigo-50/40 transition-colors ${!enabled ? 'opacity-60' : ''}`}
                       >
                         <td className="py-3 pl-4 pr-2">
                           <div className="w-9 h-9 bg-white rounded-xl flex items-center justify-center overflow-hidden text-slate-400 shrink-0 border border-slate-100">
                             {productThumbSrc(product) ? (
-                              <button type="button" onClick={(e) => { e.stopPropagation(); setImagePreview(productPreviewFromProduct(product)); }} className="w-full h-full focus:outline-none focus:ring-2 focus:ring-indigo-500" aria-label="查看产品图片">
+                              <button type="button" onClick={() => setImagePreview(productPreviewFromProduct(product))} className="w-full h-full focus:outline-none focus:ring-2 focus:ring-indigo-500" aria-label="查看产品图片">
                               <img loading="lazy" decoding="async" src={productThumbSrc(product)} alt={product.name} className="w-full h-full object-cover" />
                               </button>
                             ) : (
@@ -389,15 +488,27 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                           </div>
                         </td>
                         <td className="py-3 px-3">
-                          <p className="text-sm font-bold text-slate-800 group-hover:text-indigo-600 transition-colors truncate max-w-[220px]">
+                          <button
+                            type="button"
+                            onClick={() => setViewProductId(product.id)}
+                            className="text-left text-sm font-bold text-slate-800 hover:text-indigo-600 hover:underline transition-colors truncate max-w-[220px]"
+                            title="查看产品详情"
+                          >
                             {product.name}
                             {!enabled && (
-                              <span className="ml-1.5 inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-200 text-slate-500 align-middle">
+                              <span className="ml-1.5 inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-200 text-slate-500 align-middle no-underline">
                                 已禁用
                               </span>
                             )}
-                          </p>
-                          <p className="sm:hidden text-[10px] text-slate-400 font-medium mt-0.5">{product.sku}</p>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setViewProductId(product.id)}
+                            className="sm:hidden block text-left text-[10px] text-slate-400 font-medium mt-0.5 hover:text-indigo-600 hover:underline"
+                            title="查看产品详情"
+                          >
+                            {product.sku}
+                          </button>
                           {(partnerName || customTags.length > 0) && (
                             <div className="mt-1 flex flex-wrap items-center gap-1">
                               {partnerName && (
@@ -415,7 +526,14 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                           )}
                         </td>
                         <td className="py-3 px-3 hidden sm:table-cell">
-                          <span className="text-xs text-slate-500 font-medium">{product.sku}</span>
+                          <button
+                            type="button"
+                            onClick={() => setViewProductId(product.id)}
+                            className="text-left text-xs text-slate-500 font-medium hover:text-indigo-600 hover:underline transition-colors"
+                            title="查看产品详情"
+                          >
+                            {product.sku || '—'}
+                          </button>
                         </td>
                         <td className="py-3 px-3 hidden md:table-cell">
                           {category && <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold text-white bg-indigo-600">{category.name}</span>}
@@ -436,7 +554,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                           <span className="text-sm font-bold text-slate-800">¥{displayPrice > 0 ? displayPrice.toLocaleString() : '0'}</span>
                           {displayPrice > 0 && <span className="text-[9px] text-slate-400 ml-1">{priceLabel}</span>}
                         </td>
-                        <td className="py-3 px-3 text-center" onClick={e => e.stopPropagation()}>
+                        <td className="py-3 px-3 text-center">
                           {permCanEdit ? (
                             <button
                               type="button"
@@ -462,12 +580,27 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                           )}
                         </td>
                         <td className="py-3 pr-4 pl-2">
-                          {permCanEdit && (
-                            <button type="button" onClick={(e) => { e.stopPropagation(); handleStartEditProduct(product); }}
-                              className="p-1.5 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all">
-                              <Settings2 className="w-4 h-4" />
-                            </button>
-                          )}
+                          <div className="flex items-center justify-end gap-0.5">
+                            {permCanCreate && (
+                              <button
+                                type="button"
+                                onClick={() => { void handleStartCopyProduct(product); }}
+                                className="p-1.5 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                                title="复制为新产品"
+                                aria-label="复制为新产品"
+                              >
+                                <Copy className="w-4 h-4" />
+                              </button>
+                            )}
+                            {permCanEdit && (
+                              <button type="button" onClick={() => handleStartEditProduct(product)}
+                                className="p-1.5 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                                title="编辑产品"
+                                aria-label="编辑产品">
+                                <Settings2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -495,6 +628,20 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
         onImportComplete={async () => { setImportModalOpen(false); if (onRefreshProducts) await onRefreshProducts(); }}
       />
       <ProductImageLightbox target={imagePreview} onClose={() => setImagePreview(null)} />
+      {viewProductId && (
+        <PlanProductDetail
+          viewProductId={viewProductId}
+          products={products}
+          categories={categories}
+          dictionaries={dictionaries}
+          partners={partners}
+          globalNodes={globalNodes}
+          boms={boms}
+          onClose={() => setViewProductId(null)}
+          onFilePreview={(url, type) => setFilePreview({ src: url, kind: type })}
+        />
+      )}
+      <MediaFilePreviewOverlay preview={filePreview} onClose={() => setFilePreview(null)} />
     </div>
   );
 };

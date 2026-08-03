@@ -16,6 +16,12 @@ export const devStyles = {
     return request<DevStyleDto[]>(`/dev/styles${qs}`);
   },
   get: (id: string) => request<DevStyleDto>(`/dev/styles/${id}`),
+  getStageField: (fieldId: string) =>
+    request<{ id: string; value: string }>(`/dev/styles/stage-fields/${encodeURIComponent(fieldId)}`),
+  getAttachment: (attachmentId: string) =>
+    request<{ id: string; fileName: string; fileUrl: string; fileType?: string }>(
+      `/dev/styles/attachments/${encodeURIComponent(attachmentId)}`,
+    ),
   create: (data: unknown) =>
     request<DevStyleDto>('/dev/styles', { method: 'POST', body: JSON.stringify(data) }),
   update: (id: string, data: unknown) =>

@@ -3,8 +3,10 @@ import { AppError } from '../middleware/errorHandler.js';
 import { genId } from '../utils/genId.js';
 import { sanitizeCreate, sanitizeItems, sanitizeUpdate } from '../utils/request.js';
 import { DevStageStatus, DevStyleStatus } from '../../../shared/types.js';
+import { nodeBomsMapsEqual } from '../../../shared/nodeBomsEqual.js';
 import { buildImageThumb } from '../lib/imageThumb.js';
-import { devStyleInclude, devStyleListInclude, mapDevStyleRow } from './dev-styles.mapper.js';
+import { devStyleListInclude, mapDevStyleRow } from './dev-styles.mapper.js';
+import { loadMappedDevStyle } from './dev-styles.load.js';
 import { publishDevStyleToProduct } from './dev-publish.service.js';
 import { countDevMaterialRecords } from './dev-material.service.js';
 import { syncPublishedProductFromDevStyle } from './dev-published-sync.service.js';
@@ -172,9 +174,30 @@ export async function listDevStyles(
 }
 
 export async function getDevStyle(db: TenantPrismaClient, id: string) {
-  const row = await db.devStyle.findUnique({ where: { id }, include: devStyleInclude });
-  if (!row) throw new AppError(404, '款式不存在');
-  return mapDevStyleRow(row);
+  return loadMappedDevStyle(db, id);
+}
+
+export async function getDevStageField(db: TenantPrismaClient, fieldId: string) {
+  const field = await db.devStageField.findUnique({
+    where: { id: fieldId },
+    select: { id: true, value: true },
+  });
+  if (!field) throw new AppError(404, '登记字段不存在');
+  return { id: field.id, value: field.value ?? '' };
+}
+
+export async function getDevAttachment(db: TenantPrismaClient, attachmentId: string) {
+  const att = await db.devAttachment.findUnique({
+    where: { id: attachmentId },
+    select: { id: true, fileName: true, fileUrl: true, fileType: true },
+  });
+  if (!att) throw new AppError(404, '附件不存在');
+  return {
+    id: att.id,
+    fileName: att.fileName,
+    fileUrl: att.fileUrl ?? '',
+    fileType: att.fileType ?? undefined,
+  };
 }
 
 async function assertNoProductCatalogConflict(
@@ -644,7 +667,7 @@ export async function updateDevBom(
   // 若改动父款式归属，校验新父款式同样属于当前租户，避免脏外键
   if ('parentStyleId' in data) await assertDevParentStyle(db, data.parentStyleId);
 
-  await db.$transaction(async (tx) => {
+  const updated = await db.$transaction(async (tx) => {
     await tx.devBom.update({ where: { id: bomId }, data });
     if (items) {
       const cleanItems = sanitizeItems(items as Record<string, unknown>[], ['bomId']).map(
@@ -653,10 +676,15 @@ export async function updateDevBom(
       await tx.devBomItem.deleteMany({ where: { bomId } });
       if (cleanItems.length > 0) await tx.devBomItem.createMany({ data: cleanItems });
     }
+    return tx.devBom.findUnique({
+      where: { id: bomId },
+      include: { items: { orderBy: { sortOrder: 'asc' } } },
+    });
   });
+  if (!updated) throw new AppError(404, '开发 BOM 不存在');
   const styleId = String(('parentStyleId' in data ? data.parentStyleId : existing.parentStyleId) ?? '');
   if (styleId) await maybeSyncPublishedProductAfterBomChange(db, tenantId, styleId);
-  return getDevBom(db, bomId);
+  return updated;
 }
 
 export async function deleteDevBom(db: TenantPrismaClient, tenantId: string, id: string) {
@@ -676,11 +704,13 @@ export async function syncDevVariantNodeBoms(
 ) {
   const v = await db.devStyleVariant.findFirst({ where: { id: variantId, styleId } });
   if (!v) throw new AppError(404, '款式变体不存在');
-  await db.devStyleVariant.update({
-    where: { id: variantId },
-    data: { nodeBoms },
-  });
-  await maybeSyncPublishedProductAfterBomChange(db, tenantId, styleId);
+  if (!nodeBomsMapsEqual(v.nodeBoms, nodeBoms)) {
+    await db.devStyleVariant.update({
+      where: { id: variantId },
+      data: { nodeBoms },
+    });
+    await maybeSyncPublishedProductAfterBomChange(db, tenantId, styleId);
+  }
   return getDevStyle(db, styleId);
 }
 

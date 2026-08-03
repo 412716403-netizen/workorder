@@ -813,7 +813,17 @@ async function assertBomItemsNotColorSizeProducts(
   if (ids.length === 0) return;
   const rows = await db.product.findMany({
     where: { id: { in: ids } },
-    select: { id: true, name: true, sku: true, colorIds: true, sizeIds: true, variants: { select: { id: true }, take: 1 } },
+    select: {
+      id: true,
+      name: true,
+      sku: true,
+      colorIds: true,
+      sizeIds: true,
+      variants: {
+        select: { colorId: true, sizeId: true },
+        take: 2,
+      },
+    },
   });
   const byId = new Map(rows.map((r) => [r.id, r]));
   for (const id of ids) {

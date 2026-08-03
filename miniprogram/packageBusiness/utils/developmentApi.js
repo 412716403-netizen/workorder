@@ -25,6 +25,14 @@ function getDevStyle(id) {
   });
 }
 
+function getDevStageField(fieldId) {
+  if (!fieldId) return Promise.resolve(null);
+  return request({
+    path: `/dev/styles/stage-fields/${encodeURIComponent(fieldId)}`,
+    method: 'GET',
+  });
+}
+
 function createDevStyle(data) {
   return request({
     path: '/dev/styles',
@@ -194,6 +202,7 @@ function deleteDevMaterialDoc(styleId, docNo) {
 module.exports = {
   listDevStyles,
   getDevStyle,
+  getDevStageField,
   createDevStyle,
   updateDevStyle,
   deleteDevStyle,

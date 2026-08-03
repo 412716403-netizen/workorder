@@ -46,6 +46,11 @@ interface DevCreateStyleModalProps {
   devBoms?: DevBomDto[];
   /** 编辑态：即时保存单条 BOM（创建态不传，走 pendingBoms 批量保存） */
   onSaveBom?: (bom: DevBomDto, exists: boolean) => Promise<DevBomDto | void>;
+  onSyncVariantNodeBoms?: (
+    styleId: string,
+    variantId: string,
+    nodeBoms: Record<string, string>,
+  ) => Promise<void>;
   onCreateTemplate: (name: string) => Promise<void>;
   onUpdateTemplate: (id: string, data: Partial<DevStageTemplateDto>) => Promise<void>;
   onDeleteTemplate: (id: string) => Promise<void>;
@@ -75,6 +80,7 @@ const DevCreateStyleModal: React.FC<DevCreateStyleModalProps> = ({
   templatePerms,
   devBoms,
   onSaveBom,
+  onSyncVariantNodeBoms,
   onCreateTemplate,
   onUpdateTemplate,
   onDeleteTemplate,
@@ -246,6 +252,7 @@ const DevCreateStyleModal: React.FC<DevCreateStyleModalProps> = ({
               pendingBoms={pendingBoms}
               onPendingBomsChange={setPendingBoms}
               onSaveBom={isNew ? undefined : onSaveBom}
+              onSyncVariantNodeBoms={isNew ? undefined : onSyncVariantNodeBoms}
               readOnly={false}
               embeddedInCreateModal
             />

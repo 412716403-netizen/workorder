@@ -18,7 +18,6 @@ import {
   type DevStyleListFilters,
 } from '../../utils/devStyleListFilter';
 import { toast } from 'sonner';
-import * as api from '../../services/api';
 
 const DevManagementView: React.FC = () => {
   const {
@@ -81,6 +80,7 @@ const DevManagementView: React.FC = () => {
     removeStyle,
     publishStyle,
     saveDevBom,
+    syncVariantNodeBoms,
     updateStage,
     addSample,
     removeSample,
@@ -199,7 +199,10 @@ const DevManagementView: React.FC = () => {
 
   const handleSaveDevBom = useCallback(
     async (bom: Parameters<typeof saveDevBom>[0], exists: boolean) => {
-      const saved = await saveDevBom(bom, exists);
+      // 有变体时随后 syncVariantNodeBoms 会带回详情；单 SKU 仍在 save 内刷详情
+      const saved = await saveDevBom(bom, exists, {
+        skipDetailRefresh: Boolean(bom.variantId),
+      });
       // 试制 BOM 保存后后端会回写大货 BOM；刷新产品/BOM 列表，避免产品档案页看到旧数据
       if (selected?.publishedProductId || styles.find((s) => s.id === bom.parentStyleId)?.publishedProductId) {
         await refreshPublishedCatalog();
@@ -207,6 +210,13 @@ const DevManagementView: React.FC = () => {
       return saved;
     },
     [saveDevBom, selected?.publishedProductId, styles, refreshPublishedCatalog],
+  );
+
+  const handleSyncVariantNodeBoms = useCallback(
+    async (styleId: string, variantId: string, nodeBoms: Record<string, string>) => {
+      await syncVariantNodeBoms(styleId, variantId, nodeBoms);
+    },
+    [syncVariantNodeBoms],
   );
 
   const handlePublish = useCallback(async () => {
@@ -300,6 +310,7 @@ const DevManagementView: React.FC = () => {
       templatePerms={templatePerms}
       devBoms={devBoms}
       onSaveBom={handleSaveDevBom}
+      onSyncVariantNodeBoms={handleSyncVariantNodeBoms}
       onCreateTemplate={async (name) => {
         await createTemplate(name);
       }}
@@ -314,11 +325,11 @@ const DevManagementView: React.FC = () => {
         const pending = opts.pendingBoms ?? [];
         for (const bom of pending) {
           if (!bom.items?.some((it) => it.productId?.trim())) continue;
-          await saveDevBom({ ...bom, parentStyleId: saved.id }, false);
+          await saveDevBom({ ...bom, parentStyleId: saved.id }, false, { skipDetailRefresh: true });
           if (bom.variantId && bom.nodeId) {
             const v = saved.variants.find((x) => x.id === bom.variantId);
             const nodeBoms = { ...(v?.nodeBoms ?? {}), [bom.nodeId]: bom.id };
-            await api.devStyles.syncVariantNodeBoms(saved.id, bom.variantId, nodeBoms);
+            await syncVariantNodeBoms(saved.id, bom.variantId, nodeBoms);
           }
         }
         await refresh();
@@ -376,6 +387,7 @@ const DevManagementView: React.FC = () => {
             materialPerms={materialPerms}
             devBoms={devBoms}
             onSaveBom={handleSaveDevBom}
+            onSyncVariantNodeBoms={handleSyncVariantNodeBoms}
             readOnly={readOnly}
             canEdit={canEdit}
             canDeleteStyle={canDeleteStyle}

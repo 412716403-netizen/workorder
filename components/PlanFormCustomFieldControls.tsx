@@ -172,39 +172,139 @@ const PlanFormFileFieldInput: React.FC<{
   multipleFiles?: boolean;
 }> = ({ cf, value, onChange, onFilePreview, multipleFiles = false }) => {
   const { openAttachment, overlay } = useDevStageAttachmentPreview(onFilePreview);
+  const [dragDepth, setDragDepth] = useState(0);
+  const dragOver = dragDepth > 0;
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const items = parseDevStageFileItems(value);
+  const canAdd = multipleFiles ? items.length < DEV_STAGE_FILE_MAX_COUNT : true;
+  const acceptDrop = canAdd;
+
+  const ingestFiles = useCallback(
+    (fileList: FileList | File[] | null | undefined) => {
+      const files = Array.from(fileList ?? []).filter(Boolean);
+      if (!files.length) return;
+      if (multipleFiles) {
+        const room = DEV_STAGE_FILE_MAX_COUNT - items.length;
+        if (room <= 0) return;
+        const slice = files.slice(0, room);
+        void Promise.all(slice.map((file) => readFileAsDevStageItem(file)))
+          .then((added) => {
+            const next = [
+              ...items,
+              ...added.filter((a): a is DevStageFileItem => a != null),
+            ];
+            onChange(serializeDevStageFileItems(next));
+          })
+          .catch(() => toast.error('文件读取失败'));
+        return;
+      }
+      const file = files[0];
+      if (!file) return;
+      void readFileAsDevStageItem(file)
+        .then((item) => {
+          if (!item) {
+            onChange('');
+            return;
+          }
+          onChange(serializeDevStageFileItems([item]));
+        })
+        .catch(() => toast.error('文件读取失败'));
+    },
+    [multipleFiles, items, onChange],
+  );
+
+  const onDragEnter = (e: React.DragEvent) => {
+    if (!acceptDrop) return;
+    if (![...e.dataTransfer.types].includes('Files')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDragDepth((d) => d + 1);
+  };
+  const onDragOver = (e: React.DragEvent) => {
+    if (!acceptDrop) return;
+    if (![...e.dataTransfer.types].includes('Files')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+  };
+  const onDragLeave = (e: React.DragEvent) => {
+    if (!acceptDrop) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDragDepth((d) => Math.max(0, d - 1));
+  };
+  const onDrop = (e: React.DragEvent) => {
+    if (!acceptDrop) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDragDepth(0);
+    ingestFiles(e.dataTransfer.files);
+  };
+
+  const dropZoneClass = [
+    'rounded-xl border-2 border-dashed px-3 py-3 transition-all',
+    acceptDrop ? 'cursor-pointer' : 'cursor-not-allowed opacity-60',
+    dragOver && acceptDrop
+      ? 'border-indigo-300 bg-indigo-50/90 ring-2 ring-indigo-400'
+      : 'border-slate-200 bg-slate-50/40 hover:border-slate-300',
+  ].join(' ');
+
+  const dropHint = !acceptDrop
+    ? '已达上限，无法继续添加'
+    : dragOver
+      ? '松开即可上传'
+      : '点击选择或拖拽到此处';
 
   if (multipleFiles) {
-    const items = parseDevStageFileItems(value);
-    const canAdd = items.length < DEV_STAGE_FILE_MAX_COUNT;
     return (
       <div className="space-y-2">
         {overlay}
-        <input
-          type="file"
-          multiple
-          disabled={!canAdd}
-          className="w-full text-[0] text-transparent file:mr-2 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-indigo-700 disabled:opacity-50"
-          onChange={e => {
-            const files = Array.from(e.target.files ?? []);
-            e.target.value = '';
-            if (!files.length) return;
-            const room = DEV_STAGE_FILE_MAX_COUNT - items.length;
-            const slice = files.slice(0, room);
-            void Promise.all(slice.map((file) => readFileAsDevStageItem(file)))
-              .then((added) => {
-                const next = [
-                  ...items,
-                  ...added.filter((a): a is DevStageFileItem => a != null),
-                ];
-                onChange(serializeDevStageFileItems(next));
-              })
-              .catch(() => toast.error('文件读取失败'));
+        <div
+          className={dropZoneClass}
+          onDragEnter={onDragEnter}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+          onClick={() => {
+            if (!canAdd) return;
+            fileInputRef.current?.click();
           }}
-        />
-        <p className="text-[11px] text-slate-400">
-          最多 {DEV_STAGE_FILE_MAX_COUNT} 个，已选 {items.length} 个
-          {!canAdd ? '（已满）' : items.length > 0 ? '，可继续添加' : ''}
-        </p>
+          role="button"
+          tabIndex={canAdd ? 0 : -1}
+          onKeyDown={(e) => {
+            if (!canAdd) return;
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              fileInputRef.current?.click();
+            }
+          }}
+          aria-label={dropHint}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            disabled={!canAdd}
+            className="hidden"
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => {
+              ingestFiles(e.target.files);
+              e.target.value = '';
+            }}
+          />
+          <p
+            className={`text-center text-xs font-bold ${
+              dragOver && acceptDrop ? 'text-indigo-700' : 'text-slate-500'
+            }`}
+          >
+            {dropHint}
+          </p>
+          <p className="mt-1 text-center text-[11px] text-slate-400">
+            最多 {DEV_STAGE_FILE_MAX_COUNT} 个，已选 {items.length} 个
+            {!canAdd ? '（已满）' : items.length > 0 ? '，可继续添加' : ''}
+          </p>
+        </div>
         {items.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {items.map((item, idx) => {
@@ -276,8 +376,7 @@ const PlanFormFileFieldInput: React.FC<{
     );
   }
 
-  const singleItems = parseDevStageFileItems(value);
-  const single = singleItems[0];
+  const single = items[0];
   const dataStr = single?.url ?? '';
   const singleDownloadName = single
     ? resolveDevStageFileDownloadName(single, cf.label, 0)
@@ -296,27 +395,46 @@ const PlanFormFileFieldInput: React.FC<{
   return (
     <div className="space-y-2">
       {overlay}
-      <input
-        type="file"
-        className="w-full text-[0] text-transparent file:mr-2 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-indigo-700"
-        onChange={e => {
-          const file = e.target.files?.[0];
-          e.target.value = '';
-          if (!file) {
-            onChange('');
-            return;
+      <div
+        className={dropZoneClass}
+        onDragEnter={onDragEnter}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+        onClick={() => fileInputRef.current?.click()}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            fileInputRef.current?.click();
           }
-          void readFileAsDevStageItem(file)
-            .then((item) => {
-              if (!item) {
-                onChange('');
-                return;
-              }
-              onChange(serializeDevStageFileItems([item]));
-            })
-            .catch(() => toast.error('文件读取失败'));
         }}
-      />
+        aria-label={dropHint}
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = '';
+            if (!file) {
+              onChange('');
+              return;
+            }
+            ingestFiles([file]);
+          }}
+        />
+        <p
+          className={`text-center text-xs font-bold ${
+            dragOver ? 'text-indigo-700' : 'text-slate-500'
+          }`}
+        >
+          {dropHint}
+        </p>
+      </div>
       {single && dataStr.startsWith('data:') ? (
         <div className="space-y-1.5 text-left">
           <div className="flex flex-wrap items-center justify-start gap-2">

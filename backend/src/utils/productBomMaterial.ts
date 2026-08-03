@@ -1,11 +1,10 @@
-/** 与前端 `utils/productBomMaterial.ts` 口径一致：含颜色/尺码或已有变体的产品不可作 BOM 子件 */
+import { isProductBlockedAsBomMaterialValue } from '../../../shared/productBomMaterial.js';
+
+/** 与前端一致：真正含颜色/尺码的产品不可作 BOM 子件，空维度默认变体允许 */
 export function isProductBlockedAsBomMaterialDb(row: {
   colorIds: unknown;
   sizeIds: unknown;
-  variants: { id: string }[];
+  variants: Array<{ colorId?: unknown; sizeId?: unknown }>;
 }): boolean {
-  if (row.variants.length > 0) return true;
-  if (Array.isArray(row.colorIds) && row.colorIds.length > 0) return true;
-  if (Array.isArray(row.sizeIds) && row.sizeIds.length > 0) return true;
-  return false;
+  return isProductBlockedAsBomMaterialValue(row);
 }

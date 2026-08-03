@@ -11,6 +11,7 @@ import {
   isDevStageFileValueFilled,
   serializeDevStageFileItems,
   parseDevStageFileItems,
+  hasDevStageFileDeferred,
 } from '../../utils/devStageFileValue';
 import {
   formStandardControlClass,
@@ -22,6 +23,7 @@ import {
 } from '../../styles/uiDensity';
 import DevCreateSectionCard from './DevCreateSectionCard';
 import DevStageTemplateModal, { type DevTemplatePerms } from './DevStageTemplateModal';
+import { devStyles } from '../../services/api';
 
 const STATUS_OPTIONS: DevStageStatus[] = [
   DevStageStatus.PENDING,
@@ -142,6 +144,7 @@ const DevStageRegisterModal: React.FC<DevStageRegisterModalProps> = ({
   );
   const [saving, setSaving] = useState(false);
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
+  const [filesHydrating, setFilesHydrating] = useState(false);
 
   const canOpenTemplateSettings =
     canManageTemplates
@@ -164,16 +167,73 @@ const DevStageRegisterModal: React.FC<DevStageRegisterModalProps> = ({
   useEffect(() => {
     if (!open) return;
     setStatus(stage.status);
-    setTemplateValues(buildTemplateValues(stage, templateFields));
+    const initial = buildTemplateValues(stage, templateFields);
+    setTemplateValues(initial);
+
+    const deferredPairs = templateFields
+      .map((tf) => {
+        if (effectiveCustomDocFieldType(tf) !== 'file') return null;
+        if (!hasDevStageFileDeferred(initial[tf.id])) return null;
+        const existing = stage.fields.find((f) => f.label.trim() === tf.label.trim());
+        if (!existing?.id) return null;
+        return { templateFieldId: tf.id, stageFieldId: existing.id };
+      })
+      .filter((x): x is { templateFieldId: string; stageFieldId: string } => !!x);
+
+    if (deferredPairs.length === 0) {
+      setFilesHydrating(false);
+      return;
+    }
+
+    let cancelled = false;
+    setFilesHydrating(true);
+    void (async () => {
+      try {
+        const results = await Promise.all(
+          deferredPairs.map(async (p) => {
+            const res = await devStyles.getStageField(p.stageFieldId);
+            return { templateFieldId: p.templateFieldId, value: res.value };
+          }),
+        );
+        if (cancelled) return;
+        setTemplateValues((prev) => {
+          const next = { ...prev };
+          for (const r of results) next[r.templateFieldId] = r.value;
+          return next;
+        });
+      } catch (e) {
+        if (!cancelled) {
+          toast.error(e instanceof Error ? e.message : '文件加载失败，请关闭后重试');
+        }
+      } finally {
+        if (!cancelled) setFilesHydrating(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [open, stage.id, stage.status, stage.fields, templateFields]);
 
   if (!open) return null;
 
   async function handleSave() {
+    if (filesHydrating) {
+      toast.message('文件加载中，请稍候再保存');
+      return;
+    }
     for (const tf of templateFields) {
       if (!tf.required) continue;
       if (isTemplateFieldValueEmpty(tf, templateValues[tf.id])) {
         toast.error(`请填写必填项：${tf.label}`);
+        return;
+      }
+    }
+    // 若仍存在 deferred stub（加载失败），禁止保存以免清空文件体
+    for (const tf of templateFields) {
+      if (effectiveCustomDocFieldType(tf) !== 'file') continue;
+      if (hasDevStageFileDeferred(templateValues[tf.id])) {
+        toast.error(`文件尚未加载完成：${tf.label}`);
         return;
       }
     }
@@ -284,6 +344,9 @@ const DevStageRegisterModal: React.FC<DevStageRegisterModalProps> = ({
               icon={ListChecks}
               iconTone="indigo"
             >
+              {filesHydrating && (
+                <p className="mb-3 text-xs font-medium text-indigo-500">文件加载中…</p>
+              )}
               <ReportCustomFieldsEditor
                 fields={templateFields}
                 values={templateValues}
@@ -309,12 +372,12 @@ const DevStageRegisterModal: React.FC<DevStageRegisterModalProps> = ({
           </button>
           <button
             type="button"
-            disabled={saving}
+            disabled={saving || filesHydrating}
             onClick={() => void handleSave()}
             className={`inline-flex items-center gap-2 bg-indigo-600 text-white hover:bg-indigo-700 ${primaryToolbarButtonClass} disabled:opacity-50`}
           >
             <Save className="h-4 w-4" />
-            {saving ? '保存中…' : '保存登记'}
+            {saving ? '保存中…' : filesHydrating ? '文件加载中…' : '保存登记'}
           </button>
         </div>
       </div>

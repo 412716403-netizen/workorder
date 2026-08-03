@@ -46,6 +46,7 @@ import { useDevMaterials } from '../../hooks/useDevMaterials';
 import AddTodoButton from '../../components/AddTodoButton';
 import { ModalPortal } from '../../components/ModalPortal';
 import { devSingleSkuVariantId } from '../../utils/devBomHelpers';
+import { devStyles } from '../../services/api';
 import {
   formStandardLabelClass,
   outlineToolbarButtonClass,
@@ -56,33 +57,101 @@ import {
 } from '../../styles/uiDensity';
 
 const StageAttachmentItem: React.FC<{ file: DevAttachmentDto }> = ({ file }) => {
-  const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(file.fileName) || file.fileUrl.startsWith('data:image');
+  const [fileUrl, setFileUrl] = useState(file.fileUrl || '');
+  const [loading, setLoading] = useState(false);
+  const isImage =
+    /\.(jpg|jpeg|png|gif|webp)$/i.test(file.fileName)
+    || fileUrl.startsWith('data:image')
+    || (file.fileType ?? '').startsWith('image/');
   const isZip = /\.(zip|rar|7z)$/i.test(file.fileName);
+
+  const ensureUrl = async (): Promise<string | null> => {
+    if (fileUrl) return fileUrl;
+    if (!file.id) {
+      toast.error('无法加载附件：缺少编号');
+      return null;
+    }
+    setLoading(true);
+    try {
+      const res = await devStyles.getAttachment(file.id);
+      setFileUrl(res.fileUrl);
+      return res.fileUrl;
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '加载附件失败');
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePreview = async () => {
+    const url = await ensureUrl();
+    if (!url) return;
+    if (isImage || url.startsWith('data:image')) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = file.fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
+  const handleDownload = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const url = await ensureUrl();
+    if (!url) return;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = file.fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
   return (
     <div className="group/file relative flex items-center gap-3 px-4 py-2.5 bg-indigo-50/50 border border-indigo-100 rounded-2xl pr-12">
-      <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm overflow-hidden shrink-0">
-        {isImage ? (
-          <img src={file.fileUrl} alt="" className="w-full h-full object-cover" />
+      <button
+        type="button"
+        onClick={() => void handlePreview()}
+        disabled={loading}
+        className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm overflow-hidden shrink-0 disabled:opacity-60"
+        title={loading ? '加载中…' : `查看 ${file.fileName}`}
+      >
+        {fileUrl && isImage ? (
+          <img src={fileUrl} alt="" className="w-full h-full object-cover" />
         ) : isZip ? (
           <FileArchiveIcon className="w-5 h-5 text-amber-500" />
         ) : (
           <FileText className="w-5 h-5 text-indigo-500" />
         )}
-      </div>
-      <div className="flex flex-col min-w-0">
+      </button>
+      <button
+        type="button"
+        onClick={() => void handlePreview()}
+        disabled={loading}
+        className="flex flex-col min-w-0 text-left disabled:opacity-60"
+      >
         <span className="text-xs font-semibold text-indigo-600 truncate max-w-[140px]">{file.fileName}</span>
-        <span className="text-[10px] font-medium text-indigo-400">{isImage ? '图片' : isZip ? '压缩包' : '文档'}</span>
-      </div>
-      <a
-        href={file.fileUrl}
-        download={file.fileName}
-        className="absolute right-3 p-2 bg-white text-indigo-500 rounded-lg shadow-sm opacity-0 group-hover/file:opacity-100"
+        <span className="text-[10px] font-medium text-indigo-400">
+          {loading ? '加载中…' : isImage ? '图片' : isZip ? '压缩包' : '文档'}
+        </span>
+      </button>
+      <button
+        type="button"
+        onClick={(e) => void handleDownload(e)}
+        disabled={loading}
+        className="absolute right-3 p-2 bg-white text-indigo-500 rounded-lg shadow-sm opacity-0 group-hover/file:opacity-100 disabled:opacity-40"
+        title="下载"
       >
         <Download className="w-3.5 h-3.5" />
-      </a>
+      </button>
     </div>
   );
-}
+};
 
 interface DevStyleMainContentProps {
   style: DevStyleDto;
@@ -100,6 +169,11 @@ interface DevStyleMainContentProps {
   materialPerms?: DevMaterialPerms;
   devBoms?: DevBomDto[];
   onSaveBom?: (bom: DevBomDto, exists: boolean) => Promise<DevBomDto | void>;
+  onSyncVariantNodeBoms?: (
+    styleId: string,
+    variantId: string,
+    nodeBoms: Record<string, string>,
+  ) => Promise<void>;
   readOnly?: boolean;
   canEdit?: boolean;
   canDeleteStyle?: boolean;
@@ -142,6 +216,7 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
   materialPerms,
   devBoms,
   onSaveBom,
+  onSyncVariantNodeBoms,
   readOnly,
   canEdit,
   canDeleteStyle,
@@ -642,6 +717,7 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
                   devBoms={devBoms}
                   mode="persist"
                   onSaveBom={onSaveBom}
+                  onSyncVariantNodeBoms={onSyncVariantNodeBoms}
                   readOnly={readOnly}
                   variantFilterId={activeSample ? activeSampleVariantId : undefined}
                   showMilestonePicker={false}

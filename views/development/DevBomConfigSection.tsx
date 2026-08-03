@@ -26,7 +26,6 @@ import DevFlowNodePicker from './DevFlowNodePicker';
 import DevCreateSectionCard from './DevCreateSectionCard';
 import { pageSubtitleClass, sectionTitleClass } from '../../styles/uiDensity';
 import { toast } from 'sonner';
-import * as api from '../../services/api';
 
 export type DevBomPersistMode = 'persist' | 'pending';
 
@@ -42,6 +41,12 @@ interface DevBomConfigSectionProps {
   pendingBoms?: DevBomDto[];
   onPendingBomsChange?: (boms: DevBomDto[]) => void;
   onSaveBom?: (bom: DevBomDto, exists: boolean) => Promise<DevBomDto | void>;
+  /** 持久化变体 nodeBoms 并回写款式详情（勿再单独 GET） */
+  onSyncVariantNodeBoms?: (
+    styleId: string,
+    variantId: string,
+    nodeBoms: Record<string, string>,
+  ) => Promise<void>;
   readOnly?: boolean;
   /** 嵌入「创建开发款式」弹窗：分区卡片布局 */
   embeddedInCreateModal?: boolean;
@@ -66,6 +71,7 @@ const DevBomConfigSection: React.FC<DevBomConfigSectionProps> = ({
   pendingBoms = [],
   onPendingBomsChange,
   onSaveBom,
+  onSyncVariantNodeBoms,
   readOnly,
   embeddedInCreateModal,
   variantFilterId,
@@ -302,7 +308,9 @@ const DevBomConfigSection: React.FC<DevBomConfigSectionProps> = ({
       if (devBom.variantId && devBom.nodeId) {
         const v = working.variants.find((x) => x.id === devBom.variantId);
         const nodeBoms = { ...(v?.nodeBoms ?? {}), [devBom.nodeId]: devBom.id };
-        await api.devStyles.syncVariantNodeBoms(working.id, devBom.variantId, nodeBoms);
+        if (onSyncVariantNodeBoms) {
+          await onSyncVariantNodeBoms(working.id, devBom.variantId, nodeBoms);
+        }
         patchVariantNodeBoms(devBom.variantId, devBom.nodeId, devBom.id);
       }
       closeBomEditor();

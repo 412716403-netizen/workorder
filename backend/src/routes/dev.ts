@@ -91,6 +91,16 @@ router.post('/styles/boms', requireSubPermission('development:styles:create'), v
 router.put('/styles/boms/:id', requireSubPermission('development:styles:edit'), validate(createBomSchema), stylesCtrl.updateBom);
 router.delete('/styles/boms/:id', requireSubPermission('development:styles:delete'), stylesCtrl.deleteBom);
 
+router.get(
+  '/styles/stage-fields/:fieldId',
+  requireSubPermission('development:styles:view'),
+  stylesCtrl.getStageField,
+);
+router.get(
+  '/styles/attachments/:attachmentId',
+  requireSubPermission('development:styles:view'),
+  stylesCtrl.getAttachment,
+);
 router.get('/styles/:id', requireSubPermission('development:styles:view'), stylesCtrl.getStyle);
 router.post('/styles', requireSubPermission('development:styles:create'), validate(createStyleSchema), stylesCtrl.createStyle);
 router.put('/styles/:id', requireSubPermission('development:styles:edit'), validate(updateStyleSchema), stylesCtrl.updateStyle);

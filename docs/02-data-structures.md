@@ -319,7 +319,7 @@ interface BOM {
 
 `DevStyleVariant.nodeBoms` 与 `ProductVariant.nodeBoms` 同形。发布大货时拷贝为 `Bom`，并重新生成 `bom-*` id 写入产品变体 `nodeBoms`。
 
-`DevStyle.defaultStageNames`（Json 字符串数组）：款式创建时配置的默认开发流程节点名。创建款式不再自动建头样；新增首个样品（头样）时带出这套默认节点。开发域 `DevStyle` / `DevSample` / `DevBom` / `DevStageTemplate` / `DevLog` 均有 `createdByUserId`（创建时后端写入，本阶段仅关联，见 `docs/01` §5.6.2）。`DevStyle.imageThumb`：列表缩略图（由 `imageUrl` 生成）；`GET /dev/styles` 列表 omit 原图与节点附件/文件字段二进制，详情 `GET /dev/styles/:id` 返回完整数据。
+`DevStyle.defaultStageNames`（Json 字符串数组）：款式创建时配置的默认开发流程节点名。创建款式不再自动建头样；新增首个样品（头样）时带出这套默认节点。开发域 `DevStyle` / `DevSample` / `DevBom` / `DevStageTemplate` / `DevLog` 均有 `createdByUserId`（创建时后端写入，本阶段仅关联，见 `docs/01` §5.6.2）。`DevStyle.imageThumb`：列表缩略图（由 `imageUrl` 生成）；`GET /dev/styles` 列表 omit 原图与节点附件/文件字段二进制；详情 `GET /dev/styles/:id` 对节点 `type=file` 仅用 `LEFT(value)` 取文件名头生成 deferred stub（不把 data URL 读进 Node），`attachments.fileUrl` 置空；内容按需 `GET /dev/styles/stage-fields/:fieldId`、`GET /dev/styles/attachments/:attachmentId`。归档 / 生成商品回包同一套轻量装载；发布过程不 include 样品节点文件。
 
 `DevSample` 增加可选 `colorId` / `sizeId`：开发样品（头样与新增样品轮次）绑定**单一**「颜色×尺码」组合，取自款式 `DevStyleVariant`。款式配置了颜色尺码（存在 variants）时为必填，且组合须命中某条 variant；款式无颜色尺码时为空。
 

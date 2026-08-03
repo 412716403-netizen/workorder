@@ -589,7 +589,7 @@
 
 | 子模块 | 管理实体 | 规则 |
 |--------|----------|------|
-| 产品与 BOM | `products`, `boms` | 支持产品编辑、变体管理、BOM 绑定；列表列含「被调用」（BOM 子件引用次数），不含「工序」「变体」列；**产品编号**（`name`）必填且租户内唯一；**产品名称**（`sku`）选填、**不自动生成**、**允许租户内重复**（空值存 NULL）；**启用/禁用**：产品档案列表可切换 `enabled`；禁用后不在商品选择组件（`SearchableProductSelect`）中展示，已选中的禁用产品仍保留显示；**产品模式工序锁定**：当租户 `productionLinkMode='product'` 且产品已有非 `PENDING_PROCESS` 的生产工单、且 `milestoneNodeIds` 非空时，禁止再修改工序增删与顺序（`PUT /products/:id` 改 `milestoneNodeIds` 返回 409）；产品首次从 0 工序配置路线仍放行；工价、报工模板、BOM 不受锁；前端产品编辑页根据 API 返回的 `processLocked` 禁用工序 UI；**颜色尺码保存**：分类 `hasColorSize` 为真时，保存产品须至少选择 1 个颜色与 1 个尺码（前后端同口径）；**改名级联**：修改产品编号/名称时，后端事务内同步刷新工单快照字段 `ProductionOrder.productName` / `ProductionOrder.sku`，保证工单中心、报工记录及相关单据展示与产品档案一致（PSI、财务、计划单等均按 `productId` 动态取名，无需级联；跨租户协作单据的 `senderProductName` 为发出时快照，刻意不随改名变化）；**规格删除限制**：取消勾选颜色/尺码即删除对应变体，若变体已被业务数据引用（工单明细、工单/产品报工记录、产品工序进度、生产操作记录、进销存流水、计划单明细、扫码批次、单品码）则禁止删除——前端取消勾选时经 `GET /products/:id/variant-usage` 预检提示，后端保存时同口径校验 409 兜底；变体写入为 diff 式（保留的 update、新增 create、移除先校验再 delete），被删变体的变体级 BOM（配置数据）随之清理 |
+| 产品与 BOM | `products`, `boms` | 支持产品编辑、变体管理、BOM 绑定；列表列含「被调用」（BOM 子件引用次数），不含「工序」「变体」列；**产品编号**（`name`）必填且租户内唯一；**产品名称**（`sku`）选填、**不自动生成**、**允许租户内重复**（空值存 NULL）；**启用/禁用**：产品档案列表可切换 `enabled`；禁用后不在商品选择组件（`SearchableProductSelect`）中展示，已选中的禁用产品仍保留显示；**产品模式工序锁定**：当租户 `productionLinkMode='product'` 且产品已有非 `PENDING_PROCESS` 的生产工单、且 `milestoneNodeIds` 非空时，禁止再修改工序增删与顺序（`PUT /products/:id` 改 `milestoneNodeIds` 返回 409）；产品首次从 0 工序配置路线仍放行；工价、报工模板、BOM 不受锁；前端产品编辑页根据 API 返回的 `processLocked` 禁用工序 UI；**颜色尺码保存**：分类 `hasColorSize` 为真时，保存产品须至少选择 1 个颜色与 1 个尺码（前后端同口径）；**BOM 子件限制**：真正配置了颜色或尺码（维度 id 或变体上的 `colorId/sizeId` 非空）的产品不可作为 BOM 子件；开发发布无色无码产品时生成的单个空维度默认变体不属于颜色尺码，允许作为子件；**改名级联**：修改产品编号/名称时，后端事务内同步刷新工单快照字段 `ProductionOrder.productName` / `ProductionOrder.sku`，保证工单中心、报工记录及相关单据展示与产品档案一致（PSI、财务、计划单等均按 `productId` 动态取名，无需级联；跨租户协作单据的 `senderProductName` 为发出时快照，刻意不随改名变化）；**规格删除限制**：取消勾选颜色/尺码即删除对应变体，若变体已被业务数据引用（工单明细、工单/产品报工记录、产品工序进度、生产操作记录、进销存流水、计划单明细、扫码批次、单品码）则禁止删除——前端取消勾选时经 `GET /products/:id/variant-usage` 预检提示，后端保存时同口径校验 409 兜底；变体写入为 diff 式（保留的 update、新增 create、移除先校验再 delete），被删变体的变体级 BOM（配置数据）随之清理 |
 | 合作单位 | `partners` | 关联 `partnerCategories`；**名称租户内唯一**（新增/编辑均校验，忽略首尾空白与大小写）；**单位编号**（`partnerListNo`）创建时按租户递增自动生成，**不可编辑**；**改名级联**：修改单位名称时，后端事务内同步更新名称快照字段 `ProductionOpRecord.partner`（外协/委外返工）、`PsiRecord.partner`（按 `partnerId` 或旧名称匹配）、`FinanceRecord.partner`，保证外协管理、外协流水及相关单据展示一致；**批量导入**：基础信息 → 合作单位 →「导入单位」，按分类下载 Excel 模板（单位名称 + 该分类 `customFields`），预览校验后调用 `POST /master/partners/import`；名称重复（库内或文件内）跳过；扩展字段（联系人、电话等）随分类模板导入，不支持附件/资料库字段；不导入协作租户关联 |
 | 工人管理 | `workers` | 支持按工序派工 |
 | 设备管理 | `equipment` | 支持按工序派工 |
@@ -901,7 +901,7 @@
 ### 6.4 附件
 
 - `DevAttachment.fileUrl` 存 **data URL（base64）**，与产品路线报工附件、自定义字段文件上传一致，查询时直接从库取回。
-- **开发款主图**：`DevStyle.imageUrl` 存原图；服务端同步生成 `imageThumb`（约 256px JPEG）。**列表接口**不返回原图与节点附件/文件字段二进制（仅摘要），侧栏用缩略图；**选中款式后**再拉详情含原图，点击主图放大看原图。存量数据可跑 `npm run db:backfill-dev-style-thumbs`（backend 目录）。
+- **开发款主图**：`DevStyle.imageUrl` 存原图；服务端同步生成 `imageThumb`（约 256px JPEG）。**列表接口**不返回原图与节点附件/文件字段二进制（仅摘要），侧栏用缩略图；**选中款式后**再拉详情含原图（点击主图放大），节点登记文件与附件默认仅元数据，点击查看/下载或打开登记弹窗时再按需拉取内容。存量数据可跑 `npm run db:backfill-dev-style-thumbs`（backend 目录）。
 
 ### 6.5 开发节点库自定义内容
 

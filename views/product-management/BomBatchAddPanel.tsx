@@ -5,6 +5,7 @@ import { useAuthOptional } from '../../contexts/AuthContext';
 import { hasSubPermission } from '../../utils/hasSubPermission';
 import { isProductEnabled } from '../../utils/productEnabled';
 import { productMatchesSearchQuery } from '../../utils/productSearchMatch';
+import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 import { lazyWithReloadOnChunkError } from '../../utils/lazyWithReloadOnChunkError';
 
 const LazyProductArchiveCreateModal = lazyWithReloadOnChunkError(() => import('../../components/ProductArchiveCreateModal'));
@@ -62,6 +63,10 @@ export function BomBatchAddPanel({
 
   const usedSet = useMemo(() => new Set(alreadyUsedProductIds.filter(Boolean)), [alreadyUsedProductIds]);
   const blockedSet = useMemo(() => new Set(blockedProductIds.filter(Boolean)), [blockedProductIds]);
+  const categoryById = useMemo(
+    () => new Map(categories.map((c) => [c.id, c])),
+    [categories],
+  );
 
   const pool = useMemo(
     () => options.filter(p => p.id !== parentProductId && isProductEnabled(p)),
@@ -72,13 +77,13 @@ export function BomBatchAddPanel({
     return pool
       .filter(p => {
         const q = search.trim();
-        const cat = categories.find(c => c.id === p.categoryId) ?? null;
+        const cat = categoryById.get(p.categoryId ?? '') ?? null;
         const matchesSearch = productMatchesSearchQuery(p, cat, q);
         const matchesCategory = activeTab === 'all' || p.categoryId === activeTab;
         return matchesSearch && matchesCategory;
       })
       .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id));
-  }, [pool, search, activeTab, categories]);
+  }, [pool, search, activeTab, categoryById]);
 
   const tabBtnCls = (active: boolean) =>
     `px-2 py-1 rounded-md text-[9px] font-black uppercase transition-all whitespace-nowrap shrink-0 ${active ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`;
@@ -190,9 +195,13 @@ export function BomBatchAddPanel({
           const used = usedSet.has(p.id);
           const blocked = blockedSet.has(p.id);
           const checked = picked.has(p.id);
-          const cat = categories.find(c => c.id === p.categoryId);
+          const cat = categoryById.get(p.categoryId ?? '');
           const rowDisabled = used || blocked;
           const sku = (p.sku ?? '').trim();
+          // 与 SearchableProductSelect 一致：表单可见自定义字段；含文件摘要（已上传/文件名）
+          const customTags = cat
+            ? getProductCategoryCustomFieldEntries(p, cat, { includeFile: true })
+            : [];
           return (
             <label
               key={p.id}
@@ -215,6 +224,19 @@ export function BomBatchAddPanel({
                     <span className="text-[7px] font-black uppercase text-slate-400 bg-slate-100 px-1 py-0 rounded shrink-0">{cat.name}</span>
                   )}
                 </div>
+                {customTags.length > 0 && (
+                  <div className="mt-1 flex flex-wrap items-center gap-1">
+                    {customTags.map(({ field, display }) => (
+                      <span
+                        key={field.id}
+                        className="rounded bg-slate-50 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-slate-500"
+                        title={`${field.label}: ${display}`}
+                      >
+                        {field.label}: {display}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 {used && <p className="text-[9px] text-amber-600 font-bold mt-0.5">已在清单中</p>}
                 {blocked && !used && <p className="text-[9px] text-slate-500 font-bold mt-0.5">含颜色/尺码，不可作 BOM 子件</p>}
               </div>

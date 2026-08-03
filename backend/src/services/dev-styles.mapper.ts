@@ -146,7 +146,10 @@ export function mapDevStyleRow(row: DevStyleRow) {
   };
 }
 
-/** 详情：含样品节点字段值与附件二进制 */
+/**
+ * 详情：样品节点字段元数据（value 由 getDevStyle 按需轻量合并；file 只读 LEFT 头）。
+ * 附件仅元数据（fileUrl 按需 GET）。
+ */
 export const devStyleInclude = {
   variants: { orderBy: { id: 'asc' as const } },
   samples: {
@@ -154,7 +157,10 @@ export const devStyleInclude = {
     include: {
       stages: {
         orderBy: { order: 'asc' as const },
-        include: { fields: true, attachments: true },
+        include: {
+          fields: { select: { id: true, label: true, type: true } },
+          attachments: { select: { id: true, fileName: true, fileType: true } },
+        },
       },
       logs: { orderBy: { time: 'desc' as const } },
     },

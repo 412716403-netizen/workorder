@@ -1,9 +1,7 @@
 import type { Product } from '../types';
+import { isProductBlockedAsBomMaterialValue } from '../shared/productBomMaterial';
 
-/** 含颜色/尺码配置或已有变体的产品，不可作为 BOM 子件（与后端校验口径一致） */
+/** 真正含颜色/尺码的产品不可作为 BOM 子件；空维度默认变体不拦截（与后端一致） */
 export function isProductBlockedAsBomMaterial(p: Pick<Product, 'variants' | 'colorIds' | 'sizeIds'>): boolean {
-  if ((p.variants?.length ?? 0) > 0) return true;
-  if ((p.colorIds?.length ?? 0) > 0) return true;
-  if ((p.sizeIds?.length ?? 0) > 0) return true;
-  return false;
+  return isProductBlockedAsBomMaterialValue(p);
 }

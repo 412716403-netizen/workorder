@@ -3,7 +3,7 @@ import type { TenantPrismaClient } from '../lib/prisma.js';
 import { genId } from '../utils/genId.js';
 import * as productsService from './products.service.js';
 import { DevStyleStatus } from '../../../shared/types.js';
-import { devStyleInclude, mapDevStyleRow } from './dev-styles.mapper.js';
+import { loadMappedDevStyle } from './dev-styles.load.js';
 import {
   attachNodeBomsFromTargets,
   buildBomPublishTargets,
@@ -25,11 +25,12 @@ export async function publishDevStyleToProduct(
   tenantId: string,
   styleId: string,
 ) {
+  // 发布只需要款式标量 / 变体 / BOM；切勿 include samples（节点文件 data URL 极大且无用）
   const style = await db.devStyle.findUnique({
     where: { id: styleId },
     include: {
-      ...devStyleInclude,
-      boms: { include: { items: { orderBy: { sortOrder: 'asc' } } } },
+      variants: { orderBy: { id: 'asc' as const } },
+      boms: { include: { items: { orderBy: { sortOrder: 'asc' as const } } } },
     },
   });
   if (!style) throw new AppError(404, '款式不存在');
@@ -161,12 +162,8 @@ export async function publishDevStyleToProduct(
     });
   });
 
-  const updated = await db.devStyle.findUnique({
-    where: { id: styleId },
-    include: devStyleInclude,
-  });
   return {
-    style: mapDevStyleRow(updated!),
+    style: await loadMappedDevStyle(db, styleId),
     productId,
   };
 }

@@ -143,15 +143,19 @@ export function useDevStyles() {
     return result;
   }, [applySavedStyle]);
 
-  const invalidateDevMaterials = useCallback(async (styleId?: string | null) => {
+  const invalidateDevMaterials = useCallback((styleId?: string | null) => {
     if (styleId) {
-      await queryClient.invalidateQueries({ queryKey: devMaterialQueryKey(styleId) });
+      void queryClient.invalidateQueries({ queryKey: devMaterialQueryKey(styleId) });
     } else {
-      await queryClient.invalidateQueries({ queryKey: DEV_MATERIAL_QK_BASE });
+      void queryClient.invalidateQueries({ queryKey: DEV_MATERIAL_QK_BASE });
     }
   }, [queryClient]);
 
-  const saveDevBom = useCallback(async (bom: DevBomDto, exists: boolean) => {
+  const saveDevBom = useCallback(async (
+    bom: DevBomDto,
+    exists: boolean,
+    opts?: { skipDetailRefresh?: boolean },
+  ) => {
     const saved = (exists
       ? await api.devBoms.update(bom.id, bom)
       : await api.devBoms.create(bom)) as DevBomDto;
@@ -162,19 +166,31 @@ export function useDevStyles() {
       next[idx] = saved;
       return next;
     });
-    // 变体 nodeBoms 可能由样品面板同步，详情仍需单次 GET
-    await refreshSelectedDetail(bom.parentStyleId);
-    // 开发领料依赖 BOM 物料列表；保存后立即刷新，避免按钮仍禁用需整页刷新
-    await invalidateDevMaterials(bom.parentStyleId);
+    // 变体款随后会 syncVariantNodeBoms（已返回全量详情）；单 SKU 仍需补一次详情
+    if (!opts?.skipDetailRefresh) {
+      await refreshSelectedDetail(bom.parentStyleId);
+    }
+    // 领料物料列表后台刷新，不阻塞保存 toast
+    invalidateDevMaterials(bom.parentStyleId);
     return saved;
   }, [refreshSelectedDetail, invalidateDevMaterials]);
+
+  const syncVariantNodeBoms = useCallback(async (
+    styleId: string,
+    variantId: string,
+    nodeBoms: Record<string, string>,
+  ) => {
+    const saved = await api.devStyles.syncVariantNodeBoms(styleId, variantId, nodeBoms);
+    applySavedStyle(saved);
+    return saved;
+  }, [applySavedStyle]);
 
   const deleteDevBom = useCallback(async (id: string) => {
     const target = devBoms.find((b) => b.id === id);
     await api.devBoms.delete(id);
     setDevBoms((prev) => prev.filter((b) => b.id !== id));
     await refreshSelectedDetail(target?.parentStyleId);
-    await invalidateDevMaterials(target?.parentStyleId);
+    invalidateDevMaterials(target?.parentStyleId);
   }, [devBoms, refreshSelectedDetail, invalidateDevMaterials]);
 
   const updateStage = useCallback(async (
@@ -216,6 +232,7 @@ export function useDevStyles() {
     removeStyle,
     publishStyle,
     saveDevBom,
+    syncVariantNodeBoms,
     deleteDevBom,
     updateStage,
     addSample,

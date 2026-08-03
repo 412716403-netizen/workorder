@@ -16,6 +16,21 @@ export const getStyle = asyncHandler(async (req, res) => {
   res.json(await devStylesService.getDevStyle(getTenantPrisma(req.tenantId!), str(req.params.id)));
 });
 
+export const getStageField = asyncHandler(async (req, res) => {
+  res.json(
+    await devStylesService.getDevStageField(getTenantPrisma(req.tenantId!), str(req.params.fieldId)),
+  );
+});
+
+export const getAttachment = asyncHandler(async (req, res) => {
+  res.json(
+    await devStylesService.getDevAttachment(
+      getTenantPrisma(req.tenantId!),
+      str(req.params.attachmentId),
+    ),
+  );
+});
+
 export const createStyle = asyncHandler(async (req, res) => {
   res.status(201).json(
     await devStylesService.createDevStyle(

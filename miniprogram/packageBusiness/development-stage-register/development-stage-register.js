@@ -8,6 +8,7 @@ const {
 } = require('../../utils/windowMetrics.js');
 const {
   getDevStyle,
+  getDevStageField,
   updateDevStage,
   listDevStageTemplates,
 } = require('../utils/developmentApi.js');
@@ -23,6 +24,7 @@ const {
 const { chooseCustomFieldFiles, isImageDataUrl, resolveImageDisplaySrc } = require('../utils/fileBase64.js');
 const {
   DEV_STAGE_FILE_MAX_COUNT,
+  hasDevStageFileDeferred,
   parseDevStageFileItems,
   serializeDevStageFileItems,
 } = require('../utils/devStageFileValue.js');
@@ -222,14 +224,34 @@ Page({
         return;
       }
       this._style = style;
-      this._originalStage = found.stage;
       this._templates = templates || [];
       this._fileValues = {};
       this._filePreviews = {};
       const rawFields = buildStageRegisterFields(found.stage, this._templates);
+      const hydratedFields = await Promise.all(
+        rawFields.map(async (field) => {
+          if (field.type !== 'file' || !hasDevStageFileDeferred(field.value)) return field;
+          if (!field.id) throw new Error(`文件字段缺少编号：${field.label || '附件'}`);
+          const result = await getDevStageField(field.id);
+          return { ...field, value: (result && result.value) || '' };
+        }),
+      );
+      const hydratedValueById = new Map(
+        hydratedFields
+          .filter((field) => field.type === 'file')
+          .map((field) => [field.id, field.value]),
+      );
+      this._originalStage = {
+        ...found.stage,
+        fields: (found.stage.fields || []).map((field) =>
+          hydratedValueById.has(field.id)
+            ? { ...field, value: hydratedValueById.get(field.id) || '' }
+            : field,
+        ),
+      };
       const fields = [];
-      for (let fi = 0; fi < rawFields.length; fi += 1) {
-        const f = rawFields[fi];
+      for (let fi = 0; fi < hydratedFields.length; fi += 1) {
+        const f = hydratedFields[fi];
         const parts = f.type === 'date' ? splitIsoToDateTime(f.value) : { datePart: '', timePart: '' };
         const base = {
           ...f,
@@ -433,6 +455,15 @@ Page({
 
   async onSaveTap() {
     if (this.data.submitting) return;
+    const deferredField = (this.data.fields || []).find(
+      (field) =>
+        field.type === 'file'
+        && hasDevStageFileDeferred(this._fileValues && this._fileValues[field.id]),
+    );
+    if (deferredField) {
+      wx.showToast({ title: `文件尚未加载：${deferredField.label || '附件'}`, icon: 'none' });
+      return;
+    }
     const fieldsForSave = (this.data.fields || []).map((f) => ({
       ...f,
       value: this.resolveFieldValue(f),
