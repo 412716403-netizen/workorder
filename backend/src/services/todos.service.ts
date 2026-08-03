@@ -112,11 +112,12 @@ function normalizeRemind(
 
 export async function listTodos(
   db: TenantPrismaClient,
+  tenantId: string,
   userId: string,
   opts: { status?: TodoStatus } = {},
 ): Promise<TodoItemDTO[]> {
   const rows = (await db.todoItem.findMany({
-    where: { userId, ...(opts.status ? { status: opts.status } : {}) },
+    where: { tenantId, userId, ...(opts.status ? { status: opts.status } : {}) },
     select: SELECT,
     // 按建立时间倒序：最新建立的排第一个
     orderBy: { createdAt: 'desc' },
@@ -156,10 +157,15 @@ export async function createTodo(
   return toDTO(row);
 }
 
-/** 仅能改自己的待办；不存在或非本人则 404 */
-async function findOwn(db: TenantPrismaClient, userId: string, id: string): Promise<TodoRow> {
+/** 仅能改当前企业下自己的待办；不存在、跨企业或非本人则 404 */
+async function findOwn(
+  db: TenantPrismaClient,
+  tenantId: string,
+  userId: string,
+  id: string,
+): Promise<TodoRow> {
   const row = (await db.todoItem.findFirst({
-    where: { id, userId },
+    where: { id, tenantId, userId },
     select: SELECT,
   })) as TodoRow | null;
   if (!row) throw new AppError(404, '待办不存在');
@@ -168,11 +174,12 @@ async function findOwn(db: TenantPrismaClient, userId: string, id: string): Prom
 
 export async function updateTodo(
   db: TenantPrismaClient,
+  tenantId: string,
   userId: string,
   id: string,
   patch: TodoUpdateInput,
 ): Promise<TodoItemDTO> {
-  const existing = await findOwn(db, userId, id);
+  const existing = await findOwn(db, tenantId, userId, id);
 
   const data: Record<string, unknown> = {};
 
@@ -210,10 +217,11 @@ export async function updateTodo(
 
 export async function deleteTodo(
   db: TenantPrismaClient,
+  tenantId: string,
   userId: string,
   id: string,
 ): Promise<{ id: string }> {
-  await findOwn(db, userId, id);
+  await findOwn(db, tenantId, userId, id);
   await db.todoItem.delete({ where: { id } });
   return { id };
 }

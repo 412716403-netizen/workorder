@@ -342,7 +342,7 @@ model PlatformAnnouncement {
   @@map("platform_announcements")
 }
 
-/** 个人待办事项（todo_reminder 插件）；个人级，按 userId 作用域隔离 */
+/** 个人待办事项（todo_reminder 插件）；按 tenantId + userId 双重作用域隔离，跨企业互不可见 */
 model TodoItem {
   id            String    @id @default(uuid()) @db.Uuid
   tenantId      String    @map("tenant_id") @db.Uuid

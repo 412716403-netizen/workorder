@@ -39,6 +39,7 @@ import {
   reworkMainListBlockTieId,
 } from '../../utils/orderCenterSort';
 import { shouldShowOrderInIncompleteListFilter } from '../../utils/orderDispatchListFilter';
+import { filterProcessTagsBySearch } from '../../utils/filterProcessTagsBySearch';
 import { latestDefectiveReportMs } from '../../utils/latestDefectiveReportMs';
 import ReworkPendingDefectiveModal from './ReworkPendingDefectiveModal';
 import ReworkOrderDetailModal from './ReworkOrderDetailModal';
@@ -580,33 +581,74 @@ const ReworkPanel: React.FC<PanelProps> = ({
     });
   }, [reworkListBlocks, onlyShowIncompleteOrders, reworkStatsByOrderId]);
 
-  const displayReworkListBlocks = useMemo(() => {
-    const q = debouncedReworkMainSearch.trim().toLowerCase();
-    if (!q) return reworkListBlocksForDisplay;
-    const orderHay = (order: ProductionOrder) => {
+  /**
+   * 单行（工单 / 产品聚合）在当前搜索下是否展示，以及应展示哪些返工工序标签。
+   * 行过滤、分页计数、父子块折叠选行与卡片渲染共用此函数，避免「计数有值但卡片空白」。
+   */
+  const resolveReworkRow = useCallback(
+    <T extends { nodeName: string; pendingQty: number; outsourcePartner?: string }>(
+      rawStats: T[],
+      textHay: string,
+    ): { stats: T[]; visible: boolean } => {
+      const q = debouncedReworkMainSearch.trim().toLowerCase();
+      if (!q) return { stats: rawStats, visible: true };
+      const { tags, nameHit, hideRow } = filterProcessTagsBySearch(
+        rawStats,
+        debouncedReworkMainSearch,
+        s => s.nodeName,
+        { getReportableQty: s => s.pendingQty },
+      );
+      /** 搜工序名但匹配工序均无可报 → 该行不展示 */
+      if (hideRow) return { stats: tags, visible: false };
+      const partnerHit = rawStats.some(s => (s.outsourcePartner ?? '').toLowerCase().includes(q));
+      return { stats: tags, visible: textHay.includes(q) || partnerHit || nameHit };
+    },
+    [debouncedReworkMainSearch],
+  );
+
+  const orderSearchHay = useCallback(
+    (order: ProductionOrder) => {
       const p = idx.productsById.get(order.productId);
       return [order.orderNumber, order.productName, order.sku, order.customer, p?.name, p?.sku]
         .filter(Boolean)
         .join('\0')
         .toLowerCase();
-    };
+    },
+    [idx],
+  );
+
+  const resolveReworkOrderRow = useCallback(
+    (order: ProductionOrder) =>
+      resolveReworkRow(reworkStatsByOrderId.get(order.id) ?? [], orderSearchHay(order)),
+    [resolveReworkRow, reworkStatsByOrderId, orderSearchHay],
+  );
+
+  const resolveReworkProductRow = useCallback(
+    (productId: string) => {
+      const fp = idx.productsById.get(productId);
+      const hay = [fp?.name ?? '', fp?.sku ?? '', productId].filter(Boolean).join('\0').toLowerCase();
+      return resolveReworkRow(reworkStatsByProductId.get(productId) ?? [], hay);
+    },
+    [resolveReworkRow, reworkStatsByProductId, idx],
+  );
+
+  const displayReworkListBlocks = useMemo(() => {
+    if (!debouncedReworkMainSearch.trim()) return reworkListBlocksForDisplay;
     return reworkListBlocksForDisplay.filter(block => {
       if (block.type === 'productAggregate') {
-        const fp = idx.productsById.get(block.productId);
-        const stats = reworkStatsByProductId.get(block.productId) ?? [];
-        const parts: string[] = [fp?.name ?? '', fp?.sku ?? '', block.productId];
-        stats.forEach(s => {
-          parts.push(s.nodeName, s.outsourcePartner ?? '');
-        });
-        return parts.filter(Boolean).join('\0').toLowerCase().includes(q);
+        return resolveReworkProductRow(block.productId).visible;
       }
       if (block.type === 'single') {
-        return orderHay(block.order).includes(q);
+        return resolveReworkOrderRow(block.order).visible;
       }
-      const childHay = block.children.map(orderHay).join('\0');
-      return (orderHay(block.parent) + '\0' + childHay).includes(q);
+      return [block.parent, ...block.children].some(o => resolveReworkOrderRow(o).visible);
     });
-  }, [reworkListBlocksForDisplay, debouncedReworkMainSearch, idx, reworkStatsByProductId]);
+  }, [
+    reworkListBlocksForDisplay,
+    debouncedReworkMainSearch,
+    resolveReworkOrderRow,
+    resolveReworkProductRow,
+  ]);
 
   // ── JSX ──────────────────────────────────────────────────────────────────
   return (
@@ -710,7 +752,8 @@ const ReworkPanel: React.FC<PanelProps> = ({
             {pagedBlocks.map((block) => {
               const renderReworkCard = (order: ProductionOrder, isChild?: boolean, indentPx?: number) => {
                 const product = idx.productsById.get(order.productId);
-                const stats = [...(reworkStatsByOrderId.get(order.id) ?? [])];
+                const { stats, visible } = resolveReworkOrderRow(order);
+                if (!visible) return null;
                 const orderTotalQty = order.items.reduce((s, i) => s + i.quantity, 0);
                 const cardClass = isChild
                   ? 'bg-white px-5 py-2 rounded-2xl border border-l-4 border-l-slate-300 border-slate-200 hover:shadow-lg hover:border-slate-300 transition-all grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-3 lg:gap-4 items-center'
@@ -843,7 +886,8 @@ const ReworkPanel: React.FC<PanelProps> = ({
 
               if (block.type === 'productAggregate') {
                 const fp = idx.productsById.get(block.productId);
-                const stats = reworkStatsByProductId.get(block.productId) ?? [];
+                const { stats, visible } = resolveReworkProductRow(block.productId);
+                if (!visible) return null;
                 const productOrders = idx.rootOrdersByProductId.get(block.productId)
                   ?? idx.ordersByProductId.get(block.productId)
                   ?? [];
@@ -970,7 +1014,9 @@ const ReworkPanel: React.FC<PanelProps> = ({
                 );
               }
               if (block.type === 'single') {
-                return <div key={block.order.id}>{renderReworkCard(block.order)}</div>;
+                const card = renderReworkCard(block.order);
+                if (!card) return null;
+                return <div key={block.order.id}>{card}</div>;
               }
               const { parent, children: childList } = block;
               void childList;
@@ -982,8 +1028,20 @@ const ReworkPanel: React.FC<PanelProps> = ({
                 }
                 return true;
               });
-              const collapsedOrder = onlyShowIncompleteOrders ? visibleFamily[0]?.order : parent;
+              const familyForDisplay = onlyShowIncompleteOrders ? visibleFamily : allWithDepth;
+              /**
+               * 折叠态代表工单必须是「当前搜索下可见」的那条：搜工序时命中的可能是子工单，
+               * 若仍固定取主工单，会出现「列表计数有该块但卡片区空白」。
+               */
+              const collapsedOrder =
+                familyForDisplay.find(({ order }) => resolveReworkOrderRow(order).visible)?.order
+                ?? (onlyShowIncompleteOrders ? visibleFamily[0]?.order : parent);
               const isExpanded = reworkExpandedParents.has(parent.id);
+              const expandedCards = familyForDisplay
+                .map(({ order, depth }) => renderReworkCard(order, depth > 0, depth > 0 ? 24 * depth : 0))
+                .filter(Boolean);
+              const collapsedCard = collapsedOrder ? renderReworkCard(collapsedOrder) : null;
+              if (isExpanded ? expandedCards.length === 0 : !collapsedCard) return null;
               return (
                 <div key={`rework-parentChild-${parent.id}`} className="rounded-2xl border-2 border-slate-300 bg-slate-50/50 overflow-hidden">
                   <button
@@ -994,16 +1052,10 @@ const ReworkPanel: React.FC<PanelProps> = ({
                   >
                     {isExpanded ? <ChevronDown className="w-4 h-4 text-slate-600 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-600 shrink-0" />}
                     <Plus className="w-3.5 h-3.5 text-slate-600 shrink-0" />
-                    <span className="text-xs font-bold text-slate-800">主工单及子工单（共 {onlyShowIncompleteOrders ? visibleFamily.length : allWithDepth.length} 条）</span>
+                    <span className="text-xs font-bold text-slate-800">主工单及子工单（共 {isExpanded ? expandedCards.length : familyForDisplay.length} 条）</span>
                   </button>
                   <div className="p-2.5 space-y-1.5">
-                    {isExpanded
-                      ? (onlyShowIncompleteOrders
-                        ? visibleFamily.map(({ order, depth }) => renderReworkCard(order, depth > 0, depth > 0 ? 24 * depth : 0))
-                        : allWithDepth.map(({ order, depth }) => renderReworkCard(order, depth > 0, depth > 0 ? 24 * depth : 0)))
-                      : collapsedOrder
-                        ? renderReworkCard(collapsedOrder)
-                        : null}
+                    {isExpanded ? expandedCards : collapsedCard}
                   </div>
                 </div>
               );

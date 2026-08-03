@@ -99,6 +99,8 @@ export async function listOrders(
       { productName: { contains: opts.search, mode: 'insensitive' } },
       { sku: { contains: opts.search, mode: 'insensitive' } },
       { customer: { contains: opts.search, mode: 'insensitive' } },
+      /** 工序名模糊：工单中心搜索「缝制」等时命中含该工序里程碑的工单 */
+      { milestones: { some: { name: { contains: opts.search, mode: 'insensitive' } } } },
     ];
   }
 

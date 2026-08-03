@@ -164,7 +164,7 @@ function toAnnouncementNotification(msg: DashboardPublishedMessage): DashboardNo
 
 const TODO_REMINDER_PUBLISHER = '待办提醒';
 
-/** todo_reminder 插件：当前用户到点未完成的待办，注入消息流 */
+/** todo_reminder 插件：当前企业内、当前用户到点的待办，注入消息流 */
 async function buildTodoReminderNotifications(
   tenantId: string,
   userId: string,
@@ -188,6 +188,7 @@ async function buildTodoReminderNotifications(
   try {
     rows = (await db.todoItem.findMany({
       where: {
+        tenantId,
         userId,
         remindEnabled: true,
         remindAt: { lte: now },

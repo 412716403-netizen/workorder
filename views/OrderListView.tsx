@@ -90,6 +90,8 @@ import { useRefreshReportScopeWhileActive } from '../hooks/useRefreshReportScope
 import { ModalPortal } from '../components/ModalPortal';
 import { PdfPreviewViewer } from '../components/PdfPreviewViewer';
 import { PROCESS_LOCK_ORDER_STATUS_EXEMPT } from '../shared/productProcessLock';
+import { filterProcessTagsBySearch } from '../utils/filterProcessTagsBySearch';
+import { buildOrderMilestoneCardMetrics } from '../utils/orderMilestoneCardMetrics';
 
 /**
  * 「待配工序」是后端真实存在的工单状态（见 shared/productProcessLock.ts、
@@ -841,7 +843,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
             <input
               type="search"
-              placeholder="搜索产品、工单号、客户..."
+              placeholder="搜索产品、工单号、客户、工序..."
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-3 text-sm font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-medium outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
@@ -905,7 +907,8 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
               <p className="text-slate-400 font-medium">暂无工单数据</p>
             </div>
           ) : (<>
-            {listBlocks.map((block) => {
+            {(() => {
+            const renderedBlocks = listBlocks.map((block) => {
               const renderOrderCard = (order: ProductionOrder, isChild?: boolean, indentPx?: number) => {
                 const product = productMap.get(order.productId);
                 const totalMilestones = order.milestones.length;
@@ -927,6 +930,30 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                 const cardClass = isChild
                   ? 'bg-white px-5 py-2 rounded-2xl border border-l-4 border-l-slate-300 border-slate-200 hover:shadow-lg hover:border-slate-300 transition-all grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-3 lg:gap-4 items-center'
                   : 'bg-white px-5 py-2 rounded-[32px] border border-slate-200 hover:shadow-xl hover:border-indigo-200 transition-all group grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-3 lg:gap-4 items-center';
+                const productTotalAcrossOrders = productionLinkMode === 'product'
+                  ? (productOrdersTotalQtyByPid.get(order.productId) ?? orderTotalQty)
+                  : orderTotalQty;
+                /** 产品维度外协摊回用（与 PMP 摊回对称） */
+                const shareRatio = productionLinkMode === 'product' && productTotalAcrossOrders > 0
+                  ? orderTotalQty / productTotalAcrossOrders
+                  : 0;
+                const milestoneMetrics = buildOrderMilestoneCardMetrics(order.milestones, {
+                  productionLinkMode,
+                  processSequenceMode,
+                  outOfSequenceTemplateIds,
+                  orderTotalQty,
+                  productTotalAcrossOrders,
+                  pmpCompletedAt: tid => pmpCompletedByProductTpl.get(`${order.productId}|${tid}`) ?? 0,
+                  getDefectiveRework: tid => getDefectiveRework(order.id, tid),
+                });
+                /** 搜工序名时只展示匹配且可报>0 的标签；匹配工序均无可报则整行不展示 */
+                const { tags: visibleMetrics, hideRow } = filterProcessTagsBySearch(
+                  milestoneMetrics,
+                  debouncedSearch,
+                  e => e.milestone.name,
+                  { getReportableQty: e => e.remaining },
+                );
+                if (hideRow) return null;
                 return (
                   <div key={order.id} className={cardClass} style={indentPx != null && indentPx > 0 ? { marginLeft: `${indentPx}px` } : undefined}>
                     <div className="flex items-center gap-4 min-w-0">
@@ -1063,37 +1090,10 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                         <div className="flex-1 min-w-0 overflow-x-auto overflow-y-hidden scroll-smooth custom-scrollbar touch-pan-x -mx-0.5">
                           <div className="flex items-stretch gap-1.5 flex-nowrap py-0.5 w-max px-0.5">
                             {/* 产品模式：按工单 items.quantity 比例摊回 PMP（估算，详见 pmpCompletedByProductTpl 注释） */}
-                            {order.milestones.map((ms) => {
+                            {/* 搜工序名时只展示匹配且可报>0 的工序标签；顺控仍按完整工序列计算 */}
+                            {visibleMetrics.map(({ milestone: ms, pmpShare: pmpShareCur, currentCompleted, availableQty, remaining }) => {
                               const isCompleted = ms.status === MilestoneStatus.COMPLETED;
                               const canReport = !!onReportSubmit && canReportMilestone(order, ms);
-                              const productTotalAcrossOrders = productionLinkMode === 'product'
-                                ? (productOrdersTotalQtyByPid.get(order.productId) ?? orderTotalQty)
-                                : orderTotalQty;
-                              const shareRatio = productionLinkMode === 'product' && productTotalAcrossOrders > 0
-                                ? orderTotalQty / productTotalAcrossOrders
-                                : 0;
-                              const pmpShareAt = (templateId: string) => {
-                                if (productionLinkMode !== 'product' || shareRatio <= 0) return 0;
-                                const total = pmpCompletedByProductTpl.get(`${order.productId}|${templateId}`) ?? 0;
-                                return total * shareRatio;
-                              };
-                              const pmpShareCur = pmpShareAt(ms.templateId);
-                              const currentCompletedRaw = ms.completedQuantity + pmpShareCur;
-                              const currentCompleted = Math.round(currentCompletedRaw);
-                              let baseQty = orderTotalQty;
-                              if (isProcessSequential(processSequenceMode, ms.templateId, outOfSequenceTemplateIds)) {
-                                const idx = order.milestones.findIndex(m => m.id === ms.id);
-                                const templateIds = order.milestones.map(m => m.templateId);
-                                const gateIdx = findGatingPredecessorIndex(templateIds, idx, outOfSequenceTemplateIds);
-                                if (gateIdx >= 0) {
-                                  const prev = order.milestones[gateIdx];
-                                  const pmpSharePrev = pmpShareAt(prev.templateId);
-                                  baseQty = (prev?.completedQuantity ?? 0) + pmpSharePrev;
-                                }
-                              }
-                              const { defective, rework } = getDefectiveRework(order.id, ms.templateId);
-                              const availableQty = Math.max(0, Math.round(baseQty - defective + rework));
-                              const remaining = availableQty - currentCompleted;
                               /**
                                * 小卡圆下的 `availableQty / remaining` 数字保持原口径（不扣外协），
                                * 仅在 hover tooltip 上**额外**追加"外协剩余 X 件"，与 ReportModal 的"扣外协"剩余口径互补。
@@ -1205,19 +1205,25 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
               };
 
               if (block.type === 'single') {
-                return <div key={block.order.id}>{renderOrderCard(block.order)}</div>;
+                const card = renderOrderCard(block.order);
+                if (!card) return null;
+                return <div key={block.order.id}>{card}</div>;
               }
               if (block.type === 'orderGroup') {
                 const { groupKey, orders: groupOrders } = block;
+                const cards = groupOrders
+                  .map(order => ({ order, card: renderOrderCard(order) }))
+                  .filter((x): x is { order: ProductionOrder; card: React.ReactElement } => x.card != null);
+                if (cards.length === 0) return null;
                 return (
                   <div key={`orderGroup-${groupKey}`} className="rounded-[32px] border-2 border-slate-300 bg-slate-50/50 overflow-hidden">
                     <div className="px-5 py-3 border-b border-slate-200 bg-slate-100/80 flex items-center gap-2">
                       <Split className="w-4 h-4 text-slate-600" />
-                      <span className="text-sm font-bold text-slate-800">原单 {groupKey}（共 {groupOrders.length} 条工单）</span>
+                      <span className="text-sm font-bold text-slate-800">原单 {groupKey}（共 {cards.length} 条工单）</span>
                     </div>
                     <div className="p-3 space-y-2">
-                      {groupOrders.map(order => (
-                        <div key={order.id}>{renderOrderCard(order)}</div>
+                      {cards.map(({ order, card }) => (
+                        <div key={order.id}>{card}</div>
                       ))}
                     </div>
                   </div>
@@ -1266,7 +1272,53 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                 const pgShowConfigureProcessHint =
                   (product != null && !pgProductHasMilestoneTemplate) ||
                   block.orders.some(o => isPendingProcessOrderStatus(o.status));
-                const pgHasMilestoneStrip = Array.from(byTemplate.entries()).length > 0;
+                const allTemplateEntries = Array.from(byTemplate.entries()).sort(([aId], [bId]) => {
+                  const orderIds = product?.milestoneNodeIds || [];
+                  const ia = orderIds.indexOf(aId);
+                  const ib = orderIds.indexOf(bId);
+                  if (ia === -1 && ib === -1) return aId.localeCompare(bId);
+                  if (ia === -1) return 1;
+                  if (ib === -1) return -1;
+                  return ia - ib;
+                });
+                const pgHasMilestoneStrip = allTemplateEntries.length > 0;
+                const pgTemplateIds = allTemplateEntries.map(([t]) => t);
+                const templateEntriesWithQty = allTemplateEntries.map(([tid, m], mIdx) => {
+                  const gateIdx = findGatingPredecessorIndex(pgTemplateIds, mIdx, outOfSequenceTemplateIds);
+                  /** 关联产品报工写在 pmp，不良不在工单里程碑；顺序+产品时不能用「合计−里程碑不良」否则会漏扣 pmp 不良 */
+                  const availableQty =
+                    productionLinkMode === 'product' && productMilestoneProgresses.length > 0
+                      ? productGroupMaxReportableSum(
+                          block.orders,
+                          tid,
+                          block.productId,
+                          productMilestoneProgresses,
+                          processSequenceMode,
+                          (oid, t) => getDefectiveRework(oid, t),
+                          undefined,
+                          orders,
+                          outOfSequenceTemplateIds,
+                        )
+                      : (() => {
+                          let baseQty = totalQty;
+                          if (isProcessSequential(processSequenceMode, tid, outOfSequenceTemplateIds) && gateIdx >= 0) {
+                            baseQty = allTemplateEntries[gateIdx][1].completed;
+                          }
+                          const defectiveSum = block.orders.reduce((s, o) => s + getDefectiveRework(o.id, tid).defective, 0);
+                          const reworkSum = block.orders.reduce((s, o) => s + getDefectiveRework(o.id, tid).rework, 0);
+                          return Math.max(0, baseQty - defectiveSum + reworkSum);
+                        })();
+                  const remaining = availableQty - m.completed;
+                  return { tid, m, mIdx, gateIdx, availableQty, remaining };
+                });
+                /** 搜工序名时只展示匹配且可报>0 的标签；匹配工序均无可报则整个产品组不展示 */
+                const { tags: visibleTemplateEntries, hideRow: hideProductGroup } = filterProcessTagsBySearch(
+                  templateEntriesWithQty,
+                  debouncedSearch,
+                  e => e.m.name,
+                  { getReportableQty: e => e.remaining },
+                );
+                if (hideProductGroup) return null;
                 return (
                   <div key={`productGroup-${block.productId}`}>
                     <div className="pt-0">
@@ -1327,46 +1379,10 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                               {pgHasMilestoneStrip ? (
                               <div className="flex-1 min-w-0 overflow-x-auto overflow-y-hidden -mx-0.5">
                                 <div className="flex items-stretch gap-1.5 flex-nowrap py-0.5 w-max px-0.5">
-                                  {(() => {
-                                    const templateEntries = Array.from(byTemplate.entries()).sort(([aId], [bId]) => {
-                                      const order = product?.milestoneNodeIds || [];
-                                      const ia = order.indexOf(aId);
-                                      const ib = order.indexOf(bId);
-                                      if (ia === -1 && ib === -1) return aId.localeCompare(bId);
-                                      if (ia === -1) return 1;
-                                      if (ib === -1) return -1;
-                                      return ia - ib;
-                                    });
-                                    return templateEntries.map(([tid, m], mIdx) => {
-                                    const templateIds = templateEntries.map(([t]) => t);
-                                    const gateIdx = findGatingPredecessorIndex(templateIds, mIdx, outOfSequenceTemplateIds);
-                                    /** 关联产品报工写在 pmp，不良不在工单里程碑；顺序+产品时不能用「合计−里程碑不良」否则会漏扣 pmp 不良（如横机显示成下单总数 450） */
-                                    const availableQty =
-                                      productionLinkMode === 'product' && productMilestoneProgresses.length > 0
-                                        ? productGroupMaxReportableSum(
-                                            block.orders,
-                                            tid,
-                                            block.productId,
-                                            productMilestoneProgresses,
-                                            processSequenceMode,
-                                            (oid, t) => getDefectiveRework(oid, t),
-                                            undefined,
-                                            orders,
-                                            outOfSequenceTemplateIds,
-                                          )
-                                        : (() => {
-                                            let baseQty = totalQty;
-                                            if (isProcessSequential(processSequenceMode, tid, outOfSequenceTemplateIds) && gateIdx >= 0) {
-                                              baseQty = templateEntries[gateIdx][1].completed;
-                                            }
-                                            const defectiveSum = block.orders.reduce((s, o) => s + getDefectiveRework(o.id, tid).defective, 0);
-                                            const reworkSum = block.orders.reduce((s, o) => s + getDefectiveRework(o.id, tid).rework, 0);
-                                            return Math.max(0, baseQty - defectiveSum + reworkSum);
-                                          })();
+                                  {visibleTemplateEntries.map(({ tid, m, gateIdx, availableQty, remaining }) => {
                                     const availDisplay = Math.max(0, Math.round(Number(availableQty) || 0));
                                     const remainingRaw = Math.round((Number(availableQty) || 0) - m.completed);
                                     const remainingDisplay = allowExceedMaxReportQty ? remainingRaw : Math.max(0, remainingRaw);
-                                    const remaining = availableQty - m.completed;
                                     const isDone = remaining <= 0 && m.completed > 0;
                                     /**
                                      * 小卡圆下数字保持原口径（不扣外协），仅 hover tooltip 额外提示"外协剩余 X 件"。
@@ -1381,7 +1397,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                     const allowReport = (onReportSubmit || (productionLinkMode === 'product' && onReportSubmitProduct)) && (
                                       !isProcessSequential(processSequenceMode, tid, outOfSequenceTemplateIds) ||
                                       gateIdx < 0 ||
-                                      templateEntries[gateIdx][1].completed > 0
+                                      allTemplateEntries[gateIdx][1].completed > 0
                                     );
                                     const tooltipReadOnly = [
                                       `可报最多 ${availDisplay}`,
@@ -1486,8 +1502,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                         </div>
                                       </div>
                                     );
-                                  });
-                                  })()}
+                                  })}
                                 </div>
                               </div>
                               ) : !pgShowConfigureProcessHint ? (
@@ -1544,6 +1559,15 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
               const allWithDepth = [{ order: parent, depth: 0 }, ...getAllDescendantsWithDepth(parent.id, 1)];
               const allOrders = allWithDepth.map(d => d.order);
               const isExpanded = expandedParents.has(parent.id);
+              const expandedCards = allWithDepth
+                .map(({ order, depth }) => renderOrderCard(order, depth > 0, depth > 0 ? 24 * depth : 0))
+                .filter(Boolean);
+              /**
+               * 折叠态代表工单必须是「当前搜索下可见」的那条：搜工序时命中的可能是子工单，
+               * 若仍固定取主工单，会渲染出只剩分组标题的空框。
+               */
+              const collapsedCard = expandedCards[0] ?? null;
+              if (isExpanded ? expandedCards.length === 0 : !collapsedCard) return null;
               return (
                 <div key={`parentChild-${parent.id}`} className="rounded-2xl border-2 border-slate-300 bg-slate-50/50 overflow-hidden">
                   <button
@@ -1558,22 +1582,29 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                       <ChevronRight className="w-4 h-4 text-slate-600 shrink-0" />
                     )}
                     <Plus className="w-3.5 h-3.5 text-slate-600 shrink-0" />
-                    <span className="text-xs font-bold text-slate-800">主工单及子工单（共 {allOrders.length} 条）</span>
+                    <span className="text-xs font-bold text-slate-800">主工单及子工单（共 {isExpanded ? expandedCards.length : allOrders.length} 条）</span>
                   </button>
                   <div className="p-2.5 space-y-1.5">
-                    {isExpanded ? (
-                      allWithDepth.map(({ order, depth }) => {
-                        const isChild = depth > 0;
-                        const indentPx = isChild ? 24 * depth : 0;
-                        return renderOrderCard(order, isChild, indentPx);
-                      })
-                    ) : (
-                      renderOrderCard(parent, false)
-                    )}
+                    {isExpanded ? expandedCards : collapsedCard}
                   </div>
                 </div>
               );
-            })}
+            }).filter(Boolean);
+            if (renderedBlocks.length === 0) {
+              return (
+                <div className="bg-white border-2 border-dashed border-slate-100 rounded-[32px] p-20 text-center">
+                  <Layers className="w-12 h-12 text-slate-200 mx-auto mb-4" />
+                  <p className="text-slate-400 font-medium">
+                    {debouncedSearch ? `没有匹配「${debouncedSearch}」且可报数量大于 0 的工单` : '暂无工单数据'}
+                  </p>
+                  {debouncedSearch && totalPages > 1 && (
+                    <p className="text-slate-300 text-xs font-medium mt-2">本页匹配的工序均已报满，可翻到其他页查看</p>
+                  )}
+                </div>
+              );
+            }
+            return renderedBlocks;
+            })()}
             {totalPages > 1 && (
               <div className="flex items-center justify-center gap-3 py-4">
                 <span className="text-xs text-slate-400">共 {totalOrders} 条，第 {currentPage} / {totalPages} 页</span>

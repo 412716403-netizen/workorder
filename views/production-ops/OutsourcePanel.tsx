@@ -48,6 +48,7 @@ import {
   pageTitleClass,
 } from '../../styles/uiDensity';
 import { productGroupMaxReportableSum, combinedCompletedAtTemplate } from '../../utils/productReportAggregates';
+import { filterProcessTagsBySearch } from '../../utils/filterProcessTagsBySearch';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import {
   productOutsourceDispatchUsesAggregateVariantPool,
@@ -817,7 +818,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
     const q = debouncedOutsourceSearch.trim().toLowerCase();
     if (!q) return base;
     const isProductMode = productionLinkMode === 'product';
-    return base.filter(item => {
+    const matched = base.filter(item => {
       const parts: string[] = [];
       if ('productName' in item) parts.push(String(item.productName ?? ''));
       if ('orderNumber' in item && item.orderNumber != null) parts.push(String(item.orderNumber));
@@ -835,9 +836,21 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
           parts.push(pt.partner ?? '', pt.nodeName ?? '');
         });
       }
-      const hay = parts.join('\u0000').toLowerCase();
-      return hay.includes(q);
+      return parts.join('\u0000').toLowerCase().includes(q);
     });
+    const out: typeof matched = [];
+    for (const item of matched) {
+      /** 搜工序名命中且剩余可收均为 0 → 整行不展示 */
+      const { tags: partners, hideRow } = filterProcessTagsBySearch(
+        item.partners,
+        debouncedOutsourceSearch,
+        p => p.nodeName ?? '',
+        { getReportableQty: p => p.pending },
+      );
+      if (hideRow) continue;
+      out.push({ ...item, partners });
+    }
+    return out;
   }, [outsourceStatsByOrder, debouncedOutsourceSearch, productionLinkMode, idx, outsourceFormSettings.hideZeroPendingPartnerOnList, onlyShowIncompleteOrders]);
 
   // Phase 3.E：outsourceFlowSummaryRows 已搬入 OutsourceFlowListModal 内部，

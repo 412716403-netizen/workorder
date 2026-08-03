@@ -7,7 +7,8 @@ import { TODO_NOTE_MAX_CHARS, TODO_SOURCE_TYPES } from '../types/index.js';
 /**
  * 待办提醒（todo_reminder 插件）。
  * 个人 / 工作台级功能：与 dashboard 路由一致，仅挂 authMiddleware + requireTenant，
- * 不挂 requireSubPermission —— 待办按 userId 作用域隔离，无需管理员单独授权。
+ * 不挂 requireSubPermission —— 待办按 tenantId + userId 双重作用域隔离，无需管理员单独授权。
+ * 同一用户加入多家企业时，只能看到 / 操作当前登录企业下自己创建的待办。
  * 可见性由前端 featurePlugins.todo_reminder 开关控制。
  */
 const router = Router();

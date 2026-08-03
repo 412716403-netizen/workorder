@@ -314,6 +314,9 @@
 | 父子分组 | 主工单及子工单以分组形式展示 |
 | 收缩 / 展开 | 默认可收缩，仅显示主工单 |
 | 层级缩进 | 子工单按 depth 缩进，保留层级关系 |
+| 列表搜索 | 支持产品编号/名称、工单号、客户、**工序名**模糊搜索；`GET /api/orders` 的 `search` 同时匹配里程碑 `Milestone.name`。命中工序名时，列表行只保留含该工序的工单/产品，工序标签条只展示匹配工序，且**可报数量（剩）> 0**（外协管理看剩余待收、返工管理看可报/待返工） |
+| 工序搜索的隐藏判据 | `utils/filterProcessTagsBySearch.ts` 一次扫描给出「展示哪些标签 / 是否因工序命中 / 是否隐藏整行」，行过滤与标签过滤共用 `hideRow`，避免两处口径漂移。父子工单块在折叠态会自动改用「当前搜索下可见」的那条工单作为代表，否则命中子工单时会渲染出只剩分组标题的空框 |
+| 工序小卡口径 | 工单中心小卡的「可报 / 已报 / 剩」由纯函数 `utils/orderMilestoneCardMetrics.ts` 统一计算，搜索过滤与渲染复用同一份结果 |
 
 ### 3.7 创建计划校验
 
@@ -912,7 +915,7 @@
 
 ## 6.x 待办提醒（`todo_reminder` 插件）
 
-- **个人级**：待办按 `userId` 隔离，每位成员只能查看/操作自己的待办；不进 RBAC 权限目录，开通插件后全员可用（与工作台/dashboard 同属个人区，接口不挂 `requireSubPermission`）。
+- **个人级 + 企业级双重隔离**：待办按 `tenantId + userId` 隔离，每位成员只能查看/操作**当前登录企业下**自己的待办。同一账号加入多家企业时，各企业的待办与待办提醒互不可见（登录 B 企业看不到在 A 企业建的待办，也无法凭 id 改/删）。不进 RBAC 权限目录，开通插件后全员可用（与工作台/dashboard 同属个人区，接口不挂 `requireSubPermission`）。
 - **来源**：`sourceType ∈ standalone | production_order | plan | product | outsource | rework | purchase_order | purchase_bill | sales_order | sales_bill | dev_stage | dev_bom | dev_style`。`standalone` 为不关联单据的独立待办；其余从对应详情页「待办」按钮生成并快照单号、标题与跳转 `href`：`production_order`（工单详情）/ `plan`（计划详情）/ `product`（产品生产详情）/ `outsource`（外协「加工厂往来数量明细」）/ `rework`（返工管理「返工详情」）/ `purchase_order`（采购订单详情）/ `purchase_bill`（采购入库详情）/ `sales_order`（销售订单详情）/ `sales_bill`（销售单详情）/ `dev_style`（开发管理「款式详情」商品信息区）/ `dev_stage`（历史：节点登记）/ `dev_bom`（开发管理「BOM 录入」）。各待办「关联单据」标签（`[sourceDocNo, sourceTitle]` 拼接）统一以**所属模块名打头**：`sourceDocNo` 放模块名（生产计划 / 工单中心 / 外协管理 / 返工管理 / 采购订单 / 采购入库 / 销售订单 / 销售单 / 开发管理），`sourceTitle` 放单号 + 产品/标题快照。
 - **提醒**：`remindEnabled` 开启时必须给将来时间 `remindAt`。到点（`remindAt <= now`）的待办，由工作台消息中心 `getNotifications` 注入消息流（轮询 ≤60s 呈现）；**完成后仍保留显示**（不改标题，完成状态由通知的 `done` 字段驱动：消息中心列表前置只读复选框图标、详情弹窗用可点击复选框/「标记完成·取消完成」按钮展示），仅**删除**待办才从消息中心移除。通知**标题**只放固定提示 +（若有）关联单据号，备注内容放 body；「前往单据」按 `href` 经 `utils/todoHrefNavigate` 把 query 透传进 `location.state`（`orderId/productId/planId` 别名映射为 `detailOrderId/detailProductId/detailPlanId`），各业务页据此**直接打开对应单据详情弹窗**：工单/产品/计划（`/production?tab=orders|plans&orderId|productId|planId=`）、返工（`/production?tab=REWORK&reworkOrderId=`，`ReworkPanel` 打开返工详情）、外协（`/production?tab=OUTSOURCE&outsourceFlow=<PartnerFlowDetailSeed JSON>`，`OutsourcePanel` 重开「加工厂往来数量明细」）、采购/销售（`/psi?tab=<PSITab>&psiDoc=<单号>`，`PSIOpsView` 在 `tab===type` 命中时打开对应单据详情）、开发管理（`/development?styleId=<款式>&devStageId=<节点>` 或 `&devSampleId=<样品>`，`DevManagementView` 先选中款式并切到对应页签/清空筛选，再由 `DevStyleMainContent` 打开「节点登记」或「BOM 录入」弹窗）。各页消费深链后会 `navigate(replace)` 清掉对应 state 键，避免切页签再回来重复弹窗。
 - **入口**：工作台首页「待办事项」组件（`todos`，插件 `todo_reminder` 开启后自动出现在首页最下方靠左，可拖动/删除，删除后可从「添加组件」加回；关闭插件即隐藏）内可新建、勾选完成、打开管理面板（未完成/已完成 + 搜索，可编辑、删除，列表按建立时间倒序）；消息中心仅保留到点提醒消息流，不再挂「待办事项」管理入口。各业务详情弹窗顶栏的「待办」按钮（`components/AddTodoButton`）带单据上下文新建：工单详情、计划详情、产品生产详情、外协「加工厂往来数量明细」、返工详情、采购订单/采购入库/销售订单/销售单详情、开发管理「款式详情」商品信息区（宿主弹窗层级高，按钮传 `modalZIndexClass` 上调新建弹窗层级）。**BOM 录入**不再提供新建待办入口（历史 `dev_bom` 来源仍可查看与完成）。
