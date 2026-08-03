@@ -47,10 +47,13 @@ export const devStyles = {
     },
   ) => request<DevStyleDto>(`/dev/styles/stages/${stageId}`, { method: 'PUT', body: JSON.stringify(data) }),
   syncVariantNodeBoms: (styleId: string, variantId: string, nodeBoms: Record<string, string>) =>
-    request<DevStyleDto>(`/dev/styles/${styleId}/variants/${variantId}/node-boms`, {
-      method: 'PUT',
-      body: JSON.stringify({ nodeBoms }),
-    }),
+    request<{ variantId: string; nodeBoms: Record<string, string> }>(
+      `/dev/styles/${styleId}/variants/${variantId}/node-boms`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ nodeBoms }),
+      },
+    ),
 };
 
 export const devBoms = {

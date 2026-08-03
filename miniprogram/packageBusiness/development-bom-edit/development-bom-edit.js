@@ -16,7 +16,6 @@ const {
   createDevBom,
   updateDevBom,
   deleteDevBom,
-  syncVariantNodeBoms,
 } = require('../utils/developmentApi.js');
 const {
   genBomId,
@@ -347,11 +346,13 @@ Page({
         this.setData({ submitting: true });
         try {
           await deleteDevBom(this._editingBom.id);
-          if (cell.variantId) {
+          if (cell.variantId && this._style) {
             const variant = (this._style.variants || []).find((v) => v.id === cell.variantId);
-            const nodeBoms = { ...((variant && variant.nodeBoms) || {}) };
-            delete nodeBoms[cell.nodeId];
-            await syncVariantNodeBoms(this._style.id, cell.variantId, nodeBoms);
+            if (variant && variant.nodeBoms) {
+              const nodeBoms = { ...(variant.nodeBoms || {}) };
+              delete nodeBoms[cell.nodeId];
+              variant.nodeBoms = nodeBoms;
+            }
           }
       wx.showToast({ title: '已清空', icon: 'success' });
           if (this._style && this._style.publishedProductId) {
@@ -394,10 +395,11 @@ Page({
         });
         bomId = saved.id;
       }
-      if (cell.variantId) {
+      if (cell.variantId && this._style) {
         const variant = (this._style.variants || []).find((v) => v.id === cell.variantId);
-        const nodeBoms = { ...((variant && variant.nodeBoms) || {}), [cell.nodeId]: bomId };
-        await syncVariantNodeBoms(this._style.id, cell.variantId, nodeBoms);
+        if (variant) {
+          variant.nodeBoms = { ...(variant.nodeBoms || {}), [cell.nodeId]: bomId };
+        }
       }
       wx.showToast({
         title: this._style && this._style.publishedProductId ? '已保存并同步商品' : '已保存',

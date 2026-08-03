@@ -25,6 +25,9 @@
 
 - 入口：`App.tsx`（侧栏「开发管理」位于「生产管理」之上，路由 `/development`）
 - 款式开发：`views/development/DevManagementView.tsx`、`hooks/useDevStyles.ts`、`services/api/development.ts`
+  - **开发 BOM 按款加载**：`useDevStyles` 仅在选中款式时请求 `GET /dev/styles/boms/all?parentStyleId=`，不再首屏拉全租户 BOM。
+  - **BOM 全 SKU 编辑与单次写入**：开发管理 BOM 弹窗始终展示当前款式全部 SKU × 工序，不随选中样品过滤。`POST/PUT/DELETE /dev/styles/boms` 事务内同步维护变体 `nodeBoms`；已发布款走 `syncPublishedProductBomFromDevBomChange` **定向**更新受影响商品 BOM（支持新增/改/删/清空物料），`nodeBoms` 缺失时按 `productId + variantId + nodeId` 找真实 BOM，规格映射缺失再回退全量重建。保存后等待一次 `refreshProducts`（内部并行刷新商品与商品 BOM），保证切换商品信息立即一致；勿再额外 `PUT .../node-boms` 或重复 `refreshBoms`。
+  - **`PUT .../node-boms` 兼容**：仅返回 `{ variantId, nodeBoms }`，不再返回整款详情。
 - 认证与租户：`contexts/AuthContext.tsx`
 - 聚合数据：`contexts/AppDataContext.tsx`
 - 主要页面：`views/`

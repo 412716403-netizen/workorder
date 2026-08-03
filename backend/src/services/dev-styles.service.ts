@@ -5,11 +5,15 @@ import { sanitizeCreate, sanitizeItems, sanitizeUpdate } from '../utils/request.
 import { DevStageStatus, DevStyleStatus } from '../../../shared/types.js';
 import { nodeBomsMapsEqual } from '../../../shared/nodeBomsEqual.js';
 import { buildImageThumb } from '../lib/imageThumb.js';
+import { asNodeBomsRecord, isSingleSkuDevBomVariant, type DevBomRow } from './dev-publish.helpers.js';
 import { devStyleListInclude, mapDevStyleRow } from './dev-styles.mapper.js';
 import { loadMappedDevStyle } from './dev-styles.load.js';
 import { publishDevStyleToProduct } from './dev-publish.service.js';
 import { countDevMaterialRecords } from './dev-material.service.js';
-import { syncPublishedProductFromDevStyle } from './dev-published-sync.service.js';
+import {
+  syncPublishedProductBomFromDevBomChange,
+  syncPublishedProductFromDevStyle,
+} from './dev-published-sync.service.js';
 
 const STYLE_JSON_FIELDS = [
   'categoryCustomData', 'colorIds', 'sizeIds', 'milestoneNodeIds', 'defaultStageNames',
@@ -614,17 +618,92 @@ async function assertDevParentStyle(db: TenantPrismaClient, parentStyleId: unkno
   return parent;
 }
 
+type DevVariantNodeBomTx = {
+  devStyleVariant: {
+    findFirst: (args: {
+      where: { id: string; styleId: string };
+      select?: { id?: true; nodeBoms?: true };
+    }) => Promise<{ id: string; nodeBoms: unknown } | null>;
+    update: (args: {
+      where: { id: string };
+      data: { nodeBoms: Record<string, string> };
+    }) => Promise<unknown>;
+  };
+};
+
+/** 在事务内维护真实规格的 nodeBoms；单 SKU 虚拟规格跳过 */
+async function applyDevVariantNodeBomMapping(
+  tx: DevVariantNodeBomTx,
+  styleId: string,
+  variantId: string | null | undefined,
+  nodeId: string | null | undefined,
+  bomId: string | null,
+): Promise<void> {
+  const vid = String(variantId ?? '').trim();
+  const nid = String(nodeId ?? '').trim();
+  if (!vid || !nid) return;
+  if (isSingleSkuDevBomVariant(vid, styleId)) return;
+
+  const v = await tx.devStyleVariant.findFirst({
+    where: { id: vid, styleId },
+    select: { id: true, nodeBoms: true },
+  });
+  if (!v) return;
+
+  const next = asNodeBomsRecord(v.nodeBoms);
+  if (bomId) next[nid] = bomId;
+  else delete next[nid];
+  if (nodeBomsMapsEqual(v.nodeBoms, next)) return;
+  await tx.devStyleVariant.update({
+    where: { id: vid },
+    data: { nodeBoms: next },
+  });
+}
+
+function toDevBomRow(bom: {
+  id: string;
+  name?: string | null;
+  variantId?: string | null;
+  nodeId?: string | null;
+  items?: Array<{
+    categoryId?: string | null;
+    productId: string;
+    quantity: unknown;
+    note?: string | null;
+    useShortageOnly?: boolean;
+    excludeFromWeightShare?: boolean;
+    sortOrder?: number | null;
+  }>;
+}): DevBomRow {
+  return {
+    id: bom.id,
+    name: bom.name ?? null,
+    variantId: bom.variantId ?? null,
+    nodeId: bom.nodeId ?? null,
+    items: (bom.items ?? []).map((it, idx) => ({
+      categoryId: it.categoryId ?? null,
+      productId: it.productId,
+      quantity: it.quantity,
+      note: it.note ?? null,
+      useShortageOnly: Boolean(it.useShortageOnly),
+      excludeFromWeightShare: Boolean(it.excludeFromWeightShare),
+      sortOrder: it.sortOrder ?? idx,
+    })),
+  };
+}
+
 async function maybeSyncPublishedProductAfterBomChange(
   db: TenantPrismaClient,
   tenantId: string,
   styleId: string,
+  change: { action: 'upsert' | 'delete'; bom: DevBomRow },
 ): Promise<void> {
   const style = await db.devStyle.findUnique({
     where: { id: styleId },
     select: { publishedProductId: true },
   });
   if (!style?.publishedProductId) return;
-  await syncPublishedProductFromDevStyle(db, tenantId, styleId, style.publishedProductId);
+  await syncPublishedProductBomFromDevBomChange(db, tenantId, styleId, change);
 }
 
 export async function createDevBom(
@@ -635,21 +714,38 @@ export async function createDevBom(
 ) {
   const { items, ...rest } = body;
   const data = sanitizeCreate(rest);
-  await assertDevParentStyle(db, data.parentStyleId);
+  const parentStyleId = String(data.parentStyleId ?? '');
+  await assertDevParentStyle(db, parentStyleId);
   if (!data.id) data.id = genId('dbom');
   data.createdByUserId = creatorUserId ?? null;
   const cleanItems = items
     ? sanitizeItems(items as Record<string, unknown>[], ['bomId'])
     : undefined;
-  const created = await db.devBom.create({
-    data: {
-      ...data,
-      tenantId,
-      items: cleanItems ? { create: cleanItems } : undefined,
-    },
-    include: { items: true },
+
+  const created = await db.$transaction(async (tx) => {
+    const row = await tx.devBom.create({
+      data: {
+        ...data,
+        tenantId,
+        items: cleanItems ? { create: cleanItems } : undefined,
+      },
+      include: { items: { orderBy: { sortOrder: 'asc' } } },
+    });
+    const hasItems = (row.items ?? []).some((it) => String(it.productId ?? '').trim() !== '');
+    await applyDevVariantNodeBomMapping(
+      tx,
+      parentStyleId,
+      row.variantId,
+      row.nodeId,
+      hasItems ? row.id : null,
+    );
+    return row;
   });
-  await maybeSyncPublishedProductAfterBomChange(db, tenantId, String(created.parentStyleId));
+
+  await maybeSyncPublishedProductAfterBomChange(db, tenantId, parentStyleId, {
+    action: 'upsert',
+    bom: toDevBomRow(created),
+  });
   return created;
 }
 
@@ -662,36 +758,93 @@ export async function updateDevBom(
   const { items, ...rest } = body;
   const data = sanitizeUpdate(rest);
   delete data.createdByUserId;
-  const existing = await db.devBom.findUnique({ where: { id: bomId } });
+  const existing = await db.devBom.findUnique({
+    where: { id: bomId },
+    include: { items: { orderBy: { sortOrder: 'asc' } } },
+  });
   if (!existing) throw new AppError(404, '开发 BOM 不存在');
   // 若改动父款式归属，校验新父款式同样属于当前租户，避免脏外键
   if ('parentStyleId' in data) await assertDevParentStyle(db, data.parentStyleId);
 
+  const nextStyleId = String(
+    ('parentStyleId' in data ? data.parentStyleId : existing.parentStyleId) ?? '',
+  );
+  const nextVariantId =
+    'variantId' in data ? (data.variantId as string | null) : existing.variantId;
+  const nextNodeId = 'nodeId' in data ? (data.nodeId as string | null) : existing.nodeId;
+
   const updated = await db.$transaction(async (tx) => {
     await tx.devBom.update({ where: { id: bomId }, data });
+    let nextItems = existing.items;
     if (items) {
       const cleanItems = sanitizeItems(items as Record<string, unknown>[], ['bomId']).map(
         (item) => ({ ...item, bomId }),
       );
       await tx.devBomItem.deleteMany({ where: { bomId } });
       if (cleanItems.length > 0) await tx.devBomItem.createMany({ data: cleanItems });
+      nextItems = cleanItems as typeof existing.items;
     }
+
+    // 映射变体/节点/父款变化时：清旧指针、写新指针；明细为空则不挂映射
+    const mappingChanged =
+      existing.parentStyleId !== nextStyleId
+      || existing.variantId !== nextVariantId
+      || existing.nodeId !== nextNodeId;
+    if (mappingChanged) {
+      await applyDevVariantNodeBomMapping(
+        tx,
+        existing.parentStyleId,
+        existing.variantId,
+        existing.nodeId,
+        null,
+      );
+    }
+    const hasItems = nextItems.some((it) => String(it.productId ?? '').trim() !== '');
+    await applyDevVariantNodeBomMapping(
+      tx,
+      nextStyleId,
+      nextVariantId,
+      nextNodeId,
+      hasItems ? bomId : null,
+    );
+
     return tx.devBom.findUnique({
       where: { id: bomId },
       include: { items: { orderBy: { sortOrder: 'asc' } } },
     });
   });
   if (!updated) throw new AppError(404, '开发 BOM 不存在');
-  const styleId = String(('parentStyleId' in data ? data.parentStyleId : existing.parentStyleId) ?? '');
-  if (styleId) await maybeSyncPublishedProductAfterBomChange(db, tenantId, styleId);
+  if (nextStyleId) {
+    await maybeSyncPublishedProductAfterBomChange(db, tenantId, nextStyleId, {
+      action: 'upsert',
+      bom: toDevBomRow(updated),
+    });
+  }
   return updated;
 }
 
 export async function deleteDevBom(db: TenantPrismaClient, tenantId: string, id: string) {
-  const existing = await db.devBom.findUnique({ where: { id }, select: { parentStyleId: true } });
+  const existing = await db.devBom.findUnique({
+    where: { id },
+    include: { items: { orderBy: { sortOrder: 'asc' } } },
+  });
   if (!existing) throw new AppError(404, '开发 BOM 不存在');
-  await db.devBom.delete({ where: { id } });
-  await maybeSyncPublishedProductAfterBomChange(db, tenantId, existing.parentStyleId);
+
+  await db.$transaction(async (tx) => {
+    await applyDevVariantNodeBomMapping(
+      tx,
+      existing.parentStyleId,
+      existing.variantId,
+      existing.nodeId,
+      null,
+    );
+    await tx.devBom.delete({ where: { id } });
+  });
+
+  await maybeSyncPublishedProductAfterBomChange(db, tenantId, existing.parentStyleId, {
+    action: 'delete',
+    bom: toDevBomRow(existing),
+  });
   return { message: '已删除' };
 }
 
@@ -704,14 +857,22 @@ export async function syncDevVariantNodeBoms(
 ) {
   const v = await db.devStyleVariant.findFirst({ where: { id: variantId, styleId } });
   if (!v) throw new AppError(404, '款式变体不存在');
-  if (!nodeBomsMapsEqual(v.nodeBoms, nodeBoms)) {
+  const next = asNodeBomsRecord(nodeBoms);
+  if (!nodeBomsMapsEqual(v.nodeBoms, next)) {
     await db.devStyleVariant.update({
       where: { id: variantId },
-      data: { nodeBoms },
+      data: { nodeBoms: next },
     });
-    await maybeSyncPublishedProductAfterBomChange(db, tenantId, styleId);
+    // 兼容旧客户端：仅改映射时用全量同步恢复商品侧指针；正常 BOM 保存不再依赖本接口
+    const style = await db.devStyle.findUnique({
+      where: { id: styleId },
+      select: { publishedProductId: true },
+    });
+    if (style?.publishedProductId) {
+      await syncPublishedProductFromDevStyle(db, tenantId, styleId, style.publishedProductId);
+    }
   }
-  return getDevStyle(db, styleId);
+  return { variantId, nodeBoms: next };
 }
 
 export { publishDevStyleToProduct };

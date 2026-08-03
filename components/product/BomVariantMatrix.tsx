@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { Boxes, Check, ArrowRight } from 'lucide-react';
 import type { AppDictionaries, BOM, GlobalNodeTemplate, ProductVariant } from '../../types';
 import { bomHasConfiguredItems } from '../../utils/bomEffective';
+import { isSingleSkuProduct } from '../../utils/productBomMaterial';
 import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
 
 export interface BomMatrixProductShape {
@@ -41,6 +42,11 @@ const BomVariantMatrix: React.FC<BomVariantMatrixProps> = ({
   onOpenBOMEditor,
   emptyHint,
 }) => {
+  const isSingleSku = isSingleSkuProduct({
+    variants: product.variants,
+    colorIds: product.colorIds ?? [],
+    sizeIds: product.sizeIds ?? [],
+  });
   const groupedVariants = useMemo(() => {
     const groups: Record<string, ProductVariant[]> = {};
     product.variants.forEach((v) => {
@@ -77,7 +83,7 @@ const BomVariantMatrix: React.FC<BomVariantMatrixProps> = ({
 
   return (
     <>
-      {product.variants.length === 0 && (
+      {isSingleSku && (
         <div className="space-y-4">
           <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">单 SKU 产品</h5>
           <div className="p-6 rounded-3xl border border-white bg-white/90 shadow-sm ring-1 ring-indigo-50">
@@ -135,7 +141,7 @@ const BomVariantMatrix: React.FC<BomVariantMatrixProps> = ({
         </div>
       )}
 
-      {product.variants.length > 0 && (
+      {!isSingleSku && (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">多变体 · 按颜色分组</h5>

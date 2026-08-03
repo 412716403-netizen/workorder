@@ -19,6 +19,7 @@ import {
 import { bomHasConfiguredItems } from '../../utils/bomEffective';
 import { isProductBlockedAsBomMaterial } from '../../utils/productBomMaterial';
 import { sortVariantsByColorThenSize } from '../../utils/sortVariantsByProduct';
+import { orderBomNodesByRoute } from '../../utils/orderBomNodesByRoute';
 import BomVariantMatrix from '../../components/product/BomVariantMatrix';
 import BomEditorPortal, { useBomEditorPortalState } from '../product-management/BomEditorPortal';
 import { BomBatchAddPanel } from '../product-management/BomBatchAddPanel';
@@ -41,7 +42,7 @@ interface DevBomConfigSectionProps {
   pendingBoms?: DevBomDto[];
   onPendingBomsChange?: (boms: DevBomDto[]) => void;
   onSaveBom?: (bom: DevBomDto, exists: boolean) => Promise<DevBomDto | void>;
-  /** 持久化变体 nodeBoms 并回写款式详情（勿再单独 GET） */
+  /** @deprecated 后端写 BOM 已维护 nodeBoms；保留 prop 以免旧接线报错 */
   onSyncVariantNodeBoms?: (
     styleId: string,
     variantId: string,
@@ -50,8 +51,6 @@ interface DevBomConfigSectionProps {
   readOnly?: boolean;
   /** 嵌入「创建开发款式」弹窗：分区卡片布局 */
   embeddedInCreateModal?: boolean;
-  /** 仅显示该变体（颜色尺码）的 BOM；单 SKU 传 devSingleSkuVariantId(styleId)。样品面板按样品对应变体限定 */
-  variantFilterId?: string;
   /** 是否显示「大货生产工序配置」选择器，默认 true；样品面板不改款式工序，传 false */
   showMilestonePicker?: boolean;
   /** 非嵌入模式下矩阵区标题/描述覆盖（样品面板用） */
@@ -71,10 +70,9 @@ const DevBomConfigSection: React.FC<DevBomConfigSectionProps> = ({
   pendingBoms = [],
   onPendingBomsChange,
   onSaveBom,
-  onSyncVariantNodeBoms,
+  onSyncVariantNodeBoms: _onSyncVariantNodeBoms,
   readOnly,
   embeddedInCreateModal,
-  variantFilterId,
   showMilestonePicker = true,
   scopedHeading,
   scopedDescription,
@@ -83,13 +81,6 @@ const DevBomConfigSection: React.FC<DevBomConfigSectionProps> = ({
   const copyBOMTriggerRef = useRef<HTMLButtonElement>(null);
   const productShape = useMemo(() => devStyleToProductForBom(working), [working]);
   const singleSkuVariantId = devSingleSkuVariantId(working.id);
-
-  // 样品面板按样品对应变体限定矩阵：只保留该变体行（单 SKU 走空 variants 分支）。
-  // 仅过滤矩阵展示；复制来源 / BomEditorPortal 仍用完整 productShape。
-  const matrixShape = useMemo(() => {
-    if (!variantFilterId || variantFilterId === singleSkuVariantId) return productShape;
-    return { ...productShape, variants: productShape.variants.filter((v) => v.id === variantFilterId) };
-  }, [productShape, variantFilterId, singleSkuVariantId]);
 
   const {
     activeVariantIdForBOM,
@@ -146,7 +137,7 @@ const DevBomConfigSection: React.FC<DevBomConfigSectionProps> = ({
   const bomsAsProduct = useMemo(() => devBomsToProductBoms(activeBomRows), [activeBomRows]);
 
   const enabledBOMNodes = useMemo(
-    () => globalNodes.filter((n) => working.milestoneNodeIds.includes(n.id) && n.hasBOM),
+    () => orderBomNodesByRoute(working.milestoneNodeIds, globalNodes),
     [globalNodes, working.milestoneNodeIds],
   );
 
@@ -304,13 +295,9 @@ const DevBomConfigSection: React.FC<DevBomConfigSectionProps> = ({
       }
 
       if (!onSaveBom) return;
+      // 后端写 BOM 事务已同步维护 nodeBoms + 定向回写商品，无需再 PUT node-boms
       await onSaveBom(devBom, exists);
       if (devBom.variantId && devBom.nodeId) {
-        const v = working.variants.find((x) => x.id === devBom.variantId);
-        const nodeBoms = { ...(v?.nodeBoms ?? {}), [devBom.nodeId]: devBom.id };
-        if (onSyncVariantNodeBoms) {
-          await onSyncVariantNodeBoms(working.id, devBom.variantId, nodeBoms);
-        }
         patchVariantNodeBoms(devBom.variantId, devBom.nodeId, devBom.id);
       }
       closeBomEditor();
@@ -361,7 +348,7 @@ const DevBomConfigSection: React.FC<DevBomConfigSectionProps> = ({
             </p>
           )}
           <BomVariantMatrix
-            product={matrixShape}
+            product={productShape}
             boms={bomsAsProduct}
             enabledBOMNodes={enabledBOMNodes}
             dictionaries={dictionaries}
@@ -386,7 +373,7 @@ const DevBomConfigSection: React.FC<DevBomConfigSectionProps> = ({
             </p>
           )}
           <BomVariantMatrix
-            product={matrixShape}
+            product={productShape}
             boms={bomsAsProduct}
             enabledBOMNodes={enabledBOMNodes}
             dictionaries={dictionaries}

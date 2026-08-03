@@ -1,10 +1,12 @@
 import type { TenantPrismaClient } from '../lib/prisma.js';
 import { genId } from '../utils/genId.js';
-import { updateProduct, createBom } from './products.service.js';
+import { updateProduct, createBom, updateBom, deleteBom } from './products.service.js';
 import {
+  asNodeBomsRecord,
   attachNodeBomsFromTargets,
   buildBomPublishTargets,
   effectiveDevBomItems,
+  resolveProductVariantIdsForDevBom,
   type DevBomRow,
 } from './dev-publish.helpers.js';
 
@@ -13,6 +15,13 @@ type StyleVariantRow = {
   colorId: string | null;
   sizeId: string | null;
   skuSuffix: string | null;
+  nodeBoms?: unknown;
+};
+
+export type DevBomPublishedSyncChange = {
+  /** upsert：新增/改明细（空明细按删除发布侧处理）；delete：开发 BOM 已删 */
+  action: 'upsert' | 'delete';
+  bom: DevBomRow;
 };
 
 function variantKey(colorId: string | null | undefined, sizeId: string | null | undefined): string {
@@ -153,6 +162,176 @@ export async function syncPublishedProductFromDevStyle(
       },
       tenantId,
     );
+  }
+}
+
+/**
+ * 开发单条 BOM 变更后，只同步受影响的商品 BOM（不删重建全部）。
+ * 映射缺失/规格漂移时回退全量 `syncPublishedProductFromDevStyle`。
+ */
+export async function syncPublishedProductBomFromDevBomChange(
+  db: TenantPrismaClient,
+  tenantId: string,
+  styleId: string,
+  change: DevBomPublishedSyncChange,
+): Promise<void> {
+  const style = await db.devStyle.findUnique({
+    where: { id: styleId },
+    select: {
+      id: true,
+      publishedProductId: true,
+      code: true,
+      variants: {
+        orderBy: { id: 'asc' as const },
+        select: { id: true, colorId: true, sizeId: true, skuSuffix: true, nodeBoms: true },
+      },
+    },
+  });
+  if (!style?.publishedProductId) return;
+
+  const productId = style.publishedProductId;
+  const nodeId = change.bom.nodeId?.trim() || '';
+  if (!nodeId) {
+    await syncPublishedProductFromDevStyle(db, tenantId, styleId, productId);
+    return;
+  }
+
+  const existingPVs = await db.productVariant.findMany({
+    where: { productId },
+    select: { id: true, colorId: true, sizeId: true, nodeBoms: true },
+  });
+  const pvByColorSize = new Map(
+    existingPVs.map((v) => [variantKey(v.colorId, v.sizeId), v.id]),
+  );
+  const pvById = new Map(existingPVs.map((v) => [v.id, v]));
+
+  const styleVariants = style.variants as StyleVariantRow[];
+  const hasRealVariants = styleVariants.length > 0;
+  const variantIdMap = new Map<string, string>();
+
+  let defaultVariantId = '';
+  if (hasRealVariants) {
+    for (const dv of styleVariants) {
+      const key = variantKey(dv.colorId, dv.sizeId);
+      const pvId = pvByColorSize.get(key);
+      if (!pvId) {
+        await syncPublishedProductFromDevStyle(db, tenantId, styleId, productId);
+        return;
+      }
+      variantIdMap.set(dv.id, pvId);
+    }
+    defaultVariantId = variantIdMap.get(styleVariants[0]!.id) ?? '';
+  } else {
+    defaultVariantId =
+      existingPVs.find((v) => !v.colorId && !v.sizeId)?.id ??
+      existingPVs[0]?.id ??
+      '';
+    if (!defaultVariantId) {
+      await syncPublishedProductFromDevStyle(db, tenantId, styleId, productId);
+      return;
+    }
+    variantIdMap.set('__single__', defaultVariantId);
+  }
+
+  const productVariantIds = resolveProductVariantIdsForDevBom(
+    styleId,
+    styleVariants,
+    hasRealVariants,
+    variantIdMap,
+    defaultVariantId,
+    change.bom.variantId,
+  );
+  if (!productVariantIds || productVariantIds.length === 0) {
+    await syncPublishedProductFromDevStyle(db, tenantId, styleId, productId);
+    return;
+  }
+
+  const items = effectiveDevBomItems(change.bom).map((item, idx) => ({
+    categoryId: item.categoryId ?? undefined,
+    productId: item.productId,
+    quantity: Number(item.quantity),
+    note: item.note ?? undefined,
+    useShortageOnly: item.useShortageOnly,
+    excludeFromWeightShare: item.excludeFromWeightShare,
+    sortOrder: item.sortOrder ?? idx,
+  }));
+  const shouldRemove = change.action === 'delete' || items.length === 0;
+
+  for (const productVariantId of productVariantIds) {
+    const pv = pvById.get(productVariantId);
+    if (!pv) {
+      await syncPublishedProductFromDevStyle(db, tenantId, styleId, productId);
+      return;
+    }
+    const nodeBoms = asNodeBomsRecord(pv.nodeBoms);
+    const existingBomId = nodeBoms[nodeId]?.trim() || '';
+    const scopedBoms = await db.bom.findMany({
+      where: {
+        parentProductId: productId,
+        variantId: productVariantId,
+        nodeId,
+      },
+      select: { id: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    // 历史数据可能未写 nodeBoms 或指针已漂移；以产品+规格+工序的真实 BOM 兜底。
+    const targetBomId =
+      scopedBoms.find((bom) => bom.id === existingBomId)?.id
+      ?? scopedBoms[0]?.id
+      ?? '';
+
+    if (shouldRemove) {
+      for (const bom of scopedBoms) {
+        await deleteBom(db, bom.id);
+      }
+      if (existingBomId || nodeId in nodeBoms) {
+        const next = { ...nodeBoms };
+        delete next[nodeId];
+        await db.productVariant.update({
+          where: { id: productVariantId },
+          data: { nodeBoms: next },
+        });
+      }
+      continue;
+    }
+
+    if (targetBomId) {
+      await updateBom(db, targetBomId, {
+        name: change.bom.name ?? undefined,
+        variantId: productVariantId,
+        nodeId,
+        items,
+      });
+      // 同一规格+工序理论上只允许一份 BOM；顺手清理历史重复，避免商品页读到旧记录。
+      for (const duplicate of scopedBoms) {
+        if (duplicate.id !== targetBomId) await deleteBom(db, duplicate.id);
+      }
+      if (existingBomId !== targetBomId) {
+        await db.productVariant.update({
+          where: { id: productVariantId },
+          data: { nodeBoms: { ...nodeBoms, [nodeId]: targetBomId } },
+        });
+      }
+      continue;
+    }
+
+    const newBomId = genId('bom');
+    await createBom(
+      db,
+      {
+        id: newBomId,
+        parentProductId: productId,
+        variantId: productVariantId,
+        nodeId,
+        name: change.bom.name ?? undefined,
+        items,
+      },
+      tenantId,
+    );
+    await db.productVariant.update({
+      where: { id: productVariantId },
+      data: { nodeBoms: { ...nodeBoms, [nodeId]: newBomId } },
+    });
   }
 }
 

@@ -32,10 +32,30 @@ function mergeStyleListItem(full: DevStyleDto, prev?: DevStyleDto): DevStyleDto 
   };
 }
 
+function patchStyleVariantNodeBom(
+  style: DevStyleDto,
+  variantId: string,
+  nodeId: string,
+  bomId: string | null,
+): DevStyleDto {
+  return {
+    ...style,
+    variants: style.variants.map((v) => {
+      if (v.id !== variantId) return v;
+      const next = { ...(v.nodeBoms ?? {}) };
+      if (bomId) next[nodeId] = bomId;
+      else delete next[nodeId];
+      return { ...v, nodeBoms: next };
+    }),
+  };
+}
+
 export function useDevStyles() {
   const queryClient = useQueryClient();
   const [styles, setStyles] = useState<DevStyleDto[]>([]);
+  /** 仅缓存当前选中款的开发 BOM（按款加载，避免全租户拉取） */
   const [devBoms, setDevBoms] = useState<DevBomDto[]>([]);
+  const [devBomsStyleId, setDevBomsStyleId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<{ categoryId?: string; search?: string; status?: string }>({});
   /** 当前选中款详情（含原图与节点附件二进制）；列表项不含这些大字段 */
@@ -45,12 +65,8 @@ export function useDevStyles() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [list, boms] = await Promise.all([
-        api.devStyles.list(filter),
-        api.devBoms.list(),
-      ]);
+      const list = await api.devStyles.list(filter);
       setStyles(list);
-      setDevBoms(boms as DevBomDto[]);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : '加载款式失败');
     } finally {
@@ -65,31 +81,29 @@ export function useDevStyles() {
   const loadStyleDetail = useCallback(async (id: string | null) => {
     if (!id) {
       setSelectedDetail(null);
+      setDevBoms([]);
+      setDevBomsStyleId(null);
       setDetailLoading(false);
       return;
     }
     setDetailLoading(true);
     try {
-      const full = await api.devStyles.get(id);
+      const [full, boms] = await Promise.all([
+        api.devStyles.get(id),
+        api.devBoms.list({ parentStyleId: id }),
+      ]);
       setSelectedDetail(full);
+      setDevBoms(boms as DevBomDto[]);
+      setDevBomsStyleId(id);
     } catch (e: unknown) {
       setSelectedDetail(null);
+      setDevBoms([]);
+      setDevBomsStyleId(null);
       toast.error(e instanceof Error ? e.message : '加载款式详情失败');
     } finally {
       setDetailLoading(false);
     }
   }, []);
-
-  const refreshSelectedDetail = useCallback(async (id?: string | null) => {
-    const targetId = id ?? selectedDetail?.id ?? null;
-    if (!targetId) return;
-    try {
-      const full = await api.devStyles.get(targetId);
-      setSelectedDetail(full);
-    } catch {
-      /* 列表 refresh 已提示时此处静默 */
-    }
-  }, [selectedDetail?.id]);
 
   /** 用写接口返回的完整详情更新本地态（选中详情 + 侧栏列表 patch），避免再 list+GET */
   const applySavedStyle = useCallback((saved: DevStyleDto) => {
@@ -101,6 +115,21 @@ export function useDevStyles() {
       next[idx] = mergeStyleListItem(saved, prev[idx]);
       return next;
     });
+  }, []);
+
+  const applyVariantNodeBomLocal = useCallback((
+    styleId: string,
+    variantId: string | undefined,
+    nodeId: string | undefined,
+    bomId: string | null,
+  ) => {
+    if (!variantId || !nodeId) return;
+    setSelectedDetail((prev) => (
+      prev?.id === styleId ? patchStyleVariantNodeBom(prev, variantId, nodeId, bomId) : prev
+    ));
+    setStyles((prev) => prev.map((s) => (
+      s.id === styleId ? patchStyleVariantNodeBom(s, variantId, nodeId, bomId) : s
+    )));
   }, []);
 
   const saveStyle = useCallback(async (
@@ -133,7 +162,11 @@ export function useDevStyles() {
 
   const removeStyle = useCallback(async (id: string) => {
     await api.devStyles.delete(id);
-    if (selectedDetail?.id === id) setSelectedDetail(null);
+    if (selectedDetail?.id === id) {
+      setSelectedDetail(null);
+      setDevBoms([]);
+      setDevBomsStyleId(null);
+    }
     await refresh();
   }, [refresh, selectedDetail?.id]);
 
@@ -154,44 +187,76 @@ export function useDevStyles() {
   const saveDevBom = useCallback(async (
     bom: DevBomDto,
     exists: boolean,
-    opts?: { skipDetailRefresh?: boolean },
+    _opts?: { skipDetailRefresh?: boolean },
   ) => {
     const saved = (exists
       ? await api.devBoms.update(bom.id, bom)
       : await api.devBoms.create(bom)) as DevBomDto;
-    setDevBoms((prev) => {
-      const idx = prev.findIndex((b) => b.id === saved.id);
-      if (idx < 0) return [...prev, saved];
-      const next = [...prev];
-      next[idx] = saved;
-      return next;
-    });
-    // 变体款随后会 syncVariantNodeBoms（已返回全量详情）；单 SKU 仍需补一次详情
-    if (!opts?.skipDetailRefresh) {
-      await refreshSelectedDetail(bom.parentStyleId);
+
+    // 仅刷新与当前缓存款式相关的 BOM；保存其它款时留给后续选中时再拉
+    if (!devBomsStyleId || saved.parentStyleId === devBomsStyleId) {
+      if (!devBomsStyleId) setDevBomsStyleId(saved.parentStyleId);
+      setDevBoms((prev) => {
+        const idx = prev.findIndex((b) => b.id === saved.id);
+        if (idx < 0) return [...prev, saved];
+        const next = [...prev];
+        next[idx] = saved;
+        return next;
+      });
     }
+
+    applyVariantNodeBomLocal(
+      saved.parentStyleId,
+      saved.variantId,
+      saved.nodeId,
+      saved.id,
+    );
     // 领料物料列表后台刷新，不阻塞保存 toast
     invalidateDevMaterials(bom.parentStyleId);
     return saved;
-  }, [refreshSelectedDetail, invalidateDevMaterials]);
+  }, [devBomsStyleId, applyVariantNodeBomLocal, invalidateDevMaterials]);
 
   const syncVariantNodeBoms = useCallback(async (
     styleId: string,
     variantId: string,
     nodeBoms: Record<string, string>,
   ) => {
-    const saved = await api.devStyles.syncVariantNodeBoms(styleId, variantId, nodeBoms);
-    applySavedStyle(saved);
+    // 兼容接口：仅返回 variantId/nodeBoms，本地 patch 而不再拉整款详情
+    const saved = await api.devStyles.syncVariantNodeBoms(styleId, variantId, nodeBoms) as {
+      variantId: string;
+      nodeBoms: Record<string, string>;
+    };
+    const nextMap = saved.nodeBoms ?? nodeBoms;
+    setSelectedDetail((prev) => {
+      if (prev?.id !== styleId) return prev;
+      return {
+        ...prev,
+        variants: prev.variants.map((v) => (
+          v.id === variantId ? { ...v, nodeBoms: nextMap } : v
+        )),
+      };
+    });
+    setStyles((prev) => prev.map((s) => {
+      if (s.id !== styleId) return s;
+      return {
+        ...s,
+        variants: s.variants.map((v) => (
+          v.id === variantId ? { ...v, nodeBoms: nextMap } : v
+        )),
+      };
+    }));
     return saved;
-  }, [applySavedStyle]);
+  }, []);
 
   const deleteDevBom = useCallback(async (id: string) => {
     const target = devBoms.find((b) => b.id === id);
     await api.devBoms.delete(id);
     setDevBoms((prev) => prev.filter((b) => b.id !== id));
-    await refreshSelectedDetail(target?.parentStyleId);
+    if (target) {
+      applyVariantNodeBomLocal(target.parentStyleId, target.variantId, target.nodeId, null);
+    }
     invalidateDevMaterials(target?.parentStyleId);
-  }, [devBoms, refreshSelectedDetail, invalidateDevMaterials]);
+  }, [devBoms, applyVariantNodeBomLocal, invalidateDevMaterials]);
 
   const updateStage = useCallback(async (
     stageId: string,

@@ -106,4 +106,14 @@ describe('devStageFileValue', () => {
       { url: '', name: '附件1', deferred: true },
     ]);
   });
+
+  it('recovers a legacy url-first file name from the value tail', () => {
+    const head = '[{"url":"data:application/pdf;base64,AAAA';
+    const tail = 'BBBB","name":"历史图纸.pdf"}]';
+    const stub = stubDevStageFileValueFromHead(head, tail);
+    expect(parseDevStageFileItems(stub)).toEqual([
+      { url: '', name: '历史图纸.pdf', deferred: true },
+    ]);
+    expect(stub.includes('base64')).toBe(false);
+  });
 });

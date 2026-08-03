@@ -7,7 +7,7 @@
 
 export const DEV_STAGE_FILE_MAX_COUNT = 9;
 
-/** 详情 / SQL LEFT 读取的文件头长度，足以容纳 names 头 + 首文件名 */
+/** 详情 / SQL LEFT、RIGHT 读取的元数据切片长度，不包含完整 base64 本体 */
 export const DEV_STAGE_FILE_VALUE_HEAD_LEN = 1200;
 
 const FILE_NAMES_HEADER_PREFIX = '/*devStageFiles:';
@@ -165,6 +165,20 @@ function stubsFromNames(names: string[]): string {
   );
 }
 
+function findNamesInJsonFragment(fragment: string): string[] {
+  const found: string[] = [];
+  const re = /"(?:name|fileName|filename)"\s*:\s*"((?:\\.|[^"\\])*)"/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(fragment)) && found.length < DEV_STAGE_FILE_MAX_COUNT) {
+    try {
+      found.push(sanitizeFileName(JSON.parse(`"${m[1]}"`) as string));
+    } catch {
+      found.push(sanitizeFileName(m[1]!.replace(/\\"/g, '"')));
+    }
+  }
+  return found;
+}
+
 /**
  * 剥离文件本体，仅保留文件名元数据 stub，供款式详情 GET 减负。
  * 空值原样返回空串。
@@ -176,28 +190,25 @@ export function stripDevStageFilePayloads(raw: unknown): string {
 }
 
 /**
- * 由 SQL LEFT(value, N) 得到的短前缀生成 deferred stub（不要求完整 JSON / data URL）。
- * 优先读文件名头；否则尝试从前缀里捞 "name"；再否则占位「附件1」。
+ * 由 SQL LEFT/RIGHT(value, N) 得到的短切片生成 deferred stub（不要求完整 JSON / data URL）。
+ * 优先读文件名头；否则尝试从前缀/后缀里捞 name；再否则占位「附件1」。
+ * 旧版 `{url, name}` 把 name 写在巨大 base64 之后，所以需要可选的后缀切片。
  */
-export function stubDevStageFileValueFromHead(head: unknown): string {
+export function stubDevStageFileValueFromHead(head: unknown, tail?: unknown): string {
   if (head == null) return '';
   const s = String(head);
   if (!s.trim()) return '';
 
   const { names, body } = peelDevStageFileNamesHeader(s.trim());
-  if (names && names.length > 0) return stubsFromNames(names);
+  if (names && names.some(Boolean)) return stubsFromNames(names);
 
-  const found: string[] = [];
-  const re = /"name"\s*:\s*"((?:\\.|[^"\\])*)"/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(s)) && found.length < DEV_STAGE_FILE_MAX_COUNT) {
-    try {
-      found.push(sanitizeFileName(JSON.parse(`"${m[1]}"`) as string));
-    } catch {
-      found.push(sanitizeFileName(m[1]!.replace(/\\"/g, '"')));
-    }
-  }
+  const foundInHead = findNamesInJsonFragment(s);
+  const tailText = tail == null ? '' : String(tail);
+  const found = foundInHead.length > 0
+    ? foundInHead
+    : findNamesInJsonFragment(tailText === s ? '' : tailText);
   if (found.length > 0) return stubsFromNames(found);
+  if (names && names.length > 0) return stubsFromNames(names);
 
   const probe = body.trim() || s.trim();
   if (probe.startsWith('data:') || probe.startsWith('[') || /data:/i.test(s)) {

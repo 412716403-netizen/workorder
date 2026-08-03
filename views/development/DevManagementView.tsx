@@ -32,7 +32,6 @@ const DevManagementView: React.FC = () => {
     refreshDictionaries,
     refreshPartners,
     refreshProducts,
-    refreshBoms,
   } = useAppData();
   const {
     templates,
@@ -80,7 +79,6 @@ const DevManagementView: React.FC = () => {
     removeStyle,
     publishStyle,
     saveDevBom,
-    syncVariantNodeBoms,
     updateStage,
     addSample,
     removeSample,
@@ -194,29 +192,20 @@ const DevManagementView: React.FC = () => {
   };
 
   const refreshPublishedCatalog = useCallback(async () => {
-    await Promise.all([refreshProducts(), refreshBoms()]);
-  }, [refreshProducts, refreshBoms]);
+    // refreshProducts 已并行拉 products + boms，勿再重复 refreshBoms
+    await refreshProducts();
+  }, [refreshProducts]);
 
   const handleSaveDevBom = useCallback(
     async (bom: Parameters<typeof saveDevBom>[0], exists: boolean) => {
-      // 有变体时随后 syncVariantNodeBoms 会带回详情；单 SKU 仍在 save 内刷详情
-      const saved = await saveDevBom(bom, exists, {
-        skipDetailRefresh: Boolean(bom.variantId),
-      });
-      // 试制 BOM 保存后后端会回写大货 BOM；刷新产品/BOM 列表，避免产品档案页看到旧数据
+      const saved = await saveDevBom(bom, exists);
+      // 已发布关联款：等待商品+BOM 目录刷新，保证切到商品信息时立即看到同步结果
       if (selected?.publishedProductId || styles.find((s) => s.id === bom.parentStyleId)?.publishedProductId) {
         await refreshPublishedCatalog();
       }
       return saved;
     },
     [saveDevBom, selected?.publishedProductId, styles, refreshPublishedCatalog],
-  );
-
-  const handleSyncVariantNodeBoms = useCallback(
-    async (styleId: string, variantId: string, nodeBoms: Record<string, string>) => {
-      await syncVariantNodeBoms(styleId, variantId, nodeBoms);
-    },
-    [syncVariantNodeBoms],
   );
 
   const handlePublish = useCallback(async () => {
@@ -310,7 +299,6 @@ const DevManagementView: React.FC = () => {
       templatePerms={templatePerms}
       devBoms={devBoms}
       onSaveBom={handleSaveDevBom}
-      onSyncVariantNodeBoms={handleSyncVariantNodeBoms}
       onCreateTemplate={async (name) => {
         await createTemplate(name);
       }}
@@ -325,15 +313,11 @@ const DevManagementView: React.FC = () => {
         const pending = opts.pendingBoms ?? [];
         for (const bom of pending) {
           if (!bom.items?.some((it) => it.productId?.trim())) continue;
-          await saveDevBom({ ...bom, parentStyleId: saved.id }, false, { skipDetailRefresh: true });
-          if (bom.variantId && bom.nodeId) {
-            const v = saved.variants.find((x) => x.id === bom.variantId);
-            const nodeBoms = { ...(v?.nodeBoms ?? {}), [bom.nodeId]: bom.id };
-            await syncVariantNodeBoms(saved.id, bom.variantId, nodeBoms);
-          }
+          // 后端写 BOM 已维护 nodeBoms，无需再 syncVariantNodeBoms
+          await saveDevBom({ ...bom, parentStyleId: saved.id }, false);
         }
         await refresh();
-        // 已生成商品的款式保存后，后端会回写产品档案（色码/工序/变体/BOM）；刷新产品与 BOM 列表
+        // 已生成商品的款式保存后，后端会回写产品档案；刷新产品目录（含 BOM）
         if (saved.publishedProductId) await refreshPublishedCatalog();
         setProductModal(null);
         setSelectedId(saved.id);
@@ -387,7 +371,6 @@ const DevManagementView: React.FC = () => {
             materialPerms={materialPerms}
             devBoms={devBoms}
             onSaveBom={handleSaveDevBom}
-            onSyncVariantNodeBoms={handleSyncVariantNodeBoms}
             readOnly={readOnly}
             canEdit={canEdit}
             canDeleteStyle={canDeleteStyle}

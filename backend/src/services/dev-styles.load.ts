@@ -9,7 +9,8 @@ import { devStyleInclude, mapDevStyleRow } from './dev-styles.mapper.js';
 
 /**
  * 详情装载：样品字段 value 按类型轻量合并。
- * file 只取 LEFT(value) 生成 deferred stub（保留文件名头），避免把 data URL 读进 Node。
+ * file 只取 LEFT/RIGHT(value) 生成 deferred stub（兼容新文件名头和旧版尾部 name），
+ * 避免把 data URL 读进 Node。
  */
 export async function loadMappedDevStyle(db: TenantPrismaClient, id: string) {
   const row = await db.devStyle.findUnique({ where: { id }, include: devStyleInclude });
@@ -19,12 +20,21 @@ export async function loadMappedDevStyle(db: TenantPrismaClient, id: string) {
   const valueById = new Map<string, string>();
   if (fieldIds.length > 0) {
     const headLen = DEV_STAGE_FILE_VALUE_HEAD_LEN;
-    const valueRows = await db.$queryRaw<Array<{ id: string; type: string; value: string | null }>>`
+    const valueRows = await db.$queryRaw<Array<{
+      id: string;
+      type: string;
+      value: string | null;
+      valueTail: string | null;
+    }>>`
       SELECT f.id, f.type,
         CASE
           WHEN f.type = 'file' THEN LEFT(f.value, CAST(${headLen} AS INTEGER))
           ELSE f.value
-        END AS value
+        END AS value,
+        CASE
+          WHEN f.type = 'file' THEN RIGHT(f.value, CAST(${headLen} AS INTEGER))
+          ELSE NULL
+        END AS "valueTail"
       FROM dev_stage_fields f
       INNER JOIN dev_stages st ON st.id = f.stage_id
       INNER JOIN dev_samples sa ON sa.id = st.sample_id
@@ -33,7 +43,7 @@ export async function loadMappedDevStyle(db: TenantPrismaClient, id: string) {
     `;
     for (const vr of valueRows) {
       if (vr.type === 'file') {
-        valueById.set(vr.id, stubDevStageFileValueFromHead(vr.value ?? ''));
+        valueById.set(vr.id, stubDevStageFileValueFromHead(vr.value ?? '', vr.valueTail ?? ''));
       } else {
         valueById.set(vr.id, vr.value ?? '');
       }

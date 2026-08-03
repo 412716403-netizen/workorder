@@ -1,5 +1,30 @@
 import { describe, expect, it } from 'vitest';
-import { isProductBlockedAsBomMaterialValue } from './productBomMaterial';
+import {
+  isProductBlockedAsBomMaterialValue,
+  isSingleSkuProductValue,
+} from './productBomMaterial';
+
+describe('isSingleSkuProductValue', () => {
+  it('treats one blank generated variant as single SKU', () => {
+    expect(
+      isSingleSkuProductValue({
+        colorIds: [],
+        sizeIds: [],
+        variants: [{ colorId: '', sizeId: '' }],
+      }),
+    ).toBe(true);
+  });
+
+  it('does not treat configured dimensions as single SKU', () => {
+    expect(
+      isSingleSkuProductValue({
+        colorIds: ['red'],
+        sizeIds: [],
+        variants: [{ colorId: 'red', sizeId: '' }],
+      }),
+    ).toBe(false);
+  });
+});
 
 describe('isProductBlockedAsBomMaterialValue', () => {
   it('allows a generated product with one blank default variant', () => {

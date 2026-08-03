@@ -24,7 +24,10 @@ import { getProductScanWeighingNodes } from '../../utils/variantNodeUnitWeight';
 import { useTraceabilityPlugin } from '../../hooks/useTraceabilityPlugin';
 import { productColorSizeEnabled, validateProductColorSizeSelection } from '../../utils/productColorSize';
 import { bomHasConfiguredItems } from '../../utils/bomEffective';
-import { isProductBlockedAsBomMaterial } from '../../utils/productBomMaterial';
+import {
+  isProductBlockedAsBomMaterial,
+  isSingleSkuProduct,
+} from '../../utils/productBomMaterial';
 import {
   getFileExtFromDataUrl,
   parseRouteReportFileUrls,
@@ -703,7 +706,12 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
   const scanWeighingNodes = getProductScanWeighingNodes(nodeIds, globalNodes);
   const enabledBOMNodes = selectedNodesOrdered.filter(n => n.hasBOM);
 
-  const singleSkuVariantId = `single-${workingProduct.id}`;
+  const persistedSingleSkuVariant =
+    isSingleSkuProduct(workingProduct) && workingProduct.variants.length === 1
+      ? workingProduct.variants[0]
+      : undefined;
+  // 开发发布的无色无码商品已有一个空维度默认变体；沿用真实 ID，避免编辑时另建虚拟 BOM。
+  const singleSkuVariantId = persistedSingleSkuVariant?.id ?? `single-${workingProduct.id}`;
   const singleSkuNodeBOMs: Record<string, string> = Object.fromEntries(
     boms.filter(b => b.parentProductId === workingProduct.id && b.variantId === singleSkuVariantId && b.nodeId && bomHasConfiguredItems(b)).map(b => [b.nodeId!, b.id])
   );

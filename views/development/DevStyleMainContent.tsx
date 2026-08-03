@@ -45,7 +45,6 @@ import DevMaterialSection, { type DevMaterialPerms } from './DevMaterialSection'
 import { useDevMaterials } from '../../hooks/useDevMaterials';
 import AddTodoButton from '../../components/AddTodoButton';
 import { ModalPortal } from '../../components/ModalPortal';
-import { devSingleSkuVariantId } from '../../utils/devBomHelpers';
 import { devStyles } from '../../services/api';
 import {
   formStandardLabelClass,
@@ -281,14 +280,6 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
   }, [deepLinkStageId, deepLinkSampleId, style.id]);
 
   const activeSample: DevSampleDto | undefined = style.samples.find((s) => s.id === activeSampleId);
-  // 样品对应款式变体：单 SKU 用占位变体 id；否则按颜色尺码命中具体变体
-  const activeSampleVariantId = useMemo<string | undefined>(() => {
-    if (!activeSample) return undefined;
-    if (style.variants.length === 0) return devSingleSkuVariantId(style.id);
-    return style.variants.find(
-      (v) => v.colorId === activeSample.colorId && v.sizeId === activeSample.sizeId,
-    )?.id;
-  }, [activeSample, style.variants, style.id]);
   const displayStyle = useMemo(
     () => resolveDevStyleWithPublishedProduct(style, products),
     [style, products],
@@ -681,20 +672,7 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
           <div className="absolute inset-0 bg-slate-900/40" onClick={() => setBomModalOpen(false)} role="presentation" />
           <div className="relative z-10 flex max-h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
             <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-6 py-4">
-              <h3 className={sectionTitleClass}>
-                {activeSample ? (
-                  <>
-                    BOM 录入 · {activeSample.name}
-                    {colorSizeLabel(activeSample.colorId, activeSample.sizeId, dictionaries) && (
-                      <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
-                        {colorSizeLabel(activeSample.colorId, activeSample.sizeId, dictionaries)}
-                      </span>
-                    )}
-                  </>
-                ) : (
-                  'BOM 录入'
-                )}
-              </h3>
+              <h3 className={sectionTitleClass}>BOM 录入 · 全部 SKU</h3>
               <div className="flex shrink-0 items-center gap-2">
                 <button type="button" onClick={() => setBomModalOpen(false)}>
                   <X className="h-5 w-5 text-slate-400" />
@@ -702,29 +680,22 @@ const DevStyleMainContent: React.FC<DevStyleMainContentProps> = ({
               </div>
             </div>
             <div className="flex-1 overflow-y-auto px-6 py-5">
-              {activeSample && !activeSampleVariantId ? (
-                <p className="rounded-2xl border border-amber-100 bg-amber-50/60 px-4 py-3 text-xs font-medium text-amber-600">
-                  该样品未绑定颜色尺码，无法录入 BOM；请在新增样品时选择颜色尺码。
-                </p>
-              ) : (
-                <DevBomConfigSection
-                  working={style}
-                  setWorking={() => {}}
-                  globalNodes={globalNodes}
-                  categories={categories}
-                  products={products}
-                  dictionaries={dictionaries}
-                  devBoms={devBoms}
-                  mode="persist"
-                  onSaveBom={onSaveBom}
-                  onSyncVariantNodeBoms={onSyncVariantNodeBoms}
-                  readOnly={readOnly}
-                  variantFilterId={activeSample ? activeSampleVariantId : undefined}
-                  showMilestonePicker={false}
-                  scopedHeading=""
-                  scopedDescription=""
-                />
-              )}
+              <DevBomConfigSection
+                working={style}
+                setWorking={() => {}}
+                globalNodes={globalNodes}
+                categories={categories}
+                products={products}
+                dictionaries={dictionaries}
+                devBoms={devBoms}
+                mode="persist"
+                onSaveBom={onSaveBom}
+                onSyncVariantNodeBoms={onSyncVariantNodeBoms}
+                readOnly={readOnly}
+                showMilestonePicker={false}
+                scopedHeading=""
+                scopedDescription=""
+              />
             </div>
           </div>
         </div>
