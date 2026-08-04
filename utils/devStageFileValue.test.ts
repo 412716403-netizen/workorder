@@ -116,4 +116,15 @@ describe('devStageFileValue', () => {
     ]);
     expect(stub.includes('base64')).toBe(false);
   });
+
+  it('extracts raw binary bytes from a named data URL item', async () => {
+    const { extractDevStageFileBinary } = await import('./devStageFileValue');
+    const raw = serializeDevStageFileItems([
+      { url: 'data:video/mp4;base64,AAAA', name: 'demo.mp4' },
+    ]);
+    const payload = extractDevStageFileBinary(raw, 0, '视频');
+    expect(payload?.name).toBe('demo.mp4');
+    expect(payload?.mimeType).toBe('video/mp4');
+    expect(Array.from(payload?.bytes ?? [])).toEqual([0, 0, 0]);
+  });
 });

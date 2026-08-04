@@ -1,4 +1,4 @@
-import { request, buildQs, authorizedFetch } from './_client';
+import { request, buildQs, authorizedFetch, BINARY_FETCH_TIMEOUT_MS } from './_client';
 import type {
   KnowledgeFolderDto,
   KnowledgeDocumentSummaryDto,
@@ -88,7 +88,7 @@ export async function fetchKnowledgeAssetBlob(assetUrl: string): Promise<Blob> {
     if (!res.ok) throw new Error('加载附件失败');
     return res.blob();
   }
-  const res = await authorizedFetch(assetUrlToApiPath(raw));
+  const res = await authorizedFetch(assetUrlToApiPath(raw), { timeoutMs: BINARY_FETCH_TIMEOUT_MS });
   if (!res.ok) throw new Error('加载附件失败');
   return res.blob();
 }

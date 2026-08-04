@@ -6,6 +6,7 @@ import { DevStageStatus, DevStyleStatus } from '../../../shared/types.js';
 import { nodeBomsMapsEqual } from '../../../shared/nodeBomsEqual.js';
 import { buildImageThumb } from '../lib/imageThumb.js';
 import { asNodeBomsRecord, isSingleSkuDevBomVariant, type DevBomRow } from './dev-publish.helpers.js';
+import { extractDevStageFileBinary } from '../../../shared/devStageFileValue.js';
 import { devStyleListInclude, mapDevStyleRow } from './dev-styles.mapper.js';
 import { loadMappedDevStyle } from './dev-styles.load.js';
 import { publishDevStyleToProduct } from './dev-publish.service.js';
@@ -188,6 +189,33 @@ export async function getDevStageField(db: TenantPrismaClient, fieldId: string) 
   });
   if (!field) throw new AppError(404, '登记字段不存在');
   return { id: field.id, value: field.value ?? '' };
+}
+
+/** 登记字段中单个文件的二进制（解码 base64，供 Range 流式响应） */
+export async function getDevStageFieldFileBinary(
+  db: TenantPrismaClient,
+  fieldId: string,
+  fileIndex: number,
+) {
+  if (!Number.isInteger(fileIndex) || fileIndex < 0) {
+    throw new AppError(400, '无效的文件序号');
+  }
+  const field = await db.devStageField.findUnique({
+    where: { id: fieldId },
+    select: { id: true, label: true, type: true, value: true },
+  });
+  if (!field) throw new AppError(404, '登记字段不存在');
+  if (field.type !== 'file') throw new AppError(400, '该字段不是文件类型');
+
+  const payload = extractDevStageFileBinary(field.value ?? '', fileIndex, field.label || '附件');
+  if (!payload) throw new AppError(404, '文件不存在或尚未保存完整内容');
+
+  return {
+    fieldId: field.id,
+    fileName: payload.name,
+    mimeType: payload.mimeType,
+    data: Buffer.from(payload.bytes),
+  };
 }
 
 export async function getDevAttachment(db: TenantPrismaClient, attachmentId: string) {

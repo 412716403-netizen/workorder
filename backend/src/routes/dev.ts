@@ -92,6 +92,11 @@ router.put('/styles/boms/:id', requireSubPermission('development:styles:edit'), 
 router.delete('/styles/boms/:id', requireSubPermission('development:styles:delete'), stylesCtrl.deleteBom);
 
 router.get(
+  '/styles/stage-fields/:fieldId/files/:index',
+  requireSubPermission('development:styles:view'),
+  stylesCtrl.getStageFieldFile,
+);
+router.get(
   '/styles/stage-fields/:fieldId',
   requireSubPermission('development:styles:view'),
   stylesCtrl.getStageField,

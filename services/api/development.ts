@@ -18,6 +18,9 @@ export const devStyles = {
   get: (id: string) => request<DevStyleDto>(`/dev/styles/${id}`),
   getStageField: (fieldId: string) =>
     request<{ id: string; value: string }>(`/dev/styles/stage-fields/${encodeURIComponent(fieldId)}`),
+  /** 同源相对路径；`<video src>` 走 Cookie 鉴权并可 Range 分段 */
+  stageFieldFileUrl: (fieldId: string, index: number) =>
+    `/api/dev/styles/stage-fields/${encodeURIComponent(fieldId)}/files/${Math.max(0, Math.floor(index))}`,
   getAttachment: (attachmentId: string) =>
     request<{ id: string; fileName: string; fileUrl: string; fileType?: string }>(
       `/dev/styles/attachments/${encodeURIComponent(attachmentId)}`,

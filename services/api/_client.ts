@@ -10,10 +10,16 @@ export const API_BASE =
 
 /** 避免防火墙丢包或地址错误时 fetch 长期挂起，登录按钮一直转圈 */
 const REQUEST_TIMEOUT_MS = 25_000;
+/** 大文件二进制下载（视频等）允许更长等待 */
+export const BINARY_FETCH_TIMEOUT_MS = 120_000;
 
-async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs = REQUEST_TIMEOUT_MS,
+): Promise<Response> {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     return await fetch(url, { ...init, signal: ctrl.signal });
   } catch (e) {
@@ -273,37 +279,41 @@ export async function request<T = unknown>(path: string, options: RequestInit = 
  * 带鉴权的原始 fetch：复用与 `request()` 相同的令牌续期 / Authorization / Cookie 逻辑，
  * 但返回原始 `Response`，用于拉取二进制资源（如资料库附件 Blob 供 Excel 解析）。
  */
-export async function authorizedFetch(path: string, init: RequestInit = {}): Promise<Response> {
+export async function authorizedFetch(
+  path: string,
+  init: RequestInit & { timeoutMs?: number } = {},
+): Promise<Response> {
   const url = `${API_BASE}${path}`;
+  const { timeoutMs, ...fetchInit } = init;
 
   if (localStorage.getItem('isLoggedIn') && isAccessTokenExpiringSoon()) {
     await tryRefresh();
   }
 
   const headers: Record<string, string> = {
-    ...(init.headers as Record<string, string> || {}),
+    ...(fetchInit.headers as Record<string, string> || {}),
   };
   if (memoryAccessToken) {
     headers['Authorization'] = `Bearer ${memoryAccessToken}`;
   }
 
   let res = await fetchWithTimeout(url, {
-    ...init,
+    ...fetchInit,
     headers,
     credentials: 'include',
-    cache: init.cache ?? 'no-store',
-  });
+    cache: fetchInit.cache ?? 'no-store',
+  }, timeoutMs);
 
   if (res.status === 401) {
     const refreshResult = await tryRefreshDetailed();
     if (refreshResult === 'ok') {
       if (memoryAccessToken) headers['Authorization'] = `Bearer ${memoryAccessToken}`;
       res = await fetchWithTimeout(url, {
-        ...init,
+        ...fetchInit,
         headers,
         credentials: 'include',
-        cache: init.cache ?? 'no-store',
-      });
+        cache: fetchInit.cache ?? 'no-store',
+      }, timeoutMs);
     }
   }
 

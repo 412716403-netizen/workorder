@@ -260,3 +260,56 @@ export function resolveDevStageFileDownloadName(
   const ext = item.url.startsWith('data:') ? extFromDataUrl(item.url) : 'bin';
   return `${label}-${index + 1}.${ext}`;
 }
+
+export type DevStageFileBinaryPayload = {
+  name: string;
+  mimeType: string;
+  /** 原始文件字节（非 base64） */
+  bytes: Uint8Array;
+};
+
+function decodeDataUrlPayload(url: string): { mimeType: string; bytes: Uint8Array } | null {
+  const raw = url.trim();
+  if (!raw.startsWith('data:')) return null;
+  const comma = raw.indexOf(',');
+  if (comma < 0) return null;
+  const meta = raw.slice(5, comma);
+  const payload = raw.slice(comma + 1);
+  const mimeType = (meta.split(';')[0] || 'application/octet-stream').trim().toLowerCase()
+    || 'application/octet-stream';
+  if (/;base64/i.test(meta)) {
+    const Buf = (globalThis as { Buffer?: { from: (s: string, enc: string) => Uint8Array } }).Buffer;
+    if (Buf) {
+      return { mimeType, bytes: new Uint8Array(Buf.from(payload, 'base64')) };
+    }
+    if (typeof atob === 'function') {
+      return { mimeType, bytes: Uint8Array.from(atob(payload), (c) => c.charCodeAt(0)) };
+    }
+    return null;
+  }
+  try {
+    return { mimeType, bytes: new TextEncoder().encode(decodeURIComponent(payload)) };
+  } catch {
+    return { mimeType, bytes: new TextEncoder().encode(payload) };
+  }
+}
+
+/**
+ * 从登记字段完整 value 中取出第 index 个文件的二进制（供流式下载，避免再下发 base64 JSON）。
+ */
+export function extractDevStageFileBinary(
+  raw: unknown,
+  index: number,
+  fallbackLabel = '附件',
+): DevStageFileBinaryPayload | null {
+  const items = parseDevStageFileItems(raw);
+  const item = items[index];
+  if (!item?.url.startsWith('data:')) return null;
+  const decoded = decodeDataUrlPayload(item.url);
+  if (!decoded) return null;
+  return {
+    name: resolveDevStageFileDownloadName(item, fallbackLabel, index),
+    mimeType: decoded.mimeType,
+    bytes: decoded.bytes,
+  };
+}

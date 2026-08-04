@@ -2,6 +2,7 @@ import { getTenantPrisma } from '../lib/prisma.js';
 import { str, optStr } from '../utils/request.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import * as devStylesService from '../services/dev-styles.service.js';
+import { sendBinaryWithRange } from '../utils/sendBinaryWithRange.js';
 
 export const listStyles = asyncHandler(async (req, res) => {
   const db = getTenantPrisma(req.tenantId!);
@@ -20,6 +21,21 @@ export const getStageField = asyncHandler(async (req, res) => {
   res.json(
     await devStylesService.getDevStageField(getTenantPrisma(req.tenantId!), str(req.params.fieldId)),
   );
+});
+
+export const getStageFieldFile = asyncHandler(async (req, res) => {
+  const index = Number(req.params.index);
+  const file = await devStylesService.getDevStageFieldFileBinary(
+    getTenantPrisma(req.tenantId!),
+    str(req.params.fieldId),
+    index,
+  );
+  sendBinaryWithRange(req, res, {
+    mimeType: file.mimeType,
+    fileName: file.fileName,
+    data: file.data,
+    asDownload: Boolean(optStr(req.query.download)),
+  });
 });
 
 export const getAttachment = asyncHandler(async (req, res) => {

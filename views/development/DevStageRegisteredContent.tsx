@@ -12,10 +12,15 @@ import {
 } from '../../utils/devStageFileValue';
 import type { DevStageFileItem } from '../../utils/devStageFileValue';
 import { toKnowledgeAttachmentInfo } from '../../utils/devStageAttachmentPreview';
-import { formatUnpreviewableMessage, resolveAttachmentKind } from '../../utils/knowledgeAttachment';
+import {
+  formatUnpreviewableMessage,
+  resolveAttachmentKind,
+  resolveUploadMimeType,
+} from '../../utils/knowledgeAttachment';
 import { formStandardLabelClass } from '../../styles/uiDensity';
 import KnowledgeFilePreviewOverlay from '../knowledge-base/KnowledgeFilePreviewOverlay';
 import type { KnowledgeAttachmentInfo } from '../knowledge-base/knowledgeFileAttachmentExtension';
+import { downloadKnowledgeAsset } from '../../services/api/knowledgeBase';
 import { devStyles } from '../../services/api';
 
 interface DevStageRegisteredContentProps {
@@ -94,6 +99,23 @@ function DevStageFieldValue({
 
   const openAttachment = useCallback(
     async (index: number) => {
+      const current = hydratedItems ?? parseDevStageFileItems(value.trim());
+      const stub = current[index];
+      if (!stub) return;
+      const downloadName = resolveDevStageFileDownloadName(stub, label, index);
+      const stubKind = resolveAttachmentKind('', downloadName);
+
+      // 视频走二进制流（支持 Range），避免先拉整段 base64 JSON
+      if (stubKind === 'video' && fieldId) {
+        setAttachmentPreview({
+          assetUrl: devStyles.stageFieldFileUrl(fieldId, index),
+          fileName: downloadName,
+          mimeType: resolveUploadMimeType(downloadName, ''),
+          sizeBytes: 0,
+        });
+        return;
+      }
+
       const item = await ensureItemReady(index);
       if (!item?.url.startsWith('data:')) return;
       const info = toKnowledgeAttachmentInfo(item, label, index);
@@ -105,18 +127,36 @@ function DevStageFieldValue({
       toast.message(formatUnpreviewableMessage(info.fileName));
       triggerDownload(item.url, info.fileName);
     },
-    [ensureItemReady, label],
+    [ensureItemReady, fieldId, hydratedItems, label, value],
   );
 
   const downloadAttachment = useCallback(
     async (index: number, e?: React.MouseEvent) => {
       e?.preventDefault();
       e?.stopPropagation();
+      const current = hydratedItems ?? parseDevStageFileItems(value.trim());
+      const stub = current[index];
+      if (!stub) return;
+      const downloadName = resolveDevStageFileDownloadName(stub, label, index);
+      const stubKind = resolveAttachmentKind('', downloadName);
+
+      if (stubKind === 'video' && fieldId) {
+        setLoadingIndex(index);
+        try {
+          await downloadKnowledgeAsset(devStyles.stageFieldFileUrl(fieldId, index), downloadName);
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : '下载失败');
+        } finally {
+          setLoadingIndex(null);
+        }
+        return;
+      }
+
       const item = await ensureItemReady(index);
       if (!item?.url.startsWith('data:')) return;
       triggerDownload(item.url, resolveDevStageFileDownloadName(item, label, index));
     },
-    [ensureItemReady, label],
+    [ensureItemReady, fieldId, hydratedItems, label, value],
   );
 
   const str = value.trim();

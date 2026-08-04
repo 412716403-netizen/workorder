@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ModalPortal } from '../../components/ModalPortal';
 import { X, Save, ClipboardCheck, Activity, ListChecks, Settings2 } from 'lucide-react';
 import type { DevStageDto, DevStageTemplateDto, ReportFieldDefinition } from '../../types';
@@ -98,16 +98,17 @@ function serializeTemplateFieldValue(
 }
 
 /** 模板字段相对 stage.fields 是否无变更（避免只改状态仍重传大 data URL） */
-function templateFieldsUnchanged(
+export function templateFieldsUnchanged(
   stage: DevStageDto,
   templateFields: ReportFieldDefinition[],
   templateValues: Record<string, unknown>,
+  baselineValues: Record<string, unknown>,
 ): boolean {
   if (templateFields.length === 0) return true;
   for (const tf of templateFields) {
     const { type, value } = serializeTemplateFieldValue(tf, templateValues[tf.id]);
     const existing = stage.fields.find((f) => f.label.trim() === tf.label.trim());
-    const prevRaw = existing?.value ?? '';
+    const prevRaw = baselineValues[tf.id] ?? '';
     const prevNorm =
       type === 'file'
         ? serializeDevStageFileItems(parseDevStageFileItems(prevRaw))
@@ -142,6 +143,10 @@ const DevStageRegisterModal: React.FC<DevStageRegisterModalProps> = ({
   const [templateValues, setTemplateValues] = useState<Record<string, unknown>>(() =>
     buildTemplateValues(stage, templateFields),
   );
+  // 详情中的文件初始为 deferred stub，加载完整值后同步更新基线；删除时才能与原值正确判定为有变更。
+  const baselineTemplateValuesRef = useRef<Record<string, unknown>>(
+    buildTemplateValues(stage, templateFields),
+  );
   const [saving, setSaving] = useState(false);
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [filesHydrating, setFilesHydrating] = useState(false);
@@ -168,6 +173,7 @@ const DevStageRegisterModal: React.FC<DevStageRegisterModalProps> = ({
     if (!open) return;
     setStatus(stage.status);
     const initial = buildTemplateValues(stage, templateFields);
+    baselineTemplateValuesRef.current = initial;
     setTemplateValues(initial);
 
     const deferredPairs = templateFields
@@ -196,6 +202,9 @@ const DevStageRegisterModal: React.FC<DevStageRegisterModalProps> = ({
           }),
         );
         if (cancelled) return;
+        const hydratedBaseline = { ...baselineTemplateValuesRef.current };
+        for (const r of results) hydratedBaseline[r.templateFieldId] = r.value;
+        baselineTemplateValuesRef.current = hydratedBaseline;
         setTemplateValues((prev) => {
           const next = { ...prev };
           for (const r of results) next[r.templateFieldId] = r.value;
@@ -238,7 +247,12 @@ const DevStageRegisterModal: React.FC<DevStageRegisterModalProps> = ({
       }
     }
     const statusChanged = status !== stage.status;
-    const fieldsChanged = !templateFieldsUnchanged(stage, templateFields, templateValues);
+    const fieldsChanged = !templateFieldsUnchanged(
+      stage,
+      templateFields,
+      templateValues,
+      baselineTemplateValuesRef.current,
+    );
     if (!statusChanged && !fieldsChanged) {
       toast.success('节点登记已保存');
       onClose();
