@@ -3,7 +3,7 @@ import { ModalPortal } from '../../components/ModalPortal';
 import { useQueries } from '@tanstack/react-query';
 import { TableVirtuoso } from 'react-virtuoso';
 import { X, Filter, FileText, ScrollText } from 'lucide-react';
-import type { Product, ProductionOpRecord, PsiRecord, Warehouse } from '../../types';
+import type { Product, ProductionOpRecord, PsiRecord, Warehouse, AppDictionaries } from '../../types';
 import {
   fetchProductionByFilter,
   fetchPsiByFilter,
@@ -17,10 +17,19 @@ import {
   formatWarehouseFlowQty,
   matchesWarehouseFlowTypeFilter,
   resolveProdWarehouseFlowTypeLabel,
+  splitWarehouseVariantQtyByDirection,
   warehouseFlowTypeLabel as sharedWarehouseFlowTypeLabel,
+  warehouseRecordToVariantQtySource,
 } from './warehouseFlowHelpers';
 import FlowListSummaryFooter from '../../components/flow/FlowListSummaryFooter';
 import FlowListProductCell from '../../components/flow/FlowListProductCell';
+import FlowListQtyMatrixHover from '../../components/flow/FlowListQtyMatrixHover';
+import {
+  aggregateVariantQty,
+  getSingleFlowProductId,
+  resolveProductUnitName,
+  subtractVariantQty,
+} from '../../utils/flowListVariantQty';
 
 const WAREHOUSE_FLOW_TYPES = ['PURCHASE_BILL', 'SALES_BILL', 'TRANSFER', 'STOCKTAKE', 'STOCK_IN', 'STOCK_RETURN', 'STOCK_OUT'] as const;
 const warehouseFlowTypeLabel: Record<string, string> = sharedWarehouseFlowTypeLabel;
@@ -41,6 +50,7 @@ interface FlowRow {
   isOutbound: boolean;
   partner: string;
   record: PsiRecord | ProductionOpRecord;
+  sourceRecords?: Array<PsiRecord | ProductionOpRecord>;
   _sortTs: number;
 }
 
@@ -54,6 +64,7 @@ export interface WarehouseFlowModalProps {
   onClose: () => void;
   products: Product[];
   warehouses: Warehouse[];
+  dictionaries?: AppDictionaries;
   orders: { id: string; orderNumber?: string }[];
   /** 详情打开回调；同时把当时窄拉到的全部 PSI / 生产记录回传给上层，避免 panel 当时窄拉未覆盖 */
   onViewDetail: (key: string, extra: WarehouseFlowDetailExtraPayload) => void;
@@ -90,6 +101,7 @@ const WarehouseFlowModal: React.FC<WarehouseFlowModalProps> = ({
   onClose,
   products,
   warehouses,
+  dictionaries,
   orders,
   onViewDetail,
 }) => {
@@ -253,7 +265,13 @@ const WarehouseFlowModal: React.FC<WarehouseFlowModalProps> = ({
           return cur._sortTs < best._sortTs ? cur : best;
         }, rows[0]);
         const totalQty = rows.reduce((s, r) => s + r.quantity, 0);
-        return { ...displayRow, id: key, quantity: totalQty, _sortTs: minTs };
+        return {
+          ...displayRow,
+          id: key,
+          quantity: totalQty,
+          sourceRecords: rows.map(r => r.record),
+          _sortTs: minTs,
+        };
       })
       .sort((a, b) => b._sortTs - a._sortTs || String(a.id).localeCompare(String(b.id)));
   }, [psiAll, prodAll, productMap, warehouseMap, ordersById]);
@@ -293,6 +311,18 @@ const WarehouseFlowModal: React.FC<WarehouseFlowModalProps> = ({
     () => computeWarehouseFlowTotals(filteredRows),
     [filteredRows],
   );
+  const singleSummaryProduct = productMap.get(getSingleFlowProductId(filteredRows) ?? '');
+  const summaryUnitName = resolveProductUnitName(singleSummaryProduct, dictionaries);
+  const summaryDirectionQty = useMemo(() => {
+    const { inbound, outbound } = splitWarehouseVariantQtyByDirection(filteredRows);
+    const inboundBreakdown = aggregateVariantQty(inbound);
+    const outboundBreakdown = aggregateVariantQty(outbound);
+    return {
+      inbound: inboundBreakdown,
+      outbound: outboundBreakdown,
+      net: subtractVariantQty(inboundBreakdown, outboundBreakdown),
+    };
+  }, [filteredRows]);
 
   const handleViewDetail = (key: string) => {
     onViewDetail(key, { psiRecords: psiAll, prodRecords: prodAll });
@@ -384,17 +414,72 @@ const WarehouseFlowModal: React.FC<WarehouseFlowModalProps> = ({
                     colSpan={6}
                     trailingEmptyCols={1}
                     metrics={[
-                      { label: '入库', value: `${formatWarehouseFlowQty(flowTotals.inboundTotal)} 件`, className: 'text-indigo-600' },
-                      { label: '出库', value: `${formatWarehouseFlowQty(flowTotals.outboundTotal)} 件`, className: 'text-amber-600' },
+                      {
+                        label: '入库',
+                        value: singleSummaryProduct ? (
+                          <FlowListQtyMatrixHover
+                            product={singleSummaryProduct}
+                            dictionaries={dictionaries}
+                            breakdown={summaryDirectionQty.inbound}
+                            totalQty={flowTotals.inboundTotal}
+                            unitName={summaryUnitName}
+                            label="入库"
+                          >
+                            {formatWarehouseFlowQty(flowTotals.inboundTotal)} {summaryUnitName}
+                          </FlowListQtyMatrixHover>
+                        ) : (
+                          `${formatWarehouseFlowQty(flowTotals.inboundTotal)} 件`
+                        ),
+                        className: 'text-indigo-600',
+                      },
+                      {
+                        label: '出库',
+                        value: singleSummaryProduct ? (
+                          <FlowListQtyMatrixHover
+                            product={singleSummaryProduct}
+                            dictionaries={dictionaries}
+                            breakdown={summaryDirectionQty.outbound}
+                            totalQty={flowTotals.outboundTotal}
+                            unitName={summaryUnitName}
+                            label="出库"
+                          >
+                            {formatWarehouseFlowQty(flowTotals.outboundTotal)} {summaryUnitName}
+                          </FlowListQtyMatrixHover>
+                        ) : (
+                          `${formatWarehouseFlowQty(flowTotals.outboundTotal)} 件`
+                        ),
+                        className: 'text-amber-600',
+                      },
                       {
                         label: '净变化',
-                        value: `${flowTotals.netChange >= 0 ? '+' : ''}${formatWarehouseFlowQty(flowTotals.netChange)} 件`,
+                        value: singleSummaryProduct ? (
+                          <FlowListQtyMatrixHover
+                            product={singleSummaryProduct}
+                            dictionaries={dictionaries}
+                            breakdown={summaryDirectionQty.net}
+                            totalQty={flowTotals.netChange}
+                            unitName={summaryUnitName}
+                            label="净变化"
+                          >
+                            {flowTotals.netChange >= 0 ? '+' : ''}
+                            {formatWarehouseFlowQty(flowTotals.netChange)} {summaryUnitName}
+                          </FlowListQtyMatrixHover>
+                        ) : (
+                          `${flowTotals.netChange >= 0 ? '+' : ''}${formatWarehouseFlowQty(flowTotals.netChange)} 件`
+                        ),
                         className: flowTotals.netChange < 0 ? 'text-rose-600' : 'text-slate-700',
                       },
                     ]}
                   />
                 )}
-                itemContent={(_idx, row) => (
+                itemContent={(_idx, row) => {
+                  const rowProduct = productMap.get(row.productId);
+                  const rowUnitName = resolveProductUnitName(rowProduct, dictionaries);
+                  const rowSources = (row.sourceRecords?.length ? row.sourceRecords : [row.record]).map(
+                    warehouseRecordToVariantQtySource,
+                  );
+                  const rowVariantQty = aggregateVariantQty(rowSources);
+                  return (
                   <>
                      <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{row.displayDateTime ?? row.dateStr}</td>
                      <td className="px-4 py-3"><span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800">{row.typeLabel}</span></td>
@@ -402,19 +487,30 @@ const WarehouseFlowModal: React.FC<WarehouseFlowModalProps> = ({
                      <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{row.warehouseName}</td>
                      <td className="px-4 py-3">
                        <FlowListProductCell
-                         product={productMap.get(row.productId)}
+                         product={rowProduct}
                          name={row.productName}
                          sku={row.productSku}
                        />
                      </td>
-                     <td className="px-4 py-3 text-right font-black text-indigo-600">{row.quantity}</td>
+                     <td className="px-4 py-3 text-right font-black text-indigo-600">
+                       <FlowListQtyMatrixHover
+                         product={rowProduct}
+                         dictionaries={dictionaries}
+                         breakdown={rowVariantQty}
+                         totalQty={row.quantity}
+                         unitName={rowUnitName}
+                       >
+                         {row.quantity}
+                       </FlowListQtyMatrixHover>
+                     </td>
                      <td className="px-4 py-3">
                         <button type="button" onClick={() => handleViewDetail(`${row.type}|${row.docNumber}`)} className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all whitespace-nowrap">
                           <FileText className="w-3.5 h-3.5" /> 详情
                         </button>
                       </td>
                   </>
-                )}
+                  );
+                }}
                 components={{ Table: (props) => <table {...props} className="w-full text-left text-sm" />, TableRow: ({ item: _item, ...props }) => <tr {...props} className="border-b border-slate-100 hover:bg-slate-50/50" /> }}
               />
             </div>

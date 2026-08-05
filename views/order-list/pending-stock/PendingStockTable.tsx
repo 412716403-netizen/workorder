@@ -11,11 +11,13 @@ import React from 'react';
 import { History } from 'lucide-react';
 import { ScanBatchTrigger } from '../../../components/scan/ScanBatchTrigger';
 import { useTraceabilityPlugin } from '../../../hooks/useTraceabilityPlugin';
-import type { Product, ProductCategory } from '../../../types';
+import type { AppDictionaries, Product, ProductCategory } from '../../../types';
 import { buildStockInFormDefaultsForPending, type PendingStockItem } from '../pendingStockStockInHelpers';
 import { defaultEntryDatetimeLocal } from '../../../utils/docEntryTime';
 import type { usePendingStockState } from '../../../hooks/usePendingStockState';
 import FlowListProductCell from '../../../components/flow/FlowListProductCell';
+import FlowListQtyMatrixHover from '../../../components/flow/FlowListQtyMatrixHover';
+import { breakdownFromVariantQtyMap } from '../../../utils/flowListVariantQty';
 
 type Helper = ReturnType<typeof usePendingStockState>;
 
@@ -24,10 +26,11 @@ interface Props {
   productionLinkMode: 'order' | 'product';
   productMap: Map<string, Product>;
   categoryMap: Map<string, ProductCategory>;
+  dictionaries?: AppDictionaries;
   hasPerm: (perm: string) => boolean;
 }
 
-const PendingStockTable: React.FC<Props> = ({ helper, productionLinkMode, productMap, categoryMap, hasPerm }) => {
+const PendingStockTable: React.FC<Props> = ({ helper, productionLinkMode, productMap, categoryMap, dictionaries, hasPerm }) => {
   const { scanEnabled } = useTraceabilityPlugin();
   const {
     pendingStockOrders,
@@ -209,7 +212,16 @@ const PendingStockTable: React.FC<Props> = ({ helper, productionLinkMode, produc
                       </td>
                     )}
                     <td className="px-4 py-3 font-bold text-indigo-600 text-right">
-                      {item.pendingTotal} {unitName}
+                      <FlowListQtyMatrixHover
+                        product={productMap.get(item.order.productId)}
+                        dictionaries={dictionaries}
+                        breakdown={breakdownFromVariantQtyMap(item.pendingByVariant)}
+                        totalQty={item.pendingTotal}
+                        unitName={unitName}
+                        label="待入库"
+                      >
+                        {item.pendingTotal} {unitName}
+                      </FlowListQtyMatrixHover>
                     </td>
                     <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                       {hasPerm('production:orders_pending_stock_in:create') && (

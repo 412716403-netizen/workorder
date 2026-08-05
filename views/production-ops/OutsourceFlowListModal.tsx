@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ScrollText, X, Filter, ArrowUpFromLine, Undo2, FileText, Loader2 } from 'lucide-react';
 import type {
+  AppDictionaries,
   ProductionOpRecord,
   GlobalNodeTemplate,
   ProductionOrder,
@@ -20,7 +21,14 @@ import {
 import FlowListSummaryFooter from '../../components/flow/FlowListSummaryFooter';
 import FlowListTableShell from '../../components/flow/FlowListTableShell';
 import FlowListProductCell from '../../components/flow/FlowListProductCell';
+import FlowListQtyMatrixHover from '../../components/flow/FlowListQtyMatrixHover';
 import { ModalPortal } from '../../components/ModalPortal';
+import {
+  aggregateVariantQty,
+  getSingleFlowProductId,
+  resolveProductUnitName,
+  subtractVariantQty,
+} from '../../utils/flowListVariantQty';
 
 interface FlowSummaryRow {
   docNo: string;
@@ -52,6 +60,7 @@ export interface OutsourceFlowListModalProps {
   showOrderDueDateColumn?: boolean;
   orders: ProductionOrder[];
   products: Product[];
+  dictionaries?: AppDictionaries;
   globalNodes: GlobalNodeTemplate[];
   userPermissions?: string[];
   tenantRole?: string;
@@ -71,6 +80,7 @@ const OutsourceFlowListModal: React.FC<OutsourceFlowListModalProps> = ({
   showOrderDueDateColumn = false,
   orders,
   products,
+  dictionaries,
   globalNodes,
   userPermissions,
   tenantRole,
@@ -297,18 +307,30 @@ const OutsourceFlowListModal: React.FC<OutsourceFlowListModalProps> = ({
     return list;
   }, [outsourceFlowSummaryRows, flowFilterDateFrom, flowFilterDateTo, flowFilterType, flowFilterPartner, flowFilterDocNo, flowFilterOrder, flowFilterProduct, flowFilterMilestone, productionLinkMode]);
 
-  const { outsourceFlowTotalDispatch, outsourceFlowTotalReceive, outsourceFlowRemaining } = useMemo(() => {
-    let dispatch = 0;
-    let receive = 0;
-    filteredOutsourceFlowRows.forEach(row => {
-      row.records.forEach(r => {
-        if (r.status === '加工中') dispatch += r.quantity;
-        else if (r.status === '已收回') receive += r.quantity;
-      });
-    });
-    const outsourceFlowRemaining = Math.max(0, dispatch - receive);
-    return { outsourceFlowTotalDispatch: dispatch, outsourceFlowTotalReceive: receive, outsourceFlowRemaining };
+  const summaryVariantQty = useMemo(() => {
+    const recordsForSummary = filteredOutsourceFlowRows.flatMap(row => row.records);
+    const dispatched = aggregateVariantQty(
+      recordsForSummary.filter(record => record.status === '加工中'),
+    );
+    const received = aggregateVariantQty(
+      recordsForSummary.filter(record => record.status === '已收回'),
+    );
+    return {
+      dispatched,
+      received,
+      remaining: subtractVariantQty(dispatched, received),
+    };
   }, [filteredOutsourceFlowRows]);
+  const outsourceFlowTotalDispatch = summaryVariantQty.dispatched.totalQty;
+  const outsourceFlowTotalReceive = summaryVariantQty.received.totalQty;
+  const outsourceFlowRemaining = Math.max(
+    0,
+    outsourceFlowTotalDispatch - outsourceFlowTotalReceive,
+  );
+  const singleSummaryProduct = productsById.get(
+    getSingleFlowProductId(filteredOutsourceFlowRows) ?? '',
+  );
+  const summaryUnitName = resolveProductUnitName(singleSummaryProduct, dictionaries);
 
   return (
     <ModalPortal>
@@ -389,9 +411,54 @@ const OutsourceFlowListModal: React.FC<OutsourceFlowListModalProps> = ({
                   mode="bar"
                   count={filteredOutsourceFlowRows.length}
                   metrics={[
-                    { label: '发出', value: `${outsourceFlowTotalDispatch} 件`, className: 'text-indigo-600' },
-                    { label: '收回', value: `${outsourceFlowTotalReceive} 件`, className: 'text-amber-600' },
-                    { label: '剩余', value: `${outsourceFlowRemaining} 件`, className: 'text-slate-700' },
+                    {
+                      label: '发出',
+                      value: singleSummaryProduct ? (
+                        <FlowListQtyMatrixHover
+                          product={singleSummaryProduct}
+                          dictionaries={dictionaries}
+                          breakdown={summaryVariantQty.dispatched}
+                          totalQty={outsourceFlowTotalDispatch}
+                          unitName={summaryUnitName}
+                          label="发出"
+                        >
+                          {outsourceFlowTotalDispatch} {summaryUnitName}
+                        </FlowListQtyMatrixHover>
+                      ) : `${outsourceFlowTotalDispatch} 件`,
+                      className: 'text-indigo-600',
+                    },
+                    {
+                      label: '收回',
+                      value: singleSummaryProduct ? (
+                        <FlowListQtyMatrixHover
+                          product={singleSummaryProduct}
+                          dictionaries={dictionaries}
+                          breakdown={summaryVariantQty.received}
+                          totalQty={outsourceFlowTotalReceive}
+                          unitName={summaryUnitName}
+                          label="收回"
+                        >
+                          {outsourceFlowTotalReceive} {summaryUnitName}
+                        </FlowListQtyMatrixHover>
+                      ) : `${outsourceFlowTotalReceive} 件`,
+                      className: 'text-amber-600',
+                    },
+                    {
+                      label: '剩余',
+                      value: singleSummaryProduct ? (
+                        <FlowListQtyMatrixHover
+                          product={singleSummaryProduct}
+                          dictionaries={dictionaries}
+                          breakdown={summaryVariantQty.remaining}
+                          totalQty={outsourceFlowRemaining}
+                          unitName={summaryUnitName}
+                          label="剩余"
+                        >
+                          {outsourceFlowRemaining} {summaryUnitName}
+                        </FlowListQtyMatrixHover>
+                      ) : `${outsourceFlowRemaining} 件`,
+                      className: 'text-slate-700',
+                    },
                   ]}
                 />
               }
@@ -418,6 +485,9 @@ const OutsourceFlowListModal: React.FC<OutsourceFlowListModalProps> = ({
                     const rowKey = productionLinkMode === 'product' ? `${row.docNo}|${row.productId}` : `${row.docNo}|${row.orderId}|${row.productId}`;
                     const hasDispatch = (row.typeStr || '').includes('发出');
                     const hasReceive = (row.typeStr || '').includes('收回');
+                    const rowProduct = productsById.get(row.productId);
+                    const rowUnitName = resolveProductUnitName(rowProduct, dictionaries);
+                    const rowVariantQty = aggregateVariantQty(row.records);
                     return (
                       <tr key={rowKey} className="border-b border-slate-100 hover:bg-slate-50/50">
                         <td className="px-4 py-3 text-[10px] font-mono font-bold text-slate-600 whitespace-nowrap">{row.docNo}</td>
@@ -435,12 +505,22 @@ const OutsourceFlowListModal: React.FC<OutsourceFlowListModalProps> = ({
                         )}
                         <td className="px-4 py-3">
                           <FlowListProductCell
-                            product={products.find(p => p.id === row.productId)}
+                            product={rowProduct}
                             name={row.productName}
                           />
                         </td>
                         <td className="px-4 py-3 font-bold text-slate-700">{row.milestoneStr}</td>
-                        <td className="px-4 py-3 text-right font-black text-indigo-600">{row.totalQuantity}</td>
+                        <td className="px-4 py-3 text-right font-black text-indigo-600">
+                          <FlowListQtyMatrixHover
+                            product={rowProduct}
+                            dictionaries={dictionaries}
+                            breakdown={rowVariantQty}
+                            totalQty={row.totalQuantity}
+                            unitName={rowUnitName}
+                          >
+                            {row.totalQuantity}
+                          </FlowListQtyMatrixHover>
+                        </td>
                         <td className="px-4 py-3">
                           {hasOpsPerm(tenantRole, userPermissions, 'production:outsource_records:view') && (
                             <button type="button" onClick={() => onOpenDetail(row.docNo, row.records)} className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all whitespace-nowrap shrink-0">

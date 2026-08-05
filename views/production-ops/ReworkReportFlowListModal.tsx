@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { History, X, Filter, FileText, Loader2 } from 'lucide-react';
-import { ProductionOpRecord, ProductionOrder, Product, GlobalNodeTemplate } from '../../types';
+import { ProductionOpRecord, ProductionOrder, Product, GlobalNodeTemplate, AppDictionaries } from '../../types';
 import { hasOpsPerm } from './types';
 import { formatTimestamp } from '../../utils/formatTime';
 import { toLocalCompactYmd, toLocalDateYmd } from '../../utils/localDateTime';
@@ -16,12 +16,19 @@ import {
 import FlowListSummaryFooter from '../../components/flow/FlowListSummaryFooter';
 import FlowListTableShell from '../../components/flow/FlowListTableShell';
 import FlowListProductCell from '../../components/flow/FlowListProductCell';
+import FlowListQtyMatrixHover from '../../components/flow/FlowListQtyMatrixHover';
+import {
+  aggregateVariantQty,
+  getSingleFlowProductId,
+  resolveProductUnitName,
+} from '../../utils/flowListVariantQty';
 import { ModalPortal } from '../../components/ModalPortal';
 
 export interface ReworkReportFlowListModalProps {
   productionLinkMode: 'order' | 'product';
   orders: ProductionOrder[];
   products: Product[];
+  dictionaries?: AppDictionaries;
   globalNodes: GlobalNodeTemplate[];
   userPermissions?: string[];
   tenantRole?: string;
@@ -33,6 +40,7 @@ const ReworkReportFlowListModal: React.FC<ReworkReportFlowListModalProps> = ({
   productionLinkMode,
   orders,
   products,
+  dictionaries,
   globalNodes,
   userPermissions,
   tenantRole,
@@ -177,6 +185,11 @@ const ReworkReportFlowListModal: React.FC<ReworkReportFlowListModalProps> = ({
   const totalAmount = useMemo(() => groupedRows.reduce((s, g) => s + g.totalAmount, 0), [groupedRows]);
   const hasAnyPrice = useMemo(() => sorted.some(r => r.unitPrice != null && r.unitPrice > 0), [sorted]);
   const uniqueNodeNames = useMemo(() => [...new Set(reworkRecords.map(r => globalNodes.find(n => n.id === r.nodeId)?.name).filter(Boolean))] as string[], [reworkRecords, globalNodes]);
+  const singleSummaryProduct = products.find(
+    product => product.id === (getSingleFlowProductId(groupedRows.map(g => ({ productId: g.first.productId }))) ?? ''),
+  );
+  const summaryUnitName = resolveProductUnitName(singleSummaryProduct, dictionaries);
+  const summaryVariantQty = aggregateVariantQty(groupedRows.flatMap(g => g.records));
 
   return (
     <ModalPortal>
@@ -246,7 +259,23 @@ const ReworkReportFlowListModal: React.FC<ReworkReportFlowListModalProps> = ({
                   mode="bar"
                   count={groupedRows.length}
                   metrics={[
-                    { label: '数量', value: `${totalQuantity} 件`, className: 'text-indigo-600' },
+                    {
+                      label: '数量',
+                      value: singleSummaryProduct ? (
+                        <FlowListQtyMatrixHover
+                          product={singleSummaryProduct}
+                          dictionaries={dictionaries}
+                          breakdown={summaryVariantQty}
+                          totalQty={totalQuantity}
+                          unitName={summaryUnitName}
+                        >
+                          {totalQuantity} {summaryUnitName}
+                        </FlowListQtyMatrixHover>
+                      ) : (
+                        `${totalQuantity} 件`
+                      ),
+                      className: 'text-indigo-600',
+                    },
                     ...(hasAnyPrice
                       ? [{ label: '金额', value: totalAmount.toFixed(2), className: 'text-amber-600' }]
                       : []),
@@ -298,6 +327,8 @@ const ReworkReportFlowListModal: React.FC<ReworkReportFlowListModalProps> = ({
                       return t >= best.t ? { t, ts: x.timestamp } : best;
                     }, { t: -1 }).ts;
                     const rowKey = r.docNo && validDocNoRe.test(r.docNo) ? `${r.docNo}|${r.productId ?? ''}` : r.id;
+                    const rowUnitName = resolveProductUnitName(product, dictionaries);
+                    const rowVariantQty = aggregateVariantQty(groupRecs);
                     return (
                       <tr key={rowKey} className="border-b border-slate-100 hover:bg-slate-50/50">
                         <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{formatTimestamp(latestTs)}</td>
@@ -311,7 +342,17 @@ const ReworkReportFlowListModal: React.FC<ReworkReportFlowListModalProps> = ({
                           <FlowListProductCell product={product} />
                         </td>
                         <td className="px-4 py-3 text-slate-700 whitespace-nowrap max-w-[200px] truncate" title={nodeLabel}>{nodeLabel}</td>
-                        <td className="px-4 py-3 text-right font-bold text-indigo-600 whitespace-nowrap">{totalQty} 件</td>
+                        <td className="px-4 py-3 text-right font-bold text-indigo-600 whitespace-nowrap">
+                          <FlowListQtyMatrixHover
+                            product={product}
+                            dictionaries={dictionaries}
+                            breakdown={rowVariantQty}
+                            totalQty={totalQty}
+                            unitName={rowUnitName}
+                          >
+                            {totalQty} {rowUnitName}
+                          </FlowListQtyMatrixHover>
+                        </td>
                         {hasAnyPrice && <td className="px-4 py-3 text-right text-slate-700 whitespace-nowrap">{unitLabel}</td>}
                         {hasAnyPrice && <td className="px-4 py-3 text-right font-bold text-amber-600 whitespace-nowrap">{amtLabel}</td>}
                         <td className="px-4 py-3 text-slate-600 whitespace-nowrap max-w-[220px] truncate" title={operatorColumnLabel !== '—' ? operatorColumnLabel : undefined}>{operatorColumnLabel}</td>

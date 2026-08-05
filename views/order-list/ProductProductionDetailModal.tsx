@@ -229,6 +229,7 @@ const ProductProductionDetailModal: React.FC<ProductProductionDetailModalProps> 
           showOrderDueDateColumn={false}
           orders={orders}
           products={products}
+          dictionaries={dictionaries}
           globalNodes={globalNodes}
           userPermissions={userPermissions}
           tenantRole={tenantRole}

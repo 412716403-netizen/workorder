@@ -54,7 +54,14 @@ import {
 import FlowListSummaryFooter from '../../components/flow/FlowListSummaryFooter';
 import FlowListProductCell from '../../components/flow/FlowListProductCell';
 import FlowListTableShell from '../../components/flow/FlowListTableShell';
+import FlowListQtyMatrixHover from '../../components/flow/FlowListQtyMatrixHover';
+import {
+  aggregateVariantQty,
+  getSingleFlowProductId,
+  resolveProductUnitName,
+} from '../../utils/flowListVariantQty';
 import { productThumbSrc } from '../../utils/productImageSrc';
+import { ModalPortal } from '../../components/ModalPortal';
 
 function StockInFlowEditSavePortal({ active, onSave }: { active: boolean; onSave: () => void }) {
   const host = React.useContext(DocPhaseEditToolbarPortalContext);
@@ -214,7 +221,14 @@ export const StockInFlowModal: React.FC<StockInFlowModalProps> = ({
   const filteredRows = allStockInRows.filter(r => {
     if (sf.docNo && !r.docNo.toLowerCase().includes(sf.docNo.toLowerCase())) return false;
     if (sf.orderNumber && !r.orderNumber.toLowerCase().includes(sf.orderNumber.toLowerCase())) return false;
-    if (sf.productName && !r.productName.toLowerCase().includes(sf.productName.toLowerCase())) return false;
+    if (sf.productName.trim()) {
+      const kw = sf.productName.trim().toLowerCase();
+      const product = productMap.get(r.productId);
+      const name = (product?.name || r.productName || '').toLowerCase();
+      const sku = (product?.sku || '').toLowerCase();
+      const productId = (r.productId || '').toLowerCase();
+      if (!name.includes(kw) && !sku.includes(kw) && !productId.includes(kw)) return false;
+    }
     if (sf.warehouseId && r.warehouseId !== sf.warehouseId) return false;
     return true;
   });
@@ -278,12 +292,16 @@ export const StockInFlowModal: React.FC<StockInFlowModalProps> = ({
       };
     }),
   );
+  const singleSummaryProduct = productMap.get(getSingleFlowProductId(flowListRows) ?? '');
+  const summaryUnitName = resolveProductUnitName(singleSummaryProduct, dictionaries);
+  const summaryVariantQty = aggregateVariantQty(flowListRows.flatMap(row => row.rows));
   const uniqueWarehouses = [...new Set(allStockInRows.map(r => r.warehouseId).filter(Boolean))] as string[];
   const detailBatch = stockInFlowDetailDocNo ? batches.find(b => b.docNo === stockInFlowDetailDocNo) : null;
 
   return (
+    <ModalPortal>
     <>
-      <div className="fixed inset-0 z-[86] flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
         <div
           className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
           onClick={() => { onClose(); setStockInFlowDetailDocNo(null); }}
@@ -331,8 +349,14 @@ export const StockInFlowModal: React.FC<StockInFlowModalProps> = ({
                 </div>
               )}
               <div>
-                <label className="text-[10px] font-bold text-slate-400 block mb-1">产品编号</label>
-                <input type="text" value={sf.productName} onChange={e => setStockInFlowFilter(prev => ({ ...prev, productName: e.target.value }))} placeholder="产品编号模糊搜索" className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200" />
+                <label className="text-[10px] font-bold text-slate-400 block mb-1">产品</label>
+                <input
+                  type="text"
+                  value={sf.productName}
+                  onChange={e => setStockInFlowFilter(prev => ({ ...prev, productName: e.target.value }))}
+                  placeholder="名称/编号/SKU 模糊搜索"
+                  className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200"
+                />
               </div>
               <div>
                 <label className="text-[10px] font-bold text-slate-400 block mb-1">入库仓库</label>
@@ -363,7 +387,26 @@ export const StockInFlowModal: React.FC<StockInFlowModalProps> = ({
                   <FlowListSummaryFooter
                     mode="bar"
                     count={flowListRows.length}
-                    metrics={[{ label: '入库', value: `${totalQtyAll} 件`, className: 'text-emerald-600' }]}
+                    metrics={[
+                      {
+                        label: '入库',
+                        value: singleSummaryProduct ? (
+                          <FlowListQtyMatrixHover
+                            product={singleSummaryProduct}
+                            dictionaries={dictionaries}
+                            breakdown={summaryVariantQty}
+                            totalQty={totalQtyAll}
+                            unitName={summaryUnitName}
+                            label="入库"
+                          >
+                            {totalQtyAll} {summaryUnitName}
+                          </FlowListQtyMatrixHover>
+                        ) : (
+                          `${totalQtyAll} 件`
+                        ),
+                        className: 'text-emerald-600',
+                      },
+                    ]}
                   />
                 }
               >
@@ -385,8 +428,8 @@ export const StockInFlowModal: React.FC<StockInFlowModalProps> = ({
                   <tbody>
                     {flowListRows.map(row => {
                       const rowProduct = productMap.get(row.productId);
-                      const rowUnit =
-                        (rowProduct?.unitId && dictionaries?.units?.find(u => u.id === rowProduct.unitId)?.name) || '件';
+                      const rowUnit = resolveProductUnitName(rowProduct, dictionaries);
+                      const rowVariantQty = aggregateVariantQty(row.rows);
                       return (
                         <tr key={`${row.docNo}-${row.productId}`} className="border-b border-slate-100 hover:bg-slate-50/50">
                           <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{fmtDT(row.first.timestamp)}</td>
@@ -403,7 +446,15 @@ export const StockInFlowModal: React.FC<StockInFlowModalProps> = ({
                           )}
                           <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{row.warehouseName || '—'}</td>
                           <td className="px-4 py-3 text-right font-black text-emerald-600 whitespace-nowrap">
-                            {row.totalQty} {rowUnit}
+                            <FlowListQtyMatrixHover
+                              product={rowProduct}
+                              dictionaries={dictionaries}
+                              breakdown={rowVariantQty}
+                              totalQty={row.totalQty}
+                              unitName={rowUnit}
+                            >
+                              {row.totalQty} {rowUnit}
+                            </FlowListQtyMatrixHover>
                           </td>
                           <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{row.first.operator || '—'}</td>
                           <td className="px-4 py-3">
@@ -631,7 +682,7 @@ export const StockInFlowModal: React.FC<StockInFlowModalProps> = ({
             phase={isEditing ? 'edit' : 'detail'}
             editingDocNumber={detailBatch.docNo || '—'}
             maxWidthClass={detailProductGroups.some(g => g.useMatrix) ? 'max-w-3xl' : 'max-w-2xl'}
-            zIndexClass="z-[90]"
+            zIndexClass="z-[92]"
             detailTitle="生产入库详情"
             editTitle="生产入库 · 编辑"
             newTitle=""
@@ -1220,5 +1271,6 @@ export const StockInFlowModal: React.FC<StockInFlowModalProps> = ({
         );
       })()}
     </>
+    </ModalPortal>
   );
 };

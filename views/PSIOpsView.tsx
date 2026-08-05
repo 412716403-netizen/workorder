@@ -797,6 +797,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
           pendingShipmentGroups={pendingShipmentGroups}
           partners={partners}
           products={products}
+          dictionaries={dictionaries}
           recordsList={recordsList}
           onClose={() => setShowPendingShipmentModal(false)}
           onOpenDetail={group => setPendingShipDetailGroup(group)}
@@ -2267,6 +2268,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
           onOpenDetail={handlePsiOrderBillFlowDetail}
           products={products}
           warehouses={warehouses}
+          dictionaries={dictionaries}
           receivedByOrderLine={type === 'PURCHASE_ORDER' ? receivedByOrderLine : undefined}
         />
       )}

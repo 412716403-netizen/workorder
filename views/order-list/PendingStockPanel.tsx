@@ -185,6 +185,7 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
               productionLinkMode={productionLinkMode}
               productMap={productMap}
               categoryMap={categoryMap}
+              dictionaries={dictionaries}
               hasPerm={hasPerm}
             />
           )}

@@ -1,18 +1,10 @@
-/** 从编辑器点击目标解析资料库正文图片地址 */
+/** 从编辑器点击目标解析资料库正文图片地址（仅点在 img 本身才预览） */
 export function resolveKnowledgeEditorImageSrc(target: Element, root: HTMLElement): string | null {
   if (!root.contains(target)) return null;
-  if (target.closest('[data-resize-handle]')) return null;
+  // 点在节点空白/缩放手柄/包装层上不预览，避免「这一行都能点开」
+  if (!(target instanceof HTMLImageElement)) return null;
 
-  let img: HTMLImageElement | null = null;
-  if (target instanceof HTMLImageElement) {
-    img = target;
-  } else {
-    const imageNode = target.closest('[data-node="image"]');
-    img = imageNode?.querySelector('img') ?? target.closest('img');
-  }
-  if (!(img instanceof HTMLImageElement) || !root.contains(img)) return null;
-
-  const src = img.currentSrc || img.getAttribute('src') || '';
+  const src = target.currentSrc || target.getAttribute('src') || '';
   return src.trim() || null;
 }
 

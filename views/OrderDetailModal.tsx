@@ -655,6 +655,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           showOrderDueDateColumn={showOrderDueDateColumn}
           orders={orders}
           products={products}
+          dictionaries={dictionaries}
           globalNodes={globalNodes ?? []}
           userPermissions={userPermissions}
           tenantRole={tenantRole}

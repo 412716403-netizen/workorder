@@ -1414,6 +1414,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
                  onClose={() => { setWarehouseFlowModalOpen(false); setWarehouseFlowDetailKey(null); setWarehouseFlowDetailExtra(null); }}
                  products={products}
                  warehouses={warehouses}
+                 dictionaries={dictionaries}
                  orders={ordersList}
                  onViewDetail={(key, extra) => {
                    setWarehouseFlowDetailExtra(extra);
@@ -1427,6 +1428,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
                    warehouseFlowRows={warehouseFlowRows}
                    warehouses={warehouses}
                    products={products}
+                   dictionaries={dictionaries}
                    parseRecordTime={parseRecordTime}
                    onViewDetail={setWarehouseFlowDetailKey}
                  />

@@ -26,6 +26,12 @@ import { resolveReportDisplayEconomics } from '../../utils/outsourceReceiveRepor
 import FlowListSummaryFooter from '../../components/flow/FlowListSummaryFooter';
 import FlowListTableShell from '../../components/flow/FlowListTableShell';
 import FlowListProductCell from '../../components/flow/FlowListProductCell';
+import FlowListQtyMatrixHover from '../../components/flow/FlowListQtyMatrixHover';
+import {
+  aggregateVariantQty,
+  getSingleFlowProductId,
+  resolveProductUnitName,
+} from '../../utils/flowListVariantQty';
 
 export type ReportHistoryInitialSeed = {
   orderNumber?: string;
@@ -377,6 +383,30 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
   const filterHint = scopedOrderIds || scopedProductIds
     ? '已按当前工单/产品窄拉，不限日期；可手动补充日期或其它筛选项'
     : '默认显示当天，扩大日期范围需手动改';
+  const batchProductIdOf = (batch: (typeof batches)[number]) =>
+    batch.source === 'order' ? batch.first.order.productId : batch.productId;
+  const singleSummaryProduct = products.find(
+    product => product.id === (getSingleFlowProductId(batches.map(batch => ({ productId: batchProductIdOf(batch) }))) ?? ''),
+  );
+  const summaryUnitName = singleSummaryProduct
+    ? resolveProductUnitName(singleSummaryProduct, dictionaries, summaryUnit)
+    : summaryUnit;
+  const summaryGoodQty = aggregateVariantQty(
+    batches.flatMap(batch =>
+      batch.rows.map(row => ({
+        variantId: row.report.variantId,
+        quantity: row.report.quantity,
+      })),
+    ),
+  );
+  const summaryDefectiveQty = aggregateVariantQty(
+    batches.flatMap(batch =>
+      batch.rows.map(row => ({
+        variantId: row.report.variantId,
+        quantity: row.report.defectiveQuantity ?? 0,
+      })),
+    ),
+  );
 
   return (
     <ModalPortal>
@@ -489,10 +519,45 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
                   mode="bar"
                   count={batches.length}
                   metrics={[
-                    { label: '良品', value: `${totalGood} ${summaryUnit}`, className: 'text-emerald-600' },
+                    {
+                      label: '良品',
+                      value: singleSummaryProduct ? (
+                        <FlowListQtyMatrixHover
+                          product={singleSummaryProduct}
+                          dictionaries={dictionaries}
+                          breakdown={summaryGoodQty}
+                          totalQty={totalGood}
+                          unitName={summaryUnitName}
+                          label="良品"
+                        >
+                          {totalGood} {summaryUnitName}
+                        </FlowListQtyMatrixHover>
+                      ) : (
+                        `${totalGood} ${summaryUnit}`
+                      ),
+                      className: 'text-emerald-600',
+                    },
                     {
                       label: '不良品',
-                      value: totalDefective > 0 ? `${totalDefective} ${summaryUnit}` : '—',
+                      value:
+                        totalDefective > 0 ? (
+                          singleSummaryProduct ? (
+                            <FlowListQtyMatrixHover
+                              product={singleSummaryProduct}
+                              dictionaries={dictionaries}
+                              breakdown={summaryDefectiveQty}
+                              totalQty={totalDefective}
+                              unitName={summaryUnitName}
+                              label="不良品"
+                            >
+                              {totalDefective} {summaryUnitName}
+                            </FlowListQtyMatrixHover>
+                          ) : (
+                            `${totalDefective} ${summaryUnit}`
+                          )
+                        ) : (
+                          '—'
+                        ),
                       className: 'text-amber-600',
                     },
                   ]}
@@ -526,6 +591,18 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
                     const rawKey = batch.source === 'product' && batch.key.startsWith('product-') ? batch.key.slice('product-'.length) : batch.key;
                     const reportNoRaw = batch.reportNo || rawKey;
                     const reportNo = reportNoRaw.startsWith('外协收回·') ? reportNoRaw.slice(5) : reportNoRaw;
+                    const goodBreakdown = aggregateVariantQty(
+                      batch.rows.map(row => ({
+                        variantId: row.report.variantId,
+                        quantity: row.report.quantity,
+                      })),
+                    );
+                    const defectiveBreakdown = aggregateVariantQty(
+                      batch.rows.map(row => ({
+                        variantId: row.report.variantId,
+                        quantity: row.report.defectiveQuantity ?? 0,
+                      })),
+                    );
                     return (
                       <tr key={batch.key} className="border-b border-slate-100 hover:bg-slate-50/50">
                         <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{fmtDT(batch.first.report.timestamp)}</td>
@@ -545,8 +622,34 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
                         <td className="px-4 py-3 text-slate-700 whitespace-nowrap">
                           {batch.source === 'order' ? batch.first.milestone.name : batch.milestoneName}
                         </td>
-                        <td className="px-4 py-3 font-bold text-emerald-600 text-right whitespace-nowrap">{batch.totalGood} {batchUnit}</td>
-                        <td className="px-4 py-3 font-bold text-amber-600 text-right whitespace-nowrap">{batch.totalDefective > 0 ? `${batch.totalDefective} ${batchUnit}` : '—'}</td>
+                        <td className="px-4 py-3 font-bold text-emerald-600 text-right whitespace-nowrap">
+                          <FlowListQtyMatrixHover
+                            product={batchProduct}
+                            dictionaries={dictionaries}
+                            breakdown={goodBreakdown}
+                            totalQty={batch.totalGood}
+                            unitName={batchUnit}
+                            label="良品"
+                          >
+                            {batch.totalGood} {batchUnit}
+                          </FlowListQtyMatrixHover>
+                        </td>
+                        <td className="px-4 py-3 font-bold text-amber-600 text-right whitespace-nowrap">
+                          {batch.totalDefective > 0 ? (
+                            <FlowListQtyMatrixHover
+                              product={batchProduct}
+                              dictionaries={dictionaries}
+                              breakdown={defectiveBreakdown}
+                              totalQty={batch.totalDefective}
+                              unitName={batchUnit}
+                              label="不良品"
+                            >
+                              {batch.totalDefective} {batchUnit}
+                            </FlowListQtyMatrixHover>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
                         <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{batch.first.report.operator}</td>
                         <td className="px-4 py-3">
                           <button

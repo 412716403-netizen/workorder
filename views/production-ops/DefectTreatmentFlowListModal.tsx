@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ScrollText, X, Filter, FileText, Loader2 } from 'lucide-react';
-import { ProductionOpRecord, ProductionOrder, Product, GlobalNodeTemplate } from '../../types';
+import { ProductionOpRecord, ProductionOrder, Product, GlobalNodeTemplate, AppDictionaries } from '../../types';
 import { hasOpsPerm } from './types';
 import { formatTimestamp } from '../../utils/formatTime';
 import { toLocalDateYmd } from '../../utils/localDateTime';
@@ -16,12 +16,19 @@ import {
 import FlowListSummaryFooter from '../../components/flow/FlowListSummaryFooter';
 import FlowListTableShell from '../../components/flow/FlowListTableShell';
 import FlowListProductCell from '../../components/flow/FlowListProductCell';
+import FlowListQtyMatrixHover from '../../components/flow/FlowListQtyMatrixHover';
+import {
+  aggregateVariantQty,
+  getSingleFlowProductId,
+  resolveProductUnitName,
+} from '../../utils/flowListVariantQty';
 import { ModalPortal } from '../../components/ModalPortal';
 
 export interface DefectTreatmentFlowListModalProps {
   productionLinkMode: 'order' | 'product';
   orders: ProductionOrder[];
   products: Product[];
+  dictionaries?: AppDictionaries;
   globalNodes: GlobalNodeTemplate[];
   userPermissions?: string[];
   tenantRole?: string;
@@ -33,6 +40,7 @@ const DefectTreatmentFlowListModal: React.FC<DefectTreatmentFlowListModalProps> 
   productionLinkMode,
   orders,
   products,
+  dictionaries,
   globalNodes,
   userPermissions,
   tenantRole,
@@ -100,6 +108,11 @@ const DefectTreatmentFlowListModal: React.FC<DefectTreatmentFlowListModalProps> 
 
   const totalQuantity = useMemo(() => groupedRows.reduce((s, g) => s + g.totalQty, 0), [groupedRows]);
   const uniqueNodeNames = useMemo(() => [...new Set(defectRecords.map(r => { const sid = r.type === 'REWORK' ? (r.sourceNodeId ?? r.nodeId) : r.nodeId; return sid ? (globalNodes.find(n => n.id === sid)?.name ?? '') : ''; }).filter(Boolean))].sort((a, b) => (a as string).localeCompare(b as string)) as string[], [defectRecords, globalNodes]);
+  const singleSummaryProduct = products.find(
+    product => product.id === (getSingleFlowProductId(groupedRows.map(g => ({ productId: g.first.productId }))) ?? ''),
+  );
+  const summaryUnitName = resolveProductUnitName(singleSummaryProduct, dictionaries);
+  const summaryVariantQty = aggregateVariantQty(groupedRows.flatMap(g => g.records));
 
   const getSourceNodeName = (rec: ProductionOpRecord) => { const sid = rec.type === 'REWORK' ? (rec.sourceNodeId ?? rec.nodeId) : rec.nodeId; return sid ? (globalNodes.find(n => n.id === sid)?.name ?? sid) : '—'; };
   const getDocNo = (rec: ProductionOpRecord) => (rec.docNo) ? rec.docNo : '—';
@@ -138,7 +151,25 @@ const DefectTreatmentFlowListModal: React.FC<DefectTreatmentFlowListModalProps> 
                 <FlowListSummaryFooter
                   mode="bar"
                   count={groupedRows.length}
-                  metrics={[{ label: '数量', value: `${totalQuantity} 件`, className: 'text-indigo-600' }]}
+                  metrics={[
+                    {
+                      label: '数量',
+                      value: singleSummaryProduct ? (
+                        <FlowListQtyMatrixHover
+                          product={singleSummaryProduct}
+                          dictionaries={dictionaries}
+                          breakdown={summaryVariantQty}
+                          totalQty={totalQuantity}
+                          unitName={summaryUnitName}
+                        >
+                          {totalQuantity} {summaryUnitName}
+                        </FlowListQtyMatrixHover>
+                      ) : (
+                        `${totalQuantity} 件`
+                      ),
+                      className: 'text-indigo-600',
+                    },
+                  ]}
                 />
               }
             >
@@ -171,6 +202,8 @@ const DefectTreatmentFlowListModal: React.FC<DefectTreatmentFlowListModalProps> 
                     const orderNumbers = productionLinkMode !== 'product' && groupRecs.length > 1
                       ? [...new Set(groupRecs.map(x => orders.find(o => o.id === x.orderId)?.orderNumber).filter(Boolean))]
                       : null;
+                    const rowUnitName = resolveProductUnitName(product, dictionaries);
+                    const rowVariantQty = aggregateVariantQty(groupRecs);
                     return (
                       <tr key={gKey} className="border-b border-slate-100 hover:bg-slate-50/50">
                         <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{formatTimestamp(r.timestamp)}</td>
@@ -188,7 +221,17 @@ const DefectTreatmentFlowListModal: React.FC<DefectTreatmentFlowListModalProps> 
                           <span className={r.type === 'REWORK' ? 'text-indigo-600 font-bold' : 'text-rose-600 font-bold'}>{typeLabel}</span>
                         </td>
                         <td className="px-4 py-3 text-slate-700 whitespace-nowrap max-w-[160px] truncate" title={partnerLabel !== '—' ? partnerLabel : undefined}>{partnerLabel}</td>
-                        <td className="px-4 py-3 text-right font-bold text-indigo-600 whitespace-nowrap">{totalQty} 件</td>
+                        <td className="px-4 py-3 text-right font-bold text-indigo-600 whitespace-nowrap">
+                          <FlowListQtyMatrixHover
+                            product={product}
+                            dictionaries={dictionaries}
+                            breakdown={rowVariantQty}
+                            totalQty={totalQty}
+                            unitName={rowUnitName}
+                          >
+                            {totalQty} {rowUnitName}
+                          </FlowListQtyMatrixHover>
+                        </td>
                         <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{(r.operator ?? '').trim() && (r.operator ?? '').trim() !== '外协收回' ? r.operator : '—'}</td>
                         <td className="px-4 py-3">
                           {hasOpsPerm(tenantRole, userPermissions, 'production:rework_records:view') && (

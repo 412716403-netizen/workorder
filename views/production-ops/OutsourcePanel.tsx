@@ -1745,6 +1745,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
           showOrderDueDateColumn={showOrderDueDateColumn}
           orders={orders}
           products={products}
+          dictionaries={dictionaries}
           globalNodes={globalNodes}
           userPermissions={userPermissions}
           tenantRole={tenantRole}

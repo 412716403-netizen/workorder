@@ -2,11 +2,16 @@ import React, { useState, useMemo } from 'react';
 import { ModalPortal } from '../../components/ModalPortal';
 import { X, Filter, PackageCheck, FileText, ArrowDownToLine } from 'lucide-react';
 import { toast } from 'sonner';
-import { Partner, Product } from '../../types';
+import { AppDictionaries, Partner, Product } from '../../types';
 import { localTodayYmd } from '../../utils/localDateTime';
 import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 import FlowListProductCell from '../../components/flow/FlowListProductCell';
+import FlowListQtyMatrixHover from '../../components/flow/FlowListQtyMatrixHover';
+import {
+  aggregateVariantQty,
+  resolveProductUnitName,
+} from '../../utils/flowListVariantQty';
 import * as api from '../../services/api';
 
 export interface PendingShipmentGroup {
@@ -26,6 +31,7 @@ interface PendingShipmentListModalProps {
   pendingShipmentGroups: PendingShipmentGroup[];
   partners: Partner[];
   products: Product[];
+  dictionaries?: AppDictionaries;
   recordsList: any[];
   onClose: () => void;
   onOpenDetail: (group: PendingShipmentGroup) => void;
@@ -37,10 +43,15 @@ interface PendingShipmentListModalProps {
   onSalesBillCreated?: (docNumber: string, billRecords: any[]) => void;
 }
 
+function linePendingQty(r: { allocatedQuantity?: number | null; shippedQuantity?: number | null }): number {
+  return Math.max(0, (Number(r.allocatedQuantity) || 0) - (Number(r.shippedQuantity) || 0));
+}
+
 const PendingShipmentListModal: React.FC<PendingShipmentListModalProps> = ({
   pendingShipmentGroups,
   partners,
   products,
+  dictionaries,
   recordsList,
   onClose,
   onOpenDetail,
@@ -134,6 +145,14 @@ const PendingShipmentListModal: React.FC<PendingShipmentListModalProps> = ({
                     const groupRecordIds = group.records.map((r: any) => r.id);
                     const allChecked = groupRecordIds.every(id => pendingShipSelectedIds.has(id));
                     const checked = allChecked;
+                    const product = products.find(p => p.id === group.productId);
+                    const unitName = resolveProductUnitName(product, dictionaries);
+                    const pendingBreakdown = aggregateVariantQty(
+                      group.records.map((r: any) => ({
+                        variantId: r.variantId,
+                        quantity: linePendingQty(r),
+                      })),
+                    );
                     const toggleGroupSelection = () => {
                       if (!allChecked && pendingShipSelectedIds.size > 0) {
                         const firstId = pendingShipSelectedIds.values().next().value!;
@@ -170,13 +189,24 @@ const PendingShipmentListModal: React.FC<PendingShipmentListModalProps> = ({
                         <td className="px-4 py-3 text-[10px] font-mono font-bold text-slate-600 whitespace-nowrap">{group.docNumber}</td>
                         <td className="px-4 py-3">
                           <FlowListProductCell
-                            product={products.find(p => p.id === group.productId)}
+                            product={product}
                             name={group.productName}
                             sku={group.productSku}
                           />
                         </td>
                         <td className="px-4 py-3 font-bold text-slate-800 truncate" title={group.partner}>{group.partner}</td>
-                        <td className="px-4 py-3 text-right font-black text-indigo-600">{group.totalQuantity.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right font-black text-indigo-600" onClick={e => e.stopPropagation()}>
+                          <FlowListQtyMatrixHover
+                            product={product}
+                            dictionaries={dictionaries}
+                            breakdown={pendingBreakdown}
+                            totalQty={group.totalQuantity}
+                            unitName={unitName}
+                            label="待发"
+                          >
+                            {group.totalQuantity.toLocaleString()} {unitName}
+                          </FlowListQtyMatrixHover>
+                        </td>
                         <td className="px-4 py-3 font-bold text-slate-700 truncate" title={group.warehouseName}>{group.warehouseName}</td>
                         <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                         <button

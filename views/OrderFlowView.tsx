@@ -1,10 +1,16 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { ScrollText, FileText, Filter } from 'lucide-react';
-import { ProductionOrder, Product, PlanFormSettings } from '../types';
+import { ProductionOrder, Product, PlanFormSettings, AppDictionaries } from '../types';
 import { formatOrderFlowPlacedDisplay, localTodayYmd, toLocalDateYmd, YMD_ONLY } from '../utils/localDateTime';
 import FlowListSummaryFooter from '../components/flow/FlowListSummaryFooter';
 import FlowListTableShell from '../components/flow/FlowListTableShell';
 import FlowListProductCell from '../components/flow/FlowListProductCell';
+import FlowListQtyMatrixHover from '../components/flow/FlowListQtyMatrixHover';
+import {
+  aggregateVariantQty,
+  getSingleFlowProductId,
+  resolveProductUnitName,
+} from '../utils/flowListVariantQty';
 
 /** 用于筛选/排序的本地日历日（YYYY-MM-DD） */
 function getOrderDateYmd(order: ProductionOrder): string {
@@ -32,6 +38,7 @@ function getOrderPlacedDisplay(order: ProductionOrder): string {
 interface OrderFlowViewProps {
   orders: ProductionOrder[];
   products: Product[];
+  dictionaries?: AppDictionaries;
   /** 嵌入弹窗时隐藏主标题，避免重复 */
   embedded?: boolean;
   productionLinkMode?: 'order' | 'product';
@@ -46,6 +53,7 @@ interface OrderFlowViewProps {
 const OrderFlowView: React.FC<OrderFlowViewProps> = ({
   orders,
   products,
+  dictionaries,
   embedded,
   productionLinkMode,
   initialProductId,
@@ -116,6 +124,11 @@ const OrderFlowView: React.FC<OrderFlowViewProps> = ({
     const totalQty = filteredOrders.reduce((s, o) => s + o.items.reduce((a, i) => a + i.quantity, 0), 0);
     return { count, totalQty };
   }, [filteredOrders]);
+  const singleSummaryProduct = products.find(
+    product => product.id === (getSingleFlowProductId(filteredOrders) ?? ''),
+  );
+  const summaryUnitName = resolveProductUnitName(singleSummaryProduct, dictionaries);
+  const summaryVariantQty = aggregateVariantQty(filteredOrders.flatMap(order => order.items));
 
   const filterSection = (
     <div className={`border-b border-slate-100 bg-slate-50/50 shrink-0 ${embedded ? 'px-6 py-4' : 'px-6 py-4 rounded-t-[32px]'}`}>
@@ -182,7 +195,23 @@ const OrderFlowView: React.FC<OrderFlowViewProps> = ({
               count={filteredStats.count}
               countSuffix="条"
               metrics={[
-                { label: '件数', value: `${filteredStats.totalQty.toLocaleString()} 件`, className: 'text-indigo-600' },
+                {
+                  label: '件数',
+                  value: singleSummaryProduct ? (
+                    <FlowListQtyMatrixHover
+                      product={singleSummaryProduct}
+                      dictionaries={dictionaries}
+                      breakdown={summaryVariantQty}
+                      totalQty={filteredStats.totalQty}
+                      unitName={summaryUnitName}
+                    >
+                      {filteredStats.totalQty.toLocaleString()} {summaryUnitName}
+                    </FlowListQtyMatrixHover>
+                  ) : (
+                    `${filteredStats.totalQty.toLocaleString()} 件`
+                  ),
+                  className: 'text-indigo-600',
+                },
               ]}
             />
           }
@@ -205,6 +234,8 @@ const OrderFlowView: React.FC<OrderFlowViewProps> = ({
                 const orderPlaced = getOrderPlacedDisplay(order);
                 const totalQty = order.items.reduce((s, i) => s + i.quantity, 0);
                 const product = products.find(p => p.id === order.productId);
+                const rowUnitName = resolveProductUnitName(product, dictionaries);
+                const rowVariantQty = aggregateVariantQty(order.items);
                 return (
                   <tr key={order.id} className="border-b border-slate-100 hover:bg-slate-50/50">
                     <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{orderPlaced}</td>
@@ -218,7 +249,17 @@ const OrderFlowView: React.FC<OrderFlowViewProps> = ({
                         sku={order.sku}
                       />
                     </td>
-                    <td className="px-4 py-3 text-right font-black text-indigo-600 whitespace-nowrap">{totalQty}</td>
+                    <td className="px-4 py-3 text-right font-black text-indigo-600 whitespace-nowrap">
+                      <FlowListQtyMatrixHover
+                        product={product}
+                        dictionaries={dictionaries}
+                        breakdown={rowVariantQty}
+                        totalQty={totalQty}
+                        unitName={rowUnitName}
+                      >
+                        {totalQty}
+                      </FlowListQtyMatrixHover>
+                    </td>
                     {showDueDate && (
                       <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
                         {order.dueDate ? toLocalDateYmd(order.dueDate) || order.dueDate : '—'}

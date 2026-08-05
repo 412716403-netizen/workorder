@@ -11,7 +11,7 @@ describe('resolveKnowledgeEditorImageSrc', () => {
     </div>
   `;
 
-  it('解析 resizable 图片节点', () => {
+  it('解析 resizable 图片节点上的 img', () => {
     const img = root.querySelector('[data-node="image"] img')!;
     expect(resolveKnowledgeEditorImageSrc(img, root)).toBe('/api/kb/a.png');
   });
@@ -19,6 +19,11 @@ describe('resolveKnowledgeEditorImageSrc', () => {
   it('解析普通 img', () => {
     const img = root.querySelector('p img')!;
     expect(resolveKnowledgeEditorImageSrc(img, root)).toBe('/api/kb/b.png');
+  });
+
+  it('忽略图片节点包装层点击', () => {
+    const wrap = root.querySelector('[data-node="image"]')!;
+    expect(resolveKnowledgeEditorImageSrc(wrap, root)).toBeNull();
   });
 
   it('忽略缩放手柄点击', () => {

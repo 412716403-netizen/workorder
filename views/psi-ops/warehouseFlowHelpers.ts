@@ -118,6 +118,8 @@ export interface WarehouseFlowRow {
   // 业务行带 any 是因为 PSI/Production 记录形状高度异构（schema 在迁移中），
   // 调用方仅用于打印/详情透传，不做强类型解构。
   record: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  /** 聚合前同单据同产品的全部源记录（含各规格） */
+  sourceRecords?: any[]; // eslint-disable-line @typescript-eslint/no-explicit-any
   _sortTs?: number;
 }
 
@@ -231,7 +233,13 @@ export function computeWarehouseFlowRows(input: ComputeWarehouseFlowRowsInput): 
         return tc < tb ? cur : best;
       }, rows[0]);
       const totalQty = rows.reduce((s, r) => s + r.quantity, 0);
-      return { ...displayRow, id: key, quantity: totalQty, _sortTs: minTs };
+      return {
+        ...displayRow,
+        id: key,
+        quantity: totalQty,
+        sourceRecords: rows.map(r => r.record),
+        _sortTs: minTs,
+      };
     })
     .sort(
       (a, b) => (b._sortTs ?? 0) - (a._sortTs ?? 0) || String(a.id).localeCompare(String(b.id)),
@@ -296,4 +304,70 @@ export function computeWarehouseFlowTotals(
     outboundTotal,
     netChange: inboundTotal - outboundTotal,
   };
+}
+
+/** 仓库流水源记录 → 规格数量源（盘点用 diffQuantity） */
+export function warehouseRecordToVariantQtySource(record: {
+  type?: string;
+  variantId?: string | null;
+  quantity?: number | null;
+  diffQuantity?: number | string | null;
+  diff_quantity?: number | string | null;
+}): { variantId?: string | null; quantity: number } {
+  if (record.type === 'STOCKTAKE') {
+    return {
+      variantId: record.variantId,
+      quantity: Number(record.diffQuantity ?? record.diff_quantity ?? 0) || 0,
+    };
+  }
+  return {
+    variantId: record.variantId,
+    quantity: Number(record.quantity) || 0,
+  };
+}
+
+/** 按库存方向拆分规格数量，供单产品合计悬浮使用 */
+export function splitWarehouseVariantQtyByDirection(
+  rows: ReadonlyArray<Pick<WarehouseFlowRow, 'type' | 'quantity' | 'record' | 'sourceRecords'>>,
+): {
+  inbound: { variantId?: string | null; quantity: number }[];
+  outbound: { variantId?: string | null; quantity: number }[];
+} {
+  const inbound: { variantId?: string | null; quantity: number }[] = [];
+  const outbound: { variantId?: string | null; quantity: number }[] = [];
+
+  for (const row of rows) {
+    const sources = row.sourceRecords?.length ? row.sourceRecords : [row.record];
+    for (const record of sources) {
+      const source = warehouseRecordToVariantQtySource(record);
+      const qty = source.quantity;
+      if (!qty) continue;
+      switch (row.type) {
+        case 'PURCHASE_BILL':
+          if (qty >= 0) inbound.push(source);
+          else outbound.push({ ...source, quantity: Math.abs(qty) });
+          break;
+        case 'STOCK_IN':
+        case 'STOCK_RETURN':
+        case 'TRANSFER':
+          inbound.push({ ...source, quantity: Math.abs(qty) });
+          break;
+        case 'STOCK_OUT':
+          outbound.push({ ...source, quantity: Math.abs(qty) });
+          break;
+        case 'SALES_BILL':
+          if (qty >= 0) outbound.push(source);
+          else inbound.push({ ...source, quantity: Math.abs(qty) });
+          break;
+        case 'STOCKTAKE':
+          if (qty > 0) inbound.push(source);
+          else if (qty < 0) outbound.push({ ...source, quantity: Math.abs(qty) });
+          break;
+        default:
+          break;
+      }
+    }
+  }
+
+  return { inbound, outbound };
 }

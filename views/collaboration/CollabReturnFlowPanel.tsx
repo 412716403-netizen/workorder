@@ -12,6 +12,15 @@ import { localTodayYmd, toLocalDateYmd } from '../../utils/localDateTime';
 import FlowListSummaryFooter from '../../components/flow/FlowListSummaryFooter';
 import FlowListProductCell from '../../components/flow/FlowListProductCell';
 import FlowListTableShell from '../../components/flow/FlowListTableShell';
+import FlowListQtyMatrixHover from '../../components/flow/FlowListQtyMatrixHover';
+import {
+  aggregateCollabColorSizeQty,
+  getSingleFlowProductId,
+  resolveProductUnitName,
+  subtractVariantQty,
+  type CollabColorSizeQtySource,
+  type VariantQtyBreakdown,
+} from '../../utils/flowListVariantQty';
 
 export type CollabFlowDocType = 'dispatch' | 'return' | 'forward';
 
@@ -59,6 +68,35 @@ type FlowRow = {
 function sumItemsQty(items: any): number {
   if (!Array.isArray(items)) return 0;
   return items.reduce((s, it) => s + (Number((it && it.quantity) ?? 0) || 0), 0);
+}
+
+function collabPayloadItems(detail: FlowRowDetail): CollabColorSizeQtySource[] {
+  if (detail.kind === 'forward') {
+    const items: CollabColorSizeQtySource[] = [];
+    for (const transfer of detail.siblings) {
+      for (const dispatch of transfer.dispatches || []) {
+        const payloadItems = (dispatch.payload as { items?: CollabColorSizeQtySource[] } | undefined)?.items;
+        if (Array.isArray(payloadItems)) items.push(...payloadItems);
+      }
+    }
+    return items;
+  }
+  const payloadItems = (detail.doc?.payload as { items?: CollabColorSizeQtySource[] } | undefined)?.items;
+  return Array.isArray(payloadItems) ? payloadItems : [];
+}
+
+function mergeBreakdowns(parts: VariantQtyBreakdown[]): VariantQtyBreakdown {
+  const quantities: Record<string, number> = {};
+  let unassignedQty = 0;
+  let totalQty = 0;
+  for (const part of parts) {
+    totalQty += part.totalQty;
+    unassignedQty += part.unassignedQty;
+    for (const [variantId, quantity] of Object.entries(part.quantities)) {
+      quantities[variantId] = (quantities[variantId] ?? 0) + quantity;
+    }
+  }
+  return { quantities, unassignedQty, totalQty };
 }
 
 function toIsoString(v: string | Date | null | undefined): string {
@@ -262,19 +300,48 @@ const CollabReturnFlowPanel: React.FC<CollabReturnFlowPanelProps> = ({
   }, [allRows, filterDocType, filterDocNo, filterProduct, filterPartner, filterDateFrom, filterDateTo]);
 
   /** 与外协流水一致：发出（派发+转发）/ 收回（回传）/ 剩余 */
-  const { collabFlowTotalDispatch, collabFlowTotalReceive, collabFlowRemaining } = useMemo(() => {
+  const {
+    collabFlowTotalDispatch,
+    collabFlowTotalReceive,
+    collabFlowRemaining,
+    summaryDispatchQty,
+    summaryReceiveQty,
+    summaryRemainingQty,
+  } = useMemo(() => {
     let dispatch = 0;
     let receive = 0;
+    const dispatchParts: VariantQtyBreakdown[] = [];
+    const receiveParts: VariantQtyBreakdown[] = [];
     filtered.forEach(row => {
-      if (row.docType === 'dispatch' || row.docType === 'forward') dispatch += row.totalQty;
-      else if (row.docType === 'return') receive += row.totalQty;
+      const product = row.productId ? products.find(p => p.id === row.productId) : null;
+      const breakdown = aggregateCollabColorSizeQty(
+        collabPayloadItems(row.detail),
+        product,
+        dictionaries,
+      );
+      if (row.docType === 'dispatch' || row.docType === 'forward') {
+        dispatch += row.totalQty;
+        dispatchParts.push(breakdown);
+      } else if (row.docType === 'return') {
+        receive += row.totalQty;
+        receiveParts.push(breakdown);
+      }
     });
+    const summaryDispatchQty = mergeBreakdowns(dispatchParts);
+    const summaryReceiveQty = mergeBreakdowns(receiveParts);
     return {
       collabFlowTotalDispatch: dispatch,
       collabFlowTotalReceive: receive,
       collabFlowRemaining: Math.max(0, dispatch - receive),
+      summaryDispatchQty,
+      summaryReceiveQty,
+      summaryRemainingQty: subtractVariantQty(summaryDispatchQty, summaryReceiveQty),
     };
-  }, [filtered]);
+  }, [dictionaries, filtered, products]);
+  const singleSummaryProduct = products.find(
+    product => product.id === (getSingleFlowProductId(filtered) ?? ''),
+  );
+  const summaryUnitName = resolveProductUnitName(singleSummaryProduct, dictionaries);
 
   const filterSection = (
     <div className={`border-b border-slate-100 bg-slate-50/50 shrink-0 ${embeddedInModal ? 'px-6 py-4' : 'px-6 py-4'}`}>
@@ -340,9 +407,60 @@ const CollabReturnFlowPanel: React.FC<CollabReturnFlowPanelProps> = ({
               mode="bar"
               count={filtered.length}
               metrics={[
-                { label: '发出', value: `${collabFlowTotalDispatch} 件`, className: 'text-indigo-600' },
-                { label: '收回', value: `${collabFlowTotalReceive} 件`, className: 'text-amber-600' },
-                { label: '剩余', value: `${collabFlowRemaining} 件`, className: 'text-slate-700' },
+                {
+                  label: '发出',
+                  value: singleSummaryProduct ? (
+                    <FlowListQtyMatrixHover
+                      product={singleSummaryProduct}
+                      dictionaries={dictionaries}
+                      breakdown={summaryDispatchQty}
+                      totalQty={collabFlowTotalDispatch}
+                      unitName={summaryUnitName}
+                      label="发出"
+                    >
+                      {collabFlowTotalDispatch} {summaryUnitName}
+                    </FlowListQtyMatrixHover>
+                  ) : (
+                    `${collabFlowTotalDispatch} 件`
+                  ),
+                  className: 'text-indigo-600',
+                },
+                {
+                  label: '收回',
+                  value: singleSummaryProduct ? (
+                    <FlowListQtyMatrixHover
+                      product={singleSummaryProduct}
+                      dictionaries={dictionaries}
+                      breakdown={summaryReceiveQty}
+                      totalQty={collabFlowTotalReceive}
+                      unitName={summaryUnitName}
+                      label="收回"
+                    >
+                      {collabFlowTotalReceive} {summaryUnitName}
+                    </FlowListQtyMatrixHover>
+                  ) : (
+                    `${collabFlowTotalReceive} 件`
+                  ),
+                  className: 'text-amber-600',
+                },
+                {
+                  label: '剩余',
+                  value: singleSummaryProduct ? (
+                    <FlowListQtyMatrixHover
+                      product={singleSummaryProduct}
+                      dictionaries={dictionaries}
+                      breakdown={summaryRemainingQty}
+                      totalQty={collabFlowRemaining}
+                      unitName={summaryUnitName}
+                      label="剩余"
+                    >
+                      {collabFlowRemaining} {summaryUnitName}
+                    </FlowListQtyMatrixHover>
+                  ) : (
+                    `${collabFlowRemaining} 件`
+                  ),
+                  className: 'text-slate-700',
+                },
               ]}
             />
           }
@@ -370,6 +488,12 @@ const CollabReturnFlowPanel: React.FC<CollabReturnFlowPanelProps> = ({
                   : row.docType === 'forward'
                     ? <span className="inline-flex rounded-md bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-800 ring-1 ring-amber-100">转发</span>
                     : <span className="inline-flex rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-700 ring-1 ring-emerald-100">回传</span>;
+                const rowUnitName = resolveProductUnitName(localProduct, dictionaries);
+                const rowVariantQty = aggregateCollabColorSizeQty(
+                  collabPayloadItems(row.detail),
+                  localProduct,
+                  dictionaries,
+                );
                 return (
                   <tr key={row.key} className="hover:bg-slate-50/50">
                     <td className="px-4 py-3 text-[10px] font-mono font-bold text-slate-600 whitespace-nowrap">{row.docNo || '—'}</td>
@@ -386,7 +510,17 @@ const CollabReturnFlowPanel: React.FC<CollabReturnFlowPanelProps> = ({
                     <td className="px-4 py-3 text-xs font-bold whitespace-nowrap">
                       <span className={row.statusWarn ? 'text-amber-700' : 'text-slate-600'}>{row.status}</span>
                     </td>
-                    <td className="px-4 py-3 text-right font-black text-indigo-600">{row.totalQty}</td>
+                    <td className="px-4 py-3 text-right font-black text-indigo-600">
+                      <FlowListQtyMatrixHover
+                        product={localProduct}
+                        dictionaries={dictionaries}
+                        breakdown={rowVariantQty}
+                        totalQty={row.totalQty}
+                        unitName={rowUnitName}
+                      >
+                        {row.totalQty}
+                      </FlowListQtyMatrixHover>
+                    </td>
                     <td className="px-4 py-3 text-right">
                       <button
                         type="button"

@@ -1633,6 +1633,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
             <OrderFlowView
               orders={orders}
               products={products}
+              dictionaries={dictionaries}
               embedded
               productionLinkMode={productionLinkMode}
               planFormSettings={planFormSettings}

@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { ModalPortal } from '../../components/ModalPortal';
 import { useQuery } from '@tanstack/react-query';
 import { ScrollText, X, Filter, FileText, Loader2 } from 'lucide-react';
-import type { Product, PsiRecordType, Warehouse } from '../../types';
+import type { Product, PsiRecordType, Warehouse, AppDictionaries } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { PSI_DOC_TYPE_AMOUNT_KEY, canViewAmount } from '../../utils/canViewAmount';
 import {
@@ -15,6 +15,12 @@ import {
 import FlowListSummaryFooter from '../../components/flow/FlowListSummaryFooter';
 import FlowListTableShell from '../../components/flow/FlowListTableShell';
 import FlowListProductCell from '../../components/flow/FlowListProductCell';
+import FlowListQtyMatrixHover from '../../components/flow/FlowListQtyMatrixHover';
+import {
+  aggregateVariantQty,
+  getSingleFlowProductId,
+  resolveProductUnitName,
+} from '../../utils/flowListVariantQty';
 import {
   buildPsiOrderBillFlowSummaryRows,
   sortPsiOrderBillFlowRows,
@@ -64,6 +70,7 @@ export interface PsiOrderBillFlowListModalProps {
   onOpenDetail: (docNumber: string) => void;
   products: Product[];
   warehouses: Warehouse[];
+  dictionaries?: AppDictionaries;
   /** 采购订单流水：按行汇总已入库数量（来自采购入库单） */
   receivedByOrderLine?: Record<string, number>;
 }
@@ -75,6 +82,7 @@ const PsiOrderBillFlowListModal: React.FC<PsiOrderBillFlowListModalProps> = ({
   onOpenDetail,
   products,
   warehouses,
+  dictionaries,
   receivedByOrderLine,
 }) => {
   const { tenantCtx } = useAuth();
@@ -150,6 +158,9 @@ const PsiOrderBillFlowListModal: React.FC<PsiOrderBillFlowListModalProps> = ({
   ]);
 
   const totals = useMemo(() => sumPsiOrderBillFlowTotals(filteredRows), [filteredRows]);
+  const singleSummaryProduct = productMap.get(getSingleFlowProductId(filteredRows) ?? '');
+  const summaryUnitName = resolveProductUnitName(singleSummaryProduct, dictionaries);
+  const summaryVariantQty = aggregateVariantQty(filteredRows.flatMap(row => row.records));
 
   const qtyClass =
     isSalesBill && totals.totalQty < 0 ? 'text-amber-600' : 'text-indigo-600';
@@ -274,7 +285,19 @@ const PsiOrderBillFlowListModal: React.FC<PsiOrderBillFlowListModalProps> = ({
                   metrics={[
                     {
                       label: '数量',
-                      value: `${totals.totalQty.toLocaleString()} 件`,
+                      value: singleSummaryProduct ? (
+                        <FlowListQtyMatrixHover
+                          product={singleSummaryProduct}
+                          dictionaries={dictionaries}
+                          breakdown={summaryVariantQty}
+                          totalQty={totals.totalQty}
+                          unitName={summaryUnitName}
+                        >
+                          {totals.totalQty.toLocaleString()} {summaryUnitName}
+                        </FlowListQtyMatrixHover>
+                      ) : (
+                        `${totals.totalQty.toLocaleString()} 件`
+                      ),
                       className: qtyClass,
                     },
                     ...(showAmount
@@ -330,6 +353,9 @@ const PsiOrderBillFlowListModal: React.FC<PsiOrderBillFlowListModalProps> = ({
                   {filteredRows.map(row => {
                     const rowQtyNegative = isSalesBill && row.totalQty < 0;
                     const rowAmountNegative = isSalesBill && row.totalAmount < 0;
+                    const rowProduct = productMap.get(row.productId);
+                    const rowUnitName = resolveProductUnitName(rowProduct, dictionaries);
+                    const rowVariantQty = aggregateVariantQty(row.records);
                     return (
                       <tr key={row.rowKey} className="border-b border-slate-100 hover:bg-slate-50/50">
                         <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{row.dateStr}</td>
@@ -342,7 +368,7 @@ const PsiOrderBillFlowListModal: React.FC<PsiOrderBillFlowListModalProps> = ({
                         )}
                         <td className="px-4 py-3">
                           <FlowListProductCell
-                            product={productMap.get(row.productId)}
+                            product={rowProduct}
                             name={row.productSummary}
                             sku={row.productSku}
                           />
@@ -352,7 +378,15 @@ const PsiOrderBillFlowListModal: React.FC<PsiOrderBillFlowListModalProps> = ({
                             rowQtyNegative ? 'text-amber-600' : 'text-indigo-600'
                           }`}
                         >
-                          {row.totalQty.toLocaleString()}
+                          <FlowListQtyMatrixHover
+                            product={rowProduct}
+                            dictionaries={dictionaries}
+                            breakdown={rowVariantQty}
+                            totalQty={row.totalQty}
+                            unitName={rowUnitName}
+                          >
+                            {row.totalQty.toLocaleString()}
+                          </FlowListQtyMatrixHover>
                         </td>
                         {showAmount && (
                         <td
